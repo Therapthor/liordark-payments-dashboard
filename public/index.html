@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Liordark — Panel de Pagos</title>
 <link rel="stylesheet" href="css/style.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -120,7 +120,10 @@
   <!-- ───────────── MODAL: registro manual ───────────── -->
   <div id="manual-modal" class="modal-backdrop" hidden>
     <form id="manual-form" class="modal-card">
-      <h3>Agregar día pasado</h3>
+      <div class="modal-head">
+        <h3>Agregar día pasado</h3>
+        <button type="button" class="modal-x" data-close-modal="manual-modal">✕</button>
+      </div>
       <label>Fecha
         <input id="manual-date" type="date" required />
       </label>
@@ -141,11 +144,11 @@
   <!-- ───────────── MODAL: detalle del día ───────────── -->
   <div id="day-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">
-      <h3 id="day-modal-title">Detalle del día</h3>
-      <div id="day-modal-body"></div>
-      <div class="modal-actions">
-        <button type="button" id="day-modal-close" class="btn-secondary">Cerrar</button>
+      <div class="modal-head">
+        <h3 id="day-modal-title">Detalle del día</h3>
+        <button type="button" class="modal-x" data-close-modal="day-modal">✕</button>
       </div>
+      <div id="day-modal-body" class="modal-scroll-body"></div>
     </div>
   </div>
 

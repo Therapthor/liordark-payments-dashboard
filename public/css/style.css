@@ -333,9 +333,37 @@ button, input {
   flex-direction: column;
   gap: 12px;
 }
-.modal-card--wide { max-width: 480px; max-height: 80vh; overflow-y: auto; }
+.modal-card--wide { max-width: 480px; max-height: 80vh; }
 
 .modal-card h3 { margin: 0 0 4px; }
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-head h3 { margin: 0; }
+
+.modal-x {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  margin: -4px -4px 0 0;
+  flex-shrink: 0;
+}
+.modal-x:hover { color: var(--text-primary); }
+
+.modal-scroll-body {
+  overflow-y: auto;
+  max-height: calc(80vh - 90px);
+  margin: 0 -8px;
+  padding: 0 8px;
+}
 
 .modal-card label {
   display: flex;

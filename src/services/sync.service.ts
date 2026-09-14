@@ -83,6 +83,14 @@ function limaStringToUtcIso(limaStr: string): string {
 
 let sseAbort: AbortController | null = null;
 
+// Estado actual de la conexión al bot — expuesto para que un cliente nuevo
+// del frontend (que se conecta DESPUÉS de que ya establecimos el stream)
+// reciba el estado real de inmediato, en vez de esperar el próximo cambio.
+let currentConnectionStatus: "connected" | "reconnecting" = "reconnecting";
+export function getConnectionStatus(): "connected" | "reconnecting" {
+  return currentConnectionStatus;
+}
+
 async function connectStream(): Promise<void> {
   sseAbort = new AbortController();
 
@@ -95,6 +103,7 @@ async function connectStream(): Promise<void> {
     });
 
     console.log("✅ Conectado al stream en vivo del bot");
+    currentConnectionStatus = "connected";
     emitDashboardEvent({ type: "connection", status: "connected" });
 
     let buffer = "";
@@ -135,6 +144,7 @@ async function connectStream(): Promise<void> {
 }
 
 function scheduleReconnect(): void {
+  currentConnectionStatus = "reconnecting";
   emitDashboardEvent({ type: "connection", status: "reconnecting" });
   setTimeout(connectStream, RECONNECT_DELAY_MS);
 }

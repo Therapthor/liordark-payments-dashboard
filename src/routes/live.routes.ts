@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getRecentPayments } from "../db/payments.repository";
 import { getSummary } from "../services/stats.service";
 import { onDashboardEvent } from "../utils/live-events.util";
+import { getConnectionStatus } from "../services/sync.service";
 
 const router = Router();
 
@@ -22,6 +23,11 @@ router.get("/stream", (req, res) => {
     "X-Accel-Buffering": "no",
   });
   res.write("retry: 3000\n\n");
+
+  // Estado actual de inmediato — si el backend ya está conectado al bot
+  // desde antes de que esta pestaña se abriera, no hay que esperar a un
+  // futuro cambio de estado para saberlo.
+  res.write(`data: ${JSON.stringify({ type: "connection", status: getConnectionStatus() })}\n\n`);
 
   const unsubscribe = onDashboardEvent((evt) => {
     res.write(`data: ${JSON.stringify(evt)}\n\n`);

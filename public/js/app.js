@@ -381,8 +381,17 @@
 
     document.getElementById("day-modal").hidden = false;
   }
-  document.getElementById("day-modal-close").addEventListener("click", () => {
-    document.getElementById("day-modal").hidden = true;
+
+  // Cerrar modales: botón X, o clic en el fondo oscuro (fuera de la tarjeta)
+  document.querySelectorAll("[data-close-modal]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.getElementById(btn.dataset.closeModal).hidden = true;
+    });
+  });
+  document.querySelectorAll(".modal-backdrop").forEach(backdrop => {
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) backdrop.hidden = true;
+    });
   });
 
   // ── Modal: agregar día manual ──
