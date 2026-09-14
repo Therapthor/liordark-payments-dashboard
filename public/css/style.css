@@ -162,9 +162,10 @@ button, input {
 .icon-btn.muted { opacity: 0.5; }
 
 .content {
-  padding: 24px;
-  max-width: 1280px;
+  padding: 28px 32px;
+  max-width: 1440px;
   margin: 0 auto;
+  font-size: 15px;
 }
 
 .view { display: block; }
@@ -183,13 +184,13 @@ button, input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 26px 24px;
 }
 .stat-card--accent { border-color: rgba(57,135,229,0.4); background: linear-gradient(180deg, rgba(57,135,229,0.10), var(--surface)); }
 
-.stat-label { color: var(--text-muted); font-size: 13px; margin-bottom: 6px; }
-.stat-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.stat-sub { color: var(--text-secondary); font-size: 13px; margin-top: 4px; }
+.stat-label { color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
+.stat-value { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-sub { color: var(--text-secondary); font-size: 14px; margin-top: 6px; }
 
 /* ─────────────────────────────────────────────────────────────
    PANELS
@@ -204,20 +205,22 @@ button, input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 24px;
 }
 
 .panel-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
-.panel-header h2 { margin: 0; font-size: 15px; font-weight: 600; }
-.panel-header.standalone { margin-bottom: 16px; }
-.panel-hint { color: var(--text-muted); font-size: 12px; }
+.panel-header h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.panel-header.standalone { margin-bottom: 18px; }
+.panel-hint { color: var(--text-muted); font-size: 13px; }
 
-.chart-wrap { height: 320px; position: relative; }
+.chart-wrap { height: 400px; position: relative; }
 
 /* ─────────────────────────────────────────────────────────────
    FEED EN VIVO
@@ -226,18 +229,18 @@ button, input {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 320px;
+  max-height: 420px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .feed-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 13px 16px;
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -254,14 +257,42 @@ button, input {
 }
 .feed-badge.matched { background: var(--good); }
 .feed-badge.pending { background: var(--warning); }
-.feed-badge.no_code { background: var(--text-muted); }
+.feed-badge.expired { background: var(--critical); }
+
+.feed-status.matched { color: var(--good); }
+.feed-status.pending { color: var(--warning); }
+.feed-status.expired { color: var(--critical); }
 
 .feed-main { flex: 1; min-width: 0; }
-.feed-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.feed-time { font-size: 11px; color: var(--text-muted); }
-.feed-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.feed-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-time { font-size: 12px; color: var(--text-muted); }
+.feed-amount { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
 
 .feed-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 30px 0; }
+
+.feed-search { display: flex; align-items: center; gap: 8px; }
+.feed-search input {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  width: 170px;
+  outline: none;
+}
+.feed-search input:focus { border-color: var(--accent); }
+.icon-btn-sm {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.icon-btn-sm:hover { border-color: var(--critical); color: var(--critical); }
 
 /* ─────────────────────────────────────────────────────────────
    HISTORIAL
@@ -269,7 +300,7 @@ button, input {
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 15px;
 }
 .history-table th {
   text-align: left;
@@ -278,11 +309,11 @@ button, input {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--gridline);
 }
 .history-table td {
-  padding: 12px;
+  padding: 15px 14px;
   border-bottom: 1px solid var(--gridline);
   font-variant-numeric: tabular-nums;
 }

@@ -162,10 +162,17 @@
     document.getElementById("stat-alltime-count").textContent = stats.allTime.count + (stats.allTime.count === 1 ? " pago" : " pagos");
   }
 
+  // confirmado = verde, pendiente/sin código = amarillo, expirado = rojo
   function statusLabel(status) {
-    if (status === "matched") return "Emparejado";
-    if (status === "no_code") return "Sin código";
+    if (status === "matched")  return "Confirmado";
+    if (status === "expired")  return "Expirado";
+    if (status === "no_code")  return "Sin código";
     return "Pendiente";
+  }
+  function statusClass(status) {
+    if (status === "matched") return "matched";
+    if (status === "expired") return "expired";
+    return "pending"; // agrupa "pending" y "no_code" en amarillo
   }
 
   function fmtCode(p) {
@@ -175,15 +182,29 @@
   function renderFeedItem(p, isNew) {
     const li = document.createElement("li");
     li.className = "feed-item" + (isNew ? " is-new" : "");
+    li.dataset.id = p.id;
     li.innerHTML = `
-      <span class="feed-badge ${p.status}"></span>
+      <span class="feed-badge ${statusClass(p.status)}"></span>
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(p.senderName)}</div>
-        <div class="feed-time">${fmtTime(p.createdAt)} · ${statusLabel(p.status)} · ${fmtCode(p)}</div>
+        <div class="feed-time">${fmtTime(p.createdAt)} · <span class="feed-status ${statusClass(p.status)}">${statusLabel(p.status)}</span> · ${fmtCode(p)}</div>
       </div>
       <div class="feed-amount">${fmtMoney(p.amount)}</div>
     `;
     return li;
+  }
+
+  /** Actualiza un pago ya pintado en pantalla (ej. pasó a expirado) sin recargar todo. */
+  function updateFeedItemStatus(id, status) {
+    const li = document.querySelector(`.feed-item[data-id="${id}"]`);
+    if (!li) return;
+    const badge = li.querySelector(".feed-badge");
+    const label = li.querySelector(".feed-status");
+    badge.className = "feed-badge " + statusClass(status);
+    if (label) {
+      label.className = "feed-status " + statusClass(status);
+      label.textContent = statusLabel(status);
+    }
   }
 
   function escapeHtml(s) {
@@ -191,6 +212,8 @@
   }
 
   function prependFeedItem(payment) {
+    cachedLivePayments = [payment, ...cachedLivePayments].slice(0, 50);
+
     const list  = document.getElementById("feed-list");
     const empty = document.getElementById("feed-empty");
     empty.hidden = true;
@@ -206,6 +229,57 @@
     if (payments.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
     for (const p of payments) list.appendChild(renderFeedItem(p, false));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // BUSCADOR POR CÓDIGO DE 3 DÍGITOS
+  // ─────────────────────────────────────────────────────────────
+
+  let searchActive = false;
+  let cachedLivePayments = [];
+
+  function initCodeSearch() {
+    const input      = document.getElementById("code-search");
+    const clearBtn   = document.getElementById("code-search-clear");
+    const statusEl   = document.getElementById("search-status");
+
+    async function runSearch() {
+      const digits = input.value.replace(/\D/g, "");
+      if (!digits) { clearSearch(); return; }
+
+      searchActive = true;
+      clearBtn.hidden = false;
+
+      try {
+        const { code, payments } = await api("/live/search?code=" + digits);
+        statusEl.hidden = false;
+        statusEl.textContent = payments.length
+          ? `${payments.length} resultado(s) para el código ${code}`
+          : `Sin resultados para el código ${code}`;
+        renderFeedList(payments);
+      } catch {
+        statusEl.hidden = false;
+        statusEl.textContent = "Error buscando el código.";
+      }
+    }
+
+    function clearSearch() {
+      searchActive = false;
+      clearBtn.hidden = true;
+      statusEl.hidden = true;
+      input.value = "";
+      renderFeedList(cachedLivePayments);
+    }
+
+    input.addEventListener("input", () => {
+      input.value = input.value.replace(/\D/g, "").slice(0, 3);
+      if (input.value.length === 3) runSearch();
+      else if (input.value.length === 0) clearSearch();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); runSearch(); }
+    });
+    clearBtn.addEventListener("click", clearSearch);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -238,9 +312,13 @@
 
       if (evt.type === "connection") setConnIndicator(evt.status);
 
-      if (evt.type === "payment") {
+      if (evt.type === "payment" && !searchActive) {
         prependFeedItem(evt.payment);
         playChime();
+      }
+
+      if (evt.type === "status_update") {
+        updateFeedItemStatus(evt.id, evt.status);
       }
 
       if (evt.type === "stats") {
@@ -441,8 +519,10 @@
 
     initTabs();
     initSoundToggle();
+    initCodeSearch();
 
     const { payments, stats } = await api("/live/initial");
+    cachedLivePayments = payments;
     renderStats(stats);
     renderFeedList(payments);
     await loadChart();

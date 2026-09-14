@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getRecentPayments } from "../db/payments.repository";
+import { getRecentPayments, searchByCode } from "../db/payments.repository";
 import { getSummary } from "../services/stats.service";
 import { onDashboardEvent } from "../utils/live-events.util";
 import { getConnectionStatus } from "../services/sync.service";
@@ -12,6 +12,18 @@ router.get("/initial", (_req, res) => {
     payments: getRecentPayments(50),
     stats:    getSummary(),
   });
+});
+
+// Buscar pagos por el código de seguridad de 3 dígitos que manda Yape.
+router.get("/search", (req, res) => {
+  const raw = String(req.query.code ?? "").replace(/\D/g, "");
+  if (!raw) {
+    res.status(400).json({ message: "Falta el código a buscar" });
+    return;
+  }
+  // Mismo padding que usa el bot (yape.service.ts normalizeCode): 3 dígitos.
+  const code = raw.padStart(3, "0").slice(0, 3);
+  res.json({ code, payments: searchByCode(code) });
 });
 
 // SSE hacia el navegador — reenvía lo que llega del bot en vivo.

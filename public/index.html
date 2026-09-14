@@ -80,8 +80,12 @@
           <div class="panel feed-panel">
             <div class="panel-header">
               <h2>Pagos recientes</h2>
-              <span class="panel-hint">se actualiza solo</span>
+              <div class="feed-search">
+                <input id="code-search" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" placeholder="Buscar código (3 dígitos)" />
+                <button id="code-search-clear" class="icon-btn-sm" title="Volver a en vivo" hidden>✕</button>
+              </div>
             </div>
+            <p id="search-status" class="panel-hint" hidden></p>
             <ul id="feed-list" class="feed-list"></ul>
             <p id="feed-empty" class="feed-empty">Todavía no hay pagos registrados.</p>
           </div>

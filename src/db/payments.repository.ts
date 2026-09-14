@@ -36,10 +36,21 @@ export function upsertPayment(p: {
   );
 }
 
+export function updatePaymentStatus(id: number, status: string): void {
+  db.prepare(`UPDATE payments SET status = ? WHERE id = ?`).run(status, id);
+}
+
 export function getRecentPayments(limit: number): PaymentRow[] {
   return (db.prepare(`
     SELECT * FROM payments ORDER BY created_at DESC LIMIT ?
   `).all(limit) as any[]).map(toPaymentRow);
+}
+
+/** Busca pagos por código de seguridad de 3 dígitos (coincidencia exacta). */
+export function searchByCode(code: string): PaymentRow[] {
+  return (db.prepare(`
+    SELECT * FROM payments WHERE security_code = ? ORDER BY created_at DESC LIMIT 50
+  `).all(code) as any[]).map(toPaymentRow);
 }
 
 export function getDayPayments(date: string): PaymentRow[] {

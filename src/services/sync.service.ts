@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env";
-import { upsertPayment } from "../db/payments.repository";
+import { upsertPayment, updatePaymentStatus } from "../db/payments.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { getSummary } from "./stats.service";
 
@@ -65,12 +65,19 @@ async function backfill(): Promise<void> {
   }
 }
 
-// El endpoint de historial usa nombres de status distintos (pending/matched/
-// unmatched/expired/no_code) — normalizamos a los mismos que usa el stream.
+// GET /api/yape/payments del bot devuelve el status CRUDO de su base de
+// datos (español, mayúsculas — ver yape.controller.ts: `status: r.status`),
+// mientras que el stream en vivo usa nombres en inglés minúscula (ver
+// receiveYapePayment). Hay que traducir el del backfill o todo lo
+// sincronizado por esa vía queda "pending" para siempre por defecto.
 function mapBotStatus(status: string): string {
-  if (status === "matched") return "matched";
-  if (status === "no_code") return "no_code";
-  return "pending";
+  switch (status) {
+    case "CONFIRMADO":  return "matched";
+    case "EXPIRADO":    return "expired";
+    case "SIN_CODIGO":  return "no_code";
+    case "PENDIENTE":
+    default:            return "pending";
+  }
 }
 
 /** Revierte "YYYY-MM-DD HH:MM:SS" en hora Lima (UTC-5) a un ISO 8601 en UTC real. */
@@ -150,21 +157,31 @@ function scheduleReconnect(): void {
 }
 
 function handleBotEvent(evt: any): void {
-  if (evt?.type !== "new_payment") return;
+  if (evt?.type === "new_payment") {
+    upsertPayment({
+      id:           evt.id,
+      senderName:   evt.senderName,
+      amount:       evt.amount,
+      securityCode: evt.securityCode,
+      hasCode:      evt.hasCode,
+      status:       evt.status,
+      orderName:    evt.orderName,
+      createdAt:    evt.createdAt,
+    });
 
-  upsertPayment({
-    id:           evt.id,
-    senderName:   evt.senderName,
-    amount:       evt.amount,
-    securityCode: evt.securityCode,
-    hasCode:      evt.hasCode,
-    status:       evt.status,
-    orderName:    evt.orderName,
-    createdAt:    evt.createdAt,
-  });
+    emitDashboardEvent({ type: "payment", payment: evt });
+    emitDashboardEvent({ type: "stats", stats: getSummary() });
+    return;
+  }
 
-  emitDashboardEvent({ type: "payment", payment: evt });
-  emitDashboardEvent({ type: "stats", stats: getSummary() });
+  if (evt?.type === "status_update") {
+    // No es un pago nuevo (ej. expiró) — actualiza el que ya existe.
+    updatePaymentStatus(evt.id, evt.status);
+    emitDashboardEvent({ type: "status_update", id: evt.id, status: evt.status });
+    // Los totales de plata no cambian por una expiración, pero el
+    // conteo de "pendientes" visualmente sí — no hace falta recalcular
+    // stats acá porque expirado no se resta de los ingresos ya contados.
+  }
 }
 
 export function startSync(): void {
