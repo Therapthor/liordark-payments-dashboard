@@ -403,6 +403,7 @@ button, input {
   border-bottom: 1px solid var(--gridline);
   font-size: 13px;
 }
+.day-detail-row small { color: var(--text-muted); font-size: 11px; }
 .day-detail-row:last-child { border-bottom: none; }
 
 /* ─────────────────────────────────────────────────────────────

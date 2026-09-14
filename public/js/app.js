@@ -168,6 +168,10 @@
     return "Pendiente";
   }
 
+  function fmtCode(p) {
+    return p.hasCode && p.securityCode ? "Cód: " + escapeHtml(p.securityCode) : "Sin código";
+  }
+
   function renderFeedItem(p, isNew) {
     const li = document.createElement("li");
     li.className = "feed-item" + (isNew ? " is-new" : "");
@@ -175,7 +179,7 @@
       <span class="feed-badge ${p.status}"></span>
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(p.senderName)}</div>
-        <div class="feed-time">${fmtTime(p.createdAt)} · ${statusLabel(p.status)}</div>
+        <div class="feed-time">${fmtTime(p.createdAt)} · ${statusLabel(p.status)} · ${fmtCode(p)}</div>
       </div>
       <div class="feed-amount">${fmtMoney(p.amount)}</div>
     `;
@@ -369,7 +373,7 @@
     } else {
       const rows = info.payments.map(p => `
         <div class="day-detail-row">
-          <span>${fmtTime(p.createdAt)} · ${escapeHtml(p.senderName)}</span>
+          <span>${fmtTime(p.createdAt)} · ${escapeHtml(p.senderName)}<br><small>${fmtCode(p)}</small></span>
           <b>${fmtMoney(p.amount)}</b>
         </div>
       `).join("");
