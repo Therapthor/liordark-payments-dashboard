@@ -1,0 +1,8 @@
+node_modules
+dist
+data/*.db
+data/*.db-journal
+.env
+.env.*
+!.env.example
+*.log
