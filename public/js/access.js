@@ -92,10 +92,11 @@
   // ESTADO EN MEMORIA
   // ─────────────────────────────────────────────────────────────
 
-  let currentProfileForModal = null;
-  let currentPasswordTarget  = null;
-  let editingAccountId       = null;
-  let platformCatalog        = [];
+  let currentProfileForModal   = null;
+  let currentPasswordTarget    = null;
+  let editingAccountId         = null;
+  let editingAccountPlatform   = null;
+  let platformCatalog          = [];
 
   async function loadCatalog() {
     if (platformCatalog.length) return platformCatalog;
@@ -159,6 +160,43 @@
     wireAccountCardEvents(target);
   }
 
+  // Reemplaza en el DOM solo la tarjeta de esta cuenta, sin recargar todo
+  // el acordeón — recargar todo cerraba las plataformas que el admin tenía
+  // abiertas cada vez que asignaba un cliente, liberaba un perfil, etc.
+  async function refreshAccountInPlace(accountId, platformHint) {
+    const container = activeQuery
+      ? document.getElementById("access-search-results")
+      : document.getElementById("access-platforms");
+    const el = container.querySelector(`.access-account[data-account-id="${accountId}"]`);
+    if (!el) { await refresh(); return; }
+
+    const { account } = await api("/accounts/" + accountId);
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = renderAccountCard(account).trim();
+    const newEl = wrapper.firstElementChild;
+    el.replaceWith(newEl);
+    wireAccountCardEvents(newEl);
+
+    refreshPlatformSummaryText(platformHint || account.platform);
+  }
+
+  // Actualiza solo el contador de la cabecera de la plataforma (cuentas /
+  // perfiles ocupados) sin tocar qué acordeones están abiertos.
+  async function refreshPlatformSummaryText(platform) {
+    try {
+      const { platforms } = await api("/platforms");
+      const info = platforms.find(p => p.platform === platform);
+      if (!info) return;
+      document.querySelectorAll(".access-platform").forEach(details => {
+        const nameEl = details.querySelector(".access-platform-name");
+        if (nameEl && nameEl.textContent === platform) {
+          details.querySelector(".access-platform-count").textContent =
+            `${info.accountCount} cuenta(s) · ${info.occupiedCount}/${info.profileCount} perfiles ocupados`;
+        }
+      });
+    } catch { /* no crítico */ }
+  }
+
   function renderAccountCard(account) {
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
     const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
@@ -181,7 +219,8 @@
             </div>
           </div>
           <div class="access-account-actions">
-            ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">📤 Enviar a todos (${occupiedCount})</button>` : ""}
+            ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">🔄 Enviar reemplazo a todos (${occupiedCount})</button>` : ""}
+            ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
             <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
             <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
             <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
@@ -235,14 +274,19 @@
       btn.addEventListener("click", () => sendAllForAccount(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
+    target.querySelectorAll(".access-open-link").forEach(btn => {
+      btn.addEventListener("click", () => window.open(btn.dataset.link, "_blank"));
+    });
+
     target.querySelectorAll(".access-copy-account").forEach(btn => {
       btn.addEventListener("click", () => copyAccountData(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
     target.querySelectorAll(".access-renew-account").forEach(btn => {
       btn.addEventListener("click", async () => {
-        await api("/accounts/" + btn.dataset.accountId + "/renew", { method: "POST" });
-        refresh();
+        const accountId = Number(btn.dataset.accountId);
+        await api("/accounts/" + accountId + "/renew", { method: "POST" });
+        refreshAccountInPlace(accountId);
       });
     });
 
@@ -267,13 +311,13 @@
     if (act === "replace") return window.open(waLink(ctx.clientPhone, msgReemplazo(ctx)), "_blank");
     if (act === "password") { currentPasswordTarget = ctx; openPasswordModal(); return; }
     if (act === "edit")    return openProfileModal(ctx);
-    if (act === "release") return releaseProfile(ctx.id);
+    if (act === "release") return releaseProfile(ctx.id, ctx.accountId);
   }
 
-  async function releaseProfile(profileId) {
+  async function releaseProfile(profileId, accountId) {
     if (!confirm("¿Liberar este perfil? Se borrará el cliente asignado.")) return;
     await api("/profiles/" + profileId + "/release", { method: "POST" });
-    refresh();
+    refreshAccountInPlace(accountId);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -281,7 +325,8 @@
   // ─────────────────────────────────────────────────────────────
 
   function accountDataText(account) {
-    return `🛒 *${account.platform}*\n📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}\n🏷 Proveedor: ${account.provider || "—"}\n⏳ Vencimiento: ${fmtDateLong(account.expiresAt)}\n👥 ${account.hasProfiles ? "Cuenta con perfiles (5)" : "Cuenta única"}`;
+    const linkLine = account.link ? `\n🔗 Enlace: ${account.link}` : "";
+    return `🛒 *${account.platform}*\n📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}\n🏷 Proveedor: ${account.provider || "—"}\n⏳ Vencimiento: ${fmtDateLong(account.expiresAt)}\n👥 ${account.hasProfiles ? "Cuenta con perfiles (5)" : "Cuenta única"}${linkLine}`;
   }
 
   function copyAccountData(btn, account) {
@@ -299,8 +344,9 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // ENVÍO EN MASIVO — un WhatsApp por cada perfil con cliente
-  // asignado, de a uno, con 5s de por medio.
+  // ENVÍO EN MASIVO — manda el mensaje de REEMPLAZO (no el de entrega
+  // inicial) a cada perfil con cliente asignado, de a uno, con 5s de
+  // por medio.
   //
   // Las ventanas se pre-abren TODAS en blanco durante el propio clic
   // (gesto real del usuario) y recién después, una por una con el
@@ -324,7 +370,7 @@
     btn.disabled = true;
 
     for (let i = 0; i < occupied.length; i++) {
-      const link = waLink(occupied[i].clientPhone, msgEntrega(profileCtx(account, occupied[i])));
+      const link = waLink(occupied[i].clientPhone, msgReemplazo(profileCtx(account, occupied[i])));
       if (windows[i]) windows[i].location = link;
       btn.textContent = `Enviando ${i + 1}/${occupied.length}…`;
       if (i < occupied.length - 1) await sleep(SEND_ALL_COOLDOWN_MS);
@@ -388,11 +434,13 @@
     document.getElementById("account-edit-error").hidden = true;
 
     const { account } = await api("/accounts/" + accountId);
+    editingAccountPlatform = account.platform;
     populatePlatformSelect(document.getElementById("account-edit-platform"), account.platform);
     document.getElementById("account-edit-email").value = account.email;
     document.getElementById("account-edit-password").value = account.password;
     document.getElementById("account-edit-provider").value = account.provider;
     document.getElementById("account-edit-expires").value = account.expiresAt || "";
+    document.getElementById("account-edit-link").value = account.link || "";
     document.getElementById("account-edit-modal").hidden = false;
   }
 
@@ -407,13 +455,20 @@
         password:  document.getElementById("account-edit-password").value,
         provider:  document.getElementById("account-edit-provider").value,
         expiresAt: document.getElementById("account-edit-expires").value,
+        link:      document.getElementById("account-edit-link").value,
       };
       const errorEl = document.getElementById("account-edit-error");
       errorEl.hidden = true;
       try {
         await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
         document.getElementById("account-edit-modal").hidden = true;
-        refresh();
+        // Si cambió de plataforma, la tarjeta se mueve de acordeón — ahí sí
+        // hace falta recargar todo. Si no, se actualiza sin cerrar nada.
+        if (body.platform === editingAccountPlatform) {
+          await refreshAccountInPlace(editingAccountId, editingAccountPlatform);
+        } else {
+          await refresh();
+        }
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
@@ -445,7 +500,7 @@
       try {
         await api("/profiles/" + currentProfileForModal.id, { method: "PUT", body: JSON.stringify(body) });
         document.getElementById("profile-modal").hidden = true;
-        refresh();
+        refreshAccountInPlace(currentProfileForModal.accountId);
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;

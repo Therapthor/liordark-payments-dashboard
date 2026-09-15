@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS access_accounts (
   provider      TEXT    NOT NULL DEFAULT '',  -- proveedor — de quién se compró la cuenta
   has_profiles  INTEGER NOT NULL DEFAULT 1,   -- 0 = cuenta única (1 solo cliente, sin perfiles)
   expires_at    TEXT,                         -- YYYY-MM-DD, vencimiento compartido por la cuenta
+  link          TEXT    NOT NULL DEFAULT '',  -- enlace opcional (info que se llena a mano), botón "Abrir enlace"
   notes         TEXT    NOT NULL DEFAULT '',
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))

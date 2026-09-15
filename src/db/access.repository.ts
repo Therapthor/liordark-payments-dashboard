@@ -21,6 +21,7 @@ export type AccessAccount = {
   provider:    string;
   hasProfiles: boolean;
   expiresAt:   string | null;
+  link:        string;
   notes:       string;
   createdAt:   string;
   updatedAt:   string;
@@ -109,6 +110,7 @@ export function updateAccount(id: number, params: {
   password?:  string;
   provider?:  string;
   expiresAt?: string | null;
+  link?:      string;
   notes?:     string;
 }): AccessAccountWithProfiles | null {
   const current = getAccountById(id);
@@ -116,7 +118,7 @@ export function updateAccount(id: number, params: {
 
   db.prepare(`
     UPDATE access_accounts
-    SET platform = ?, email = ?, password = ?, provider = ?, expires_at = ?, notes = ?, updated_at = datetime('now')
+    SET platform = ?, email = ?, password = ?, provider = ?, expires_at = ?, link = ?, notes = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(
     (params.platform ?? current.platform).trim().toUpperCase(),
@@ -124,6 +126,7 @@ export function updateAccount(id: number, params: {
     params.password ?? current.password,
     (params.provider ?? current.provider).trim(),
     params.expiresAt !== undefined ? params.expiresAt : current.expiresAt,
+    (params.link ?? current.link).trim(),
     (params.notes ?? current.notes).trim(),
     id
   );
@@ -261,6 +264,7 @@ function toAccount(row: any): AccessAccount {
     provider:    row.provider ?? "",
     hasProfiles: row.has_profiles === 1,
     expiresAt:   row.expires_at ?? null,
+    link:        row.link ?? "",
     notes:       row.notes ?? "",
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,

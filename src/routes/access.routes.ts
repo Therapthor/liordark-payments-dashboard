@@ -100,14 +100,14 @@ router.get("/accounts/:id", (req, res) => {
 });
 
 router.put("/accounts/:id", (req, res) => {
-  const { platform, email, password, provider, expiresAt, notes } = req.body ?? {};
+  const { platform, email, password, provider, expiresAt, link, notes } = req.body ?? {};
 
   if (expiresAt !== undefined && expiresAt !== null && !DATE_RE.test(expiresAt)) {
     res.status(400).json({ message: "Fecha inválida, usa YYYY-MM-DD." });
     return;
   }
 
-  const account = updateAccount(Number(req.params.id), { platform, email, password, provider, expiresAt, notes });
+  const account = updateAccount(Number(req.params.id), { platform, email, password, provider, expiresAt, link, notes });
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   res.json({ account: withStatus(account) });
 });

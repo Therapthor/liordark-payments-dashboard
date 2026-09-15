@@ -37,5 +37,6 @@ function ensureColumn(table: string, column: string, columnDdl: string): void {
 ensureColumn("access_accounts", "provider",     "provider TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_accounts", "has_profiles", "has_profiles INTEGER NOT NULL DEFAULT 1");
 ensureColumn("access_accounts", "expires_at",   "expires_at TEXT");
+ensureColumn("access_accounts", "link",         "link TEXT NOT NULL DEFAULT ''");
 
 console.log("🗄️  SQLite inicializado:", DB_PATH);
