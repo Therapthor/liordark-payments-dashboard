@@ -10,6 +10,53 @@
     return "S/ " + num.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // OJITO — ocultar/mostrar montos (persiste entre sesiones)
+  // ─────────────────────────────────────────────────────────────
+
+  const MONEY_MASK = "***";
+  let moneyHidden = localStorage.getItem("ldp_money_hidden") === "1";
+
+  /** Reemplaza el número de un texto tipo "S/ 1,234.56" por ***, dejando el prefijo. */
+  function maskMoneyText(rawText) {
+    return String(rawText).replace(/[\d.,]+/g, MONEY_MASK);
+  }
+
+  /** Escribe un valor de dinero en un elemento existente, guardando el real para poder revelarlo. */
+  function setMoneyText(el, rawText) {
+    el.dataset.raw = rawText;
+    el.textContent = moneyHidden ? maskMoneyText(rawText) : rawText;
+  }
+
+  /** HTML de un valor de dinero para usar dentro de innerHTML/templates. */
+  function moneyValueHtml(rawText) {
+    const shown = moneyHidden ? maskMoneyText(rawText) : rawText;
+    return `<span class="money-value" data-raw="${escapeHtml(rawText)}">${escapeHtml(shown)}</span>`;
+  }
+
+  function refreshMoneyVisibility() {
+    document.querySelectorAll("[data-raw]").forEach(el => {
+      el.textContent = moneyHidden ? maskMoneyText(el.dataset.raw) : el.dataset.raw;
+    });
+    if (chart) chart.update(); // los ticks del eje Y también deben ocultarse/mostrarse
+  }
+
+  function initMoneyToggle() {
+    const btn = document.getElementById("money-toggle");
+    updateMoneyToggleBtn(btn);
+    btn.addEventListener("click", () => {
+      moneyHidden = !moneyHidden;
+      localStorage.setItem("ldp_money_hidden", moneyHidden ? "1" : "0");
+      refreshMoneyVisibility();
+      updateMoneyToggleBtn(btn);
+    });
+  }
+  function updateMoneyToggleBtn(btn) {
+    btn.textContent = moneyHidden ? "🙈" : "👁";
+    btn.title = moneyHidden ? "Mostrar montos" : "Ocultar montos";
+    btn.classList.toggle("muted", moneyHidden);
+  }
+
   function fmtDateShort(ymd) {
     const [, m, d] = ymd.split("-");
     const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
@@ -196,22 +243,22 @@
   // ─────────────────────────────────────────────────────────────
 
   function renderStats(stats) {
-    document.getElementById("stat-today-total").textContent   = fmtMoney(stats.today.total);
+    setMoneyText(document.getElementById("stat-today-total"), fmtMoney(stats.today.total));
     document.getElementById("stat-today-count").textContent   = pluralPagos(stats.today.count);
-    document.getElementById("stat-month-total").textContent   = fmtMoney(stats.month.total);
+    setMoneyText(document.getElementById("stat-month-total"), fmtMoney(stats.month.total));
     document.getElementById("stat-month-count").textContent   = pluralPagos(stats.month.count);
-    document.getElementById("stat-alltime-total").textContent = fmtMoney(stats.allTime.total);
+    setMoneyText(document.getElementById("stat-alltime-total"), fmtMoney(stats.allTime.total));
     document.getElementById("stat-alltime-count").textContent = pluralPagos(stats.allTime.count);
 
     if (stats.lastMonth) {
       document.getElementById("stat-lastmonth-label").textContent = "Mes pasado";
-      document.getElementById("stat-lastmonth-total").textContent = fmtMoney(stats.lastMonth.total);
+      setMoneyText(document.getElementById("stat-lastmonth-total"), fmtMoney(stats.lastMonth.total));
       document.getElementById("stat-lastmonth-count").textContent = pluralPagos(stats.lastMonth.count);
 
       // Mismo dato, resumido arriba de la tabla de Historial.
       const histTotal = document.getElementById("history-lastmonth-total");
       const histCount = document.getElementById("history-lastmonth-count");
-      if (histTotal) histTotal.textContent = fmtMoney(stats.lastMonth.total);
+      if (histTotal) setMoneyText(histTotal, fmtMoney(stats.lastMonth.total));
       if (histCount) histCount.textContent = pluralPagos(stats.lastMonth.count);
       const hint = document.getElementById("history-lastmonth-hint");
       if (hint) hint.firstChild.textContent = "Mes pasado (" + fmtMonthName(stats.lastMonth.month) + "): ";
@@ -245,7 +292,7 @@
         <div class="feed-name">${escapeHtml(p.senderName)}</div>
         <div class="feed-time">${fmtTime(p.createdAt)} · <span class="feed-status ${statusClass(p.status)}">${statusLabel(p.status)}</span> · ${fmtCode(p)}</div>
       </div>
-      <div class="feed-amount">${fmtMoney(p.amount)}</div>
+      <div class="feed-amount">${moneyValueHtml(fmtMoney(p.amount))}</div>
     `;
     return li;
   }
@@ -419,7 +466,7 @@
         <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
       </div>
-      <div class="feed-amount">S/ ${escapeHtml(o.price)}</div>
+      <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>
     `;
     return li;
   }
@@ -509,7 +556,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (ctx) => "S/ " + ctx.parsed.y.toLocaleString("es-PE", { minimumFractionDigits: 2 }),
+              label: (ctx) => moneyHidden ? "S/ " + MONEY_MASK : "S/ " + ctx.parsed.y.toLocaleString("es-PE", { minimumFractionDigits: 2 }),
             },
           },
         },
@@ -524,7 +571,7 @@
             ticks: {
               color: "#898781",
               font: { size: 11 },
-              callback: (v) => "S/ " + v,
+              callback: (v) => moneyHidden ? MONEY_MASK : "S/ " + v,
             },
           },
         },
@@ -551,7 +598,7 @@
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${fmtDateLong(d.date)}</td>
-        <td>${fmtMoney(d.total)}</td>
+        <td>${moneyValueHtml(fmtMoney(d.total))}</td>
         <td>${d.count || "—"}</td>
         <td><span class="badge ${d.source}">${badgeLabel(d.source)}</span></td>
         <td>${d.source === "manual" ? `<button class="row-delete-btn" data-date="${d.date}">Borrar</button>` : ""}</td>
@@ -588,18 +635,18 @@
       body.innerHTML = `<p>Sin datos para este día.</p>`;
     } else if (info.source === "manual") {
       body.innerHTML = `
-        <div class="day-detail-row"><span>Total (manual)</span><b>${fmtMoney(info.total)}</b></div>
+        <div class="day-detail-row"><span>Total (manual)</span><b>${moneyValueHtml(fmtMoney(info.total))}</b></div>
         ${info.note ? `<div class="day-detail-row"><span>Nota</span><span>${escapeHtml(info.note)}</span></div>` : ""}
       `;
     } else {
       const rows = info.payments.map(p => `
         <div class="day-detail-row">
           <span>${fmtTime(p.createdAt)} · ${escapeHtml(p.senderName)}<br><small>${fmtCode(p)}</small></span>
-          <b>${fmtMoney(p.amount)}</b>
+          <b>${moneyValueHtml(fmtMoney(p.amount))}</b>
         </div>
       `).join("");
       body.innerHTML = `
-        <div class="day-detail-row"><span><b>Total del día</b></span><b>${fmtMoney(info.total)}</b></div>
+        <div class="day-detail-row"><span><b>Total del día</b></span><b>${moneyValueHtml(fmtMoney(info.total))}</b></div>
         ${rows}
       `;
     }
@@ -662,6 +709,7 @@
 
     initTabs();
     initSoundToggle();
+    initMoneyToggle();
     initCodeSearch();
     if (window.LiordarkAccess) window.LiordarkAccess.init();
 
