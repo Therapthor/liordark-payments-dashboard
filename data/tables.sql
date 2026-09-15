@@ -42,14 +42,19 @@ CREATE TABLE IF NOT EXISTS sync_state (
 --
 -- Vive solo acá, independiente de Google Sheets y del bot, mientras
 -- se prepara el traspaso. Una cuenta (ej. un correo de NETFLIX) tiene
--- N perfiles (5 por defecto); cada perfil puede tener un cliente
--- asignado con su fecha de vencimiento, o estar libre.
+-- N perfiles (5 si la plataforma usa perfiles, 1 si es cuenta única
+-- como CANVA/CAPCUT PRO). El vencimiento es UNO solo por cuenta,
+-- compartido por todos los clientes que tiene asignados — se renueva
+-- la cuenta entera, no cada cliente por separado.
 -- ═══════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS access_accounts (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   platform      TEXT    NOT NULL,
   email         TEXT    NOT NULL,
   password      TEXT    NOT NULL,
+  provider      TEXT    NOT NULL DEFAULT '',  -- proveedor — de quién se compró la cuenta
+  has_profiles  INTEGER NOT NULL DEFAULT 1,   -- 0 = cuenta única (1 solo cliente, sin perfiles)
+  expires_at    TEXT,                         -- YYYY-MM-DD, vencimiento compartido por la cuenta
   notes         TEXT    NOT NULL DEFAULT '',
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -62,9 +67,7 @@ CREATE TABLE IF NOT EXISTS access_profiles (
   account_id    INTEGER NOT NULL REFERENCES access_accounts(id) ON DELETE CASCADE,
   slot_number   INTEGER NOT NULL,
   profile_name  TEXT    NOT NULL DEFAULT '',
-  client_name   TEXT    NOT NULL DEFAULT '',
-  client_phone  TEXT    NOT NULL DEFAULT '',
-  expires_at    TEXT,                        -- YYYY-MM-DD, NULL = perfil libre
+  client_phone  TEXT    NOT NULL DEFAULT '',  -- vacío = perfil libre
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(account_id, slot_number)
 );

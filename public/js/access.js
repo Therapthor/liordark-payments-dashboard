@@ -31,11 +31,19 @@
     return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
   }
 
-  const STATUS_LABEL = { libre: "Libre", activo: "Activo", por_vencer: "Por vencer", vencido: "Vencido" };
-  const STATUS_CLASS = { libre: "libre", activo: "matched", por_vencer: "pending", vencido: "expired" };
+  function addDaysISO(dateISO, days) {
+    const [y, m, d] = dateISO.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return dt.toISOString().slice(0, 10);
+  }
+
+  // Estado de la CUENTA — compartido por todos sus clientes/perfiles.
+  const STATUS_LABEL = { activo: "Activo", por_vencer: "Por vencer", vencido: "Vencido", sin_fecha: "Sin fecha" };
+  const STATUS_CLASS = { activo: "matched", por_vencer: "pending", vencido: "expired", sin_fecha: "libre" };
 
   function daysLabel(status, days) {
-    if (status === "libre") return "—";
+    if (status === "sin_fecha" || days == null) return "—";
     if (days === 0) return "Vence hoy";
     if (days < 0) return Math.abs(days) + "d vencido";
     return days + "d restantes";
@@ -52,27 +60,61 @@
   }
 
   function msgEntrega(p) {
-    return `✅ *${p.platform}*\n\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*\n👤 Perfil: *${p.profileName}*\n⏳ Vencimiento: *${fmtDateLong(p.expiresAt)}*`;
+    const perfilLine = p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "";
+    return `✅ *${p.platform}*\n\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Vencimiento: *${fmtDateLong(p.expiresAt)}*`;
   }
   function msgReemplazo(p) {
-    return `🔄 Reemplazo de cuenta\n\n✅ *${p.platform}*\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*\n👤 Perfil: *${p.profileName}*\n⏳ Días restantes: *${p.daysLeft}*\n\nCualquier inconveniente adicional, estoy atento. 😊`;
+    const perfilLine = p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "";
+    return `🔄 Reemplazo de cuenta\n\n✅ *${p.platform}*\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Días restantes: *${p.daysLeft}*\n\nCualquier inconveniente adicional, estoy atento. 😊`;
   }
   function msgPassword(p, newPassword) {
     return `🔄 *Cambio de contraseña*\n\n✅ *${p.platform}*\n📧 Correo: *${p.email}*\n🔑 Nueva contraseña: *${newPassword}*`;
   }
   function msgResumen(items) {
-    const lines = items.map((it, i) =>
-      `${i + 1}️⃣ *${it.platform}*\n👤 Perfil: ${it.profileName}\n⏳ Vence: ${fmtDateLong(it.expiresAt)} (${daysLabel(it.status, it.daysLeft)})`
-    ).join("\n\n");
+    const lines = items.map((it, i) => {
+      const perfilLine = it.profileName ? `\n👤 Perfil: ${it.profileName}` : "";
+      return `${i + 1}️⃣ *${it.platform}*${perfilLine}\n⏳ Vence: ${fmtDateLong(it.expiresAt)} (${daysLabel(it.status, it.daysLeft)})`;
+    }).join("\n\n");
     return `📋 *Resumen de tus cuentas*\n\n${lines}`;
+  }
+
+  /** Datos de perfil + cuenta combinados, tal como los necesitan los mensajes de WhatsApp. */
+  function profileCtx(account, p) {
+    return {
+      id: p.id, accountId: account.id, platform: account.platform,
+      email: account.email, password: account.password,
+      profileName: p.profileName || "", clientPhone: p.clientPhone,
+      expiresAt: account.expiresAt, daysLeft: account.daysLeft, status: account.status,
+    };
   }
 
   // ─────────────────────────────────────────────────────────────
   // ESTADO EN MEMORIA
   // ─────────────────────────────────────────────────────────────
 
-  let currentProfileForModal = null; // { id, accountId } — perfil que se está editando
-  let currentPasswordTarget  = null; // profile con datos de cuenta, para armar el link tras poner la nueva clave
+  let currentProfileForModal = null;
+  let currentPasswordTarget  = null;
+  let editingAccountId       = null;
+  let platformCatalog        = [];
+
+  async function loadCatalog() {
+    if (platformCatalog.length) return platformCatalog;
+    try {
+      const { platforms } = await api("/platforms-catalog");
+      platformCatalog = platforms;
+    } catch {
+      platformCatalog = [];
+    }
+    return platformCatalog;
+  }
+
+  function populatePlatformSelect(select, selected) {
+    select.innerHTML = platformCatalog.length
+      ? platformCatalog.map(p =>
+          `<option value="${escapeHtml(p.platform)}" ${p.platform === selected ? "selected" : ""}>${escapeHtml(p.platform)}</option>`
+        ).join("")
+      : `<option value="">No se pudo cargar el catálogo del bot</option>`;
+  }
 
   // ─────────────────────────────────────────────────────────────
   // CARGA Y RENDER — plataformas / cuentas / perfiles
@@ -107,7 +149,7 @@
       container.appendChild(details);
       details.addEventListener("toggle", () => {
         if (details.open) loadAccountsForPlatform(p.platform, details.querySelector(".access-accounts"));
-      }, { once: false });
+      });
     }
   }
 
@@ -117,40 +159,37 @@
     wireAccountCardEvents(target);
   }
 
-  /** Datos de perfil + cuenta combinados, tal como los necesitan los mensajes de WhatsApp. */
-  function profileCtx(account, p) {
-    return {
-      id: p.id, accountId: account.id, platform: account.platform,
-      email: account.email, password: account.password,
-      profileName: p.profileName, expiresAt: p.expiresAt, daysLeft: p.daysLeft, status: p.status,
-      clientName: p.clientName, clientPhone: p.clientPhone,
-    };
-  }
-
   function renderAccountCard(account) {
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
-    const occupiedCount = account.profiles.filter(p => p.clientPhone && p.expiresAt).length;
+    const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
     const accountAttr = JSON.stringify(account).replace(/"/g, "&quot;");
 
     return `
       <div class="access-account" data-account-id="${account.id}">
         <div class="access-account-head">
-          <div class="access-account-email">
-            📧 <span>${escapeHtml(account.email)}</span>
-            <span class="access-pw-mask">🔑 ••••••••</span>
-            <span class="access-pw-real" hidden>🔑 ${escapeHtml(account.password)}</span>
-            <button class="icon-btn-sm access-toggle-pw" title="Mostrar/ocultar contraseña">👁</button>
+          <div class="access-account-info">
+            <div class="access-account-email">
+              📧 <span>${escapeHtml(account.email)}</span>
+              <span class="access-pw-mask">🔑 ••••••••</span>
+              <span class="access-pw-real" hidden>🔑 ${escapeHtml(account.password)}</span>
+              <button class="icon-btn-sm access-toggle-pw" title="Mostrar/ocultar contraseña">👁</button>
+            </div>
+            <div class="access-account-meta">
+              ${account.provider ? `<span>🏷 ${escapeHtml(account.provider)}</span>` : ""}
+              <span class="badge access-badge-${STATUS_CLASS[account.status]}">${STATUS_LABEL[account.status]}</span>
+              <span>${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
+            </div>
           </div>
           <div class="access-account-actions">
             ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">📤 Enviar a todos (${occupiedCount})</button>` : ""}
+            <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
+            <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
             <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
             <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
           </div>
         </div>
         <table class="access-table">
-          <thead>
-            <tr><th>Perfil</th><th>Cliente</th><th>Vence</th><th>Estado</th><th></th></tr>
-          </thead>
+          <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -158,29 +197,25 @@
   }
 
   function renderProfileRow(account, p) {
-    const occupied = !!p.clientPhone && !!p.expiresAt;
+    const occupied = !!p.clientPhone;
     const ctx = JSON.stringify(profileCtx(account, p)).replace(/"/g, "&quot;");
 
     const actions = occupied ? `
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
         <button class="row-action" data-act="replace" data-ctx="${ctx}" title="Reemplazo">🔄</button>
         <button class="row-action" data-act="password" data-ctx="${ctx}" title="Cambiar contraseña">🔑</button>
-        <button class="row-action" data-act="renew" data-ctx="${ctx}" title="+30 días">➕30</button>
-        <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Editar">✏️</button>
+        <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Cambiar teléfono">✏️</button>
         <button class="row-action" data-act="release" data-ctx="${ctx}" title="Liberar perfil">🗑</button>
       ` : `
         <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Asignar cliente">➕ Asignar</button>
       `;
 
-    return `
-      <tr>
-        <td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}</td>
-        <td>${occupied ? escapeHtml(p.clientName) + "<br><small>" + escapeHtml(p.clientPhone) + "</small>" : "<span class=\"text-muted\">Libre</span>"}</td>
-        <td>${occupied ? fmtDateLong(p.expiresAt) + "<br><small>" + daysLabel(p.status, p.daysLeft) + "</small>" : "—"}</td>
-        <td><span class="badge access-badge-${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span></td>
-        <td class="access-row-actions">${actions}</td>
-      </tr>
-    `;
+    const cells = [];
+    if (account.hasProfiles) cells.push(`<td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}</td>`);
+    cells.push(`<td>${occupied ? escapeHtml(p.clientPhone) : "<span class=\"text-muted\">Libre</span>"}</td>`);
+    cells.push(`<td class="access-row-actions">${actions}</td>`);
+
+    return `<tr>${cells.join("")}</tr>`;
   }
 
   function wireAccountCardEvents(target) {
@@ -200,8 +235,19 @@
       btn.addEventListener("click", () => sendAllForAccount(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
+    target.querySelectorAll(".access-copy-account").forEach(btn => {
+      btn.addEventListener("click", () => copyAccountData(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+    });
+
+    target.querySelectorAll(".access-renew-account").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await api("/accounts/" + btn.dataset.accountId + "/renew", { method: "POST" });
+        refresh();
+      });
+    });
+
     target.querySelectorAll(".access-edit-account").forEach(btn => {
-      btn.addEventListener("click", () => openAccountModal(Number(btn.dataset.accountId)));
+      btn.addEventListener("click", () => openEditModal(Number(btn.dataset.accountId)));
     });
     target.querySelectorAll(".access-delete-account").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -220,9 +266,36 @@
     if (act === "send")    return window.open(waLink(ctx.clientPhone, msgEntrega(ctx)), "_blank");
     if (act === "replace") return window.open(waLink(ctx.clientPhone, msgReemplazo(ctx)), "_blank");
     if (act === "password") { currentPasswordTarget = ctx; openPasswordModal(); return; }
-    if (act === "renew")   return renewProfile(ctx.id);
     if (act === "edit")    return openProfileModal(ctx);
     if (act === "release") return releaseProfile(ctx.id);
+  }
+
+  async function releaseProfile(profileId) {
+    if (!confirm("¿Liberar este perfil? Se borrará el cliente asignado.")) return;
+    await api("/profiles/" + profileId + "/release", { method: "POST" });
+    refresh();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // COPIAR DATOS DE CUENTA — para reportar al proveedor
+  // ─────────────────────────────────────────────────────────────
+
+  function accountDataText(account) {
+    return `🛒 *${account.platform}*\n📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}\n🏷 Proveedor: ${account.provider || "—"}\n⏳ Vencimiento: ${fmtDateLong(account.expiresAt)}\n👥 ${account.hasProfiles ? "Cuenta con perfiles (5)" : "Cuenta única"}`;
+  }
+
+  function copyAccountData(btn, account) {
+    const text = accountDataText(account);
+    const done = () => {
+      const original = btn.textContent;
+      btn.textContent = "✅ Copiado";
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => alert("No se pudo copiar:\n\n" + text));
+    } else {
+      alert("Copia manualmente:\n\n" + text);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -231,7 +304,7 @@
   //
   // Las ventanas se pre-abren TODAS en blanco durante el propio clic
   // (gesto real del usuario) y recién después, una por una con el
-  // cooldown, se les asigna el link real. Si se abrieran una por una
+  // cooldown, se les asigna el link real — si se abrieran una por una
   // tras cada espera, el navegador bloquearía como pop-up no
   // solicitado todo lo que se abra fuera del clic original.
   // ─────────────────────────────────────────────────────────────
@@ -241,7 +314,7 @@
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
   async function sendAllForAccount(btn, account) {
-    const occupied = account.profiles.filter(p => p.clientPhone && p.expiresAt);
+    const occupied = account.profiles.filter(p => p.clientPhone);
     if (occupied.length === 0) return;
 
     const windows = occupied.map(() => window.open("", "_blank"));
@@ -265,59 +338,37 @@
     }
   }
 
-  async function renewProfile(profileId) {
-    await api("/profiles/" + profileId + "/renew", { method: "POST" });
-    refresh();
-  }
-  async function releaseProfile(profileId) {
-    if (!confirm("¿Liberar este perfil? Se borrará el cliente y la fecha asignada.")) return;
-    await api("/profiles/" + profileId + "/release", { method: "POST" });
-    refresh();
-  }
-
   // ─────────────────────────────────────────────────────────────
-  // MODAL — nueva cuenta / editar cuenta
+  // MODAL — agregar cuentas en lote (correo:contraseña)
   // ─────────────────────────────────────────────────────────────
 
-  let editingAccountId = null;
-
-  function openAccountModal(accountId) {
-    editingAccountId = accountId ?? null;
-    document.getElementById("account-form").reset();
-    document.getElementById("account-error").hidden = true;
-    document.getElementById("account-slots").closest("label").style.display = accountId ? "none" : "flex";
-    document.querySelector('#account-modal h3').textContent = accountId ? "Editar cuenta" : "Nueva cuenta";
-    if (accountId) {
-      api("/accounts/" + accountId).then(({ account }) => {
-        document.getElementById("account-platform").value = account.platform;
-        document.getElementById("account-email").value = account.email;
-        document.getElementById("account-password").value = account.password;
-      });
-    }
-    document.getElementById("account-modal").hidden = false;
+  async function openBulkModal() {
+    await loadCatalog();
+    document.getElementById("bulk-form").reset();
+    document.getElementById("bulk-error").hidden = true;
+    populatePlatformSelect(document.getElementById("bulk-platform"));
+    document.getElementById("bulk-expires").value = addDaysISO(todayISO(), 30);
+    document.getElementById("bulk-expires").min = todayISO();
+    document.getElementById("bulk-modal").hidden = false;
   }
 
-  function initAccountModal() {
-    document.getElementById("access-new-account-btn").addEventListener("click", () => openAccountModal(null));
-    document.getElementById("account-cancel").addEventListener("click", () => { document.getElementById("account-modal").hidden = true; });
+  function initBulkModal() {
+    document.getElementById("access-new-account-btn").addEventListener("click", openBulkModal);
+    document.getElementById("bulk-cancel").addEventListener("click", () => { document.getElementById("bulk-modal").hidden = true; });
 
-    document.getElementById("account-form").addEventListener("submit", async (e) => {
+    document.getElementById("bulk-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const body = {
-        platform: document.getElementById("account-platform").value,
-        email:    document.getElementById("account-email").value,
-        password: document.getElementById("account-password").value,
-        slots:    Number(document.getElementById("account-slots").value) || 5,
+        platform:  document.getElementById("bulk-platform").value,
+        provider:  document.getElementById("bulk-provider").value,
+        expiresAt: document.getElementById("bulk-expires").value,
+        lines:     document.getElementById("bulk-lines").value,
       };
-      const errorEl = document.getElementById("account-error");
+      const errorEl = document.getElementById("bulk-error");
       errorEl.hidden = true;
       try {
-        if (editingAccountId) {
-          await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
-        } else {
-          await api("/accounts", { method: "POST", body: JSON.stringify(body) });
-        }
-        document.getElementById("account-modal").hidden = true;
+        await api("/accounts/bulk", { method: "POST", body: JSON.stringify(body) });
+        document.getElementById("bulk-modal").hidden = true;
         refresh();
       } catch (err) {
         errorEl.textContent = err.message;
@@ -327,20 +378,59 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MODAL — asignar/editar cliente de un perfil
+  // MODAL — editar cuenta existente
+  // ─────────────────────────────────────────────────────────────
+
+  async function openEditModal(accountId) {
+    await loadCatalog();
+    editingAccountId = accountId;
+    document.getElementById("account-edit-form").reset();
+    document.getElementById("account-edit-error").hidden = true;
+
+    const { account } = await api("/accounts/" + accountId);
+    populatePlatformSelect(document.getElementById("account-edit-platform"), account.platform);
+    document.getElementById("account-edit-email").value = account.email;
+    document.getElementById("account-edit-password").value = account.password;
+    document.getElementById("account-edit-provider").value = account.provider;
+    document.getElementById("account-edit-expires").value = account.expiresAt || "";
+    document.getElementById("account-edit-modal").hidden = false;
+  }
+
+  function initEditModal() {
+    document.getElementById("account-edit-cancel").addEventListener("click", () => { document.getElementById("account-edit-modal").hidden = true; });
+
+    document.getElementById("account-edit-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = {
+        platform:  document.getElementById("account-edit-platform").value,
+        email:     document.getElementById("account-edit-email").value,
+        password:  document.getElementById("account-edit-password").value,
+        provider:  document.getElementById("account-edit-provider").value,
+        expiresAt: document.getElementById("account-edit-expires").value,
+      };
+      const errorEl = document.getElementById("account-edit-error");
+      errorEl.hidden = true;
+      try {
+        await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
+        document.getElementById("account-edit-modal").hidden = true;
+        refresh();
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODAL — asignar/cambiar el teléfono de un perfil
   // ─────────────────────────────────────────────────────────────
 
   function openProfileModal(ctx) {
     currentProfileForModal = ctx;
     document.getElementById("profile-form").reset();
     document.getElementById("profile-error").hidden = true;
-    document.getElementById("profile-modal-title").textContent =
-      ctx.clientPhone ? "Editar perfil" : "Asignar perfil";
-    document.getElementById("profile-name").value = ctx.profileName || "";
-    document.getElementById("profile-client-name").value = ctx.clientName || "";
+    document.getElementById("profile-modal-title").textContent = ctx.clientPhone ? "Cambiar teléfono" : "Asignar cliente";
     document.getElementById("profile-client-phone").value = ctx.clientPhone || "";
-    document.getElementById("profile-expires").value = ctx.expiresAt || "";
-    document.getElementById("profile-expires").min = todayISO();
     document.getElementById("profile-modal").hidden = false;
   }
 
@@ -349,12 +439,7 @@
 
     document.getElementById("profile-form").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const body = {
-        profileName: document.getElementById("profile-name").value,
-        clientName:  document.getElementById("profile-client-name").value,
-        clientPhone: document.getElementById("profile-client-phone").value,
-        expiresAt:   document.getElementById("profile-expires").value,
-      };
+      const body = { clientPhone: document.getElementById("profile-client-phone").value };
       const errorEl = document.getElementById("profile-error");
       errorEl.hidden = true;
       try {
@@ -473,8 +558,8 @@
     list.innerHTML = profiles.map(p => `
       <li class="access-client-item">
         <div>
-          <b>${escapeHtml(p.platform)}</b> — ${escapeHtml(p.profileName)}
-          <div class="text-muted">${escapeHtml(p.clientName)} · ${escapeHtml(p.clientPhone)}</div>
+          <b>${escapeHtml(p.platform)}</b>${p.profileName ? " — " + escapeHtml(p.profileName) : ""}
+          <div class="text-muted">${escapeHtml(p.clientPhone)}${p.provider ? " · " + escapeHtml(p.provider) : ""}</div>
         </div>
         <div class="access-client-item-right">
           <span class="badge access-badge-${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span>
@@ -500,7 +585,8 @@
   function init() {
     if (initialized) return;
     initialized = true;
-    initAccountModal();
+    initBulkModal();
+    initEditModal();
     initProfileModal();
     initPasswordModal();
     initSearch();

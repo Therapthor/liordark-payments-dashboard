@@ -437,7 +437,7 @@ button, input {
   font-size: 13px;
   color: var(--text-secondary);
 }
-.modal-card input {
+.modal-card input, .modal-card select, .modal-card textarea {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   color: var(--text-primary);
@@ -445,8 +445,11 @@ button, input {
   border-radius: var(--radius-sm);
   font-size: 14px;
   outline: none;
+  font-family: inherit;
 }
-.modal-card input:focus { border-color: var(--accent); }
+.modal-card input:focus, .modal-card select:focus, .modal-card textarea:focus { border-color: var(--accent); }
+.modal-card textarea { resize: vertical; font-family: ui-monospace, monospace; font-size: 13px; }
+.modal-card label code { background: var(--surface); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 
@@ -525,15 +528,17 @@ button, input {
 }
 .access-account-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 10px;
 }
+.access-account-info { display: flex; flex-direction: column; gap: 6px; }
 .access-account-email { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; flex-wrap: wrap; }
 .access-pw-mask, .access-pw-real { color: var(--text-secondary); font-weight: 400; font-variant-numeric: tabular-nums; }
-.access-account-actions { display: flex; gap: 8px; }
+.access-account-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
+.access-account-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .access-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .access-table th {

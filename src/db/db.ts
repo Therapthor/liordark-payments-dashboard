@@ -20,4 +20,22 @@ try {
   throw err;
 }
 
+// ─────────────────────────────────────────────────────────────
+// MIGRACIONES — columnas agregadas después del primer despliegue.
+// CREATE TABLE IF NOT EXISTS no las suma solo; para una instancia
+// que ya tenía la tabla, se agregan acá si todavía faltan.
+// ─────────────────────────────────────────────────────────────
+
+function ensureColumn(table: string, column: string, columnDdl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some(c => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDdl}`);
+    console.log(`🗄️  Migración: ${table}.${column} agregada`);
+  }
+}
+
+ensureColumn("access_accounts", "provider",     "provider TEXT NOT NULL DEFAULT ''");
+ensureColumn("access_accounts", "has_profiles", "has_profiles INTEGER NOT NULL DEFAULT 1");
+ensureColumn("access_accounts", "expires_at",   "expires_at TEXT");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

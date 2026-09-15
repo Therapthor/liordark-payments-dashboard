@@ -9,20 +9,21 @@ export type AccessProfile = {
   accountId:   number;
   slotNumber:  number;
   profileName: string;
-  clientName:  string;
   clientPhone: string;
-  expiresAt:   string | null;
   updatedAt:   string;
 };
 
 export type AccessAccount = {
-  id:        number;
-  platform:  string;
-  email:     string;
-  password:  string;
-  notes:     string;
-  createdAt: string;
-  updatedAt: string;
+  id:          number;
+  platform:    string;
+  email:       string;
+  password:    string;
+  provider:    string;
+  hasProfiles: boolean;
+  expiresAt:   string | null;
+  notes:       string;
+  createdAt:   string;
+  updatedAt:   string;
 };
 
 export type AccessAccountWithProfiles = AccessAccount & { profiles: AccessProfile[] };
@@ -38,62 +39,102 @@ export type PlatformSummary = {
 // CUENTAS
 // ─────────────────────────────────────────────────────────────
 
+function slotsFor(hasProfiles: boolean): number {
+  return hasProfiles ? 5 : 1;
+}
+
 export function createAccount(params: {
-  platform: string;
-  email:    string;
-  password: string;
-  notes?:   string;
-  slots?:   number;
+  platform:    string;
+  email:       string;
+  password:    string;
+  provider?:   string;
+  hasProfiles: boolean;
+  expiresAt?:  string | null;
+  notes?:      string;
 }): AccessAccountWithProfiles {
-  const slots = Math.min(Math.max(params.slots ?? 5, 1), 10);
+  return createAccountsBulk({
+    platform:    params.platform,
+    provider:    params.provider ?? "",
+    hasProfiles: params.hasProfiles,
+    expiresAt:   params.expiresAt ?? null,
+    pairs:       [{ email: params.email, password: params.password }],
+  })[0]!;
+}
+
+/** Crea varias cuentas de una — formato "correo:contraseña" ya parseado en pares. */
+export function createAccountsBulk(params: {
+  platform:    string;
+  provider:    string;
+  hasProfiles: boolean;
+  expiresAt:   string | null;
+  pairs:       { email: string; password: string }[];
+}): AccessAccountWithProfiles[] {
+  const slots = slotsFor(params.hasProfiles);
 
   const insertAccount = db.prepare(`
-    INSERT INTO access_accounts (platform, email, password, notes)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO access_accounts (platform, email, password, provider, has_profiles, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   const insertProfile = db.prepare(`
     INSERT INTO access_profiles (account_id, slot_number, profile_name)
     VALUES (?, ?, ?)
   `);
 
-  const accountId = db.transaction(() => {
-    const result = insertAccount.run(
-      params.platform.trim().toUpperCase(),
-      params.email.trim(),
-      params.password,
-      params.notes?.trim() ?? ""
-    );
-    const id = result.lastInsertRowid as number;
-    for (let slot = 1; slot <= slots; slot++) {
-      insertProfile.run(id, slot, "Perfil " + slot);
+  const ids = db.transaction(() => {
+    const created: number[] = [];
+    for (const pair of params.pairs) {
+      const result = insertAccount.run(
+        params.platform.trim().toUpperCase(),
+        pair.email.trim(),
+        pair.password.trim(),
+        params.provider.trim(),
+        params.hasProfiles ? 1 : 0,
+        params.expiresAt
+      );
+      const id = result.lastInsertRowid as number;
+      for (let slot = 1; slot <= slots; slot++) {
+        insertProfile.run(id, slot, slots === 1 ? "" : "Perfil " + slot);
+      }
+      created.push(id);
     }
-    return id;
+    return created;
   })();
 
-  return getAccountById(accountId)!;
+  return ids.map(id => getAccountById(id)!);
 }
 
 export function updateAccount(id: number, params: {
-  platform?: string;
-  email?:    string;
-  password?: string;
-  notes?:    string;
+  platform?:  string;
+  email?:     string;
+  password?:  string;
+  provider?:  string;
+  expiresAt?: string | null;
+  notes?:     string;
 }): AccessAccountWithProfiles | null {
   const current = getAccountById(id);
   if (!current) return null;
 
   db.prepare(`
     UPDATE access_accounts
-    SET platform = ?, email = ?, password = ?, notes = ?, updated_at = datetime('now')
+    SET platform = ?, email = ?, password = ?, provider = ?, expires_at = ?, notes = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(
     (params.platform ?? current.platform).trim().toUpperCase(),
     (params.email ?? current.email).trim(),
     params.password ?? current.password,
+    (params.provider ?? current.provider).trim(),
+    params.expiresAt !== undefined ? params.expiresAt : current.expiresAt,
     (params.notes ?? current.notes).trim(),
     id
   );
 
+  return getAccountById(id);
+}
+
+export function setAccountExpiry(id: number, expiresAt: string): AccessAccountWithProfiles | null {
+  db.prepare(`
+    UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(expiresAt, id);
   return getAccountById(id);
 }
 
@@ -113,7 +154,7 @@ export function listPlatforms(): PlatformSummary[] {
       a.platform AS platform,
       COUNT(DISTINCT a.id) AS accountCount,
       COUNT(p.id) AS profileCount,
-      SUM(CASE WHEN p.client_phone != '' AND p.expires_at IS NOT NULL THEN 1 ELSE 0 END) AS occupiedCount
+      SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS occupiedCount
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
     GROUP BY a.platform
@@ -144,43 +185,19 @@ export function getProfileById(id: number): AccessProfile | null {
   return row ? toProfile(row) : null;
 }
 
-export function assignProfileClient(id: number, params: {
-  clientName:  string;
-  clientPhone: string;
-  expiresAt:   string; // YYYY-MM-DD
-  profileName?: string;
-}): AccessProfile | null {
-  const current = getProfileById(id);
-  if (!current) return null;
-
-  db.prepare(`
-    UPDATE access_profiles
-    SET client_name = ?, client_phone = ?, expires_at = ?, profile_name = ?, updated_at = datetime('now')
-    WHERE id = ?
-  `).run(
-    params.clientName.trim(),
-    params.clientPhone.replace(/\D/g, ""),
-    params.expiresAt,
-    (params.profileName ?? current.profileName).trim(),
-    id
-  );
-
-  return getProfileById(id);
-}
-
-export function setProfileExpiry(id: number, expiresAt: string): AccessProfile | null {
-  db.prepare(`
-    UPDATE access_profiles SET expires_at = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(expiresAt, id);
+export function assignProfileClient(id: number, clientPhone: string): AccessProfile | null {
+  const result = db.prepare(`
+    UPDATE access_profiles SET client_phone = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(clientPhone.replace(/\D/g, ""), id);
+  if (result.changes === 0) return null;
   return getProfileById(id);
 }
 
 export function releaseProfile(id: number): AccessProfile | null {
-  db.prepare(`
-    UPDATE access_profiles
-    SET client_name = '', client_phone = '', expires_at = NULL, updated_at = datetime('now')
-    WHERE id = ?
+  const result = db.prepare(`
+    UPDATE access_profiles SET client_phone = '', updated_at = datetime('now') WHERE id = ?
   `).run(id);
+  if (result.changes === 0) return null;
   return getProfileById(id);
 }
 
@@ -189,9 +206,12 @@ export function releaseProfile(id: number): AccessProfile | null {
 // ─────────────────────────────────────────────────────────────
 
 export type ProfileWithAccount = AccessProfile & {
-  platform: string;
-  email:    string;
-  password: string;
+  platform:    string;
+  email:       string;
+  password:    string;
+  provider:    string;
+  hasProfiles: boolean;
+  expiresAt:   string | null;
 };
 
 /** Cuentas cuyo correo contiene el término buscado. */
@@ -202,20 +222,30 @@ export function searchAccountsByEmail(term: string): AccessAccountWithProfiles[]
   return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
 }
 
-/** Perfiles (con su cuenta) cuyo teléfono de cliente coincide, más recientes primero. */
+/** Perfiles (con su cuenta) cuyo teléfono de cliente coincide. */
 export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
   const digits = term.replace(/\D/g, "");
   if (!digits) return [];
 
   const rows = db.prepare(`
-    SELECT p.*, a.platform AS platform, a.email AS email, a.password AS password
+    SELECT p.*,
+           a.platform AS platform, a.email AS email, a.password AS password,
+           a.provider AS provider, a.has_profiles AS has_profiles, a.expires_at AS account_expires_at
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.client_phone LIKE ?
-    ORDER BY p.expires_at ASC
+    ORDER BY a.expires_at ASC
   `).all("%" + digits + "%") as any[];
 
-  return rows.map(row => ({ ...toProfile(row), platform: row.platform, email: row.email, password: row.password }));
+  return rows.map(row => ({
+    ...toProfile(row),
+    platform:    row.platform,
+    email:       row.email,
+    password:    row.password,
+    provider:    row.provider ?? "",
+    hasProfiles: row.has_profiles === 1,
+    expiresAt:   row.account_expires_at ?? null,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -224,13 +254,16 @@ export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
 
 function toAccount(row: any): AccessAccount {
   return {
-    id:        row.id,
-    platform:  row.platform,
-    email:     row.email,
-    password:  row.password,
-    notes:     row.notes ?? "",
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    id:          row.id,
+    platform:    row.platform,
+    email:       row.email,
+    password:    row.password,
+    provider:    row.provider ?? "",
+    hasProfiles: row.has_profiles === 1,
+    expiresAt:   row.expires_at ?? null,
+    notes:       row.notes ?? "",
+    createdAt:   row.created_at,
+    updatedAt:   row.updated_at,
   };
 }
 
@@ -240,9 +273,7 @@ function toProfile(row: any): AccessProfile {
     accountId:   row.account_id,
     slotNumber:  row.slot_number,
     profileName: row.profile_name ?? "",
-    clientName:  row.client_name ?? "",
     clientPhone: row.client_phone ?? "",
-    expiresAt:   row.expires_at ?? null,
     updatedAt:   row.updated_at,
   };
 }

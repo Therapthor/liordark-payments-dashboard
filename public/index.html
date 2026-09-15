@@ -109,7 +109,7 @@
             <input id="access-search-input" type="text" placeholder="Buscar cuenta por correo, o cliente por teléfono…" />
             <button id="access-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
           </div>
-          <button id="access-new-account-btn" class="btn-primary">+ Nueva cuenta</button>
+          <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
         </div>
 
         <!-- Resultado: resumen de cliente por teléfono -->
@@ -125,7 +125,7 @@
         <div id="access-search-results" class="access-accounts" hidden></div>
 
         <div id="access-platforms" class="access-platforms"></div>
-        <p id="access-empty" class="feed-empty" hidden>Todavía no hay cuentas registradas. Crea la primera con "+ Nueva cuenta".</p>
+        <p id="access-empty" class="feed-empty" hidden>Todavía no hay cuentas registradas. Crea las primeras con "+ Agregar cuentas".</p>
 
       </section>
 
@@ -181,51 +181,72 @@
     </form>
   </div>
 
-  <!-- ───────────── MODAL: nueva cuenta ───────────── -->
-  <div id="account-modal" class="modal-backdrop" hidden>
-    <form id="account-form" class="modal-card">
+  <!-- ───────────── MODAL: agregar cuentas (correo:contraseña, en lote) ───────────── -->
+  <div id="bulk-modal" class="modal-backdrop" hidden>
+    <form id="bulk-form" class="modal-card modal-card--wide">
       <div class="modal-head">
-        <h3>Nueva cuenta</h3>
-        <button type="button" class="modal-x" data-close-modal="account-modal">✕</button>
+        <h3>Agregar cuentas</h3>
+        <button type="button" class="modal-x" data-close-modal="bulk-modal">✕</button>
       </div>
       <label>Plataforma
-        <input id="account-platform" type="text" placeholder="ej. CRUNCHYROLL" required />
+        <select id="bulk-platform" required></select>
       </label>
-      <label>Correo
-        <input id="account-email" type="text" required />
+      <label>Proveedor <span class="text-muted">(opcional)</span>
+        <input id="bulk-provider" type="text" placeholder="ej. proveedor Juan" />
       </label>
-      <label>Contraseña
-        <input id="account-password" type="text" required />
+      <label>Vencimiento inicial
+        <input id="bulk-expires" type="date" required />
       </label>
-      <label>Cantidad de perfiles
-        <input id="account-slots" type="number" min="1" max="10" value="5" required />
+      <label>Cuentas — una por línea, formato <code>correo:contraseña</code>
+        <textarea id="bulk-lines" rows="6" placeholder="correo1@gmail.com:clave123&#10;correo2@gmail.com:clave456" required></textarea>
       </label>
-      <p id="account-error" class="login-error" hidden></p>
+      <p id="bulk-error" class="login-error" hidden></p>
       <div class="modal-actions">
-        <button type="button" id="account-cancel" class="btn-secondary">Cancelar</button>
+        <button type="button" id="bulk-cancel" class="btn-secondary">Cancelar</button>
         <button type="submit" class="btn-primary">Crear</button>
       </div>
     </form>
   </div>
 
-  <!-- ───────────── MODAL: asignar/editar cliente en un perfil ───────────── -->
+  <!-- ───────────── MODAL: editar cuenta ───────────── -->
+  <div id="account-edit-modal" class="modal-backdrop" hidden>
+    <form id="account-edit-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Editar cuenta</h3>
+        <button type="button" class="modal-x" data-close-modal="account-edit-modal">✕</button>
+      </div>
+      <label>Plataforma
+        <select id="account-edit-platform" required></select>
+      </label>
+      <label>Correo
+        <input id="account-edit-email" type="text" required />
+      </label>
+      <label>Contraseña
+        <input id="account-edit-password" type="text" required />
+      </label>
+      <label>Proveedor <span class="text-muted">(opcional)</span>
+        <input id="account-edit-provider" type="text" />
+      </label>
+      <label>Vencimiento
+        <input id="account-edit-expires" type="date" required />
+      </label>
+      <p id="account-edit-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="account-edit-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: asignar/cambiar teléfono de un perfil ───────────── -->
   <div id="profile-modal" class="modal-backdrop" hidden>
     <form id="profile-form" class="modal-card">
       <div class="modal-head">
-        <h3 id="profile-modal-title">Asignar perfil</h3>
+        <h3 id="profile-modal-title">Asignar cliente</h3>
         <button type="button" class="modal-x" data-close-modal="profile-modal">✕</button>
       </div>
-      <label>Nombre del perfil
-        <input id="profile-name" type="text" placeholder="ej. Perfil 3" />
-      </label>
-      <label>Cliente
-        <input id="profile-client-name" type="text" required />
-      </label>
       <label>Teléfono (WhatsApp)
         <input id="profile-client-phone" type="text" inputmode="numeric" placeholder="51987654321" required />
-      </label>
-      <label>Vencimiento
-        <input id="profile-expires" type="date" required />
       </label>
       <p id="profile-error" class="login-error" hidden></p>
       <div class="modal-actions">
