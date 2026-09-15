@@ -597,9 +597,15 @@
   function renderApprovedOrder(o, isNew) {
     const li = document.createElement("li");
     li.className = "feed-item" + (isNew ? " is-new" : "");
+    // Primera línea del mensaje = el título ("✅ Orden confirmada...") — es
+    // lo único que se ve en modo compacto; el resto sigue en el HTML para
+    // que la búsqueda por celular (que busca en la base, no en pantalla)
+    // no se vea afectada por si está compactado o no.
+    const summary = (o.message.split("\n")[0] || o.message).trim();
     li.innerHTML = `
       <span class="feed-badge matched"></span>
       <div class="feed-main">
+        <div class="orders-approved-summary">${summary}</div>
         <div class="orders-approved-text">${o.message}</div>
         <div class="feed-time">${fmtTime(o.createdAt)}</div>
       </div>

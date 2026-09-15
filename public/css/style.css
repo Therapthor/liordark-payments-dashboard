@@ -254,6 +254,7 @@ button, input {
 .panel-header.standalone { margin-bottom: 18px; }
 .panel-hint { color: var(--text-muted); font-size: 13px; }
 
+.chart-panel { margin-bottom: 20px; }
 .chart-wrap { height: 400px; position: relative; }
 
 /* ─────────────────────────────────────────────────────────────
@@ -313,6 +314,7 @@ button, input {
   min-width: 22px; justify-content: center;
 }
 .orders-approved-list .feed-badge { align-self: flex-start; margin-top: 4px; }
+.orders-approved-list .feed-main { min-width: 0; } /* evita que el texto largo estire la tarjeta */
 .orders-approved-text {
   font-size: 13px;
   line-height: 1.5;
@@ -321,14 +323,21 @@ button, input {
 }
 .orders-approved-text b { color: var(--text-primary); }
 
-/* Compactar — una línea por aprobación en vez del mensaje completo,
-   para ver muchas más de un vistazo sin tener que hacer scroll. */
-.orders-approved-list.compact .feed-item { padding: 8px 12px; }
-.orders-approved-list.compact .orders-approved-text {
+.orders-approved-summary {
+  display: none;
+  font-size: 14px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Compactar — se ve solo el título ("✅ Orden confirmada...") por
+   aprobación, no el mensaje completo. La búsqueda sigue funcionando
+   igual porque busca en el texto guardado, no en lo que se ve. */
+.orders-approved-list.compact .feed-item { padding: 8px 12px; align-items: center; }
+.orders-approved-list.compact .orders-approved-summary { display: block; }
+.orders-approved-list.compact .orders-approved-text { display: none; }
 #approved-compact-toggle.active { color: var(--accent); border-color: var(--accent); }
 
 .pending-order-actions { display: flex; gap: 4px; flex-shrink: 0; }
