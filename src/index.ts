@@ -10,6 +10,7 @@ import authRoutes from "./routes/auth.routes";
 import liveRoutes from "./routes/live.routes";
 import statsRoutes from "./routes/stats.routes";
 import historyRoutes from "./routes/history.routes";
+import accessRoutes from "./routes/access.routes";
 
 const app = express();
 
@@ -22,6 +23,7 @@ apiRouter.use("/auth", authRoutes);
 apiRouter.use("/live", requireAuth, liveRoutes);
 apiRouter.use("/stats", requireAuth, statsRoutes);
 apiRouter.use("/history", requireAuth, historyRoutes);
+apiRouter.use("/access", requireAuth, accessRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {

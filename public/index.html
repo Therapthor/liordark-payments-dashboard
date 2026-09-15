@@ -31,8 +31,16 @@
       </div>
 
       <nav class="tabs">
-        <button class="tab-btn active" data-view="live">En vivo</button>
-        <button class="tab-btn" data-view="history">Historial</button>
+        <div class="tab-dropdown" id="pagos-dropdown">
+          <button class="tab-btn tab-dropdown-toggle active" id="pagos-toggle" type="button">
+            Pagos <span class="tab-dropdown-caret">▾</span>
+          </button>
+          <div class="tab-dropdown-menu" id="pagos-menu" hidden>
+            <button class="tab-dropdown-item active" data-view="live">En vivo</button>
+            <button class="tab-dropdown-item" data-view="history">Historial</button>
+          </div>
+        </div>
+        <button class="tab-btn" data-view="access">Accesos</button>
       </nav>
 
       <div class="topbar-actions">
@@ -93,6 +101,34 @@
 
       </section>
 
+      <!-- ═══════════ VISTA: ACCESOS ═══════════ -->
+      <section id="view-access" class="view" hidden>
+
+        <div class="panel-header standalone">
+          <div class="access-search">
+            <input id="access-search-input" type="text" placeholder="Buscar cuenta por correo, o cliente por teléfono…" />
+            <button id="access-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+          </div>
+          <button id="access-new-account-btn" class="btn-primary">+ Nueva cuenta</button>
+        </div>
+
+        <!-- Resultado: resumen de cliente por teléfono -->
+        <div id="access-client-summary" class="panel" hidden>
+          <div class="panel-header">
+            <h2>Cuentas del cliente</h2>
+            <button id="access-summary-send-btn" class="btn-secondary">📋 Enviar resumen por WhatsApp</button>
+          </div>
+          <ul id="access-client-list" class="access-client-list"></ul>
+        </div>
+
+        <!-- Resultado: cuentas encontradas por correo -->
+        <div id="access-search-results" class="access-accounts" hidden></div>
+
+        <div id="access-platforms" class="access-platforms"></div>
+        <p id="access-empty" class="feed-empty" hidden>Todavía no hay cuentas registradas. Crea la primera con "+ Nueva cuenta".</p>
+
+      </section>
+
       <!-- ═══════════ VISTA: HISTORIAL ═══════════ -->
       <section id="view-history" class="view" hidden>
 
@@ -145,6 +181,77 @@
     </form>
   </div>
 
+  <!-- ───────────── MODAL: nueva cuenta ───────────── -->
+  <div id="account-modal" class="modal-backdrop" hidden>
+    <form id="account-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Nueva cuenta</h3>
+        <button type="button" class="modal-x" data-close-modal="account-modal">✕</button>
+      </div>
+      <label>Plataforma
+        <input id="account-platform" type="text" placeholder="ej. CRUNCHYROLL" required />
+      </label>
+      <label>Correo
+        <input id="account-email" type="text" required />
+      </label>
+      <label>Contraseña
+        <input id="account-password" type="text" required />
+      </label>
+      <label>Cantidad de perfiles
+        <input id="account-slots" type="number" min="1" max="10" value="5" required />
+      </label>
+      <p id="account-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="account-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Crear</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: asignar/editar cliente en un perfil ───────────── -->
+  <div id="profile-modal" class="modal-backdrop" hidden>
+    <form id="profile-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="profile-modal-title">Asignar perfil</h3>
+        <button type="button" class="modal-x" data-close-modal="profile-modal">✕</button>
+      </div>
+      <label>Nombre del perfil
+        <input id="profile-name" type="text" placeholder="ej. Perfil 3" />
+      </label>
+      <label>Cliente
+        <input id="profile-client-name" type="text" required />
+      </label>
+      <label>Teléfono (WhatsApp)
+        <input id="profile-client-phone" type="text" inputmode="numeric" placeholder="51987654321" required />
+      </label>
+      <label>Vencimiento
+        <input id="profile-expires" type="date" required />
+      </label>
+      <p id="profile-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="profile-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: nueva contraseña (para armar el link de aviso) ───────────── -->
+  <div id="password-modal" class="modal-backdrop" hidden>
+    <form id="password-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Cambio de contraseña</h3>
+        <button type="button" class="modal-x" data-close-modal="password-modal">✕</button>
+      </div>
+      <label>Nueva contraseña
+        <input id="password-new" type="text" required />
+      </label>
+      <div class="modal-actions">
+        <button type="button" id="password-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">📧 Generar aviso</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ───────────── MODAL: detalle del día ───────────── -->
   <div id="day-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">
@@ -156,6 +263,7 @@
     </div>
   </div>
 
+  <script src="js/access.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -36,3 +36,37 @@ CREATE TABLE IF NOT EXISTS sync_state (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- ═══════════════════════════════════════════════════════════════════
+-- PANEL ACCESOS — cuentas y perfiles de clientes.
+--
+-- Vive solo acá, independiente de Google Sheets y del bot, mientras
+-- se prepara el traspaso. Una cuenta (ej. un correo de NETFLIX) tiene
+-- N perfiles (5 por defecto); cada perfil puede tener un cliente
+-- asignado con su fecha de vencimiento, o estar libre.
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS access_accounts (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform      TEXT    NOT NULL,
+  email         TEXT    NOT NULL,
+  password      TEXT    NOT NULL,
+  notes         TEXT    NOT NULL DEFAULT '',
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_access_accounts_platform ON access_accounts(platform);
+CREATE INDEX IF NOT EXISTS idx_access_accounts_email    ON access_accounts(email);
+
+CREATE TABLE IF NOT EXISTS access_profiles (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id    INTEGER NOT NULL REFERENCES access_accounts(id) ON DELETE CASCADE,
+  slot_number   INTEGER NOT NULL,
+  profile_name  TEXT    NOT NULL DEFAULT '',
+  client_name   TEXT    NOT NULL DEFAULT '',
+  client_phone  TEXT    NOT NULL DEFAULT '',
+  expires_at    TEXT,                        -- YYYY-MM-DD, NULL = perfil libre
+  updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(account_id, slot_number)
+);
+CREATE INDEX IF NOT EXISTS idx_access_profiles_account ON access_profiles(account_id);
+CREATE INDEX IF NOT EXISTS idx_access_profiles_phone   ON access_profiles(client_phone);

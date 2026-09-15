@@ -136,16 +136,48 @@
   // TABS
   // ─────────────────────────────────────────────────────────────
 
+  // "Pagos" es un desplegable con dos sub-vistas (En vivo / Historial);
+  // "Accesos" es un botón directo aparte.
+  function switchView(view) {
+    document.getElementById("view-live").hidden    = view !== "live";
+    document.getElementById("view-access").hidden  = view !== "access";
+    document.getElementById("view-history").hidden = view !== "history";
+
+    const isPagos = view === "live" || view === "history";
+    document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
+    document.querySelectorAll(".tab-dropdown-item").forEach(item => {
+      item.classList.toggle("active", item.dataset.view === view);
+    });
+    const accessBtn = document.querySelector('.tab-btn[data-view="access"]');
+    if (accessBtn) accessBtn.classList.toggle("active", view === "access");
+
+    if (view === "history") loadHistory();
+    if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
+  }
+
   function initTabs() {
-    document.querySelectorAll(".tab-btn").forEach(btn => {
+    const dropdown = document.getElementById("pagos-dropdown");
+    const menu     = document.getElementById("pagos-menu");
+
+    document.getElementById("pagos-toggle").addEventListener("click", (e) => {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden;
+    });
+
+    document.querySelectorAll(".tab-dropdown-item").forEach(btn => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        const view = btn.dataset.view;
-        document.getElementById("view-live").hidden    = view !== "live";
-        document.getElementById("view-history").hidden = view !== "history";
-        if (view === "history") loadHistory();
+        menu.hidden = true;
+        switchView(btn.dataset.view);
       });
+    });
+
+    document.querySelector('.tab-btn[data-view="access"]').addEventListener("click", () => {
+      menu.hidden = true;
+      switchView("access");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!dropdown.contains(e.target)) menu.hidden = true;
     });
   }
 
@@ -520,6 +552,7 @@
     initTabs();
     initSoundToggle();
     initCodeSearch();
+    if (window.LiordarkAccess) window.LiordarkAccess.init();
 
     const { payments, stats } = await api("/live/initial");
     cachedLivePayments = payments;
