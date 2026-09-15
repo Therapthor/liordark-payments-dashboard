@@ -476,6 +476,28 @@
     return li;
   }
 
+  // Renovación — mismas 3 opciones que Telegram (más "limpiar").
+  function renderRenewalOrder(o) {
+    const li = document.createElement("li");
+    li.className = "feed-item";
+    const cls = ORDER_STATUS_CLASS[o.status] || "pending";
+    li.innerHTML = `
+      <span class="feed-badge ${cls}"></span>
+      <div class="feed-main">
+        <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
+        <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
+      </div>
+      <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>
+      <div class="pending-order-actions">
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="approve" title="Nueva cuenta">🆕</button>
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="renew-message-only" title="Solo mensaje (sin cuenta nueva)">✉️</button>
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="reject" title="Rechazar">❌</button>
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="clear" title="Limpiar (el cliente nunca pagó)">🧹</button>
+      </div>
+    `;
+    return li;
+  }
+
   // Se guarda el último fetch para poder filtrar por celular sin
   // tener que golpear al bot de nuevo en cada tecla.
   let cachedPendingOrders = [];
@@ -496,11 +518,23 @@
     for (const o of orders) list.appendChild(renderPendingOrder(o));
   }
 
+  function renderRenewalList(orders) {
+    const list  = document.getElementById("renewals-list");
+    const empty = document.getElementById("renewals-empty");
+    const count = document.getElementById("renewals-count");
+    count.textContent = orders.length;
+    list.innerHTML = "";
+    if (orders.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const o of orders) list.appendChild(renderRenewalOrder(o));
+  }
+
   async function loadPendingOrders() {
     try {
       const { orders } = await api("/orders/pending");
-      cachedPendingOrders = orders;
+      cachedPendingOrders = orders.filter(o => !o.isRenewal);
       applyPendingSearch();
+      renderRenewalList(orders.filter(o => o.isRenewal));
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
     }
@@ -530,18 +564,20 @@
     });
   }
 
-  // Delegado en el contenedor — la lista se re-dibuja entera en cada
+  // Delegado en el contenedor — las listas se re-dibujan enteras en cada
   // loadPendingOrders(), así que un listener fijo por botón se perdería.
-  function initOrdersActions() {
-    document.getElementById("orders-pending-list").addEventListener("click", async (e) => {
+  // Se usa para "Pedidos pendientes" y "Renovaciones pendientes" por igual.
+  function wireOrderActions(containerId) {
+    document.getElementById(containerId).addEventListener("click", async (e) => {
       const btn = e.target.closest(".order-action-btn");
       if (!btn) return;
 
       const orderName = btn.dataset.order;
-      const act       = btn.dataset.act; // "approve" | "reject" | "clear"
+      const act       = btn.dataset.act; // "approve" | "reject" | "clear" | "renew-message-only"
 
       // Sin confirmación — igual que los botones de Telegram, para poder
-      // procesar rápido. Ojo al tocar: aprobar/rechazar sí afectan al cliente.
+      // procesar rápido. Ojo al tocar: aprobar/rechazar/solo-mensaje sí
+      // afectan al cliente.
       btn.closest("li").querySelectorAll("button").forEach(b => b.disabled = true);
       try {
         await api("/orders/" + encodeURIComponent(orderName) + "/" + act, { method: "POST" });
@@ -551,6 +587,11 @@
         loadPendingOrders();
       }
     });
+  }
+
+  function initOrdersActions() {
+    wireOrderActions("orders-pending-list");
+    wireOrderActions("renewals-list");
   }
 
   function renderApprovedOrder(o, isNew) {
@@ -617,6 +658,21 @@
       approvedSearchDigits = "";
       clearBtn.hidden = true;
       loadApprovedOrders();
+    });
+  }
+
+  function initApprovedCompactToggle() {
+    const btn  = document.getElementById("approved-compact-toggle");
+    const list = document.getElementById("orders-approved-list");
+    const compact = localStorage.getItem("ldp_approved_compact") === "1";
+    list.classList.toggle("compact", compact);
+    btn.classList.toggle("active", compact);
+
+    btn.addEventListener("click", () => {
+      const nowCompact = !list.classList.contains("compact");
+      list.classList.toggle("compact", nowCompact);
+      btn.classList.toggle("active", nowCompact);
+      localStorage.setItem("ldp_approved_compact", nowCompact ? "1" : "0");
     });
   }
 
@@ -851,6 +907,7 @@
     initOrdersActions();
     initPendingSearch();
     initApprovedSearch();
+    initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();
     loadApprovedOrders();

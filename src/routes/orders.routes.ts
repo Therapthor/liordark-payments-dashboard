@@ -44,45 +44,28 @@ router.get("/approved", (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// POST /api/orders/:orderName/approve
-// POST /api/orders/:orderName/reject
+// POST /api/orders/:orderName/<accion>
 //
-// Proxy directo a los endpoints equivalentes del bot — la lógica de
-// aprobar/rechazar vive ahí (reusa lo mismo que los botones de
+// Proxy directo al endpoint equivalente del bot — la lógica de
+// aprobar/rechazar/etc. vive ahí (reusa lo mismo que los botones de
 // Telegram). Acá solo se reenvía la acción con la clave compartida.
 // ─────────────────────────────────────────────────────────────
 
-async function proxyOrderAction(orderName: string, action: "approve" | "reject" | "clear") {
-  return axios.post(
-    env.BOT_BASE_URL + "/api/dashboard/orders/" + encodeURIComponent(orderName) + "/" + action,
-    {},
-    { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 30_000 }
-  );
-}
+const ALLOWED_ACTIONS = new Set(["approve", "reject", "clear", "renew-message-only"]);
 
-router.post("/:orderName/approve", async (req, res) => {
-  try {
-    const response = await proxyOrderAction(req.params.orderName, "approve");
-    res.status(response.status).json(response.data);
-  } catch (err: any) {
-    const status = err?.response?.status ?? 502;
-    res.status(status).json(err?.response?.data ?? { success: false, message: "No se pudo conectar con el bot." });
+router.post("/:orderName/:action", async (req, res) => {
+  const { orderName, action } = req.params;
+  if (!ALLOWED_ACTIONS.has(action)) {
+    res.status(404).json({ success: false, message: "Acción no reconocida." });
+    return;
   }
-});
 
-router.post("/:orderName/reject", async (req, res) => {
   try {
-    const response = await proxyOrderAction(req.params.orderName, "reject");
-    res.status(response.status).json(response.data);
-  } catch (err: any) {
-    const status = err?.response?.status ?? 502;
-    res.status(status).json(err?.response?.data ?? { success: false, message: "No se pudo conectar con el bot." });
-  }
-});
-
-router.post("/:orderName/clear", async (req, res) => {
-  try {
-    const response = await proxyOrderAction(req.params.orderName, "clear");
+    const response = await axios.post(
+      env.BOT_BASE_URL + "/api/dashboard/orders/" + encodeURIComponent(orderName) + "/" + action,
+      {},
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 30_000 }
+    );
     res.status(response.status).json(response.data);
   } catch (err: any) {
     const status = err?.response?.status ?? 502;

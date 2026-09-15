@@ -58,6 +58,16 @@
       <!-- ═══════════ VISTA: EN VIVO ═══════════ -->
       <section id="view-live" class="view">
 
+        <!-- Arriba de todo — para ver la tendencia de un vistazo antes de los montos puntuales. -->
+        <div class="panel chart-panel">
+          <div class="panel-header">
+            <h2>Últimos 30 días</h2>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="chart-daily"></canvas>
+          </div>
+        </div>
+
         <div class="stat-cards">
           <div class="stat-card stat-card--accent">
             <div class="stat-label">Hoy</div>
@@ -81,14 +91,15 @@
           </div>
         </div>
 
+        <!-- ── RENOVACIONES — mismas 3 opciones que Telegram (Nueva cuenta / Solo mensaje / Rechazar) ── -->
         <div class="panel-grid">
-          <div class="panel chart-panel">
+          <div class="panel">
             <div class="panel-header">
-              <h2>Últimos 30 días</h2>
+              <h2>Renovaciones pendientes</h2>
+              <span class="badge orders-count-badge" id="renewals-count">0</span>
             </div>
-            <div class="chart-wrap">
-              <canvas id="chart-daily"></canvas>
-            </div>
+            <ul id="renewals-list" class="feed-list"></ul>
+            <p id="renewals-empty" class="feed-empty">No hay renovaciones pendientes.</p>
           </div>
 
           <div class="panel feed-panel">
@@ -123,6 +134,7 @@
           <div class="panel">
             <div class="panel-header">
               <h2>Aprobados recientes</h2>
+              <button id="approved-compact-toggle" class="icon-btn-sm" title="Compactar la lista">🗜</button>
             </div>
             <div class="feed-search">
               <input id="approved-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
