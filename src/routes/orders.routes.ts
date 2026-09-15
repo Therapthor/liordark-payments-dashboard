@@ -1,7 +1,7 @@
 import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
-import { getRecentApprovedOrders } from "../db/orders.repository";
+import { getRecentApprovedOrders, searchApprovedOrders } from "../db/orders.repository";
 
 const router = Router();
 
@@ -34,6 +34,12 @@ router.get("/pending", async (_req, res) => {
 
 router.get("/approved", (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 30, 200);
+  const phone = String(req.query.phone ?? "").replace(/\D/g, "");
+
+  if (phone) {
+    res.json({ orders: searchApprovedOrders(phone, limit) });
+    return;
+  }
   res.json({ orders: getRecentApprovedOrders(limit) });
 });
 
@@ -46,7 +52,7 @@ router.get("/approved", (req, res) => {
 // Telegram). Acá solo se reenvía la acción con la clave compartida.
 // ─────────────────────────────────────────────────────────────
 
-async function proxyOrderAction(orderName: string, action: "approve" | "reject") {
+async function proxyOrderAction(orderName: string, action: "approve" | "reject" | "clear") {
   return axios.post(
     env.BOT_BASE_URL + "/api/dashboard/orders/" + encodeURIComponent(orderName) + "/" + action,
     {},
@@ -67,6 +73,16 @@ router.post("/:orderName/approve", async (req, res) => {
 router.post("/:orderName/reject", async (req, res) => {
   try {
     const response = await proxyOrderAction(req.params.orderName, "reject");
+    res.status(response.status).json(response.data);
+  } catch (err: any) {
+    const status = err?.response?.status ?? 502;
+    res.status(status).json(err?.response?.data ?? { success: false, message: "No se pudo conectar con el bot." });
+  }
+});
+
+router.post("/:orderName/clear", async (req, res) => {
+  try {
+    const response = await proxyOrderAction(req.params.orderName, "clear");
     res.status(response.status).json(response.data);
   } catch (err: any) {
     const status = err?.response?.status ?? 502;

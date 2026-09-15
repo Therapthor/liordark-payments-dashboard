@@ -323,7 +323,7 @@ button, input {
 
 .pending-order-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
-.feed-search { display: flex; align-items: center; gap: 8px; }
+.feed-search { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .feed-search input {
   background: var(--surface-raised);
   border: 1px solid var(--border);

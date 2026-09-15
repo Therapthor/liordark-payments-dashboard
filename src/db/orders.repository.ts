@@ -21,3 +21,12 @@ export function getRecentApprovedOrders(limit: number): ApprovedOrderRow[] {
     id: row.id, message: row.message, createdAt: row.created_at,
   }));
 }
+
+/** Busca en el texto guardado (trae el teléfono tal cual, ej. "👤 51987654321"). */
+export function searchApprovedOrders(term: string, limit: number): ApprovedOrderRow[] {
+  return (db.prepare(`
+    SELECT * FROM orders_log WHERE message LIKE ? ORDER BY created_at DESC LIMIT ?
+  `).all("%" + term + "%", limit) as any[]).map(row => ({
+    id: row.id, message: row.message, createdAt: row.created_at,
+  }));
+}

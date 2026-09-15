@@ -112,6 +112,10 @@
               <h2>Pedidos pendientes</h2>
               <span class="badge orders-count-badge" id="orders-pending-count">0</span>
             </div>
+            <div class="feed-search">
+              <input id="pending-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+              <button id="pending-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+            </div>
             <ul id="orders-pending-list" class="feed-list"></ul>
             <p id="orders-pending-empty" class="feed-empty">No hay pedidos pendientes 🎉</p>
           </div>
@@ -119,6 +123,10 @@
           <div class="panel">
             <div class="panel-header">
               <h2>Aprobados recientes</h2>
+            </div>
+            <div class="feed-search">
+              <input id="approved-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+              <button id="approved-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
             </div>
             <ul id="orders-approved-list" class="feed-list orders-approved-list"></ul>
             <p id="orders-approved-empty" class="feed-empty">Todavía no hay aprobaciones registradas.</p>

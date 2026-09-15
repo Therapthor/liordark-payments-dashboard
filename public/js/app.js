@@ -470,26 +470,71 @@
       <div class="pending-order-actions">
         <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="approve" title="Aprobar">✅</button>
         <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="reject" title="Rechazar">❌</button>
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="clear" title="Limpiar (el cliente nunca pagó)">🧹</button>
       </div>
     `;
     return li;
   }
 
+  // Se guarda el último fetch para poder filtrar por celular sin
+  // tener que golpear al bot de nuevo en cada tecla.
+  let cachedPendingOrders = [];
+  let pendingSearchDigits = "";
+
+  function renderPendingList(orders) {
+    const list  = document.getElementById("orders-pending-list");
+    const empty = document.getElementById("orders-pending-empty");
+    const count = document.getElementById("orders-pending-count");
+    count.textContent = orders.length;
+    list.innerHTML = "";
+    if (orders.length === 0) {
+      empty.hidden = false;
+      empty.textContent = pendingSearchDigits ? "Sin resultados para ese número." : "No hay pedidos pendientes 🎉";
+      return;
+    }
+    empty.hidden = true;
+    for (const o of orders) list.appendChild(renderPendingOrder(o));
+  }
+
   async function loadPendingOrders() {
     try {
       const { orders } = await api("/orders/pending");
-      const list  = document.getElementById("orders-pending-list");
-      const empty = document.getElementById("orders-pending-empty");
-      const count = document.getElementById("orders-pending-count");
-      count.textContent = orders.length;
-      list.innerHTML = "";
-      if (orders.length === 0) { empty.hidden = false; return; }
-      empty.hidden = true;
-      for (const o of orders) list.appendChild(renderPendingOrder(o));
+      cachedPendingOrders = orders;
+      applyPendingSearch();
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
     }
   }
+
+  function applyPendingSearch() {
+    const filtered = pendingSearchDigits
+      ? cachedPendingOrders.filter(o => o.phone.replace(/\D/g, "").includes(pendingSearchDigits))
+      : cachedPendingOrders;
+    renderPendingList(filtered);
+  }
+
+  function initPendingSearch() {
+    const input    = document.getElementById("pending-search");
+    const clearBtn = document.getElementById("pending-search-clear");
+
+    input.addEventListener("input", () => {
+      pendingSearchDigits = input.value.replace(/\D/g, "");
+      clearBtn.hidden = !pendingSearchDigits;
+      applyPendingSearch();
+    });
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      pendingSearchDigits = "";
+      clearBtn.hidden = true;
+      applyPendingSearch();
+    });
+  }
+
+  const ORDER_ACTION_VERB = {
+    approve: "aprobar",
+    reject:  "rechazar",
+    clear:   "limpiar (no se le avisa nada al cliente)",
+  };
 
   // Delegado en el contenedor — la lista se re-dibuja entera en cada
   // loadPendingOrders(), así que un listener fijo por botón se perdería.
@@ -499,9 +544,8 @@
       if (!btn) return;
 
       const orderName = btn.dataset.order;
-      const act        = btn.dataset.act; // "approve" | "reject"
-      const verb       = act === "approve" ? "aprobar" : "rechazar";
-      if (!confirm(`¿Seguro que quieres ${verb} el pedido ${orderName}?`)) return;
+      const act       = btn.dataset.act; // "approve" | "reject" | "clear"
+      if (!confirm(`¿Seguro que quieres ${ORDER_ACTION_VERB[act]} el pedido ${orderName}?`)) return;
 
       btn.closest("li").querySelectorAll("button").forEach(b => b.disabled = true);
       try {
@@ -527,22 +571,58 @@
     return li;
   }
 
-  async function loadApprovedOrders() {
-    const { orders } = await api("/orders/approved?limit=30");
+  function renderApprovedList(orders, emptyMessage) {
     const list  = document.getElementById("orders-approved-list");
     const empty = document.getElementById("orders-approved-empty");
     list.innerHTML = "";
-    if (orders.length === 0) { empty.hidden = false; return; }
+    if (orders.length === 0) {
+      empty.hidden = false;
+      empty.textContent = emptyMessage;
+      return;
+    }
     empty.hidden = true;
     for (const o of orders) list.appendChild(renderApprovedOrder(o, false));
   }
 
+  async function loadApprovedOrders() {
+    const { orders } = await api("/orders/approved?limit=30");
+    renderApprovedList(orders, "Todavía no hay aprobaciones registradas.");
+  }
+
   function prependApprovedOrder(evt) {
+    if (approvedSearchDigits) return; // hay una búsqueda activa — no mezclar resultados
     const list  = document.getElementById("orders-approved-list");
     const empty = document.getElementById("orders-approved-empty");
     empty.hidden = true;
     list.prepend(renderApprovedOrder({ message: evt.message, createdAt: evt.createdAt }, true));
     while (list.children.length > 30) list.removeChild(list.lastChild);
+  }
+
+  let approvedSearchDigits  = "";
+  let approvedSearchTimeout = null;
+
+  function initApprovedSearch() {
+    const input    = document.getElementById("approved-search");
+    const clearBtn = document.getElementById("approved-search-clear");
+
+    input.addEventListener("input", () => {
+      clearTimeout(approvedSearchTimeout);
+      approvedSearchDigits = input.value.replace(/\D/g, "");
+      clearBtn.hidden = !approvedSearchDigits;
+
+      if (!approvedSearchDigits) { loadApprovedOrders(); return; }
+      approvedSearchTimeout = setTimeout(async () => {
+        const { orders } = await api("/orders/approved?phone=" + approvedSearchDigits);
+        renderApprovedList(orders, "Sin resultados para ese número.");
+      }, 300);
+    });
+
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      approvedSearchDigits = "";
+      clearBtn.hidden = true;
+      loadApprovedOrders();
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -774,6 +854,8 @@
     connectLive();
 
     initOrdersActions();
+    initPendingSearch();
+    initApprovedSearch();
     initMonthsModal();
     loadPendingOrders();
     loadApprovedOrders();
