@@ -545,7 +545,12 @@
 
       const orderName = btn.dataset.order;
       const act       = btn.dataset.act; // "approve" | "reject" | "clear"
-      if (!confirm(`¿Seguro que quieres ${ORDER_ACTION_VERB[act]} el pedido ${orderName}?`)) return;
+
+      // "Limpiar" no le hace nada al cliente (ni mensaje ni cambio visible
+      // para él) — va directo, sin confirmar, para no perder tiempo.
+      if (act !== "clear") {
+        if (!confirm(`¿Seguro que quieres ${ORDER_ACTION_VERB[act]} el pedido ${orderName}?`)) return;
+      }
 
       btn.closest("li").querySelectorAll("button").forEach(b => b.disabled = true);
       try {
