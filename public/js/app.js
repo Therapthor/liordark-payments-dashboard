@@ -467,6 +467,10 @@
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
       </div>
       <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>
+      <div class="pending-order-actions">
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="approve" title="Aprobar">✅</button>
+        <button class="row-action order-action-btn" data-order="${escapeHtml(o.orderName)}" data-act="reject" title="Rechazar">❌</button>
+      </div>
     `;
     return li;
   }
@@ -485,6 +489,29 @@
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
     }
+  }
+
+  // Delegado en el contenedor — la lista se re-dibuja entera en cada
+  // loadPendingOrders(), así que un listener fijo por botón se perdería.
+  function initOrdersActions() {
+    document.getElementById("orders-pending-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".order-action-btn");
+      if (!btn) return;
+
+      const orderName = btn.dataset.order;
+      const act        = btn.dataset.act; // "approve" | "reject"
+      const verb       = act === "approve" ? "aprobar" : "rechazar";
+      if (!confirm(`¿Seguro que quieres ${verb} el pedido ${orderName}?`)) return;
+
+      btn.closest("li").querySelectorAll("button").forEach(b => b.disabled = true);
+      try {
+        await api("/orders/" + encodeURIComponent(orderName) + "/" + act, { method: "POST" });
+      } catch (err) {
+        alert(err.message || "No se pudo procesar el pedido.");
+      } finally {
+        loadPendingOrders();
+      }
+    });
   }
 
   function renderApprovedOrder(o, isNew) {
@@ -626,6 +653,32 @@
     return "Sin datos";
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // HISTÓRICO POR MES
+  // ─────────────────────────────────────────────────────────────
+
+  async function openMonthsModal() {
+    const { months } = await api("/history/months");
+    const body = document.getElementById("months-modal-body");
+
+    if (months.length === 0) {
+      body.innerHTML = `<p>Todavía no hay meses con datos.</p>`;
+    } else {
+      body.innerHTML = months.map(m => `
+        <div class="day-detail-row">
+          <span>${escapeHtml(fmtMonthName(m.month))}<br><small>${pluralPagos(m.count)}</small></span>
+          <b>${moneyValueHtml(fmtMoney(m.total))}</b>
+        </div>
+      `).join("");
+    }
+
+    document.getElementById("months-modal").hidden = false;
+  }
+
+  function initMonthsModal() {
+    document.getElementById("show-months-btn").addEventListener("click", openMonthsModal);
+  }
+
   async function openDayDetail(date) {
     const info = await api("/history/" + date);
     document.getElementById("day-modal-title").textContent = fmtDateLong(date);
@@ -720,6 +773,8 @@
     await loadChart();
     connectLive();
 
+    initOrdersActions();
+    initMonthsModal();
     loadPendingOrders();
     loadApprovedOrders();
     setInterval(loadPendingOrders, ORDERS_POLL_MS);

@@ -37,4 +37,41 @@ router.get("/approved", (req, res) => {
   res.json({ orders: getRecentApprovedOrders(limit) });
 });
 
+// ─────────────────────────────────────────────────────────────
+// POST /api/orders/:orderName/approve
+// POST /api/orders/:orderName/reject
+//
+// Proxy directo a los endpoints equivalentes del bot — la lógica de
+// aprobar/rechazar vive ahí (reusa lo mismo que los botones de
+// Telegram). Acá solo se reenvía la acción con la clave compartida.
+// ─────────────────────────────────────────────────────────────
+
+async function proxyOrderAction(orderName: string, action: "approve" | "reject") {
+  return axios.post(
+    env.BOT_BASE_URL + "/api/dashboard/orders/" + encodeURIComponent(orderName) + "/" + action,
+    {},
+    { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 30_000 }
+  );
+}
+
+router.post("/:orderName/approve", async (req, res) => {
+  try {
+    const response = await proxyOrderAction(req.params.orderName, "approve");
+    res.status(response.status).json(response.data);
+  } catch (err: any) {
+    const status = err?.response?.status ?? 502;
+    res.status(status).json(err?.response?.data ?? { success: false, message: "No se pudo conectar con el bot." });
+  }
+});
+
+router.post("/:orderName/reject", async (req, res) => {
+  try {
+    const response = await proxyOrderAction(req.params.orderName, "reject");
+    res.status(response.status).json(response.data);
+  } catch (err: any) {
+    const status = err?.response?.status ?? 502;
+    res.status(status).json(err?.response?.data ?? { success: false, message: "No se pudo conectar con el bot." });
+  }
+});
+
 export default router;

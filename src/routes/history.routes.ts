@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getHistory, getDayInfo } from "../services/stats.service";
+import { getHistory, getDayInfo, getAllMonths } from "../services/stats.service";
 import { getDayPayments } from "../db/payments.repository";
 import { upsertManualEntry, deleteManualEntry } from "../db/ledger.repository";
 
@@ -10,6 +10,11 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 router.get("/", (req, res) => {
   const days = Math.min(Number(req.query.days) || 30, 365);
   res.json({ days: getHistory(days) });
+});
+
+// Antes de "/:date" — si no, Express la confunde con una fecha inválida.
+router.get("/months", (_req, res) => {
+  res.json({ months: getAllMonths() });
 });
 
 router.get("/:date", (req, res) => {

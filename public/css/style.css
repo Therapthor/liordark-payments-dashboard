@@ -321,6 +321,8 @@ button, input {
 }
 .orders-approved-text b { color: var(--text-primary); }
 
+.pending-order-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
 .feed-search { display: flex; align-items: center; gap: 8px; }
 .feed-search input {
   background: var(--surface-raised);
@@ -497,6 +499,7 @@ button, input {
 .text-muted { color: var(--text-muted); }
 
 .panel-header.standalone { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.panel-header-actions { display: flex; gap: 8px; }
 
 .access-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; max-width: 420px; }
 .access-search input {

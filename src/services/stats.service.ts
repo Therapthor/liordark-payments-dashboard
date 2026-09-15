@@ -3,9 +3,10 @@ import {
   getTotalForDate,
   getTotalForMonth,
   getAllTimeTotal,
+  getAllMonthTotals,
 } from "../db/payments.repository";
 import { getAllManualEntries, getManualEntry } from "../db/ledger.repository";
-import { refreshMonthTotal } from "../db/monthly.repository";
+import { saveMonthTotal } from "../db/monthly.repository";
 
 /** Fecha de hoy en horario Lima, formato YYYY-MM-DD. */
 export function getLimaToday(): string {
@@ -25,12 +26,23 @@ export function getLimaLastMonth(): string {
   return d.toISOString().slice(0, 7);
 }
 
+export type MonthSummary = { month: string; total: number; count: number };
+
 export type SummaryStats = {
   today:     { date: string; total: number; count: number };
   month:     { date: string; total: number; count: number };
-  lastMonth: { month: string; total: number; count: number };
+  lastMonth: MonthSummary;
   allTime:   { total: number; count: number };
 };
+
+/** Total real de un mes + entradas manuales de backfill de ese mismo mes. */
+function combinedMonthTotal(month: string): MonthSummary {
+  const auto = getTotalForMonth(month);
+  const manualTotal = getAllManualEntries()
+    .filter(e => e.date.startsWith(month))
+    .reduce((sum, e) => sum + e.amount, 0);
+  return { month, total: auto.total + manualTotal, count: auto.count };
+}
 
 export function getSummary(): SummaryStats {
   const today = getLimaToday();
@@ -39,14 +51,31 @@ export function getSummary(): SummaryStats {
   const todayTotals = getTotalForDate(today) ?? { date: today, total: 0, count: 0 };
   const monthTotals = getTotalForMonth(month);
   const allTime     = getAllTimeTotal();
-  const lastMonth   = refreshMonthTotal(getLimaLastMonth());
+
+  const lastMonth = combinedMonthTotal(getLimaLastMonth());
+  saveMonthTotal(lastMonth.month, lastMonth.total, lastMonth.count); // historial persistido
 
   return {
     today:     todayTotals,
     month:     monthTotals,
-    lastMonth: { month: lastMonth.month, total: lastMonth.total, count: lastMonth.count },
+    lastMonth,
     allTime:   { total: allTime.total, count: allTime.count },
   };
+}
+
+/** Todos los meses con algún dato (reales y/o manuales), más reciente primero. */
+export function getAllMonths(): MonthSummary[] {
+  const autoMonths       = getAllMonthTotals();
+  const manualMonthKeys  = new Set(getAllManualEntries().map(e => e.date.slice(0, 7)));
+  const allMonthKeys     = new Set([...autoMonths.map(m => m.month), ...manualMonthKeys]);
+
+  const result = [...allMonthKeys]
+    .map(combinedMonthTotal)
+    .sort((a, b) => b.month.localeCompare(a.month));
+
+  for (const m of result) saveMonthTotal(m.month, m.total, m.count); // historial persistido
+
+  return result;
 }
 
 export type HistoryDay = {

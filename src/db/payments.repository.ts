@@ -96,6 +96,18 @@ export function getTotalForMonth(yearMonth: string): DayTotal {
   return { date: yearMonth, total: row.total ?? 0, count: row.count ?? 0 };
 }
 
+/** Total real (de `payments`) agrupado por mes, para el histórico completo. */
+export function getAllMonthTotals(): { month: string; total: number; count: number }[] {
+  return db.prepare(`
+    SELECT strftime('%Y-%m', datetime(created_at, ?)) AS month,
+           SUM(CAST(amount AS REAL)) AS total,
+           COUNT(*) AS count
+    FROM payments
+    GROUP BY month
+    ORDER BY month DESC
+  `).all(LIMA_OFFSET) as { month: string; total: number; count: number }[];
+}
+
 export function getAllTimeTotal(): DayTotal {
   const row = db.prepare(`
     SELECT SUM(CAST(amount AS REAL)) AS total, COUNT(*) AS count FROM payments

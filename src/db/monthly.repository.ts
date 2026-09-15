@@ -1,16 +1,9 @@
 import { db } from "./db";
-import { getTotalForMonth } from "./payments.repository";
 
 export type MonthTotal = { month: string; total: number; count: number; updatedAt: string };
 
-/**
- * Recalcula el total real del mes (desde `payments`) y lo guarda —
- * nunca queda "congelado" mal si se corrige un dato viejo (siempre se
- * recalcula al pedirlo), pero queda persistido para tener historial
- * en vez de recomputar todo desde cero cada vez.
- */
-export function refreshMonthTotal(month: string): MonthTotal {
-  const { total, count } = getTotalForMonth(month);
+/** Guarda (o actualiza) el total ya calculado de un mes — el cálculo real vive en stats.service.ts. */
+export function saveMonthTotal(month: string, total: number, count: number): MonthTotal {
   db.prepare(`
     INSERT INTO monthly_totals (month, total, count, updated_at)
     VALUES (?, ?, ?, datetime('now'))

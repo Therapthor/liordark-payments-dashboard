@@ -160,7 +160,10 @@
 
         <div class="panel-header standalone">
           <h2>Historial diario</h2>
-          <button id="add-manual-btn" class="btn-primary">+ Agregar día pasado</button>
+          <div class="panel-header-actions">
+            <button id="show-months-btn" class="btn-secondary">📊 Histórico</button>
+            <button id="add-manual-btn" class="btn-primary">+ Agregar día pasado</button>
+          </div>
         </div>
 
         <p class="panel-hint" id="history-lastmonth-hint">Mes pasado: <b id="history-lastmonth-total">S/ 0.00</b> · <span id="history-lastmonth-count">0 pagos</span></p>
@@ -312,6 +315,17 @@
         <button type="button" class="modal-x" data-close-modal="day-modal">✕</button>
       </div>
       <div id="day-modal-body" class="modal-scroll-body"></div>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: histórico por mes ───────────── -->
+  <div id="months-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>Histórico por mes</h3>
+        <button type="button" class="modal-x" data-close-modal="months-modal">✕</button>
+      </div>
+      <div id="months-modal-body" class="modal-scroll-body"></div>
     </div>
   </div>
 
