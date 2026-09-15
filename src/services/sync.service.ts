@@ -188,7 +188,7 @@ function handleBotEvent(evt: any): void {
   if (evt?.type === "order_approved") {
     // El bot no guarda las órdenes una vez entregadas — acá quedan para
     // siempre, mismo texto exacto que ya se manda al canal de Telegram.
-    insertApprovedOrder(evt.message);
+    insertApprovedOrder(evt.message, evt.createdAt);
     emitDashboardEvent({ type: "order_approved", message: evt.message, createdAt: evt.createdAt });
   }
 }

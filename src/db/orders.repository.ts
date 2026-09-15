@@ -6,11 +6,17 @@ export type ApprovedOrderRow = {
   createdAt: string;
 };
 
-/** Guarda una orden aprobada — el bot no las conserva una vez entregadas. */
-export function insertApprovedOrder(message: string): number {
+/**
+ * Guarda una orden aprobada — el bot no las conserva una vez entregadas.
+ * createdAt debe venir del bot (ISO UTC con "Z"); si no se pasa, se usa
+ * la hora del panel. No dejar que el default de SQLite (datetime('now'),
+ * sin "Z") guarde la hora, porque el navegador la interpreta como hora
+ * local y desfasa el horario mostrado.
+ */
+export function insertApprovedOrder(message: string, createdAt?: string): number {
   const result = db.prepare(`
-    INSERT INTO orders_log (message) VALUES (?)
-  `).run(message);
+    INSERT INTO orders_log (message, created_at) VALUES (?, ?)
+  `).run(message, createdAt ?? new Date().toISOString());
   return result.lastInsertRowid as number;
 }
 

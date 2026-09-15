@@ -40,4 +40,19 @@ ensureColumn("access_accounts", "expires_at",   "expires_at TEXT");
 ensureColumn("access_accounts", "link",         "link TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "renewal_status", "renewal_status TEXT NOT NULL DEFAULT ''");
 
+// orders_log guardaba created_at con datetime('now') (UTC, sin "Z"). El
+// navegador interpretaba ese texto como hora local y mostraba la orden
+// 5 horas más tarde (offset de Lima). Se corrigen las filas viejas una
+// sola vez agregando la "Z" que les falta.
+{
+  const fixed = db.prepare(`
+    UPDATE orders_log
+    SET created_at = REPLACE(created_at, ' ', 'T') || 'Z'
+    WHERE created_at NOT LIKE '%Z'
+  `).run();
+  if (fixed.changes > 0) {
+    console.log(`🗄️  Migración: ${fixed.changes} horas corregidas en orders_log`);
+  }
+}
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);
