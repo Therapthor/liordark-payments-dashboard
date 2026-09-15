@@ -610,6 +610,13 @@
         <div class="feed-time">${fmtTime(o.createdAt)}</div>
       </div>
     `;
+    // En modo compacto, un clic sobre la orden la expande solo a ella
+    // (sin tocar el interruptor global) para ver el detalle completo.
+    li.addEventListener("click", () => {
+      const list = document.getElementById("orders-approved-list");
+      if (!list.classList.contains("compact")) return;
+      li.classList.toggle("item-expanded");
+    });
     return li;
   }
 
