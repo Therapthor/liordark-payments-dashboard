@@ -117,8 +117,21 @@
     wireAccountCardEvents(target);
   }
 
+  /** Datos de perfil + cuenta combinados, tal como los necesitan los mensajes de WhatsApp. */
+  function profileCtx(account, p) {
+    return {
+      id: p.id, accountId: account.id, platform: account.platform,
+      email: account.email, password: account.password,
+      profileName: p.profileName, expiresAt: p.expiresAt, daysLeft: p.daysLeft, status: p.status,
+      clientName: p.clientName, clientPhone: p.clientPhone,
+    };
+  }
+
   function renderAccountCard(account) {
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
+    const occupiedCount = account.profiles.filter(p => p.clientPhone && p.expiresAt).length;
+    const accountAttr = JSON.stringify(account).replace(/"/g, "&quot;");
+
     return `
       <div class="access-account" data-account-id="${account.id}">
         <div class="access-account-head">
@@ -129,6 +142,7 @@
             <button class="icon-btn-sm access-toggle-pw" title="Mostrar/ocultar contraseña">👁</button>
           </div>
           <div class="access-account-actions">
+            ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">📤 Enviar a todos (${occupiedCount})</button>` : ""}
             <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
             <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
           </div>
@@ -145,12 +159,7 @@
 
   function renderProfileRow(account, p) {
     const occupied = !!p.clientPhone && !!p.expiresAt;
-    const ctx = JSON.stringify({
-      id: p.id, accountId: account.id, platform: account.platform,
-      email: account.email, password: account.password,
-      profileName: p.profileName, expiresAt: p.expiresAt, daysLeft: p.daysLeft, status: p.status,
-      clientName: p.clientName, clientPhone: p.clientPhone,
-    }).replace(/"/g, "&quot;");
+    const ctx = JSON.stringify(profileCtx(account, p)).replace(/"/g, "&quot;");
 
     const actions = occupied ? `
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
@@ -187,6 +196,10 @@
       });
     });
 
+    target.querySelectorAll(".access-send-all").forEach(btn => {
+      btn.addEventListener("click", () => sendAllForAccount(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+    });
+
     target.querySelectorAll(".access-edit-account").forEach(btn => {
       btn.addEventListener("click", () => openAccountModal(Number(btn.dataset.accountId)));
     });
@@ -210,6 +223,46 @@
     if (act === "renew")   return renewProfile(ctx.id);
     if (act === "edit")    return openProfileModal(ctx);
     if (act === "release") return releaseProfile(ctx.id);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ENVÍO EN MASIVO — un WhatsApp por cada perfil con cliente
+  // asignado, de a uno, con 5s de por medio.
+  //
+  // Las ventanas se pre-abren TODAS en blanco durante el propio clic
+  // (gesto real del usuario) y recién después, una por una con el
+  // cooldown, se les asigna el link real. Si se abrieran una por una
+  // tras cada espera, el navegador bloquearía como pop-up no
+  // solicitado todo lo que se abra fuera del clic original.
+  // ─────────────────────────────────────────────────────────────
+
+  const SEND_ALL_COOLDOWN_MS = 5000;
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  async function sendAllForAccount(btn, account) {
+    const occupied = account.profiles.filter(p => p.clientPhone && p.expiresAt);
+    if (occupied.length === 0) return;
+
+    const windows = occupied.map(() => window.open("", "_blank"));
+    const somethingBlocked = windows.some(w => !w);
+
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+
+    for (let i = 0; i < occupied.length; i++) {
+      const link = waLink(occupied[i].clientPhone, msgEntrega(profileCtx(account, occupied[i])));
+      if (windows[i]) windows[i].location = link;
+      btn.textContent = `Enviando ${i + 1}/${occupied.length}…`;
+      if (i < occupied.length - 1) await sleep(SEND_ALL_COOLDOWN_MS);
+    }
+
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+
+    if (somethingBlocked) {
+      alert("El navegador bloqueó una o más ventanas. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.");
+    }
   }
 
   async function renewProfile(profileId) {
