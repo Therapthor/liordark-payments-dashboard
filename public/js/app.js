@@ -530,12 +530,6 @@
     });
   }
 
-  const ORDER_ACTION_VERB = {
-    approve: "aprobar",
-    reject:  "rechazar",
-    clear:   "limpiar (no se le avisa nada al cliente)",
-  };
-
   // Delegado en el contenedor — la lista se re-dibuja entera en cada
   // loadPendingOrders(), así que un listener fijo por botón se perdería.
   function initOrdersActions() {
@@ -546,12 +540,8 @@
       const orderName = btn.dataset.order;
       const act       = btn.dataset.act; // "approve" | "reject" | "clear"
 
-      // "Limpiar" no le hace nada al cliente (ni mensaje ni cambio visible
-      // para él) — va directo, sin confirmar, para no perder tiempo.
-      if (act !== "clear") {
-        if (!confirm(`¿Seguro que quieres ${ORDER_ACTION_VERB[act]} el pedido ${orderName}?`)) return;
-      }
-
+      // Sin confirmación — igual que los botones de Telegram, para poder
+      // procesar rápido. Ojo al tocar: aprobar/rechazar sí afectan al cliente.
       btn.closest("li").querySelectorAll("button").forEach(b => b.disabled = true);
       try {
         await api("/orders/" + encodeURIComponent(orderName) + "/" + act, { method: "POST" });
