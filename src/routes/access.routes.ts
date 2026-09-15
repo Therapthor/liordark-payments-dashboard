@@ -8,10 +8,12 @@ import {
   listAccountsByPlatform,
   assignProfileClient,
   releaseProfile,
+  setProfileRenewal,
   searchAccountsByEmail,
   searchProfilesByPhone,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
+  type RenewalStatus,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
 import { getPlatformCatalog, hasProfilesFor } from "../services/catalog.service";
@@ -136,6 +138,19 @@ router.put("/profiles/:id", (req, res) => {
 
 router.post("/profiles/:id/release", (req, res) => {
   const profile = releaseProfile(Number(req.params.id));
+  if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
+  res.json({ profile });
+});
+
+// Marcador manual — ¿el cliente confirmó que renueva? '' | 'yes' | 'no'.
+// Puramente informativo para el admin, no afecta el vencimiento.
+router.post("/profiles/:id/renewal", (req, res) => {
+  const status = req.body?.status as RenewalStatus;
+  if (!["", "yes", "no"].includes(status)) {
+    res.status(400).json({ message: "Estado inválido." });
+    return;
+  }
+  const profile = setProfileRenewal(Number(req.params.id), status);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   res.json({ profile });
 });

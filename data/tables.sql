@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS access_profiles (
   slot_number   INTEGER NOT NULL,
   profile_name  TEXT    NOT NULL DEFAULT '',
   client_phone  TEXT    NOT NULL DEFAULT '',  -- vacío = perfil libre
+  renewal_status TEXT   NOT NULL DEFAULT '',  -- '' = sin marcar, 'yes' = renueva, 'no' = no renueva
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(account_id, slot_number)
 );

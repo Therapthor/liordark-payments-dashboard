@@ -1,6 +1,7 @@
 import {
   getAccountById,
   setAccountExpiry,
+  resetRenewalMarkers,
   type AccessAccountWithProfiles,
 } from "../db/access.repository";
 
@@ -64,5 +65,11 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
     ? account.expiresAt
     : limaTodayISO();
 
-  return setAccountExpiry(id, addDaysISO(base, RENEW_DAYS));
+  setAccountExpiry(id, addDaysISO(base, RENEW_DAYS));
+
+  // Ciclo nuevo, marca en blanco de nuevo — evita arrastrar un "renueva"
+  // o "no renueva" que ya no aplica al período que recién empieza.
+  resetRenewalMarkers(id);
+
+  return getAccountById(id);
 }

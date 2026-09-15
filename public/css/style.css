@@ -567,6 +567,22 @@ button, input {
 }
 .row-action:hover { border-color: var(--accent); }
 
+/* Marcador de renovación — chico y discreto a propósito, para no
+   competir visualmente con el resto de la fila. */
+.row-renewal {
+  background: transparent;
+  border: 1px solid var(--border);
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.55;
+}
+.row-renewal:hover { opacity: 1; border-color: var(--accent); }
+.row-renewal.renewal-yes { opacity: 1; border-color: rgba(12,163,12,0.4); background: rgba(12,163,12,0.10); }
+.row-renewal.renewal-no  { opacity: 1; border-color: rgba(208,59,59,0.4); background: rgba(208,59,59,0.10); }
+
 .access-client-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .access-client-item {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

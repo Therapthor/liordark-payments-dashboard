@@ -4,13 +4,16 @@ import { db } from "./db";
 // TIPOS
 // ─────────────────────────────────────────────────────────────
 
+export type RenewalStatus = "" | "yes" | "no";
+
 export type AccessProfile = {
-  id:          number;
-  accountId:   number;
-  slotNumber:  number;
-  profileName: string;
-  clientPhone: string;
-  updatedAt:   string;
+  id:            number;
+  accountId:     number;
+  slotNumber:    number;
+  profileName:   string;
+  clientPhone:   string;
+  renewalStatus: RenewalStatus;
+  updatedAt:     string;
 };
 
 export type AccessAccount = {
@@ -198,10 +201,25 @@ export function assignProfileClient(id: number, clientPhone: string): AccessProf
 
 export function releaseProfile(id: number): AccessProfile | null {
   const result = db.prepare(`
-    UPDATE access_profiles SET client_phone = '', updated_at = datetime('now') WHERE id = ?
+    UPDATE access_profiles SET client_phone = '', renewal_status = '', updated_at = datetime('now') WHERE id = ?
   `).run(id);
   if (result.changes === 0) return null;
   return getProfileById(id);
+}
+
+/** Marca si el cliente de un perfil confirmó que renueva o no (o lo deja sin marcar). */
+export function setProfileRenewal(id: number, status: RenewalStatus): AccessProfile | null {
+  const result = db.prepare(`
+    UPDATE access_profiles SET renewal_status = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(status, id);
+  if (result.changes === 0) return null;
+  return getProfileById(id);
+}
+
+/** Limpia los marcadores de renovación de una cuenta — se llama al renovarla,
+ *  para que cada ciclo empiece con la marca en blanco de nuevo. */
+export function resetRenewalMarkers(accountId: number): void {
+  db.prepare(`UPDATE access_profiles SET renewal_status = '' WHERE account_id = ?`).run(accountId);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -273,11 +291,12 @@ function toAccount(row: any): AccessAccount {
 
 function toProfile(row: any): AccessProfile {
   return {
-    id:          row.id,
-    accountId:   row.account_id,
-    slotNumber:  row.slot_number,
-    profileName: row.profile_name ?? "",
-    clientPhone: row.client_phone ?? "",
-    updatedAt:   row.updated_at,
+    id:            row.id,
+    accountId:     row.account_id,
+    slotNumber:    row.slot_number,
+    profileName:   row.profile_name ?? "",
+    clientPhone:   row.client_phone ?? "",
+    renewalStatus: (row.renewal_status ?? "") as RenewalStatus,
+    updatedAt:     row.updated_at,
   };
 }

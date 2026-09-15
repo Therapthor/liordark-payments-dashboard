@@ -93,7 +93,6 @@
   // ─────────────────────────────────────────────────────────────
 
   let currentProfileForModal   = null;
-  let currentPasswordTarget    = null;
   let editingAccountId         = null;
   let editingAccountPlatform   = null;
   let platformCatalog          = [];
@@ -220,6 +219,7 @@
           </div>
           <div class="access-account-actions">
             ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">🔄 Enviar reemplazo a todos (${occupiedCount})</button>` : ""}
+            ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-password-all" data-account="${accountAttr}">🔑 Cambiar contraseña a todos</button>` : ""}
             ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
             <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
             <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
@@ -228,11 +228,23 @@
           </div>
         </div>
         <table class="access-table">
-          <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th></th></tr></thead>
+          <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
     `;
+  }
+
+  // Marcador de renovación — informativo, no toca el vencimiento. Cicla
+  // sin marcar → renueva → no renueva → sin marcar, con un solo botón
+  // chico para no ensuciar la fila.
+  const RENEWAL_ICON = { "": "➖", yes: "✅", no: "❌" };
+  const RENEWAL_NEXT = { "": "yes", yes: "no", no: "" };
+  const RENEWAL_TITLE = { "": "Marcar si renueva", yes: "Renueva — clic para marcar que no", no: "No renueva — clic para dejar sin marcar" };
+
+  function renderRenewalButton(p) {
+    const status = p.renewalStatus || "";
+    return `<button class="row-renewal renewal-${status || "unset"}" data-profile-id="${p.id}" data-status="${status}" title="${RENEWAL_TITLE[status]}">${RENEWAL_ICON[status]}</button>`;
   }
 
   function renderProfileRow(account, p) {
@@ -241,8 +253,6 @@
 
     const actions = occupied ? `
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
-        <button class="row-action" data-act="replace" data-ctx="${ctx}" title="Reemplazo">🔄</button>
-        <button class="row-action" data-act="password" data-ctx="${ctx}" title="Cambiar contraseña">🔑</button>
         <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Cambiar teléfono">✏️</button>
         <button class="row-action" data-act="release" data-ctx="${ctx}" title="Liberar perfil">🗑</button>
       ` : `
@@ -252,6 +262,7 @@
     const cells = [];
     if (account.hasProfiles) cells.push(`<td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}</td>`);
     cells.push(`<td>${occupied ? escapeHtml(p.clientPhone) : "<span class=\"text-muted\">Libre</span>"}</td>`);
+    cells.push(`<td>${occupied ? renderRenewalButton(p) : ""}</td>`);
     cells.push(`<td class="access-row-actions">${actions}</td>`);
 
     return `<tr>${cells.join("")}</tr>`;
@@ -274,8 +285,23 @@
       btn.addEventListener("click", () => sendAllForAccount(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
+    target.querySelectorAll(".access-password-all").forEach(btn => {
+      btn.addEventListener("click", () => openPasswordModalBulk(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+    });
+
     target.querySelectorAll(".access-open-link").forEach(btn => {
       btn.addEventListener("click", () => window.open(btn.dataset.link, "_blank"));
+    });
+
+    target.querySelectorAll(".row-renewal").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const next = RENEWAL_NEXT[btn.dataset.status || ""];
+        await api("/profiles/" + btn.dataset.profileId + "/renewal", { method: "POST", body: JSON.stringify({ status: next }) });
+        btn.dataset.status = next;
+        btn.className = "row-renewal renewal-" + (next || "unset");
+        btn.title = RENEWAL_TITLE[next];
+        btn.textContent = RENEWAL_ICON[next];
+      });
     });
 
     target.querySelectorAll(".access-copy-account").forEach(btn => {
@@ -308,8 +334,6 @@
 
   function handleRowAction(act, ctx) {
     if (act === "send")    return window.open(waLink(ctx.clientPhone, msgEntrega(ctx)), "_blank");
-    if (act === "replace") return window.open(waLink(ctx.clientPhone, msgReemplazo(ctx)), "_blank");
-    if (act === "password") { currentPasswordTarget = ctx; openPasswordModal(); return; }
     if (act === "edit")    return openProfileModal(ctx);
     if (act === "release") return releaseProfile(ctx.id, ctx.accountId);
   }
@@ -344,9 +368,9 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // ENVÍO EN MASIVO — manda el mensaje de REEMPLAZO (no el de entrega
-  // inicial) a cada perfil con cliente asignado, de a uno, con 5s de
-  // por medio.
+  // ENVÍO EN MASIVO — reemplazo y cambio de contraseña son SOLO
+  // masivos (uno por uno, con cooldown); "enviar cuenta" individual
+  // sigue estando por perfil, en la fila.
   //
   // Las ventanas se pre-abren TODAS en blanco durante el propio clic
   // (gesto real del usuario) y recién después, una por una con el
@@ -359,7 +383,7 @@
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-  async function sendAllForAccount(btn, account) {
+  async function bulkSendToOccupied(btn, account, buildMessage) {
     const occupied = account.profiles.filter(p => p.clientPhone);
     if (occupied.length === 0) return;
 
@@ -370,7 +394,7 @@
     btn.disabled = true;
 
     for (let i = 0; i < occupied.length; i++) {
-      const link = waLink(occupied[i].clientPhone, msgReemplazo(profileCtx(account, occupied[i])));
+      const link = waLink(occupied[i].clientPhone, buildMessage(occupied[i]));
       if (windows[i]) windows[i].location = link;
       btn.textContent = `Enviando ${i + 1}/${occupied.length}…`;
       if (i < occupied.length - 1) await sleep(SEND_ALL_COOLDOWN_MS);
@@ -382,6 +406,10 @@
     if (somethingBlocked) {
       alert("El navegador bloqueó una o más ventanas. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.");
     }
+  }
+
+  function sendAllForAccount(btn, account) {
+    return bulkSendToOccupied(btn, account, p => msgReemplazo(profileCtx(account, p)));
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -509,11 +537,15 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MODAL — cambio de contraseña (arma el link, no guarda nada
-  // todavía — la contraseña real se actualiza editando la cuenta)
+  // MODAL — cambio de contraseña, SOLO masivo (a todos los perfiles
+  // con cliente asignado). No guarda nada — la contraseña real se
+  // actualiza aparte, editando la cuenta.
   // ─────────────────────────────────────────────────────────────
 
-  function openPasswordModal() {
+  let passwordBulkTarget = null; // { btn, account }
+
+  function openPasswordModalBulk(btn, account) {
+    passwordBulkTarget = { btn, account };
     document.getElementById("password-form").reset();
     document.getElementById("password-modal").hidden = false;
   }
@@ -521,11 +553,14 @@
   function initPasswordModal() {
     document.getElementById("password-cancel").addEventListener("click", () => { document.getElementById("password-modal").hidden = true; });
 
-    document.getElementById("password-form").addEventListener("submit", (e) => {
+    document.getElementById("password-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const newPassword = document.getElementById("password-new").value;
       document.getElementById("password-modal").hidden = true;
-      window.open(waLink(currentPasswordTarget.clientPhone, msgPassword(currentPasswordTarget, newPassword)), "_blank");
+      if (!passwordBulkTarget) return;
+      const { btn, account } = passwordBulkTarget;
+      passwordBulkTarget = null;
+      await bulkSendToOccupied(btn, account, p => msgPassword(profileCtx(account, p), newPassword));
     });
   }
 
