@@ -209,7 +209,7 @@ button, input {
 ───────────────────────────────────────────────────────────── */
 .stat-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -303,6 +303,23 @@ button, input {
 .feed-amount { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
 
 .feed-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 30px 0; }
+
+/* ─────────────────────────────────────────────────────────────
+   PEDIDOS — pendientes / aprobados
+───────────────────────────────────────────────────────────── */
+.orders-grid { margin-top: 16px; }
+.orders-count-badge {
+  background: rgba(250,178,25,0.15); color: var(--warning);
+  min-width: 22px; justify-content: center;
+}
+.orders-approved-list .feed-badge { align-self: flex-start; margin-top: 4px; }
+.orders-approved-text {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-line; /* el mensaje trae \n de verdad, no <br> */
+  color: var(--text-secondary);
+}
+.orders-approved-text b { color: var(--text-primary); }
 
 .feed-search { display: flex; align-items: center; gap: 8px; }
 .feed-search input {
@@ -602,7 +619,7 @@ button, input {
 ───────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .panel-grid { grid-template-columns: 1fr; }
-  .stat-cards { grid-template-columns: 1fr; }
+  .stat-cards { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 480px) {
@@ -611,4 +628,5 @@ button, input {
   .tabs { order: 3; width: 100%; margin-left: 0; }
   .history-table, .access-table { display: block; overflow-x: auto; white-space: nowrap; }
   .access-search { max-width: none; }
+  .stat-cards { grid-template-columns: 1fr; }
 }

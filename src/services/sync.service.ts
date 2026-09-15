@@ -1,6 +1,7 @@
 import axios from "axios";
 import { env } from "../config/env";
 import { upsertPayment, updatePaymentStatus } from "../db/payments.repository";
+import { insertApprovedOrder } from "../db/orders.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { getSummary } from "./stats.service";
 
@@ -181,6 +182,14 @@ function handleBotEvent(evt: any): void {
     // Los totales de plata no cambian por una expiración, pero el
     // conteo de "pendientes" visualmente sí — no hace falta recalcular
     // stats acá porque expirado no se resta de los ingresos ya contados.
+    return;
+  }
+
+  if (evt?.type === "order_approved") {
+    // El bot no guarda las órdenes una vez entregadas — acá quedan para
+    // siempre, mismo texto exacto que ya se manda al canal de Telegram.
+    insertApprovedOrder(evt.message);
+    emitDashboardEvent({ type: "order_approved", message: evt.message, createdAt: evt.createdAt });
   }
 }
 

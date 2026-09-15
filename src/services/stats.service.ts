@@ -5,6 +5,7 @@ import {
   getAllTimeTotal,
 } from "../db/payments.repository";
 import { getAllManualEntries, getManualEntry } from "../db/ledger.repository";
+import { refreshMonthTotal } from "../db/monthly.repository";
 
 /** Fecha de hoy en horario Lima, formato YYYY-MM-DD. */
 export function getLimaToday(): string {
@@ -16,10 +17,19 @@ export function getLimaMonth(): string {
   return getLimaToday().slice(0, 7);
 }
 
+/** Mes anterior al actual (horario Lima), formato YYYY-MM. */
+export function getLimaLastMonth(): string {
+  const [y, m] = getLimaMonth().split("-").map(Number);
+  const d = new Date(Date.UTC(y as number, (m as number) - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}
+
 export type SummaryStats = {
-  today:   { date: string; total: number; count: number };
-  month:   { date: string; total: number; count: number };
-  allTime: { total: number; count: number };
+  today:     { date: string; total: number; count: number };
+  month:     { date: string; total: number; count: number };
+  lastMonth: { month: string; total: number; count: number };
+  allTime:   { total: number; count: number };
 };
 
 export function getSummary(): SummaryStats {
@@ -29,11 +39,13 @@ export function getSummary(): SummaryStats {
   const todayTotals = getTotalForDate(today) ?? { date: today, total: 0, count: 0 };
   const monthTotals = getTotalForMonth(month);
   const allTime     = getAllTimeTotal();
+  const lastMonth   = refreshMonthTotal(getLimaLastMonth());
 
   return {
-    today:   todayTotals,
-    month:   monthTotals,
-    allTime: { total: allTime.total, count: allTime.count },
+    today:     todayTotals,
+    month:     monthTotals,
+    lastMonth: { month: lastMonth.month, total: lastMonth.total, count: lastMonth.count },
+    allTime:   { total: allTime.total, count: allTime.count },
   };
 }
 

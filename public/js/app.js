@@ -21,6 +21,16 @@
     return `${d}/${m}/${y}`;
   }
 
+  function fmtMonthName(yyyyMM) {
+    const [y, m] = yyyyMM.split("-");
+    const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    return meses[Number(m) - 1] + " " + y;
+  }
+
+  function pluralPagos(count) {
+    return count + (count === 1 ? " pago" : " pagos");
+  }
+
   function fmtTime(iso) {
     try {
       return new Date(iso).toLocaleTimeString("es-PE", {
@@ -187,11 +197,25 @@
 
   function renderStats(stats) {
     document.getElementById("stat-today-total").textContent   = fmtMoney(stats.today.total);
-    document.getElementById("stat-today-count").textContent   = stats.today.count + (stats.today.count === 1 ? " pago" : " pagos");
+    document.getElementById("stat-today-count").textContent   = pluralPagos(stats.today.count);
     document.getElementById("stat-month-total").textContent   = fmtMoney(stats.month.total);
-    document.getElementById("stat-month-count").textContent   = stats.month.count + (stats.month.count === 1 ? " pago" : " pagos");
+    document.getElementById("stat-month-count").textContent   = pluralPagos(stats.month.count);
     document.getElementById("stat-alltime-total").textContent = fmtMoney(stats.allTime.total);
-    document.getElementById("stat-alltime-count").textContent = stats.allTime.count + (stats.allTime.count === 1 ? " pago" : " pagos");
+    document.getElementById("stat-alltime-count").textContent = pluralPagos(stats.allTime.count);
+
+    if (stats.lastMonth) {
+      document.getElementById("stat-lastmonth-label").textContent = "Mes pasado";
+      document.getElementById("stat-lastmonth-total").textContent = fmtMoney(stats.lastMonth.total);
+      document.getElementById("stat-lastmonth-count").textContent = pluralPagos(stats.lastMonth.count);
+
+      // Mismo dato, resumido arriba de la tabla de Historial.
+      const histTotal = document.getElementById("history-lastmonth-total");
+      const histCount = document.getElementById("history-lastmonth-count");
+      if (histTotal) histTotal.textContent = fmtMoney(stats.lastMonth.total);
+      if (histCount) histCount.textContent = pluralPagos(stats.lastMonth.count);
+      const hint = document.getElementById("history-lastmonth-hint");
+      if (hint) hint.firstChild.textContent = "Mes pasado (" + fmtMonthName(stats.lastMonth.month) + "): ";
+    }
   }
 
   // confirmado = verde, pendiente/sin código = amarillo, expirado = rojo
@@ -357,7 +381,94 @@
         renderStats(evt.stats);
         refreshChartIfStale();
       }
+
+      if (evt.type === "order_approved") {
+        prependApprovedOrder(evt);
+        playChime();
+        loadPendingOrders(); // lo más probable es que un pendiente se acaba de resolver
+      }
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // PEDIDOS — pendientes (en vivo desde el bot) y aprobados (historial propio)
+  // ─────────────────────────────────────────────────────────────
+
+  const ORDERS_POLL_MS = 20_000;
+
+  const ORDER_STATUS_LABEL = {
+    PENDING_APPROVAL:     "Pendiente de aprobar",
+    COMPROBANTE_RECIBIDO: "Comprobante recibido",
+    APPROVING:            "Aprobando…",
+    REVALIDATING:         "Revalidando",
+    NO_STOCK:             "Sin stock",
+    REJECTED:             "Rechazada",
+  };
+  const ORDER_STATUS_CLASS = {
+    NO_STOCK: "expired",
+    REJECTED: "expired",
+  };
+
+  function renderPendingOrder(o) {
+    const li = document.createElement("li");
+    li.className = "feed-item";
+    const cls = ORDER_STATUS_CLASS[o.status] || "pending";
+    li.innerHTML = `
+      <span class="feed-badge ${cls}"></span>
+      <div class="feed-main">
+        <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
+        <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
+      </div>
+      <div class="feed-amount">S/ ${escapeHtml(o.price)}</div>
+    `;
+    return li;
+  }
+
+  async function loadPendingOrders() {
+    try {
+      const { orders } = await api("/orders/pending");
+      const list  = document.getElementById("orders-pending-list");
+      const empty = document.getElementById("orders-pending-empty");
+      const count = document.getElementById("orders-pending-count");
+      count.textContent = orders.length;
+      list.innerHTML = "";
+      if (orders.length === 0) { empty.hidden = false; return; }
+      empty.hidden = true;
+      for (const o of orders) list.appendChild(renderPendingOrder(o));
+    } catch {
+      // el bot puede estar reiniciando — se deja lo último mostrado
+    }
+  }
+
+  function renderApprovedOrder(o, isNew) {
+    const li = document.createElement("li");
+    li.className = "feed-item" + (isNew ? " is-new" : "");
+    li.innerHTML = `
+      <span class="feed-badge matched"></span>
+      <div class="feed-main">
+        <div class="orders-approved-text">${o.message}</div>
+        <div class="feed-time">${fmtTime(o.createdAt)}</div>
+      </div>
+    `;
+    return li;
+  }
+
+  async function loadApprovedOrders() {
+    const { orders } = await api("/orders/approved?limit=30");
+    const list  = document.getElementById("orders-approved-list");
+    const empty = document.getElementById("orders-approved-empty");
+    list.innerHTML = "";
+    if (orders.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const o of orders) list.appendChild(renderApprovedOrder(o, false));
+  }
+
+  function prependApprovedOrder(evt) {
+    const list  = document.getElementById("orders-approved-list");
+    const empty = document.getElementById("orders-approved-empty");
+    empty.hidden = true;
+    list.prepend(renderApprovedOrder({ message: evt.message, createdAt: evt.createdAt }, true));
+    while (list.children.length > 30) list.removeChild(list.lastChild);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -560,6 +671,10 @@
     renderFeedList(payments);
     await loadChart();
     connectLive();
+
+    loadPendingOrders();
+    loadApprovedOrders();
+    setInterval(loadPendingOrders, ORDERS_POLL_MS);
   }
 
   checkAuth();

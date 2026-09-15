@@ -202,7 +202,7 @@
     const accountAttr = JSON.stringify(account).replace(/"/g, "&quot;");
 
     return `
-      <div class="access-account" data-account-id="${account.id}">
+      <div class="access-account" data-account-id="${account.id}" data-platform="${escapeHtml(account.platform)}">
         <div class="access-account-head">
           <div class="access-account-info">
             <div class="access-account-email">
@@ -322,8 +322,13 @@
     target.querySelectorAll(".access-delete-account").forEach(btn => {
       btn.addEventListener("click", async () => {
         if (!confirm("¿Eliminar esta cuenta y todos sus perfiles? Esta acción no se puede deshacer.")) return;
+        const el = btn.closest(".access-account");
+        const platform = el?.dataset.platform;
         await api("/accounts/" + btn.dataset.accountId, { method: "DELETE" });
-        refresh();
+        // Se quita solo esa tarjeta del DOM — recargar todo el acordeón
+        // lo cerraba de nuevo, igual que pasaba con las otras acciones.
+        el?.remove();
+        if (platform) refreshPlatformSummaryText(platform);
       });
     });
 

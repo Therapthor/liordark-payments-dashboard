@@ -12,6 +12,7 @@ import statsRoutes from "./routes/stats.routes";
 import historyRoutes from "./routes/history.routes";
 import accessRoutes from "./routes/access.routes";
 import integrationsRoutes from "./routes/integrations.routes";
+import ordersRoutes from "./routes/orders.routes";
 
 const app = express();
 
@@ -25,6 +26,7 @@ apiRouter.use("/live", requireAuth, liveRoutes);
 apiRouter.use("/stats", requireAuth, statsRoutes);
 apiRouter.use("/history", requireAuth, historyRoutes);
 apiRouter.use("/access", requireAuth, accessRoutes);
+apiRouter.use("/orders", requireAuth, ordersRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
 apiRouter.use("/integrations", integrationsRoutes);

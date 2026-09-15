@@ -37,6 +37,27 @@ CREATE TABLE IF NOT EXISTS sync_state (
   value TEXT NOT NULL
 );
 
+-- Historial de totales por mes (YYYY-MM) — se recalcula y se actualiza
+-- solo cada vez que se consulta un mes (nunca queda "congelado" mal si
+-- se corrige un dato viejo), pero queda guardado para no recalcular
+-- desde cero cada vez y para poder listar meses pasados más adelante.
+CREATE TABLE IF NOT EXISTS monthly_totals (
+  month       TEXT PRIMARY KEY, -- YYYY-MM (hora Lima)
+  total       REAL NOT NULL,
+  count       INTEGER NOT NULL DEFAULT 0,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Historial permanente de órdenes aprobadas (el bot no las guarda una
+-- vez entregadas — acá quedan para siempre). Mismo texto exacto que ya
+-- se manda al canal "confirmadas" de Telegram.
+CREATE TABLE IF NOT EXISTS orders_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  message     TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_orders_log_created ON orders_log(created_at);
+
 -- ═══════════════════════════════════════════════════════════════════
 -- PANEL ACCESOS — cuentas y perfiles de clientes.
 --

@@ -69,6 +69,11 @@
             <div class="stat-sub" id="stat-month-count">0 pagos</div>
           </div>
           <div class="stat-card">
+            <div class="stat-label" id="stat-lastmonth-label">Mes pasado</div>
+            <div class="stat-value" id="stat-lastmonth-total">S/ 0.00</div>
+            <div class="stat-sub" id="stat-lastmonth-count">0 pagos</div>
+          </div>
+          <div class="stat-card">
             <div class="stat-label">Histórico total</div>
             <div class="stat-value" id="stat-alltime-total">S/ 0.00</div>
             <div class="stat-sub" id="stat-alltime-count">0 pagos</div>
@@ -96,6 +101,26 @@
             <p id="search-status" class="panel-hint" hidden></p>
             <ul id="feed-list" class="feed-list"></ul>
             <p id="feed-empty" class="feed-empty">Todavía no hay pagos registrados.</p>
+          </div>
+        </div>
+
+        <!-- ── PEDIDOS — control de pendientes/aprobados, como en Telegram ── -->
+        <div class="panel-grid orders-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Pedidos pendientes</h2>
+              <span class="badge orders-count-badge" id="orders-pending-count">0</span>
+            </div>
+            <ul id="orders-pending-list" class="feed-list"></ul>
+            <p id="orders-pending-empty" class="feed-empty">No hay pedidos pendientes 🎉</p>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Aprobados recientes</h2>
+            </div>
+            <ul id="orders-approved-list" class="feed-list orders-approved-list"></ul>
+            <p id="orders-approved-empty" class="feed-empty">Todavía no hay aprobaciones registradas.</p>
           </div>
         </div>
 
@@ -136,6 +161,8 @@
           <h2>Historial diario</h2>
           <button id="add-manual-btn" class="btn-primary">+ Agregar día pasado</button>
         </div>
+
+        <p class="panel-hint" id="history-lastmonth-hint">Mes pasado: <b id="history-lastmonth-total">S/ 0.00</b> · <span id="history-lastmonth-count">0 pagos</span></p>
 
         <div class="panel">
           <table class="history-table">
