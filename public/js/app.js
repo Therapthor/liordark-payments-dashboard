@@ -431,7 +431,6 @@
 
       if (evt.type === "order_approved") {
         prependApprovedOrder(evt);
-        playChime();
         loadPendingOrders(); // lo más probable es que un pendiente se acaba de resolver
       }
     };
@@ -456,6 +455,15 @@
     REJECTED: "expired",
   };
 
+  // Chip que marca los pedidos con pago ya validado por Yape (monto
+  // exacto) — útil para saber, en "sin stock" o renovaciones, a cuáles
+  // ya se les puede asignar cuenta apenas haya disponible.
+  function yapeConfirmedBadge(o) {
+    return o.yapeConfirmed
+      ? `<span class="yape-confirmed-badge" title="Pago ya confirmado por Yape">✅ Yape confirmado</span>`
+      : "";
+  }
+
   function renderPendingOrder(o) {
     const li = document.createElement("li");
     li.className = "feed-item";
@@ -465,6 +473,7 @@
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
+        ${yapeConfirmedBadge(o)}
       </div>
       <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>
       <div class="pending-order-actions">
@@ -486,6 +495,7 @@
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
+        ${yapeConfirmedBadge(o)}
       </div>
       <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>
       <div class="pending-order-actions">
