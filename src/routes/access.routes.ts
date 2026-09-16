@@ -41,7 +41,7 @@ function profileWithStatus(p: ProfileWithAccount) {
 // bot — se edita ahí. Ver src/db/catalog.repository.ts.
 
 router.get("/platforms-catalog", (_req, res) => {
-  const platforms = listCatalogProducts().map(p => ({ platform: p.platform, hasProfiles: p.hasProfiles }));
+  const platforms = listCatalogProducts(true).map(p => ({ platform: p.platform, hasProfiles: p.hasProfiles }));
   res.json({ platforms });
 });
 

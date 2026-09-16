@@ -108,6 +108,24 @@ CREATE TABLE IF NOT EXISTS catalog_products (
   has_profiles INTEGER NOT NULL DEFAULT 1,
   description  TEXT    NOT NULL DEFAULT '',
   image_url    TEXT    NOT NULL DEFAULT '',
+  active       INTEGER NOT NULL DEFAULT 1,  -- apagado = no sale más en el desplegable de Accesos
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Combos (Configuración > Catálogo > Combos) — un combo agrupa varios
+-- perfiles de una misma plataforma bajo un solo pago. Todavía NO está
+-- conectado al flujo de WhatsApp — se prepara para cuando el catálogo se
+-- traspase al panel y la entrega de combos pueda ser automática/inmediata.
+CREATE TABLE IF NOT EXISTS catalog_combos (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL,
+  platform     TEXT    NOT NULL DEFAULT '',
+  quantity     INTEGER NOT NULL DEFAULT 2,  -- cuántos perfiles se lleva el cliente de golpe
+  price        TEXT    NOT NULL DEFAULT '0',
+  description  TEXT    NOT NULL DEFAULT '',
+  image_url    TEXT    NOT NULL DEFAULT '',
+  active       INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );

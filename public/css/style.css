@@ -711,6 +711,12 @@ button, input {
 .catalog-price { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .catalog-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
+.catalog-item-off { opacity: 0.5; }
+.catalog-tag-off { color: var(--critical); background: rgba(230,80,80,0.15); }
+.catalog-tag-qty { color: var(--accent); background: rgba(57,135,229,0.15); }
+
+.catalog-combos-header { margin-top: 28px; }
+
 /* ─────────────────────────────────────────────────────────────
    RESPONSIVE
 ───────────────────────────────────────────────────────────── */

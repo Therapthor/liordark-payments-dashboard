@@ -225,6 +225,16 @@
           <ul id="catalog-list" class="catalog-list"></ul>
           <p id="catalog-empty" class="feed-empty" hidden>Todavía no hay productos en el catálogo.</p>
 
+          <div class="panel-header standalone catalog-combos-header">
+            <h2>Combos</h2>
+            <button id="combo-new-btn" class="btn-primary">+ Agregar combo</button>
+          </div>
+
+          <p class="panel-hint">El cliente se lleva varios perfiles de una plataforma con un solo pago. <b>Todavía no cambia nada en WhatsApp</b> — se prepara para cuando el catálogo pase al panel y la entrega sea inmediata.</p>
+
+          <ul id="combo-list" class="catalog-list"></ul>
+          <p id="combo-empty" class="feed-empty" hidden>Todavía no hay combos armados.</p>
+
         </div>
 
       </section>
@@ -261,6 +271,39 @@
       <p id="catalog-error" class="login-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="catalog-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: combo ───────────── -->
+  <div id="combo-modal" class="modal-backdrop" hidden>
+    <form id="combo-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="combo-modal-title">Agregar combo</h3>
+        <button type="button" class="modal-x" data-close-modal="combo-modal">✕</button>
+      </div>
+      <label>Nombre del combo
+        <input id="combo-name" type="text" maxlength="80" required placeholder="ej. Netflix x2 perfiles" />
+      </label>
+      <label>Plataforma
+        <select id="combo-platform" required></select>
+      </label>
+      <label>Cantidad de perfiles que se lleva
+        <input id="combo-quantity" type="number" min="2" max="10" step="1" required value="2" />
+      </label>
+      <label>Precio del combo (S/)
+        <input id="combo-price" type="number" step="0.01" min="0" required />
+      </label>
+      <label>Información del combo
+        <textarea id="combo-description" maxlength="500" rows="3" placeholder="Lo que ve el cliente en la tarjeta del combo"></textarea>
+      </label>
+      <label>URL de la imagen
+        <input id="combo-image-url" type="url" maxlength="500" placeholder="https://..." />
+      </label>
+      <p id="combo-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="combo-cancel" class="btn-secondary">Cancelar</button>
         <button type="submit" class="btn-primary">Guardar</button>
       </div>
     </form>

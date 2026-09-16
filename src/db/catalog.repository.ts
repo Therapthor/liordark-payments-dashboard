@@ -17,6 +17,7 @@ export type CatalogProduct = {
   hasProfiles: boolean;
   description: string;
   imageUrl:    string;
+  active:      boolean;
   createdAt:   string;
   updatedAt:   string;
 };
@@ -39,15 +40,26 @@ function toProduct(row: any): CatalogProduct {
     hasProfiles: !!row.has_profiles,
     description: row.description,
     imageUrl:    row.image_url,
+    active:      !!row.active,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };
 }
 
-export function listCatalogProducts(): CatalogProduct[] {
+/** activeOnly=true excluye los productos apagados — es lo que usa el desplegable de Accesos. */
+export function listCatalogProducts(activeOnly = false): CatalogProduct[] {
+  const where = activeOnly ? "WHERE active = 1" : "";
   return (db.prepare(`
-    SELECT * FROM catalog_products ORDER BY platform ASC
+    SELECT * FROM catalog_products ${where} ORDER BY platform ASC
   `).all() as any[]).map(toProduct);
+}
+
+export function setCatalogProductActive(id: number, active: boolean): CatalogProduct | null {
+  db.prepare(`
+    UPDATE catalog_products SET active = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(active ? 1 : 0, id);
+  const row = db.prepare(`SELECT * FROM catalog_products WHERE id = ?`).get(id);
+  return row ? toProduct(row) : null;
 }
 
 export function getCatalogProductByPlatform(platform: string): CatalogProduct | null {

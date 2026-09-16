@@ -39,6 +39,7 @@ ensureColumn("access_accounts", "has_profiles", "has_profiles INTEGER NOT NULL D
 ensureColumn("access_accounts", "expires_at",   "expires_at TEXT");
 ensureColumn("access_accounts", "link",         "link TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "renewal_status", "renewal_status TEXT NOT NULL DEFAULT ''");
+ensureColumn("catalog_products", "active", "active INTEGER NOT NULL DEFAULT 1");
 
 // orders_log guardaba created_at con datetime('now') (UTC, sin "Z"). El
 // navegador interpretaba ese texto como hora local y mostraba la orden
