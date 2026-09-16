@@ -33,6 +33,12 @@ type BotPaymentRow = {
   createdAt:    string;
 };
 
+// Si el backfill encuentra un pago nuevo más viejo que esto, no se avisa al
+// navegador en vivo (evita, ej., que un primer arranque con la base vacía
+// disparare 500 sonidos/tarjetas de golpe) — solo se avisan los que de
+// verdad se perdieron por un corte reciente del stream.
+const BACKFILL_LIVE_NOTIFY_MAX_AGE_MS = 10 * 60 * 1000;
+
 async function backfill(): Promise<void> {
   try {
     const res = await axios.get(env.BOT_BASE_URL + "/api/yape/payments", {
@@ -41,26 +47,57 @@ async function backfill(): Promise<void> {
     });
     const rows = (res.data?.data ?? []) as BotPaymentRow[];
 
+    // rows viene del bot ordenado del más nuevo al más viejo — se recorre
+    // así para no perder ninguno, pero los avisos en vivo se emiten al
+    // revés (del más viejo al más nuevo) para que el orden en pantalla
+    // quede correcto al hacer "prepend" de cada uno.
+    const newlyInserted: { row: BotPaymentRow; status: string; createdAt: string }[] = [];
+
     for (const row of rows) {
-      upsertPayment({
+      const status    = mapBotStatus(row.status);
+      // El endpoint de historial del bot devuelve la fecha ya convertida a
+      // hora Lima como texto "YYYY-MM-DD HH:MM:SS" (ver yape.controller.ts
+      // tolimaTime) — hay que revertirla a UTC real para guardarla en el
+      // mismo formato que usan los eventos en vivo (ISO 8601 UTC), y así
+      // las consultas de "día/mes en Lima" den el mismo resultado sin
+      // importar si el dato llegó por backfill o por el stream.
+      const createdAt = limaStringToUtcIso(row.createdAt);
+
+      const isNew = upsertPayment({
         id:           row.id,
         senderName:   row.senderName,
         amount:       row.amount,
         securityCode: row.securityCode,
         hasCode:      row.hasCode,
-        status:       mapBotStatus(row.status),
+        status,
         orderName:    row.orderName,
-        // El endpoint de historial del bot devuelve la fecha ya convertida a
-        // hora Lima como texto "YYYY-MM-DD HH:MM:SS" (ver yape.controller.ts
-        // tolimaTime) — hay que revertirla a UTC real para guardarla en el
-        // mismo formato que usan los eventos en vivo (ISO 8601 UTC), y así
-        // las consultas de "día/mes en Lima" den el mismo resultado sin
-        // importar si el dato llegó por backfill o por el stream.
-        createdAt:    limaStringToUtcIso(row.createdAt),
+        createdAt,
       });
+
+      if (isNew && Date.now() - new Date(createdAt).getTime() < BACKFILL_LIVE_NOTIFY_MAX_AGE_MS) {
+        newlyInserted.push({ row, status, createdAt });
+      }
     }
 
-    console.log("🔄 Backfill: " + rows.length + " pagos sincronizados desde el bot");
+    // Pagos que el stream en vivo se perdió (ej. conexión colgada un rato
+    // sin que el bot/panel lo notaran) — se avisan igual que si acabaran
+    // de llegar, para no depender de que alguien recargue la página a mano.
+    if (newlyInserted.length > 0) {
+      for (const { row, status, createdAt } of newlyInserted.reverse()) {
+        emitDashboardEvent({
+          type: "payment",
+          payment: {
+            id: row.id, senderName: row.senderName, amount: row.amount,
+            securityCode: row.securityCode, hasCode: row.hasCode,
+            status, orderName: row.orderName, createdAt,
+          },
+        });
+      }
+      emitDashboardEvent({ type: "stats", stats: getSummary() });
+    }
+
+    console.log("🔄 Backfill: " + rows.length + " pagos sincronizados desde el bot" +
+      (newlyInserted.length > 0 ? " (" + newlyInserted.length + " avisados en vivo)" : ""));
   } catch (err: any) {
     console.error("⚠️ Backfill falló:", err?.response?.status || err?.message);
   }
@@ -90,6 +127,15 @@ function limaStringToUtcIso(limaStr: string): string {
 }
 
 let sseAbort: AbortController | null = null;
+let watchdogTimer: NodeJS.Timeout | null = null;
+
+// El bot manda un ":ping" cada 25s por ese stream (ver dashboard.routes.ts)
+// para mantener la conexión viva. Si acá no llega NADA (ni un ping) en este
+// tiempo, la conexión quedó "colgada" — sigue abierta para Node pero ya no
+// pasa nada por la red (puede pasar sin que dispare "end" ni "error") — y
+// hasta ahora eso se quedaba así hasta recargar la página a mano. Se fuerza
+// un reinicio de la conexión si pasa demasiado tiempo sin ninguna señal.
+const STREAM_WATCHDOG_TIMEOUT_MS = 70_000;
 
 // Estado actual de la conexión al bot — expuesto para que un cliente nuevo
 // del frontend (que se conecta DESPUÉS de que ya establecimos el stream)
@@ -99,8 +145,12 @@ export function getConnectionStatus(): "connected" | "reconnecting" {
   return currentConnectionStatus;
 }
 
+let reconnectPending = false;
+
 async function connectStream(): Promise<void> {
   sseAbort = new AbortController();
+  reconnectPending = false;
+  if (watchdogTimer) clearInterval(watchdogTimer);
 
   try {
     const response = await axios.get(env.BOT_BASE_URL + "/api/dashboard/stream", {
@@ -115,8 +165,20 @@ async function connectStream(): Promise<void> {
     emitDashboardEvent({ type: "connection", status: "connected" });
 
     let buffer = "";
+    let lastChunkAt = Date.now();
+
+    watchdogTimer = setInterval(() => {
+      if (Date.now() - lastChunkAt > STREAM_WATCHDOG_TIMEOUT_MS) {
+        console.warn("⚠️ Stream del bot sin señal hace rato — forzando reconexión");
+        clearInterval(watchdogTimer!);
+        watchdogTimer = null;
+        sseAbort?.abort();
+        scheduleReconnect();
+      }
+    }, 15_000);
 
     response.data.on("data", (chunk: Buffer) => {
+      lastChunkAt = Date.now();
       buffer += chunk.toString("utf-8");
       const parts = buffer.split("\n\n");
       buffer = parts.pop() ?? "";
@@ -152,6 +214,8 @@ async function connectStream(): Promise<void> {
 }
 
 function scheduleReconnect(): void {
+  if (reconnectPending) return; // el watchdog y el evento "error" del abort pueden dispararse juntos
+  reconnectPending = true;
   currentConnectionStatus = "reconnecting";
   emitDashboardEvent({ type: "connection", status: "reconnecting" });
   setTimeout(connectStream, RECONNECT_DELAY_MS);

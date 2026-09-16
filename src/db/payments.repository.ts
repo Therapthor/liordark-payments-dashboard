@@ -14,6 +14,7 @@ export type PaymentRow = {
   createdAt:    string;
 };
 
+/** Devuelve true si el pago no existía (recién insertado) — false si ya estaba y solo se actualizó. */
 export function upsertPayment(p: {
   id:           number;
   senderName:   string;
@@ -23,7 +24,9 @@ export function upsertPayment(p: {
   status:       string;
   orderName?:   string | undefined;
   createdAt:    string;
-}): void {
+}): boolean {
+  const existing = db.prepare(`SELECT 1 FROM payments WHERE id = ?`).get(p.id);
+
   db.prepare(`
     INSERT INTO payments (id, sender_name, amount, security_code, has_code, status, order_name, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -34,6 +37,8 @@ export function upsertPayment(p: {
     p.id, p.senderName, p.amount, p.securityCode,
     p.hasCode ? 1 : 0, p.status, p.orderName ?? "", p.createdAt
   );
+
+  return !existing;
 }
 
 export function updatePaymentStatus(id: number, status: string): void {

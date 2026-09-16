@@ -300,6 +300,7 @@ button, input {
 
 .feed-main { flex: 1; min-width: 0; }
 .feed-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-phone { font-size: 11px; color: var(--text-muted); }
 .feed-time { font-size: 12px; color: var(--text-muted); }
 .feed-amount { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
 
@@ -360,6 +361,16 @@ button, input {
 .orders-approved-list.compact .feed-item.item-expanded .orders-approved-text { display: block; }
 
 .pending-order-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+.btn-spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+}
+@keyframes btn-spin { to { transform: rotate(360deg); } }
 
 .feed-search { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .feed-search input {

@@ -282,14 +282,25 @@
     return p.hasCode && p.securityCode ? "Cód: " + escapeHtml(p.securityCode) : "Sin código";
   }
 
+  // El teléfono no viaja aparte — va como prefijo del orderName
+  // ("51987654321-uuid-fecha"), y solo existe si el pago ya se emparejó
+  // con un pedido (si no, orderName llega vacío).
+  function phoneFromOrderName(orderName) {
+    if (!orderName) return "";
+    const phone = orderName.split("-")[0];
+    return /^\d{6,}$/.test(phone) ? phone : "";
+  }
+
   function renderFeedItem(p, isNew) {
     const li = document.createElement("li");
     li.className = "feed-item" + (isNew ? " is-new" : "");
     li.dataset.id = p.id;
+    const phone = phoneFromOrderName(p.orderName);
     li.innerHTML = `
       <span class="feed-badge ${statusClass(p.status)}"></span>
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(p.senderName)}</div>
+        ${phone ? `<div class="feed-phone">${escapeHtml(phone)}</div>` : ""}
         <div class="feed-time">${fmtTime(p.createdAt)} · <span class="feed-status ${statusClass(p.status)}">${statusLabel(p.status)}</span> · ${fmtCode(p)}</div>
       </div>
       <div class="feed-amount">${moneyValueHtml(fmtMoney(p.amount))}</div>
@@ -587,8 +598,12 @@
 
       // Sin confirmación — igual que los botones de Telegram, para poder
       // procesar rápido. Ojo al tocar: aprobar/rechazar/solo-mensaje sí
-      // afectan al cliente.
+      // afectan al cliente. El spinner es solo para saber que está
+      // procesando (antes no había ninguna señal de que el clic sí hizo
+      // algo) — la lista se vuelve a pintar entera al terminar, así que no
+      // hace falta restaurar el botón a mano.
       btn.closest("li").querySelectorAll("button").forEach(b => b.disabled = true);
+      btn.innerHTML = '<span class="btn-spinner"></span>';
       try {
         await api("/orders/" + encodeURIComponent(orderName) + "/" + act, { method: "POST" });
       } catch (err) {
