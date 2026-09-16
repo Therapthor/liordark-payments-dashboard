@@ -159,6 +159,10 @@
 
   let cachedCombos = [];
 
+  function comboItemsLabel(items) {
+    return items.map(it => it.platform + (it.quantity > 1 ? ` x${it.quantity}` : "")).join(" + ");
+  }
+
   function renderCombo(c) {
     const li = document.createElement("li");
     li.className = "catalog-item" + (c.active ? "" : " catalog-item-off");
@@ -173,10 +177,9 @@
       <div class="catalog-main">
         <div class="catalog-name">
           ${escapeHtml(c.name)}
-          <span class="catalog-tag catalog-tag-qty">x${c.quantity} perfiles</span>
           ${c.active ? "" : '<span class="catalog-tag catalog-tag-off">Apagado</span>'}
         </div>
-        <div class="catalog-desc">${escapeHtml(c.platform)}${c.description ? " · " + escapeHtml(c.description) : ""}</div>
+        <div class="catalog-desc">${escapeHtml(comboItemsLabel(c.items))}${c.description ? " · " + escapeHtml(c.description) : ""}</div>
       </div>
       <div class="catalog-price">S/ ${escapeHtml(c.price)}</div>
       <div class="catalog-actions">
@@ -199,23 +202,44 @@
 
   let editingComboId = null;
 
-  function fillComboPlatformSelect(selected) {
-    const select = document.getElementById("combo-platform");
+  function platformOptionsHtml(selected) {
     const active = cachedProducts.filter(p => p.active);
-    select.innerHTML = active.length
+    return active.length
       ? active.map(p => `<option value="${escapeHtml(p.platform)}" ${p.platform === selected ? "selected" : ""}>${escapeHtml(p.platform)}</option>`).join("")
       : `<option value="">Agrega productos al catálogo primero</option>`;
+  }
+
+  function addComboItemRow(platform, quantity) {
+    const row = document.createElement("div");
+    row.className = "combo-item-row";
+    row.innerHTML = `
+      <select class="combo-item-platform">${platformOptionsHtml(platform ?? "")}</select>
+      <input type="number" class="combo-item-qty" min="1" max="10" step="1" value="${quantity ?? 1}" title="Cantidad de esta plataforma" />
+      <button type="button" class="icon-btn-sm combo-item-remove" title="Quitar">✕</button>
+    `;
+    row.querySelector(".combo-item-remove").addEventListener("click", () => row.remove());
+    document.getElementById("combo-items-list").appendChild(row);
+  }
+
+  function readComboItems() {
+    return [...document.querySelectorAll("#combo-items-list .combo-item-row")].map(row => ({
+      platform: row.querySelector(".combo-item-platform").value,
+      quantity: Number(row.querySelector(".combo-item-qty").value) || 1,
+    })).filter(it => it.platform);
   }
 
   function openComboModal(combo) {
     editingComboId = combo ? combo.id : null;
     document.getElementById("combo-modal-title").textContent = combo ? "Editar combo" : "Agregar combo";
-    fillComboPlatformSelect(combo?.platform ?? "");
     document.getElementById("combo-name").value        = combo?.name ?? "";
-    document.getElementById("combo-quantity").value    = combo?.quantity ?? 2;
     document.getElementById("combo-price").value       = combo?.price ?? "";
     document.getElementById("combo-description").value = combo?.description ?? "";
     document.getElementById("combo-image-url").value   = combo?.imageUrl ?? "";
+
+    document.getElementById("combo-items-list").innerHTML = "";
+    const items = combo?.items?.length ? combo.items : [{ platform: "" }, { platform: "" }];
+    for (const it of items) addComboItemRow(it.platform, it.quantity);
+
     document.getElementById("combo-error").hidden = true;
     document.getElementById("combo-modal").hidden = false;
   }
@@ -225,26 +249,27 @@
     document.getElementById("combo-cancel").addEventListener("click", () => {
       document.getElementById("combo-modal").hidden = true;
     });
+    document.getElementById("combo-add-item-btn").addEventListener("click", () => addComboItemRow());
 
     document.getElementById("combo-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const errorEl = document.getElementById("combo-error");
       errorEl.hidden = true;
 
-      const body = {
-        name:        document.getElementById("combo-name").value.trim(),
-        platform:    document.getElementById("combo-platform").value,
-        quantity:    document.getElementById("combo-quantity").value,
-        price:       document.getElementById("combo-price").value,
-        description: document.getElementById("combo-description").value.trim(),
-        imageUrl:    document.getElementById("combo-image-url").value.trim(),
-      };
-
-      if (!body.platform) {
-        errorEl.textContent = "Agrega al menos un producto activo al catálogo antes de crear un combo.";
+      const items = readComboItems();
+      if (items.length < 2) {
+        errorEl.textContent = "Un combo necesita al menos 2 plataformas.";
         errorEl.hidden = false;
         return;
       }
+
+      const body = {
+        name:        document.getElementById("combo-name").value.trim(),
+        price:       document.getElementById("combo-price").value,
+        description: document.getElementById("combo-description").value.trim(),
+        imageUrl:    document.getElementById("combo-image-url").value.trim(),
+        items,
+      };
 
       try {
         if (editingComboId) {

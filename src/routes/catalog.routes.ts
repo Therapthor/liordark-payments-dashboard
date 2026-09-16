@@ -14,6 +14,7 @@ import {
   deleteCombo,
   setComboActive,
   type ComboInput,
+  type ComboItem,
 } from "../db/combo.repository";
 
 const router = Router();
@@ -64,15 +65,26 @@ router.delete("/products/:id", (req, res) => {
 
 // ── COMBOS ──
 
+function parseComboItems(rawItems: any): ComboItem[] {
+  if (!Array.isArray(rawItems)) return [];
+  return rawItems
+    .map((it: any) => {
+      const quantity = Number(it?.quantity);
+      return {
+        platform: String(it?.platform ?? "").trim(),
+        quantity: Number.isFinite(quantity) && quantity > 0 ? Math.round(quantity) : 1,
+      };
+    })
+    .filter((it: ComboItem) => it.platform);
+}
+
 function parseComboBody(body: any): ComboInput {
-  const quantity = Number(body?.quantity);
   return {
     name:        String(body?.name ?? "").trim(),
-    platform:    String(body?.platform ?? "").trim(),
-    quantity:    Number.isFinite(quantity) && quantity > 0 ? Math.round(quantity) : 2,
     price:       String(body?.price ?? "0").trim(),
     description: String(body?.description ?? "").trim(),
     imageUrl:    String(body?.imageUrl ?? "").trim(),
+    items:       parseComboItems(body?.items),
   };
 }
 
@@ -82,16 +94,16 @@ router.get("/combos", (_req, res) => {
 
 router.post("/combos", (req, res) => {
   const data = parseComboBody(req.body);
-  if (!data.name)     { res.status(400).json({ message: "Falta el nombre del combo." }); return; }
-  if (!data.platform) { res.status(400).json({ message: "Falta la plataforma del combo." }); return; }
+  if (!data.name)          { res.status(400).json({ message: "Falta el nombre del combo." }); return; }
+  if (data.items.length < 2) { res.status(400).json({ message: "Un combo necesita al menos 2 plataformas." }); return; }
   res.status(201).json({ combo: createCombo(data) });
 });
 
 router.put("/combos/:id", (req, res) => {
   const id = Number(req.params.id);
   const data = parseComboBody(req.body);
-  if (!data.name)     { res.status(400).json({ message: "Falta el nombre del combo." }); return; }
-  if (!data.platform) { res.status(400).json({ message: "Falta la plataforma del combo." }); return; }
+  if (!data.name)          { res.status(400).json({ message: "Falta el nombre del combo." }); return; }
+  if (data.items.length < 2) { res.status(400).json({ message: "Un combo necesita al menos 2 plataformas." }); return; }
 
   const combo = updateCombo(id, data);
   if (!combo) { res.status(404).json({ message: "Combo no encontrado." }); return; }

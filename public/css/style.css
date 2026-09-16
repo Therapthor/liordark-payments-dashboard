@@ -713,9 +713,15 @@ button, input {
 
 .catalog-item-off { opacity: 0.5; }
 .catalog-tag-off { color: var(--critical); background: rgba(230,80,80,0.15); }
-.catalog-tag-qty { color: var(--accent); background: rgba(57,135,229,0.15); }
 
 .catalog-combos-header { margin-top: 28px; }
+
+.combo-items-field { display: flex; flex-direction: column; gap: 6px; }
+.combo-items-label { font-size: 13px; color: var(--text-secondary); }
+.combo-items-list { display: flex; flex-direction: column; gap: 6px; }
+.combo-item-row { display: flex; gap: 6px; align-items: center; }
+.combo-item-row select { flex: 1; }
+.combo-item-row input { width: 64px; flex-shrink: 0; }
 
 /* ─────────────────────────────────────────────────────────────
    RESPONSIVE

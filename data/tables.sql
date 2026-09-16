@@ -113,15 +113,14 @@ CREATE TABLE IF NOT EXISTS catalog_products (
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
--- Combos (Configuración > Catálogo > Combos) — un combo agrupa varios
--- perfiles de una misma plataforma bajo un solo pago. Todavía NO está
--- conectado al flujo de WhatsApp — se prepara para cuando el catálogo se
--- traspase al panel y la entrega de combos pueda ser automática/inmediata.
+-- Combos (Configuración > Catálogo > Combos) — un combo agrupa perfiles de
+-- VARIAS plataformas distintas bajo un solo pago (ej. 1 Netflix + 1 Spotify
+-- + 1 Crunchyroll), no varios perfiles repetidos de una misma plataforma.
+-- Todavía NO está conectado al flujo de WhatsApp — se prepara para cuando
+-- el catálogo se traspase al panel y la entrega pueda ser inmediata.
 CREATE TABLE IF NOT EXISTS catalog_combos (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   name         TEXT    NOT NULL,
-  platform     TEXT    NOT NULL DEFAULT '',
-  quantity     INTEGER NOT NULL DEFAULT 2,  -- cuántos perfiles se lleva el cliente de golpe
   price        TEXT    NOT NULL DEFAULT '0',
   description  TEXT    NOT NULL DEFAULT '',
   image_url    TEXT    NOT NULL DEFAULT '',
@@ -129,3 +128,14 @@ CREATE TABLE IF NOT EXISTS catalog_combos (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Cada fila es una plataforma dentro de un combo (ej. combo #3 → "NETFLIX"
+-- x1, "SPOTIFY" x1, "CRUNCHYROLL" x1). quantity casi siempre es 1, pero se
+-- deja libre por si algún combo repite perfiles de una misma plataforma.
+CREATE TABLE IF NOT EXISTS catalog_combo_items (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  combo_id  INTEGER NOT NULL,
+  platform  TEXT    NOT NULL,
+  quantity  INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_combo_items_combo ON catalog_combo_items(combo_id);
