@@ -13,6 +13,9 @@ import historyRoutes from "./routes/history.routes";
 import accessRoutes from "./routes/access.routes";
 import integrationsRoutes from "./routes/integrations.routes";
 import ordersRoutes from "./routes/orders.routes";
+import catalogRoutes from "./routes/catalog.routes";
+import { seedCatalogIfEmpty } from "./db/catalog.repository";
+import { getPlatformCatalog } from "./services/catalog.service";
 
 const app = express();
 
@@ -27,6 +30,7 @@ apiRouter.use("/stats", requireAuth, statsRoutes);
 apiRouter.use("/history", requireAuth, historyRoutes);
 apiRouter.use("/access", requireAuth, accessRoutes);
 apiRouter.use("/orders", requireAuth, ordersRoutes);
+apiRouter.use("/catalog", requireAuth, catalogRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
 apiRouter.use("/integrations", integrationsRoutes);
@@ -42,6 +46,10 @@ app.use(express.static(path.resolve(process.cwd(), "public")));
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);
   startSync();
+
+  getPlatformCatalog()
+    .then(seedCatalogIfEmpty)
+    .catch((err: any) => console.error("⚠️ No se pudo sembrar el catálogo del panel:", err?.message));
 });
 
 let isShuttingDown = false;

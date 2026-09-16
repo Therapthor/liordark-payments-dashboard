@@ -41,6 +41,7 @@
           </div>
         </div>
         <button class="tab-btn" data-view="access">Accesos</button>
+        <button class="tab-btn" data-view="config">Configuración</button>
       </nav>
 
       <div class="topbar-actions">
@@ -205,7 +206,64 @@
 
       </section>
 
+      <!-- ═══════════ VISTA: CONFIGURACIÓN ═══════════ -->
+      <section id="view-config" class="view" hidden>
+
+        <div class="config-subnav">
+          <button class="config-subnav-item active" data-config-section="catalog">Catálogo</button>
+        </div>
+
+        <div id="config-section-catalog" class="config-section">
+
+          <div class="panel-header standalone">
+            <h2>Catálogo</h2>
+            <button id="catalog-new-btn" class="btn-primary">+ Agregar producto</button>
+          </div>
+
+          <p class="panel-hint">Esto alimenta el desplegable de plataforma en "Accesos". <b>Por ahora no cambia nada en WhatsApp</b> — es un catálogo aparte, hasta que se conecte más adelante.</p>
+
+          <ul id="catalog-list" class="catalog-list"></ul>
+          <p id="catalog-empty" class="feed-empty" hidden>Todavía no hay productos en el catálogo.</p>
+
+        </div>
+
+      </section>
+
     </main>
+  </div>
+
+  <!-- ───────────── MODAL: producto de catálogo ───────────── -->
+  <div id="catalog-modal" class="modal-backdrop" hidden>
+    <form id="catalog-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="catalog-modal-title">Agregar producto</h3>
+        <button type="button" class="modal-x" data-close-modal="catalog-modal">✕</button>
+      </div>
+      <label>Nombre de la plataforma
+        <input id="catalog-platform" type="text" maxlength="60" required placeholder="ej. NETFLIX PREMIUM" />
+      </label>
+      <label>Título a mostrar (opcional, si es distinto del nombre)
+        <input id="catalog-title" type="text" maxlength="80" placeholder="ej. Netflix Premium 4K" />
+      </label>
+      <label>Precio (S/)
+        <input id="catalog-price" type="number" step="0.01" min="0" required />
+      </label>
+      <label class="catalog-checkbox-label">
+        <input id="catalog-has-profiles" type="checkbox" checked />
+        Cuenta con perfiles
+      </label>
+      <label>Información del producto
+        <textarea id="catalog-description" maxlength="500" rows="3" placeholder="Lo que ve el cliente en la tarjeta del producto"></textarea>
+      </label>
+      <label>URL de la imagen
+        <input id="catalog-image-url" type="url" maxlength="500" placeholder="https://..." />
+      </label>
+      <p id="catalog-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="catalog-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
   </div>
 
   <!-- ───────────── MODAL: registro manual ───────────── -->
@@ -350,6 +408,7 @@
   </div>
 
   <script src="js/access.js"></script>
+  <script src="js/catalog.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

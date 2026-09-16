@@ -16,7 +16,7 @@ import {
   type RenewalStatus,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
-import { getPlatformCatalog, hasProfilesFor } from "../services/catalog.service";
+import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 
 const router = Router();
 
@@ -37,13 +37,12 @@ function profileWithStatus(p: ProfileWithAccount) {
 }
 
 // ── CATÁLOGO (para el desplegable de plataforma) ──
+// Viene del catálogo propio del panel (Configuración > Catálogo), no del
+// bot — se edita ahí. Ver src/db/catalog.repository.ts.
 
-router.get("/platforms-catalog", async (_req, res) => {
-  try {
-    res.json({ platforms: await getPlatformCatalog() });
-  } catch (err: any) {
-    res.status(502).json({ message: "No se pudo obtener el catálogo del bot: " + err?.message });
-  }
+router.get("/platforms-catalog", (_req, res) => {
+  const platforms = listCatalogProducts().map(p => ({ platform: p.platform, hasProfiles: p.hasProfiles }));
+  res.json({ platforms });
 });
 
 // ── PLATAFORMAS (agrupación de cuentas ya cargadas en Accesos) ──
@@ -61,7 +60,7 @@ router.get("/platforms/:platform/accounts", (req, res) => {
 
 // Alta en formato "correo:contraseña" (una por línea) — todas comparten
 // plataforma, proveedor y vencimiento inicial. hasProfiles se resuelve
-// del catálogo del bot, nunca se confía en lo que mande el cliente.
+// del catálogo propio del panel, nunca se confía en lo que mande el cliente.
 router.post("/accounts/bulk", async (req, res) => {
   const { platform, provider, expiresAt, lines } = req.body ?? {};
 
@@ -85,7 +84,7 @@ router.post("/accounts/bulk", async (req, res) => {
     return;
   }
 
-  const hasProfiles = await hasProfilesFor(platform);
+  const hasProfiles = getCatalogProductByPlatform(platform)?.hasProfiles ?? true;
 
   const accounts = createAccountsBulk({
     platform, provider: typeof provider === "string" ? provider : "",

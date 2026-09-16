@@ -96,3 +96,18 @@ CREATE TABLE IF NOT EXISTS access_profiles (
 );
 CREATE INDEX IF NOT EXISTS idx_access_profiles_account ON access_profiles(account_id);
 CREATE INDEX IF NOT EXISTS idx_access_profiles_phone   ON access_profiles(client_phone);
+
+-- Catálogo propio del panel (Configuración > Catálogo). Alimenta el
+-- desplegable de plataforma en Accesos. NO está conectado al bot/WhatsApp
+-- todavía — es un catálogo aparte hasta que se decida migrar esa fuente.
+CREATE TABLE IF NOT EXISTS catalog_products (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  platform     TEXT    NOT NULL,
+  title        TEXT    NOT NULL DEFAULT '',
+  price        TEXT    NOT NULL DEFAULT '0',
+  has_profiles INTEGER NOT NULL DEFAULT 1,
+  description  TEXT    NOT NULL DEFAULT '',
+  image_url    TEXT    NOT NULL DEFAULT '',
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);

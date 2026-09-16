@@ -199,17 +199,20 @@
     document.getElementById("view-live").hidden    = view !== "live";
     document.getElementById("view-access").hidden  = view !== "access";
     document.getElementById("view-history").hidden = view !== "history";
+    document.getElementById("view-config").hidden  = view !== "config";
 
     const isPagos = view === "live" || view === "history";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
     document.querySelectorAll(".tab-dropdown-item").forEach(item => {
       item.classList.toggle("active", item.dataset.view === view);
     });
-    const accessBtn = document.querySelector('.tab-btn[data-view="access"]');
-    if (accessBtn) accessBtn.classList.toggle("active", view === "access");
+    document.querySelectorAll('.tab-btn[data-view]:not(.tab-dropdown-toggle)').forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.view === view);
+    });
 
     if (view === "history") loadHistory();
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
+    if (view === "config" && window.LiordarkCatalog) window.LiordarkCatalog.load();
   }
 
   function initTabs() {
@@ -228,9 +231,11 @@
       });
     });
 
-    document.querySelector('.tab-btn[data-view="access"]').addEventListener("click", () => {
-      menu.hidden = true;
-      switchView("access");
+    document.querySelectorAll('.tab-btn[data-view]:not(.tab-dropdown-toggle)').forEach(btn => {
+      btn.addEventListener("click", () => {
+        menu.hidden = true;
+        switchView(btn.dataset.view);
+      });
     });
 
     document.addEventListener("click", (e) => {
@@ -934,6 +939,7 @@
     initMoneyToggle();
     initCodeSearch();
     if (window.LiordarkAccess) window.LiordarkAccess.init();
+    if (window.LiordarkCatalog) window.LiordarkCatalog.init();
 
     const { payments, stats } = await api("/live/initial");
     cachedLivePayments = payments;
