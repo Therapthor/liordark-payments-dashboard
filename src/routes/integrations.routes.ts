@@ -7,13 +7,11 @@ const router = Router();
 // ─────────────────────────────────────────────────────────────
 // POST /api/integrations/telegram-add
 //
-// El bot llama acá justo después de agregar una cuenta al stock por
-// /add en Telegram, para reflejarla también en el panel de Accesos.
+// El bot llama acá cuando se agrega una cuenta al stock por /add en
+// Telegram — esta es la ÚNICA fuente ahora (ya no escribe nada en
+// Sheets), así que si esto falla, el alta de stock falla también.
 // Mismo candado que el bot usa para /api/dashboard/* (x-*-key +
 // DASHBOARD_API_KEY compartida) — no depende de la sesión del navegador.
-//
-// Best-effort desde el lado del bot: si esto falla, Sheets ya quedó
-// escrito igual — el bot sigue vendiendo normal, solo no se refleja acá.
 // ─────────────────────────────────────────────────────────────
 
 router.post("/telegram-add", (req, res) => {
@@ -39,7 +37,7 @@ router.post("/telegram-add", (req, res) => {
       pairs: [{ email, password }],
     });
 
-    console.log("📥 Cuenta reflejada desde Telegram /add: " + platform + " " + email);
+    console.log("📥 Cuenta agregada desde Telegram /add: " + platform + " " + email);
     res.status(201).json({ ok: true, accountId: account?.id });
   } catch (err: any) {
     console.error("❌ Error reflejando cuenta de Telegram en Accesos:", err?.message);
