@@ -501,25 +501,12 @@
       : "";
   }
 
-  // Miniatura del comprobante — clic abre la imagen completa en pestaña
-  // nueva. Antes esto SOLO se veía en el mensaje de Telegram; ahora que
-  // Telegram ya no manda avisos de pedidos, es la única forma de verlo.
-  function proofThumbHtml(o) {
-    if (!o.cloudinaryUrl) return "";
-    return `
-      <a class="pending-order-proof" href="${escapeHtml(o.cloudinaryUrl)}" target="_blank" rel="noopener" title="Ver comprobante">
-        <img src="${escapeHtml(o.cloudinaryUrl)}" alt="Comprobante" loading="lazy" />
-      </a>
-    `;
-  }
-
   function renderPendingOrder(o) {
     const li = document.createElement("li");
     li.className = "feed-item";
     const cls = ORDER_STATUS_CLASS[o.status] || "pending";
     li.innerHTML = `
       <span class="feed-badge ${cls}"></span>
-      ${proofThumbHtml(o)}
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
@@ -543,7 +530,6 @@
     const cls = ORDER_STATUS_CLASS[o.status] || "pending";
     li.innerHTML = `
       <span class="feed-badge ${cls}"></span>
-      ${proofThumbHtml(o)}
       <div class="feed-main">
         <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
