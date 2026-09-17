@@ -370,8 +370,12 @@ export function findAccountByClientPhone(platform: string, clientPhone: string):
 }
 
 export type ExpiringClient = {
+  profileId:   number;
   clientPhone: string;
   platform:    string;
+  platformTag: string; // título "amigable" del catálogo, para el mensaje al cliente
+  email:       string;
+  password:    string;
   expiresAt:   string;
 };
 
@@ -379,9 +383,12 @@ export type ExpiringClient = {
 export function listExpiringClients(days: number): ExpiringClient[] {
   const limit = addDaysISOLocal(limaTodayISOLocal(), days);
   return db.prepare(`
-    SELECT DISTINCT p.client_phone AS clientPhone, a.platform AS platform, a.expires_at AS expiresAt
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
+           COALESCE(c.title, '') AS platformTag,
+           a.email AS email, a.password AS password, a.expires_at AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
+    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
     WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= ?
     ORDER BY a.expires_at ASC
   `).all(limit) as ExpiringClient[];
