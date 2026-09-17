@@ -167,10 +167,11 @@
     for (const p of platforms) {
       const details = document.createElement("details");
       details.className = "access-platform";
+      const free = p.profileCount - p.occupiedCount;
       details.innerHTML = `
         <summary>
           <span class="access-platform-name">${escapeHtml(p.platform)}</span>
-          <span class="access-platform-count">${p.accountCount} cuenta(s) · ${p.occupiedCount}/${p.profileCount} perfiles ocupados</span>
+          <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${p.accountCount} cuenta(s) · ${p.occupiedCount}/${p.profileCount} perfiles ocupados</span>
         </summary>
         <div class="access-accounts" data-platform="${escapeHtml(p.platform)}"></div>
       `;
@@ -217,8 +218,11 @@
       document.querySelectorAll(".access-platform").forEach(details => {
         const nameEl = details.querySelector(".access-platform-name");
         if (nameEl && nameEl.textContent === platform) {
-          details.querySelector(".access-platform-count").textContent =
-            `${info.accountCount} cuenta(s) · ${info.occupiedCount}/${info.profileCount} perfiles ocupados`;
+          const free = info.profileCount - info.occupiedCount;
+          const countEl = details.querySelector(".access-platform-count");
+          countEl.textContent = `${info.accountCount} cuenta(s) · ${info.occupiedCount}/${info.profileCount} perfiles ocupados`;
+          countEl.classList.toggle("has-stock", free > 0);
+          countEl.classList.toggle("no-stock", free === 0);
         }
       });
     } catch { /* no crítico */ }
@@ -814,17 +818,30 @@
     const empty = document.getElementById("access-history-empty");
     body.innerHTML = accounts.map(renderArchivedAccount).join("");
     empty.hidden = accounts.length > 0;
+    empty.textContent = "No hay cuentas archivadas todavía.";
+  }
+
+  async function loadHistory(query) {
+    const body  = document.getElementById("access-history-body");
+    const empty = document.getElementById("access-history-empty");
+    try {
+      const { accounts } = await api("/history" + (query ? "?q=" + encodeURIComponent(query) : ""));
+      renderHistoryList(accounts);
+    } catch (err) {
+      body.innerHTML = "";
+      empty.hidden = false;
+      empty.textContent = "⚠️ No se pudo cargar el historial: " + (err?.message || "error desconocido");
+    }
   }
 
   let historyDebounce = null;
 
   function initHistoryModal() {
-    document.getElementById("access-history-btn").addEventListener("click", async () => {
+    document.getElementById("access-history-btn").addEventListener("click", () => {
       document.getElementById("access-history-search").value = "";
       document.getElementById("access-history-search-clear").hidden = true;
       document.getElementById("access-history-modal").hidden = false;
-      const { accounts } = await api("/history");
-      renderHistoryList(accounts);
+      loadHistory("");
     });
 
     const input    = document.getElementById("access-history-search");
@@ -833,17 +850,13 @@
     input.addEventListener("input", () => {
       clearTimeout(historyDebounce);
       clearBtn.hidden = !input.value;
-      historyDebounce = setTimeout(async () => {
-        const { accounts } = await api("/history?q=" + encodeURIComponent(input.value.trim()));
-        renderHistoryList(accounts);
-      }, 300);
+      historyDebounce = setTimeout(() => loadHistory(input.value.trim()), 300);
     });
 
-    clearBtn.addEventListener("click", async () => {
+    clearBtn.addEventListener("click", () => {
       input.value = "";
       clearBtn.hidden = true;
-      const { accounts } = await api("/history");
-      renderHistoryList(accounts);
+      loadHistory("");
     });
   }
 

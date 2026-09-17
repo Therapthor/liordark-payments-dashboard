@@ -48,7 +48,11 @@ app.get("/api/health", (_req, res) => {
 });
 
 // Frontend estático — sin build, HTML/CSS/JS planos servidos directo.
-app.use(express.static(path.resolve(process.cwd(), "public")));
+// no-cache: sin esto el navegador a veces sirve una versión vieja de un
+// .js/.css cacheada aunque el archivo ya se haya reemplazado en el deploy.
+app.use(express.static(path.resolve(process.cwd(), "public"), {
+  setHeaders: (res) => res.setHeader("Cache-Control", "no-cache"),
+}));
 
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);

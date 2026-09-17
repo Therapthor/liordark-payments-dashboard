@@ -586,6 +586,8 @@ button, input {
 .access-platform summary::-webkit-details-marker { display: none; }
 .access-platform-name { font-weight: 700; font-size: 16px; }
 .access-platform-count { color: var(--text-muted); font-size: 13px; }
+.access-platform-count.has-stock { color: var(--good); }
+.access-platform-count.no-stock  { color: var(--critical); }
 
 .access-accounts { display: flex; flex-direction: column; gap: 16px; padding-bottom: 18px; }
 
