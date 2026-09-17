@@ -78,9 +78,19 @@
     return count + (count === 1 ? " pago" : " pagos");
   }
 
+  // SQLite guarda "YYYY-MM-DD HH:MM:SS" en UTC pero sin decirlo — si se
+  // parsea tal cual, el navegador lo toma como hora LOCAL suya, no UTC, y
+  // todo sale corrido (en Perú, 5 horas adelantado). Se fuerza el sufijo
+  // "Z" solo cuando el string no trae ya su propia zona horaria.
+  function toUtcISOString(s) {
+    if (typeof s !== "string") return s;
+    if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(s)) return s;
+    return s.replace(" ", "T") + "Z";
+  }
+
   function fmtTime(iso) {
     try {
-      return new Date(iso).toLocaleTimeString("es-PE", {
+      return new Date(toUtcISOString(iso)).toLocaleTimeString("es-PE", {
         timeZone: "America/Lima", hour: "2-digit", minute: "2-digit",
       });
     } catch { return ""; }
