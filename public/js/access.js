@@ -96,6 +96,7 @@
   let editingAccountId         = null;
   let editingAccountPlatform   = null;
   let platformCatalog          = [];
+  let providerCatalog          = [];
 
   async function loadCatalog() {
     if (platformCatalog.length) return platformCatalog;
@@ -106,6 +107,32 @@
       platformCatalog = [];
     }
     return platformCatalog;
+  }
+
+  async function loadProviderCatalog() {
+    if (providerCatalog.length) return providerCatalog;
+    try {
+      const { providers } = await api("/providers-catalog");
+      providerCatalog = providers;
+    } catch {
+      providerCatalog = [];
+    }
+    return providerCatalog;
+  }
+
+  function populateProviderSelect(select, selected) {
+    const options = providerCatalog.map(p =>
+      `<option value="${escapeHtml(p.name)}" ${p.name === selected ? "selected" : ""}>${escapeHtml(p.name)}</option>`
+    ).join("");
+    select.innerHTML = `<option value="">— Sin proveedor —</option>` + options;
+    if (selected && !providerCatalog.some(p => p.name === selected)) {
+      select.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+    }
+  }
+
+  function providerWhatsapp(name) {
+    const found = providerCatalog.find(p => p.name.trim().toUpperCase() === String(name).trim().toUpperCase());
+    return found?.whatsapp || "";
   }
 
   function populatePlatformSelect(select, selected) {
@@ -121,6 +148,7 @@
   // ─────────────────────────────────────────────────────────────
 
   async function load() {
+    loadProviderCatalog(); // se necesita para el botón 🔑 de soporte — no bloquea el render
     document.getElementById("access-client-summary").hidden = true;
     document.getElementById("access-search-results").hidden = true;
     document.getElementById("access-platforms").hidden = false;
@@ -223,6 +251,7 @@
             ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-password-all" data-account="${accountAttr}">🔑 Cambiar contraseña a todos</button>` : ""}
             ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
             <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
+            <button class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte proveedor</button>
             <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
             ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
             <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
@@ -308,6 +337,24 @@
 
     target.querySelectorAll(".access-copy-account").forEach(btn => {
       btn.addEventListener("click", () => copyAccountData(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+    });
+
+    target.querySelectorAll(".access-provider-support").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const account = JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'));
+        await loadProviderCatalog();
+        if (!account.provider) {
+          alert("Esta cuenta no tiene proveedor asignado. Edítala y elige uno primero.");
+          return;
+        }
+        const phone = providerWhatsapp(account.provider);
+        if (!phone) {
+          alert(`No hay WhatsApp guardado para "${account.provider}". Agrégalo en Configuración > Proveedores.`);
+          return;
+        }
+        const msg = `Hola! Necesito soporte con una cuenta de *${account.platform}*.\n📧 Correo: ${account.email}`;
+        window.open(waLink(phone, msg), "_blank");
+      });
     });
 
     target.querySelectorAll(".access-renew-account").forEach(btn => {
@@ -428,10 +475,11 @@
   // ─────────────────────────────────────────────────────────────
 
   async function openBulkModal() {
-    await loadCatalog();
+    await Promise.all([loadCatalog(), loadProviderCatalog()]);
     document.getElementById("bulk-form").reset();
     document.getElementById("bulk-error").hidden = true;
     populatePlatformSelect(document.getElementById("bulk-platform"));
+    populateProviderSelect(document.getElementById("bulk-provider"));
     document.getElementById("bulk-expires").value = addDaysISO(todayISO(), 30);
     document.getElementById("bulk-expires").min = todayISO();
     document.getElementById("bulk-modal").hidden = false;
@@ -467,7 +515,7 @@
   // ─────────────────────────────────────────────────────────────
 
   async function openEditModal(accountId) {
-    await loadCatalog();
+    await Promise.all([loadCatalog(), loadProviderCatalog()]);
     editingAccountId = accountId;
     document.getElementById("account-edit-form").reset();
     document.getElementById("account-edit-error").hidden = true;
@@ -477,7 +525,7 @@
     populatePlatformSelect(document.getElementById("account-edit-platform"), account.platform);
     document.getElementById("account-edit-email").value = account.email;
     document.getElementById("account-edit-password").value = account.password;
-    document.getElementById("account-edit-provider").value = account.provider;
+    populateProviderSelect(document.getElementById("account-edit-provider"), account.provider);
     document.getElementById("account-edit-expires").value = account.expiresAt || "";
     document.getElementById("account-edit-link").value = account.link || "";
     document.getElementById("account-edit-modal").hidden = false;

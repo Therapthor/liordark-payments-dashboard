@@ -139,3 +139,28 @@ CREATE TABLE IF NOT EXISTS catalog_combo_items (
   quantity  INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_combo_items_combo ON catalog_combo_items(combo_id);
+
+-- Métodos de pago (Configuración > Métodos de pago). Por ahora solo se usa
+-- como referencia/lista propia del panel — no está conectado al selector
+-- de método de pago que ya usa el bot en WhatsApp.
+CREATE TABLE IF NOT EXISTS payment_methods (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL,
+  description  TEXT    NOT NULL DEFAULT '',
+  active       INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Proveedores (Configuración > Proveedores). Alimenta el desplegable de
+-- "Proveedor" al crear/editar cuentas en Accesos, y el botón 🔑 de soporte
+-- (abre WhatsApp al proveedor de esa cuenta).
+CREATE TABLE IF NOT EXISTS providers (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT    NOT NULL,
+  whatsapp     TEXT    NOT NULL DEFAULT '',
+  notes        TEXT    NOT NULL DEFAULT '',
+  active       INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);

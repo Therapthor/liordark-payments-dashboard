@@ -211,6 +211,8 @@
 
         <div class="config-subnav">
           <button class="config-subnav-item active" data-config-section="catalog">Catálogo</button>
+          <button class="config-subnav-item" data-config-section="payment-methods">Métodos de pago</button>
+          <button class="config-subnav-item" data-config-section="providers">Proveedores</button>
         </div>
 
         <div id="config-section-catalog" class="config-section">
@@ -234,6 +236,34 @@
 
           <ul id="combo-list" class="catalog-list"></ul>
           <p id="combo-empty" class="feed-empty" hidden>Todavía no hay combos armados.</p>
+
+        </div>
+
+        <div id="config-section-payment-methods" class="config-section" hidden>
+
+          <div class="panel-header standalone">
+            <h2>Métodos de pago</h2>
+            <button id="payment-method-new-btn" class="btn-primary">+ Agregar método</button>
+          </div>
+
+          <p class="panel-hint">Métodos de pago que manejas. Hoy el bot solo usa Yape — esta lista es tuya, para tenerla lista si cambia.</p>
+
+          <ul id="payment-method-list" class="catalog-list"></ul>
+          <p id="payment-method-empty" class="feed-empty" hidden>Todavía no hay métodos de pago.</p>
+
+        </div>
+
+        <div id="config-section-providers" class="config-section" hidden>
+
+          <div class="panel-header standalone">
+            <h2>Proveedores</h2>
+            <button id="provider-new-btn" class="btn-primary">+ Agregar proveedor</button>
+          </div>
+
+          <p class="panel-hint">Se usan en el desplegable "Proveedor" de Accesos y en el botón 🔑 para pedirles soporte por WhatsApp.</p>
+
+          <ul id="provider-list" class="catalog-list"></ul>
+          <p id="provider-empty" class="feed-empty" hidden>Todavía no hay proveedores agregados.</p>
 
         </div>
 
@@ -308,6 +338,51 @@
     </form>
   </div>
 
+  <!-- ───────────── MODAL: método de pago ───────────── -->
+  <div id="payment-method-modal" class="modal-backdrop" hidden>
+    <form id="payment-method-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="payment-method-modal-title">Agregar método</h3>
+        <button type="button" class="modal-x" data-close-modal="payment-method-modal">✕</button>
+      </div>
+      <label>Nombre
+        <input id="payment-method-name" type="text" maxlength="60" required placeholder="ej. Yape" />
+      </label>
+      <label>Descripción <span class="text-muted">(opcional)</span>
+        <textarea id="payment-method-description" maxlength="300" rows="2"></textarea>
+      </label>
+      <p id="payment-method-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="payment-method-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: proveedor ───────────── -->
+  <div id="provider-modal" class="modal-backdrop" hidden>
+    <form id="provider-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="provider-modal-title">Agregar proveedor</h3>
+        <button type="button" class="modal-x" data-close-modal="provider-modal">✕</button>
+      </div>
+      <label>Nombre
+        <input id="provider-name" type="text" maxlength="60" required placeholder="ej. Proveedor Juan" />
+      </label>
+      <label>WhatsApp
+        <input id="provider-whatsapp" type="text" required placeholder="51987654321" />
+      </label>
+      <label>Notas <span class="text-muted">(opcional)</span>
+        <textarea id="provider-notes" maxlength="300" rows="2"></textarea>
+      </label>
+      <p id="provider-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="provider-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ───────────── MODAL: registro manual ───────────── -->
   <div id="manual-modal" class="modal-backdrop" hidden>
     <form id="manual-form" class="modal-card">
@@ -343,7 +418,7 @@
         <select id="bulk-platform" required></select>
       </label>
       <label>Proveedor <span class="text-muted">(opcional)</span>
-        <input id="bulk-provider" type="text" placeholder="ej. proveedor Juan" />
+        <select id="bulk-provider"></select>
       </label>
       <label>Vencimiento inicial
         <input id="bulk-expires" type="date" required />
@@ -376,7 +451,7 @@
         <input id="account-edit-password" type="text" required />
       </label>
       <label>Proveedor <span class="text-muted">(opcional)</span>
-        <input id="account-edit-provider" type="text" />
+        <select id="account-edit-provider"></select>
       </label>
       <label>Vencimiento
         <input id="account-edit-expires" type="date" required />
@@ -476,6 +551,7 @@
 
   <script src="js/access.js"></script>
   <script src="js/catalog.js"></script>
+  <script src="js/settings.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

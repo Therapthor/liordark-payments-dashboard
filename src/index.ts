@@ -14,7 +14,10 @@ import accessRoutes from "./routes/access.routes";
 import integrationsRoutes from "./routes/integrations.routes";
 import ordersRoutes from "./routes/orders.routes";
 import catalogRoutes from "./routes/catalog.routes";
+import paymentMethodRoutes from "./routes/payment-method.routes";
+import providerRoutes from "./routes/provider.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
+import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
 
 const app = express();
@@ -31,6 +34,8 @@ apiRouter.use("/history", requireAuth, historyRoutes);
 apiRouter.use("/access", requireAuth, accessRoutes);
 apiRouter.use("/orders", requireAuth, ordersRoutes);
 apiRouter.use("/catalog", requireAuth, catalogRoutes);
+apiRouter.use("/payment-methods", requireAuth, paymentMethodRoutes);
+apiRouter.use("/providers", requireAuth, providerRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
 apiRouter.use("/integrations", integrationsRoutes);
@@ -50,6 +55,7 @@ const server = app.listen(env.PORT, () => {
   getPlatformCatalog()
     .then(seedCatalogIfEmpty)
     .catch((err: any) => console.error("⚠️ No se pudo sembrar el catálogo del panel:", err?.message));
+  seedPaymentMethodsIfEmpty();
 });
 
 let isShuttingDown = false;

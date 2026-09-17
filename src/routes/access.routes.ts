@@ -18,6 +18,7 @@ import {
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
+import { listProviders } from "../db/provider.repository";
 
 const router = Router();
 
@@ -44,6 +45,14 @@ function profileWithStatus(p: ProfileWithAccount) {
 router.get("/platforms-catalog", (_req, res) => {
   const platforms = listCatalogProducts(true).map(p => ({ platform: p.platform, hasProfiles: p.hasProfiles }));
   res.json({ platforms });
+});
+
+// ── PROVEEDORES (para el desplegable "Proveedor" y el botón 🔑 de soporte) ──
+// Viene de Configuración > Proveedores. Ver src/db/provider.repository.ts.
+
+router.get("/providers-catalog", (_req, res) => {
+  const providers = listProviders(true).map(p => ({ name: p.name, whatsapp: p.whatsapp }));
+  res.json({ providers });
 });
 
 // ── PLATAFORMAS (agrupación de cuentas ya cargadas en Accesos) ──
