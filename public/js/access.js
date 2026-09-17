@@ -171,7 +171,7 @@
       details.innerHTML = `
         <summary>
           <span class="access-platform-name">${escapeHtml(p.platform)}</span>
-          <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${p.accountCount} cuenta(s) · ${p.occupiedCount}/${p.profileCount} perfiles ocupados</span>
+          <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${free} disponible(s)</span>
         </summary>
         <div class="access-accounts" data-platform="${escapeHtml(p.platform)}"></div>
       `;
@@ -220,7 +220,7 @@
         if (nameEl && nameEl.textContent === platform) {
           const free = info.profileCount - info.occupiedCount;
           const countEl = details.querySelector(".access-platform-count");
-          countEl.textContent = `${info.accountCount} cuenta(s) · ${info.occupiedCount}/${info.profileCount} perfiles ocupados`;
+          countEl.textContent = `${free} disponible(s)`;
           countEl.classList.toggle("has-stock", free > 0);
           countEl.classList.toggle("no-stock", free === 0);
         }
