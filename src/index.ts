@@ -16,6 +16,7 @@ import ordersRoutes from "./routes/orders.routes";
 import catalogRoutes from "./routes/catalog.routes";
 import paymentMethodRoutes from "./routes/payment-method.routes";
 import providerRoutes from "./routes/provider.routes";
+import stockRoutes from "./routes/stock.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
@@ -41,6 +42,8 @@ apiRouter.use("/providers", requireAuth, providerRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
 apiRouter.use("/integrations", integrationsRoutes);
+// Igual que integrations — su propio candado (x-bot-key) adentro del router.
+apiRouter.use("/stock", stockRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {

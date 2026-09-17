@@ -272,6 +272,111 @@ export function resetRenewalMarkers(accountId: number): void {
 }
 
 // ─────────────────────────────────────────────────────────────
+// STOCK — usado por la API que consume el bot de WhatsApp (Telegram/venta)
+//
+// sellProfile es la operación crítica: tiene que ser imposible que dos
+// ventas simultáneas se lleven el mismo perfil. Como better-sqlite3 es
+// síncrono y Node es de un solo hilo, todo el SELECT+UPDATE corre sin
+// ceder el control al event loop — no hace falta ningún lock aparte.
+// ─────────────────────────────────────────────────────────────
+
+export type SoldProfile = {
+  profileId:   number;
+  accountId:   number;
+  platform:    string;
+  email:       string;
+  password:    string;
+  profileName: string;
+  expiresAt:   string | null;
+};
+
+/** Vende (asigna) el perfil libre más próximo a vencer de esa plataforma. null si no hay stock. */
+export const sellProfile = db.transaction((platform: string, clientPhone: string): SoldProfile | null => {
+  const plat = platform.trim().toUpperCase();
+  const digits = clientPhone.replace(/\D/g, "");
+
+  const row = db.prepare(`
+    SELECT p.id AS profileId, p.profile_name AS profileName,
+           a.id AS accountId, a.platform AS platform, a.email AS email,
+           a.password AS password, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE a.platform = ? AND p.client_phone = ''
+    ORDER BY (a.expires_at IS NULL), a.expires_at ASC
+    LIMIT 1
+  `).get(plat) as any;
+
+  if (!row) return null;
+
+  db.prepare(`
+    UPDATE access_profiles SET client_phone = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(digits, row.profileId);
+
+  return row as SoldProfile;
+});
+
+/** Libera el/los perfiles de ese cliente en esa plataforma (orden cancelada). Devuelve cuántos liberó. */
+export function releaseProfilesByPhone(platform: string, clientPhone: string): number {
+  const plat = platform.trim().toUpperCase();
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return 0;
+
+  const result = db.prepare(`
+    UPDATE access_profiles
+    SET client_phone = '', renewal_status = '', updated_at = datetime('now')
+    WHERE client_phone = ?
+      AND account_id IN (SELECT id FROM access_accounts WHERE platform = ?)
+  `).run(digits, plat);
+
+  return result.changes;
+}
+
+/** Cuenta (con perfil) de ese cliente en esa plataforma — para renovar o confirmar datos. */
+export function findAccountByClientPhone(platform: string, clientPhone: string): AccessAccountWithProfiles | null {
+  const plat = platform.trim().toUpperCase();
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return null;
+
+  const row = db.prepare(`
+    SELECT a.* FROM access_accounts a
+    JOIN access_profiles p ON p.account_id = a.id
+    WHERE a.platform = ? AND p.client_phone = ?
+    LIMIT 1
+  `).get(plat, digits) as any;
+
+  return row ? { ...toAccount(row), profiles: getProfilesByAccount(row.id) } : null;
+}
+
+export type ExpiringClient = {
+  clientPhone: string;
+  platform:    string;
+  expiresAt:   string;
+};
+
+/** Clientes ocupados cuya cuenta vence en los próximos `days` días (o ya venció y sigue sin archivarse). */
+export function listExpiringClients(days: number): ExpiringClient[] {
+  const limit = addDaysISOLocal(limaTodayISOLocal(), days);
+  return db.prepare(`
+    SELECT DISTINCT p.client_phone AS clientPhone, a.platform AS platform, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= ?
+    ORDER BY a.expires_at ASC
+  `).all(limit) as ExpiringClient[];
+}
+
+function limaTodayISOLocal(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
+}
+
+function addDaysISOLocal(dateISO: string, days: number): string {
+  const [y, m, d] = dateISO.split("-").map(Number);
+  const dt = new Date(Date.UTC(y as number, (m as number) - 1, d as number));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+// ─────────────────────────────────────────────────────────────
 // BÚSQUEDA
 // ─────────────────────────────────────────────────────────────
 
