@@ -34,8 +34,11 @@
     const li = document.createElement("li");
     li.className = "catalog-item" + (m.active ? "" : " catalog-item-off");
     li.dataset.id = m.id;
+    const thumb = m.imageUrl
+      ? `<img class="catalog-thumb" src="${escapeHtml(m.imageUrl)}" alt="" />`
+      : `<div class="catalog-thumb catalog-thumb-empty">💳</div>`;
     li.innerHTML = `
-      <div class="catalog-thumb catalog-thumb-empty">💳</div>
+      ${thumb}
       <div class="catalog-main">
         <div class="catalog-name">
           ${escapeHtml(m.name)}
@@ -74,6 +77,7 @@
     document.getElementById("payment-method-modal-title").textContent = method ? "Editar método" : "Agregar método";
     document.getElementById("payment-method-name").value        = method?.name ?? "";
     document.getElementById("payment-method-description").value = method?.description ?? "";
+    document.getElementById("payment-method-image-url").value   = method?.imageUrl ?? "";
     document.getElementById("payment-method-error").hidden = true;
     document.getElementById("payment-method-modal").hidden = false;
   }
@@ -92,6 +96,7 @@
       const body = {
         name:        document.getElementById("payment-method-name").value.trim(),
         description: document.getElementById("payment-method-description").value.trim(),
+        imageUrl:    document.getElementById("payment-method-image-url").value.trim(),
       };
 
       try {

@@ -11,6 +11,7 @@ export type PaymentMethod = {
   id:          number;
   name:        string;
   description: string;
+  imageUrl:    string;
   active:      boolean;
   createdAt:   string;
   updatedAt:   string;
@@ -19,6 +20,7 @@ export type PaymentMethod = {
 export type PaymentMethodInput = {
   name:        string;
   description: string;
+  imageUrl:    string;
 };
 
 function toMethod(row: any): PaymentMethod {
@@ -26,6 +28,7 @@ function toMethod(row: any): PaymentMethod {
     id:          row.id,
     name:        row.name,
     description: row.description,
+    imageUrl:    row.image_url,
     active:      !!row.active,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
@@ -38,15 +41,15 @@ export function listPaymentMethods(): PaymentMethod[] {
 
 export function createPaymentMethod(p: PaymentMethodInput): PaymentMethod {
   const result = db.prepare(`
-    INSERT INTO payment_methods (name, description) VALUES (?, ?)
-  `).run(p.name, p.description);
+    INSERT INTO payment_methods (name, description, image_url) VALUES (?, ?, ?)
+  `).run(p.name, p.description, p.imageUrl);
   return toMethod(db.prepare(`SELECT * FROM payment_methods WHERE id = ?`).get(result.lastInsertRowid));
 }
 
 export function updatePaymentMethod(id: number, p: PaymentMethodInput): PaymentMethod | null {
   db.prepare(`
-    UPDATE payment_methods SET name = ?, description = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(p.name, p.description, id);
+    UPDATE payment_methods SET name = ?, description = ?, image_url = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(p.name, p.description, p.imageUrl, id);
   const row = db.prepare(`SELECT * FROM payment_methods WHERE id = ?`).get(id);
   return row ? toMethod(row) : null;
 }

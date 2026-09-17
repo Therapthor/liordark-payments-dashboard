@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS payment_methods (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   name         TEXT    NOT NULL,
   description  TEXT    NOT NULL DEFAULT '',
+  image_url    TEXT    NOT NULL DEFAULT '', -- ej. QR de Yape
   active       INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))

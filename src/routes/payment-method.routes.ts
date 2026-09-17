@@ -14,6 +14,7 @@ function parseBody(body: any): PaymentMethodInput {
   return {
     name:        String(body?.name ?? "").trim(),
     description: String(body?.description ?? "").trim(),
+    imageUrl:    String(body?.imageUrl ?? "").trim(),
   };
 }
 
