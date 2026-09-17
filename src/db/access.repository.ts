@@ -148,6 +148,55 @@ export function deleteAccount(id: number): void {
   db.prepare(`DELETE FROM access_accounts WHERE id = ?`).run(id);
 }
 
+/**
+ * Renovación con cuenta nueva: crea una cuenta aparte (mismas plataforma/
+ * proveedor/perfiles que la vieja, con el correo y contraseña nuevos que ya
+ * se cambiaron en el proveedor) y le pasa SOLO los clientes de la cuenta
+ * vieja marcados "✅ Renueva" — el resto se queda como estaba en la vieja,
+ * para decidir aparte qué hacer con ellos. No manda nada por WhatsApp ni
+ * toca el bot — solo mueve datos dentro del panel.
+ */
+export function createAccountFromRenewal(oldAccountId: number, params: {
+  email:     string;
+  password:  string;
+  expiresAt: string | null;
+}): { oldAccount: AccessAccountWithProfiles; newAccount: AccessAccountWithProfiles } | null {
+  const oldAccount = getAccountById(oldAccountId);
+  if (!oldAccount) return null;
+
+  const renewing = oldAccount.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes");
+  const slots = slotsFor(oldAccount.hasProfiles);
+
+  const insertAccount = db.prepare(`
+    INSERT INTO access_accounts (platform, email, password, provider, has_profiles, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const insertProfile = db.prepare(`
+    INSERT INTO access_profiles (account_id, slot_number, profile_name, client_phone)
+    VALUES (?, ?, ?, ?)
+  `);
+  const freeOldProfile = db.prepare(`
+    UPDATE access_profiles SET client_phone = '', renewal_status = '', updated_at = datetime('now') WHERE id = ?
+  `);
+
+  const newAccountId = db.transaction(() => {
+    const result = insertAccount.run(
+      oldAccount.platform, params.email.trim(), params.password.trim(),
+      oldAccount.provider, oldAccount.hasProfiles ? 1 : 0, params.expiresAt
+    );
+    const id = result.lastInsertRowid as number;
+
+    for (let slot = 1; slot <= slots; slot++) {
+      const client = renewing[slot - 1];
+      insertProfile.run(id, slot, slots === 1 ? "" : "Perfil " + slot, client ? client.clientPhone : "");
+      if (client) freeOldProfile.run(client.id);
+    }
+    return id;
+  })();
+
+  return { oldAccount: getAccountById(oldAccountId)!, newAccount: getAccountById(newAccountId)! };
+}
+
 export function getAccountById(id: number): AccessAccountWithProfiles | null {
   const row = db.prepare(`SELECT * FROM access_accounts WHERE id = ?`).get(id) as any;
   if (!row) return null;

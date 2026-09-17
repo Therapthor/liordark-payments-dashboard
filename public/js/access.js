@@ -199,6 +199,7 @@
   function renderAccountCard(account) {
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
     const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
+    const renewingCount = account.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes").length;
     const accountAttr = JSON.stringify(account).replace(/"/g, "&quot;");
 
     return `
@@ -223,6 +224,7 @@
             ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
             <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
             <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
+            ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
             <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
             <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
           </div>
@@ -314,6 +316,10 @@
         await api("/accounts/" + accountId + "/renew", { method: "POST" });
         refreshAccountInPlace(accountId);
       });
+    });
+
+    target.querySelectorAll(".access-renew-new").forEach(btn => {
+      btn.addEventListener("click", () => openRenewNewModal(Number(btn.dataset.accountId), Number(btn.dataset.renewingCount)));
     });
 
     target.querySelectorAll(".access-edit-account").forEach(btn => {
@@ -570,6 +576,55 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // MODAL — renovar con cuenta nueva
+  //
+  // Crea una cuenta aparte y le pasa solo los clientes de la cuenta vieja
+  // marcados "✅ Renueva". No manda WhatsApp ni toca el bot todavía — es
+  // la base para cuando se traspase todo al panel/bot más adelante.
+  // ─────────────────────────────────────────────────────────────
+
+  let renewNewAccountId = null;
+
+  function openRenewNewModal(accountId, renewingCount) {
+    renewNewAccountId = accountId;
+
+    document.getElementById("renew-new-hint").textContent =
+      `Se creará una cuenta nueva y se le pasarán los ${renewingCount} cliente(s) marcados "✅ Renueva" de esta cuenta. El resto se queda como está.`;
+    document.getElementById("renew-new-email").value    = "";
+    document.getElementById("renew-new-password").value = "";
+    document.getElementById("renew-new-expires").value  = addDaysISO(todayISO(), 30);
+    document.getElementById("renew-new-error").hidden = true;
+    document.getElementById("renew-new-modal").hidden = false;
+  }
+
+  function initRenewNewModal() {
+    document.getElementById("renew-new-cancel").addEventListener("click", () => {
+      document.getElementById("renew-new-modal").hidden = true;
+    });
+
+    document.getElementById("renew-new-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("renew-new-error");
+      errorEl.hidden = true;
+
+      const body = {
+        email:     document.getElementById("renew-new-email").value.trim(),
+        password:  document.getElementById("renew-new-password").value.trim(),
+        expiresAt: document.getElementById("renew-new-expires").value,
+      };
+
+      try {
+        await api("/accounts/" + renewNewAccountId + "/renew-new", { method: "POST", body: JSON.stringify(body) });
+        document.getElementById("renew-new-modal").hidden = true;
+        await refresh();
+      } catch (err) {
+        errorEl.textContent = err.message || "No se pudo crear la cuenta nueva.";
+        errorEl.hidden = false;
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // BUSCADOR — cuenta por correo / cliente por teléfono
   // ─────────────────────────────────────────────────────────────
 
@@ -684,6 +739,7 @@
     initEditModal();
     initProfileModal();
     initPasswordModal();
+    initRenewNewModal();
     initSearch();
     initClientSummarySend();
   }

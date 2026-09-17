@@ -427,6 +427,31 @@
     </form>
   </div>
 
+  <!-- ───────────── MODAL: renovar con cuenta nueva ───────────── -->
+  <div id="renew-new-modal" class="modal-backdrop" hidden>
+    <form id="renew-new-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Renovar con cuenta nueva</h3>
+        <button type="button" class="modal-x" data-close-modal="renew-new-modal">✕</button>
+      </div>
+      <p id="renew-new-hint" class="panel-hint"></p>
+      <label>Correo nuevo
+        <input id="renew-new-email" type="text" required placeholder="ya cambiado en la plataforma" />
+      </label>
+      <label>Contraseña nueva
+        <input id="renew-new-password" type="text" required />
+      </label>
+      <label>Vencimiento
+        <input id="renew-new-expires" type="date" required />
+      </label>
+      <p id="renew-new-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="renew-new-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Crear cuenta nueva</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ───────────── MODAL: detalle del día ───────────── -->
   <div id="day-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">

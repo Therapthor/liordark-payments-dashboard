@@ -11,6 +11,7 @@ import {
   setProfileRenewal,
   searchAccountsByEmail,
   searchProfilesByPhone,
+  createAccountFromRenewal,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
   type RenewalStatus,
@@ -122,6 +123,25 @@ router.post("/accounts/:id/renew", (req, res) => {
   const account = renewAccount(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   res.json({ account: withStatus(account) });
+});
+
+// Renovación con cuenta nueva — crea una cuenta aparte y le pasa solo los
+// clientes marcados "✅ Renueva" de la vieja. No manda WhatsApp ni toca el
+// bot, solo mueve datos del panel (ver createAccountFromRenewal).
+router.post("/accounts/:id/renew-new", (req, res) => {
+  const { email, password, expiresAt } = req.body ?? {};
+  if (!email?.trim())    { res.status(400).json({ message: "El correo es obligatorio." }); return; }
+  if (!password?.trim()) { res.status(400).json({ message: "La contraseña es obligatoria." }); return; }
+
+  const result = createAccountFromRenewal(Number(req.params.id), {
+    email, password, expiresAt: expiresAt?.trim() || null,
+  });
+  if (!result) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+
+  res.json({
+    oldAccount: withStatus(result.oldAccount),
+    newAccount: withStatus(result.newAccount),
+  });
 });
 
 // ── PERFILES (solo el teléfono del cliente — el resto vive en la cuenta) ──
