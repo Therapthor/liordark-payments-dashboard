@@ -120,6 +120,23 @@ CREATE TABLE IF NOT EXISTS access_accounts_history (
 CREATE INDEX IF NOT EXISTS idx_access_history_platform ON access_accounts_history(platform);
 CREATE INDEX IF NOT EXISTS idx_access_history_email    ON access_accounts_history(email);
 
+-- Bitácora de pedidos (reemplaza PEDIDOS_PENDIENTES de Sheets, que ya
+-- llegó a su límite de filas). Registro puro para seguimiento del admin —
+-- no decide si el cliente recibe su cuenta o no, eso ya lo maneja
+-- access_accounts/access_profiles. order_name es la clave natural, igual
+-- que el código de orden que ya usa el bot.
+CREATE TABLE IF NOT EXISTS pending_orders_log (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_name        TEXT    NOT NULL UNIQUE,
+  phone             TEXT    NOT NULL,
+  platform          TEXT    NOT NULL,
+  order_type        TEXT    NOT NULL DEFAULT '', -- 'Compra' | 'Renovación' | 'Compra sin stock'
+  payment_confirmed INTEGER NOT NULL DEFAULT 0,
+  assigned          INTEGER NOT NULL DEFAULT 0,
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pending_orders_order_name ON pending_orders_log(order_name);
+
 -- Catálogo propio del panel (Configuración > Catálogo). Alimenta el
 -- desplegable de plataforma en Accesos. NO está conectado al bot/WhatsApp
 -- todavía — es un catálogo aparte hasta que se decida migrar esa fuente.

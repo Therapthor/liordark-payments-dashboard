@@ -11,6 +11,12 @@ import {
   getAccountById,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
+import {
+  createPendingOrder,
+  confirmPendingOrderPayment,
+  markPendingOrderAssigned,
+  type OrderType,
+} from "../db/pending-order.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -141,6 +147,30 @@ router.get("/expiring", (req, res) => {
     daysLeft: daysLeft(c.expiresAt),
   }));
   res.json({ clients });
+});
+
+// ── BITÁCORA DE PEDIDOS (reemplaza PEDIDOS_PENDIENTES de Sheets) ──
+
+const VALID_ORDER_TYPES: OrderType[] = ["Compra", "Renovación", "Compra sin stock"];
+
+router.post("/pending-orders", (req, res) => {
+  const { orderName, phone, platform, orderType } = req.body ?? {};
+  if (!orderName?.trim() || !phone?.trim() || !platform?.trim() || !VALID_ORDER_TYPES.includes(orderType)) {
+    res.status(400).json({ message: "Faltan orderName, phone, platform, u orderType inválido." });
+    return;
+  }
+  createPendingOrder({ orderName, phone, platform, orderType });
+  res.status(201).json({ success: true });
+});
+
+router.post("/pending-orders/:orderName/confirm-payment", (req, res) => {
+  const { found } = confirmPendingOrderPayment(req.params.orderName);
+  res.json({ success: true, found });
+});
+
+router.post("/pending-orders/:orderName/mark-assigned", (req, res) => {
+  markPendingOrderAssigned(req.params.orderName);
+  res.json({ success: true });
 });
 
 export default router;
