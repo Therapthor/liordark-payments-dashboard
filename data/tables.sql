@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS access_profiles (
   profile_name  TEXT    NOT NULL DEFAULT '',
   client_phone  TEXT    NOT NULL DEFAULT '',  -- vacío = perfil libre
   renewal_status TEXT   NOT NULL DEFAULT '',  -- '' = sin marcar, 'yes' = renueva, 'no' = no renueva
+  order_ref     TEXT    NOT NULL DEFAULT '',  -- código de orden del bot que compró este perfil (rastreo)
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(account_id, slot_number)
 );

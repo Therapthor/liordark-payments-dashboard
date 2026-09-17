@@ -7,6 +7,8 @@ import {
   releaseProfilesByPhone,
   findAccountByClientPhone,
   listExpiringClients,
+  getProfileById,
+  getAccountById,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
 
@@ -54,15 +56,15 @@ router.get("/catalog", (_req, res) => {
   res.json({ catalog });
 });
 
-// POST /sell — { platform, clientPhone } → vende el perfil libre más próximo a vencer.
+// POST /sell — { platform, clientPhone, orderRef? } → vende el perfil libre más próximo a vencer.
 router.post("/sell", (req, res) => {
-  const { platform, clientPhone } = req.body ?? {};
+  const { platform, clientPhone, orderRef } = req.body ?? {};
   if (!platform?.trim() || !clientPhone?.trim()) {
     res.status(400).json({ message: "Faltan platform o clientPhone." });
     return;
   }
 
-  const sold = sellProfile(platform, clientPhone);
+  const sold = sellProfile(platform, clientPhone, typeof orderRef === "string" ? orderRef : "");
   if (!sold) {
     res.status(409).json({ success: false, message: "Sin stock disponible en esa plataforma." });
     return;
@@ -71,12 +73,33 @@ router.post("/sell", (req, res) => {
   res.status(201).json({
     success: true,
     account: {
+      profileId:   sold.profileId,
       platform:    sold.platform,
       email:       sold.email,
       password:    sold.password,
       profileName: sold.profileName,
       expiresAt:   sold.expiresAt,
     },
+  });
+});
+
+// GET /profile/:id — reconsulta un perfil ya vendido (para reenviar credenciales
+// si algo falló entre la venta y que el cliente las recibiera por WhatsApp).
+router.get("/profile/:id", (req, res) => {
+  const profile = getProfileById(Number(req.params.id));
+  if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
+
+  const account = getAccountById(profile.accountId);
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+
+  res.json({
+    profileId:   profile.id,
+    platform:    account.platform,
+    email:       account.email,
+    password:    account.password,
+    profileName: profile.profileName,
+    clientPhone: profile.clientPhone,
+    expiresAt:   account.expiresAt,
   });
 });
 

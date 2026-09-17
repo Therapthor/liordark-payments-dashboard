@@ -13,6 +13,7 @@ export type AccessProfile = {
   profileName:   string;
   clientPhone:   string;
   renewalStatus: RenewalStatus;
+  orderRef:      string;
   updatedAt:     string;
 };
 
@@ -176,7 +177,7 @@ export function createAccountFromRenewal(oldAccountId: number, params: {
     VALUES (?, ?, ?, ?)
   `);
   const freeOldProfile = db.prepare(`
-    UPDATE access_profiles SET client_phone = '', renewal_status = '', updated_at = datetime('now') WHERE id = ?
+    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now') WHERE id = ?
   `);
 
   const newAccountId = db.transaction(() => {
@@ -250,7 +251,7 @@ export function assignProfileClient(id: number, clientPhone: string): AccessProf
 
 export function releaseProfile(id: number): AccessProfile | null {
   const result = db.prepare(`
-    UPDATE access_profiles SET client_phone = '', renewal_status = '', updated_at = datetime('now') WHERE id = ?
+    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now') WHERE id = ?
   `).run(id);
   if (result.changes === 0) return null;
   return getProfileById(id);
@@ -291,7 +292,7 @@ export type SoldProfile = {
 };
 
 /** Vende (asigna) el perfil libre más próximo a vencer de esa plataforma. null si no hay stock. */
-export const sellProfile = db.transaction((platform: string, clientPhone: string): SoldProfile | null => {
+export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string): SoldProfile | null => {
   const plat = platform.trim().toUpperCase();
   const digits = clientPhone.replace(/\D/g, "");
 
@@ -309,8 +310,8 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
   if (!row) return null;
 
   db.prepare(`
-    UPDATE access_profiles SET client_phone = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(digits, row.profileId);
+    UPDATE access_profiles SET client_phone = ?, order_ref = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(digits, orderRef, row.profileId);
 
   return row as SoldProfile;
 });
@@ -323,7 +324,7 @@ export function releaseProfilesByPhone(platform: string, clientPhone: string): n
 
   const result = db.prepare(`
     UPDATE access_profiles
-    SET client_phone = '', renewal_status = '', updated_at = datetime('now')
+    SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now')
     WHERE client_phone = ?
       AND account_id IN (SELECT id FROM access_accounts WHERE platform = ?)
   `).run(digits, plat);
@@ -451,6 +452,7 @@ function toProfile(row: any): AccessProfile {
     profileName:   row.profile_name ?? "",
     clientPhone:   row.client_phone ?? "",
     renewalStatus: (row.renewal_status ?? "") as RenewalStatus,
+    orderRef:      row.order_ref ?? "",
     updatedAt:     row.updated_at,
   };
 }
