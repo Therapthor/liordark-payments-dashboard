@@ -77,6 +77,7 @@
     document.getElementById("catalog-has-profiles").checked = product ? product.hasProfiles : true;
     document.getElementById("catalog-description").value    = product?.description ?? "";
     document.getElementById("catalog-image-url").value      = product?.imageUrl ?? "";
+    document.getElementById("catalog-keywords").value       = product?.keywords ?? "";
     document.getElementById("catalog-error").hidden = true;
     document.getElementById("catalog-modal").hidden = false;
   }
@@ -99,6 +100,7 @@
         hasProfiles: document.getElementById("catalog-has-profiles").checked,
         description: document.getElementById("catalog-description").value.trim(),
         imageUrl:    document.getElementById("catalog-image-url").value.trim(),
+        keywords:    document.getElementById("catalog-keywords").value.trim(),
       };
 
       try {

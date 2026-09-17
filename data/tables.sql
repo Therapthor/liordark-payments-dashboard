@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS catalog_products (
   has_profiles INTEGER NOT NULL DEFAULT 1,
   description  TEXT    NOT NULL DEFAULT '',
   image_url    TEXT    NOT NULL DEFAULT '',
+  keywords     TEXT    NOT NULL DEFAULT '', -- separadas por coma — para que el bot reconozca "quiero netflix 4k"
   active       INTEGER NOT NULL DEFAULT 1,  -- apagado = no sale más en el desplegable de Accesos
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))

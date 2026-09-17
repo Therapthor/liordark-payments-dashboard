@@ -46,6 +46,7 @@ router.get("/catalog", (_req, res) => {
       description: p.description,
       imageUrl:    p.imageUrl,
       hasProfiles: p.hasProfiles,
+      keywords:    p.keywords.split(",").map(k => k.trim().toLowerCase()).filter(Boolean),
       available,
     };
   });

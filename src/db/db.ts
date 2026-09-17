@@ -41,6 +41,7 @@ ensureColumn("access_accounts", "link",         "link TEXT NOT NULL DEFAULT ''")
 ensureColumn("access_profiles", "renewal_status", "renewal_status TEXT NOT NULL DEFAULT ''");
 ensureColumn("catalog_products", "active", "active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("payment_methods", "image_url", "image_url TEXT NOT NULL DEFAULT ''");
+ensureColumn("catalog_products", "keywords", "keywords TEXT NOT NULL DEFAULT ''");
 
 // catalog_combos era "un combo = una plataforma con cantidad" (ej. Netflix
 // x2). Cambió a "un combo = varias plataformas juntas" (ej. 1 Netflix + 1

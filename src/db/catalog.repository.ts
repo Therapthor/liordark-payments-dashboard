@@ -17,6 +17,7 @@ export type CatalogProduct = {
   hasProfiles: boolean;
   description: string;
   imageUrl:    string;
+  keywords:    string;
   active:      boolean;
   createdAt:   string;
   updatedAt:   string;
@@ -29,6 +30,7 @@ export type CatalogProductInput = {
   hasProfiles: boolean;
   description: string;
   imageUrl:    string;
+  keywords:    string;
 };
 
 function toProduct(row: any): CatalogProduct {
@@ -40,6 +42,7 @@ function toProduct(row: any): CatalogProduct {
     hasProfiles: !!row.has_profiles,
     description: row.description,
     imageUrl:    row.image_url,
+    keywords:    row.keywords ?? "",
     active:      !!row.active,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
@@ -71,9 +74,9 @@ export function getCatalogProductByPlatform(platform: string): CatalogProduct | 
 
 export function createCatalogProduct(p: CatalogProductInput): CatalogProduct {
   const result = db.prepare(`
-    INSERT INTO catalog_products (platform, title, price, has_profiles, description, image_url)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(p.platform, p.title, p.price, p.hasProfiles ? 1 : 0, p.description, p.imageUrl);
+    INSERT INTO catalog_products (platform, title, price, has_profiles, description, image_url, keywords)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(p.platform, p.title, p.price, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, p.keywords);
 
   return toProduct(db.prepare(`SELECT * FROM catalog_products WHERE id = ?`).get(result.lastInsertRowid));
 }
@@ -81,9 +84,9 @@ export function createCatalogProduct(p: CatalogProductInput): CatalogProduct {
 export function updateCatalogProduct(id: number, p: CatalogProductInput): CatalogProduct | null {
   db.prepare(`
     UPDATE catalog_products
-    SET platform = ?, title = ?, price = ?, has_profiles = ?, description = ?, image_url = ?, updated_at = datetime('now')
+    SET platform = ?, title = ?, price = ?, has_profiles = ?, description = ?, image_url = ?, keywords = ?, updated_at = datetime('now')
     WHERE id = ?
-  `).run(p.platform, p.title, p.price, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, id);
+  `).run(p.platform, p.title, p.price, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, p.keywords, id);
 
   const row = db.prepare(`SELECT * FROM catalog_products WHERE id = ?`).get(id);
   return row ? toProduct(row) : null;

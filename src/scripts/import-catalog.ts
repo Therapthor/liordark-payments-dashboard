@@ -26,6 +26,7 @@ type ExportedProduct = {
   title:       string;
   description: string;
   imageUrl:    string;
+  keywords:    string;
 };
 
 type ExportFile = {
@@ -64,6 +65,7 @@ function main(): void {
           hasProfiles: match.hasProfiles,
           description: prod.description || match.description,
           imageUrl:    prod.imageUrl || match.imageUrl,
+          keywords:    prod.keywords || match.keywords,
         });
       }
     } else {
@@ -77,6 +79,7 @@ function main(): void {
           hasProfiles: prod.hasProfiles,
           description: prod.description,
           imageUrl:    prod.imageUrl,
+          keywords:    prod.keywords,
         });
       }
     }

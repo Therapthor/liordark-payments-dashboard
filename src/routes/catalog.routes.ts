@@ -29,6 +29,7 @@ function parseProductBody(body: any): CatalogProductInput {
     hasProfiles: !!body?.hasProfiles,
     description: String(body?.description ?? "").trim(),
     imageUrl:    String(body?.imageUrl ?? "").trim(),
+    keywords:    String(body?.keywords ?? "").trim(),
   };
 }
 
