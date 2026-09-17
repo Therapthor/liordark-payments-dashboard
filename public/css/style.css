@@ -589,14 +589,32 @@ button, input {
 .access-platform-count.has-stock { color: var(--good); }
 .access-platform-count.no-stock  { color: var(--critical); }
 
-.access-accounts { display: flex; flex-direction: column; gap: 16px; padding-bottom: 18px; }
+.access-accounts { display: flex; flex-direction: column; gap: 8px; padding-bottom: 18px; }
 
+/* Cada cuenta es su propio <details>, cerrado por defecto — mostrar solo
+   una línea resumen (correo, estado, ocupación) evita que abrir una
+   plataforma con varias cuentas llene toda la pantalla de tarjetas. */
 .access-account {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 14px 16px;
 }
+.access-account-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.access-account-summary::-webkit-details-marker { display: none; }
+.access-account-summary-email { font-size: 14px; font-weight: 600; }
+.access-account[open] .access-account-summary { border-bottom: 1px solid var(--border); }
+.access-occupancy { font-weight: 600; }
+
+.access-account-body { padding: 14px 16px; }
 .access-account-head {
   display: flex;
   align-items: flex-start;

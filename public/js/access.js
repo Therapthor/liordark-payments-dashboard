@@ -184,7 +184,7 @@
 
   async function loadAccountsForPlatform(platform, target) {
     const { accounts } = await api("/platforms/" + encodeURIComponent(platform) + "/accounts");
-    target.innerHTML = accounts.map(renderAccountCard).join("");
+    target.innerHTML = accounts.map(a => renderAccountCard(a)).join("");
     wireAccountCardEvents(target);
   }
 
@@ -197,10 +197,11 @@
       : document.getElementById("access-platforms");
     const el = container.querySelector(`.access-account[data-account-id="${accountId}"]`);
     if (!el) { await refresh(); return; }
+    const wasOpen = el.open;
 
     const { account } = await api("/accounts/" + accountId);
     const wrapper = document.createElement("div");
-    wrapper.innerHTML = renderAccountCard(account).trim();
+    wrapper.innerHTML = renderAccountCard(account, { open: wasOpen }).trim();
     const newEl = wrapper.firstElementChild;
     el.replaceWith(newEl);
     wireAccountCardEvents(newEl);
@@ -228,45 +229,59 @@
     } catch { /* no crítico */ }
   }
 
-  function renderAccountCard(account) {
+  // Cada cuenta es un <details> propio, cerrado por defecto — antes se
+  // mostraban todas las tarjetas completas (con tabla y botones) de una
+  // vez, y con varias cuentas por plataforma eso llenaba la pantalla de
+  // scroll. Ahora solo se ve una línea resumen por cuenta hasta que se
+  // abre la que interesa.
+  function renderAccountCard(account, opts) {
+    const open = !!(opts && opts.open);
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
     const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
     const renewingCount = account.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes").length;
     const accountAttr = JSON.stringify(account).replace(/"/g, "&quot;");
+    const occupancyLabel = account.hasProfiles
+      ? `${occupiedCount}/${account.profiles.length} ocupado(s)`
+      : (occupiedCount > 0 ? "🔒 Ocupada" : "🟢 Libre");
 
     return `
-      <div class="access-account" data-account-id="${account.id}" data-platform="${escapeHtml(account.platform)}">
-        <div class="access-account-head">
-          <div class="access-account-info">
-            <div class="access-account-email">
-              📧 <span>${escapeHtml(account.email)}</span>
-              <span class="access-pw-mask">🔑 ••••••••</span>
-              <span class="access-pw-real" hidden>🔑 ${escapeHtml(account.password)}</span>
-              <button class="icon-btn-sm access-toggle-pw" title="Mostrar/ocultar contraseña">👁</button>
+      <details class="access-account" data-account-id="${account.id}" data-platform="${escapeHtml(account.platform)}"${open ? " open" : ""}>
+        <summary class="access-account-summary">
+          <span class="access-account-summary-email">📧 ${escapeHtml(account.email)}</span>
+          <span class="access-account-meta">
+            ${account.provider ? `<span>🏷 ${escapeHtml(account.provider)}</span>` : ""}
+            <span class="badge access-badge-${STATUS_CLASS[account.status]}">${STATUS_LABEL[account.status]}</span>
+            <span>${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
+            <span class="access-occupancy">${occupancyLabel}</span>
+          </span>
+        </summary>
+        <div class="access-account-body">
+          <div class="access-account-head">
+            <div class="access-account-info">
+              <div class="access-account-email">
+                🔑 <span class="access-pw-mask">••••••••</span>
+                <span class="access-pw-real" hidden>${escapeHtml(account.password)}</span>
+                <button class="icon-btn-sm access-toggle-pw" title="Mostrar/ocultar contraseña">👁</button>
+              </div>
             </div>
-            <div class="access-account-meta">
-              ${account.provider ? `<span>🏷 ${escapeHtml(account.provider)}</span>` : ""}
-              <span class="badge access-badge-${STATUS_CLASS[account.status]}">${STATUS_LABEL[account.status]}</span>
-              <span>${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
+            <div class="access-account-actions">
+              ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">🔄 Enviar reemplazo a todos (${occupiedCount})</button>` : ""}
+              ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-password-all" data-account="${accountAttr}">🔑 Cambiar contraseña a todos</button>` : ""}
+              ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
+              <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
+              <button class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte proveedor</button>
+              <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
+              ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
+              <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
+              <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
             </div>
           </div>
-          <div class="access-account-actions">
-            ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">🔄 Enviar reemplazo a todos (${occupiedCount})</button>` : ""}
-            ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-password-all" data-account="${accountAttr}">🔑 Cambiar contraseña a todos</button>` : ""}
-            ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
-            <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
-            <button class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte proveedor</button>
-            <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
-            ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
-            <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
-            <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
-          </div>
+          <table class="access-table">
+            <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
         </div>
-        <table class="access-table">
-          <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
+      </details>
     `;
   }
 
@@ -742,7 +757,7 @@
       return;
     }
     resultsBox.innerHTML = result.accounts.map(a =>
-      `<div class="access-search-platform-label">${escapeHtml(a.platform)}</div>${renderAccountCard(a)}`
+      `<div class="access-search-platform-label">${escapeHtml(a.platform)}</div>${renderAccountCard(a, { open: true })}`
     ).join("");
     wireAccountCardEvents(resultsBox);
   }

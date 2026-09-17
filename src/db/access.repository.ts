@@ -234,7 +234,7 @@ export function listPlatforms(): PlatformSummary[] {
 
 export function listAccountsByPlatform(platform: string): AccessAccountWithProfiles[] {
   const rows = db.prepare(`
-    SELECT * FROM access_accounts WHERE platform = ? ORDER BY created_at ASC
+    SELECT * FROM access_accounts WHERE platform = ? ORDER BY created_at DESC
   `).all(platform.trim().toUpperCase()) as any[];
 
   return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
