@@ -40,7 +40,7 @@ router.get("/catalog", (_req, res) => {
 
   const catalog = products.map(p => {
     const summary = summaries.find(s => s.platform === p.platform.trim().toUpperCase());
-    const available = summary ? summary.profileCount - summary.occupiedCount : 0;
+    const available = summary ? summary.sellableCount : 0;
     return {
       platform:    p.platform,
       price:       p.price,

@@ -167,7 +167,7 @@
     for (const p of platforms) {
       const details = document.createElement("details");
       details.className = "access-platform";
-      const free = p.profileCount - p.occupiedCount;
+      const free = p.sellableCount;
       details.innerHTML = `
         <summary>
           <span class="access-platform-name">${escapeHtml(p.platform)}</span>
@@ -218,7 +218,7 @@
       document.querySelectorAll(".access-platform").forEach(details => {
         const nameEl = details.querySelector(".access-platform-name");
         if (nameEl && nameEl.textContent === platform) {
-          const free = info.profileCount - info.occupiedCount;
+          const free = info.sellableCount;
           const countEl = details.querySelector(".access-platform-count");
           countEl.textContent = `${free} disponible(s)`;
           countEl.classList.toggle("has-stock", free > 0);

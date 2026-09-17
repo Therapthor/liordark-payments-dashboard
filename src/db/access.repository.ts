@@ -38,7 +38,19 @@ export type PlatformSummary = {
   accountCount:  number;
   profileCount:  number;
   occupiedCount: number;
+  sellableCount: number; // libres Y con al menos MIN_SELLABLE_DAYS por delante — lo que de verdad se le puede vender a un cliente nuevo
 };
+
+// Regla del negocio: nunca vender un perfil cuya cuenta vaya a vencer en
+// menos de 28 días — si no, el cliente reclama que no le llegó el mes
+// completo. Aplica tanto a la venta real (sellProfile) como al conteo de
+// "disponibles" que ve el admin y el catálogo del bot, para que ambos
+// digan siempre lo mismo.
+const MIN_SELLABLE_DAYS = 28;
+
+function minSellableDateISO(): string {
+  return addDaysISOLocal(limaTodayISOLocal(), MIN_SELLABLE_DAYS);
+}
 
 // ─────────────────────────────────────────────────────────────
 // CUENTAS
@@ -205,17 +217,19 @@ export function getAccountById(id: number): AccessAccountWithProfiles | null {
 }
 
 export function listPlatforms(): PlatformSummary[] {
+  const floor = minSellableDateISO();
   return db.prepare(`
     SELECT
       a.platform AS platform,
       COUNT(DISTINCT a.id) AS accountCount,
       COUNT(p.id) AS profileCount,
-      SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS occupiedCount
+      SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS occupiedCount,
+      SUM(CASE WHEN p.client_phone = '' AND a.expires_at IS NOT NULL AND a.expires_at >= ? THEN 1 ELSE 0 END) AS sellableCount
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
     GROUP BY a.platform
     ORDER BY a.platform ASC
-  `).all() as PlatformSummary[];
+  `).all(floor) as PlatformSummary[];
 }
 
 export function listAccountsByPlatform(platform: string): AccessAccountWithProfiles[] {
@@ -291,10 +305,16 @@ export type SoldProfile = {
   expiresAt:   string | null;
 };
 
-/** Vende (asigna) el perfil libre más próximo a vencer de esa plataforma. null si no hay stock. */
+/**
+ * Vende (asigna) el perfil libre más próximo a vencer de esa plataforma,
+ * SIEMPRE que a la cuenta le queden al menos MIN_SELLABLE_DAYS — nunca se
+ * vende una cuenta que va a vencer pronto, así el cliente no reclama por
+ * no recibir el mes completo. null si no hay stock que cumpla eso.
+ */
 export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string): SoldProfile | null => {
   const plat = platform.trim().toUpperCase();
   const digits = clientPhone.replace(/\D/g, "");
+  const floor = minSellableDateISO();
 
   const row = db.prepare(`
     SELECT p.id AS profileId, p.profile_name AS profileName,
@@ -303,9 +323,10 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE a.platform = ? AND p.client_phone = ''
-    ORDER BY (a.expires_at IS NULL), a.expires_at ASC
+      AND a.expires_at IS NOT NULL AND a.expires_at >= ?
+    ORDER BY a.expires_at ASC
     LIMIT 1
-  `).get(plat) as any;
+  `).get(plat, floor) as any;
 
   if (!row) return null;
 
