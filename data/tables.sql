@@ -152,6 +152,19 @@ CREATE TABLE IF NOT EXISTS renewals_log (
 );
 CREATE INDEX IF NOT EXISTS idx_renewals_order_name ON renewals_log(order_name);
 
+-- Bitácora de CANVA (reemplaza el registro que se hacía en la hoja
+-- 'CANVA ANUAL'). CANVA no usa el modelo de stock (access_accounts): el
+-- admin activa el plan a mano en Canva.com con el correo del cliente, y
+-- esto solo queda como registro de esa aprobación.
+CREATE TABLE IF NOT EXISTS canva_orders_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_name   TEXT    NOT NULL UNIQUE,
+  phone        TEXT    NOT NULL,
+  client_email TEXT    NOT NULL DEFAULT '',
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_canva_orders_order_name ON canva_orders_log(order_name);
+
 -- Catálogo propio del panel (Configuración > Catálogo). Alimenta el
 -- desplegable de plataforma en Accesos. NO está conectado al bot/WhatsApp
 -- todavía — es un catálogo aparte hasta que se decida migrar esa fuente.

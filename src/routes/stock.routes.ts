@@ -18,6 +18,8 @@ import {
   type OrderType,
 } from "../db/pending-order.repository";
 import { createRenewalLog, confirmRenewalLog } from "../db/renewal-log.repository";
+import { logCanvaOrder } from "../db/canva-order.repository";
+import { listPaymentMethods } from "../db/payment-method.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -189,6 +191,42 @@ router.post("/renewals", (req, res) => {
 router.post("/renewals/:orderName/confirm", (req, res) => {
   const { found } = confirmRenewalLog(req.params.orderName);
   res.json({ success: true, found });
+});
+
+// ── BITÁCORA DE CANVA (reemplaza el registro en 'CANVA ANUAL' de Sheets) ──
+
+router.post("/canva-orders", (req, res) => {
+  const { orderName, phone, clientEmail } = req.body ?? {};
+  if (!orderName?.trim() || !phone?.trim()) {
+    res.status(400).json({ message: "Faltan orderName o phone." });
+    return;
+  }
+  logCanvaOrder({ orderName, phone, clientEmail: typeof clientEmail === "string" ? clientEmail : "" });
+  res.status(201).json({ success: true });
+});
+
+// ── MÉTODOS DE PAGO (para el flujo de checkout del bot) ──
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+router.get("/payment-methods", (_req, res) => {
+  const methods = listPaymentMethods()
+    .filter(m => m.active)
+    .map(m => ({
+      id:          slugify(m.name),
+      buttonLabel: m.name,
+      title:       m.name,
+      description: m.description,
+      imageUrl:    m.imageUrl,
+    }));
+  res.json({ methods });
 });
 
 export default router;
