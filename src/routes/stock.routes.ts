@@ -17,6 +17,7 @@ import {
   markPendingOrderAssigned,
   type OrderType,
 } from "../db/pending-order.repository";
+import { createRenewalLog, confirmRenewalLog } from "../db/renewal-log.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -171,6 +172,23 @@ router.post("/pending-orders/:orderName/confirm-payment", (req, res) => {
 router.post("/pending-orders/:orderName/mark-assigned", (req, res) => {
   markPendingOrderAssigned(req.params.orderName);
   res.json({ success: true });
+});
+
+// ── BITÁCORA DE RENOVACIONES (reemplaza RENOVACIONES_CLIENTES de Sheets) ──
+
+router.post("/renewals", (req, res) => {
+  const { orderName, phone, platform } = req.body ?? {};
+  if (!orderName?.trim() || !phone?.trim() || !platform?.trim()) {
+    res.status(400).json({ message: "Faltan orderName, phone o platform." });
+    return;
+  }
+  createRenewalLog({ orderName, phone, platform });
+  res.status(201).json({ success: true });
+});
+
+router.post("/renewals/:orderName/confirm", (req, res) => {
+  const { found } = confirmRenewalLog(req.params.orderName);
+  res.json({ success: true, found });
 });
 
 export default router;

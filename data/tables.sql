@@ -137,6 +137,21 @@ CREATE TABLE IF NOT EXISTS pending_orders_log (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_orders_order_name ON pending_orders_log(order_name);
 
+-- Bitácora de renovaciones (reemplaza RENOVACIONES_CLIENTES de Sheets).
+-- Registro para seguimiento del admin — la fecha de vencimiento real ya
+-- se actualiza sola vía access_accounts (cuenta nueva) o el botón
+-- "Renovar" del panel (misma cuenta), esto es solo el historial.
+CREATE TABLE IF NOT EXISTS renewals_log (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_name     TEXT    NOT NULL UNIQUE,
+  phone          TEXT    NOT NULL,
+  platform       TEXT    NOT NULL,
+  initial_email  TEXT    NOT NULL DEFAULT '',
+  status         TEXT    NOT NULL DEFAULT 'Pendiente de aprobar',
+  created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_renewals_order_name ON renewals_log(order_name);
+
 -- Catálogo propio del panel (Configuración > Catálogo). Alimenta el
 -- desplegable de plataforma en Accesos. NO está conectado al bot/WhatsApp
 -- todavía — es un catálogo aparte hasta que se decida migrar esa fuente.
