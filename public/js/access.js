@@ -776,6 +776,7 @@
       <li class="access-client-item">
         <div>
           <b>${escapeHtml(p.platform)}</b>${p.profileName ? " — " + escapeHtml(p.profileName) : ""}
+          <div class="text-muted">📧 ${escapeHtml(p.email)}</div>
           <div class="text-muted">${escapeHtml(p.clientPhone)}${p.provider ? " · " + escapeHtml(p.provider) : ""}</div>
         </div>
         <div class="access-client-item-right">
