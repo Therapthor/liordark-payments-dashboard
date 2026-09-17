@@ -723,6 +723,28 @@ button, input {
 .combo-item-row select { flex: 1; }
 .combo-item-row input { width: 64px; flex-shrink: 0; }
 
+.access-history-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 16px;
+  margin-bottom: 8px;
+}
+.access-history-item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.access-history-item summary::-webkit-details-marker { display: none; }
+.access-history-platform { font-weight: 700; font-size: 15px; color: var(--text-primary); }
+.access-history-detail { padding: 0 0 14px; font-size: 13px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; }
+.access-history-clients ul { margin: 4px 0 0; padding-left: 18px; }
+
 /* ─────────────────────────────────────────────────────────────
    RESPONSIVE
 ───────────────────────────────────────────────────────────── */

@@ -156,6 +156,7 @@
             <input id="access-search-input" type="text" placeholder="Buscar cuenta por correo, o cliente por teléfono…" />
             <button id="access-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
           </div>
+          <button id="access-history-btn" class="btn-secondary">🗄 Historial</button>
           <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
         </div>
 
@@ -546,6 +547,23 @@
         <button type="button" class="modal-x" data-close-modal="months-modal">✕</button>
       </div>
       <div id="months-modal-body" class="modal-scroll-body"></div>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: historial de cuentas vencidas ───────────── -->
+  <div id="access-history-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>Historial de cuentas vencidas</h3>
+        <button type="button" class="modal-x" data-close-modal="access-history-modal">✕</button>
+      </div>
+      <div class="feed-search">
+        <input id="access-history-search" type="text" placeholder="Buscar por correo, plataforma o celular…" />
+        <button id="access-history-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+      </div>
+      <p class="panel-hint">Se archivan solas cuando vencen — de solo lectura, para resolver reclamos futuros.</p>
+      <div id="access-history-body" class="modal-scroll-body"></div>
+      <p id="access-history-empty" class="feed-empty" hidden>No hay cuentas archivadas todavía.</p>
     </div>
   </div>
 

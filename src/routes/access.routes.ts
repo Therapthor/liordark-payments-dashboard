@@ -19,6 +19,7 @@ import {
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
+import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
 
 const router = Router();
 
@@ -53,6 +54,13 @@ router.get("/platforms-catalog", (_req, res) => {
 router.get("/providers-catalog", (_req, res) => {
   const providers = listProviders(true).map(p => ({ name: p.name, whatsapp: p.whatsapp }));
   res.json({ providers });
+});
+
+// ── HISTORIAL (cuentas ya vencidas — archivado automático, ver index.ts) ──
+
+router.get("/history", (req, res) => {
+  const term = String(req.query.q ?? "").trim();
+  res.json({ accounts: term ? searchArchivedAccounts(term) : listArchivedAccounts() });
 });
 
 // ── PLATAFORMAS (agrupación de cuentas ya cargadas en Accesos) ──

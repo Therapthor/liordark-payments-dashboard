@@ -19,6 +19,8 @@ import providerRoutes from "./routes/provider.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
+import { archiveExpiredAccounts } from "./db/access-history.repository";
+import { limaTodayISO } from "./services/access.service";
 
 const app = express();
 
@@ -56,7 +58,23 @@ const server = app.listen(env.PORT, () => {
     .then(seedCatalogIfEmpty)
     .catch((err: any) => console.error("⚠️ No se pudo sembrar el catálogo del panel:", err?.message));
   seedPaymentMethodsIfEmpty();
+
+  runArchiveExpiredAccounts();
+  setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
 });
+
+// Cuentas vencidas (Accesos) — se archivan solas a Historial y se borran de
+// las tablas activas. Al arrancar y cada hora, no hace falta más seguido.
+const ARCHIVE_INTERVAL_MS = 60 * 60 * 1000;
+
+function runArchiveExpiredAccounts(): void {
+  try {
+    const archived = archiveExpiredAccounts(limaTodayISO());
+    if (archived > 0) console.log(`🗄️  ${archived} cuenta(s) vencida(s) archivadas a Historial`);
+  } catch (err: any) {
+    console.error("⚠️ Error archivando cuentas vencidas:", err?.message);
+  }
+}
 
 let isShuttingDown = false;
 

@@ -779,6 +779,74 @@
   // INIT
   // ─────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────
+  // MODAL — historial de cuentas vencidas (solo lectura)
+  // ─────────────────────────────────────────────────────────────
+
+  function renderArchivedAccount(a) {
+    const clients = a.profiles.filter(p => p.clientPhone);
+    const clientsHtml = clients.length
+      ? clients.map(p => `<li>${escapeHtml(p.clientPhone)}${p.profileName ? " · " + escapeHtml(p.profileName) : ""}</li>`).join("")
+      : `<li class="text-muted">Sin clientes asignados al vencer</li>`;
+
+    return `
+      <details class="access-history-item">
+        <summary>
+          <span class="access-history-platform">${escapeHtml(a.platform)}</span>
+          <span class="text-muted">${escapeHtml(a.email)}</span>
+          <span class="text-muted">Venció: ${fmtDateLong(a.expiresAt)}</span>
+        </summary>
+        <div class="access-history-detail">
+          <div>🔑 ${escapeHtml(a.password)}</div>
+          ${a.provider ? `<div>🏷 ${escapeHtml(a.provider)}</div>` : ""}
+          <div class="text-muted">Archivada: ${fmtDateLong(a.archivedAt.slice(0, 10))}</div>
+          <div class="access-history-clients">
+            <b>Clientes al momento de vencer:</b>
+            <ul>${clientsHtml}</ul>
+          </div>
+        </div>
+      </details>
+    `;
+  }
+
+  function renderHistoryList(accounts) {
+    const body  = document.getElementById("access-history-body");
+    const empty = document.getElementById("access-history-empty");
+    body.innerHTML = accounts.map(renderArchivedAccount).join("");
+    empty.hidden = accounts.length > 0;
+  }
+
+  let historyDebounce = null;
+
+  function initHistoryModal() {
+    document.getElementById("access-history-btn").addEventListener("click", async () => {
+      document.getElementById("access-history-search").value = "";
+      document.getElementById("access-history-search-clear").hidden = true;
+      document.getElementById("access-history-modal").hidden = false;
+      const { accounts } = await api("/history");
+      renderHistoryList(accounts);
+    });
+
+    const input    = document.getElementById("access-history-search");
+    const clearBtn = document.getElementById("access-history-search-clear");
+
+    input.addEventListener("input", () => {
+      clearTimeout(historyDebounce);
+      clearBtn.hidden = !input.value;
+      historyDebounce = setTimeout(async () => {
+        const { accounts } = await api("/history?q=" + encodeURIComponent(input.value.trim()));
+        renderHistoryList(accounts);
+      }, 300);
+    });
+
+    clearBtn.addEventListener("click", async () => {
+      input.value = "";
+      clearBtn.hidden = true;
+      const { accounts } = await api("/history");
+      renderHistoryList(accounts);
+    });
+  }
+
   let initialized = false;
   function init() {
     if (initialized) return;
@@ -788,6 +856,7 @@
     initProfileModal();
     initPasswordModal();
     initRenewNewModal();
+    initHistoryModal();
     initSearch();
     initClientSummarySend();
   }

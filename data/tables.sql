@@ -97,6 +97,28 @@ CREATE TABLE IF NOT EXISTS access_profiles (
 CREATE INDEX IF NOT EXISTS idx_access_profiles_account ON access_profiles(account_id);
 CREATE INDEX IF NOT EXISTS idx_access_profiles_phone   ON access_profiles(client_phone);
 
+-- Historial de cuentas vencidas — cuando una cuenta de access_accounts
+-- vence (expires_at < hoy), se copia acá completa (con sus perfiles como
+-- snapshot en JSON, tal como estaban al momento de archivarse) y se borra
+-- de access_accounts/access_profiles. Es de solo lectura desde el panel —
+-- existe para poder resolver reclamos de clientes viejos, no para operar.
+CREATE TABLE IF NOT EXISTS access_accounts_history (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  original_account_id INTEGER NOT NULL,
+  platform           TEXT    NOT NULL,
+  email              TEXT    NOT NULL,
+  password           TEXT    NOT NULL,
+  provider           TEXT    NOT NULL DEFAULT '',
+  has_profiles       INTEGER NOT NULL DEFAULT 1,
+  expires_at         TEXT,
+  link               TEXT    NOT NULL DEFAULT '',
+  notes              TEXT    NOT NULL DEFAULT '',
+  profiles_json      TEXT    NOT NULL DEFAULT '[]', -- snapshot de access_profiles al momento de vencer
+  archived_at        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_access_history_platform ON access_accounts_history(platform);
+CREATE INDEX IF NOT EXISTS idx_access_history_email    ON access_accounts_history(email);
+
 -- Catálogo propio del panel (Configuración > Catálogo). Alimenta el
 -- desplegable de plataforma en Accesos. NO está conectado al bot/WhatsApp
 -- todavía — es un catálogo aparte hasta que se decida migrar esa fuente.
