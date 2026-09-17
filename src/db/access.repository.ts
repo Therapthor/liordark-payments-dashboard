@@ -233,8 +233,12 @@ export function listPlatforms(): PlatformSummary[] {
 }
 
 export function listAccountsByPlatform(platform: string): AccessAccountWithProfiles[] {
+  // id DESC como desempate: las cuentas migradas desde Sheets se insertaron
+  // todas en una sola transacción (mismo created_at exacto), así que sin
+  // este desempate el orden entre ellas queda indefinido. El id ascendente
+  // sí refleja el orden real en que se agregaron (orden de fila en Sheets).
   const rows = db.prepare(`
-    SELECT * FROM access_accounts WHERE platform = ? ORDER BY created_at DESC
+    SELECT * FROM access_accounts WHERE platform = ? ORDER BY created_at DESC, id DESC
   `).all(platform.trim().toUpperCase()) as any[];
 
   return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
