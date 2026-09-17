@@ -118,7 +118,7 @@ function main(): void {
           if (apply) {
             const profilesJson = acc.profiles.map(p => ({
               slotNumber: p.slotNumber, profileName: p.profileName,
-              clientPhone: p.clientPhone, renewalStatus: "",
+              clientPhone: (p.clientPhone || "").replace(/\D/g, ""), renewalStatus: "",
             }));
             insertHistory.run(
               plat.platform, acc.email, acc.password,
@@ -140,7 +140,7 @@ function main(): void {
               insertProfile.run(
                 accountId, slot,
                 p?.profileName || (slots === 1 ? "" : "Perfil " + slot),
-                p?.clientPhone || ""
+                (p?.clientPhone || "").replace(/\D/g, "") // por si el JSON trae espacios/guiones sin limpiar
               );
             }
           }
