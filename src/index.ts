@@ -17,6 +17,7 @@ import catalogRoutes from "./routes/catalog.routes";
 import paymentMethodRoutes from "./routes/payment-method.routes";
 import providerRoutes from "./routes/provider.routes";
 import stockRoutes from "./routes/stock.routes";
+import renewalsRoutes from "./routes/renewals.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
@@ -39,6 +40,7 @@ apiRouter.use("/orders", requireAuth, ordersRoutes);
 apiRouter.use("/catalog", requireAuth, catalogRoutes);
 apiRouter.use("/payment-methods", requireAuth, paymentMethodRoutes);
 apiRouter.use("/providers", requireAuth, providerRoutes);
+apiRouter.use("/renewals", requireAuth, renewalsRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
 apiRouter.use("/integrations", integrationsRoutes);

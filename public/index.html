@@ -38,6 +38,7 @@
           <div class="tab-dropdown-menu" id="pagos-menu" hidden>
             <button class="tab-dropdown-item active" data-view="live">En vivo</button>
             <button class="tab-dropdown-item" data-view="history">Historial</button>
+            <button class="tab-dropdown-item" data-view="renewals">Renovaciones</button>
           </div>
         </div>
         <button class="tab-btn" data-view="access">Accesos</button>
@@ -203,6 +204,37 @@
             </thead>
             <tbody id="history-tbody"></tbody>
           </table>
+        </div>
+
+      </section>
+
+      <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
+      <section id="view-renewals" class="view" hidden>
+
+        <div class="panel-header standalone">
+          <h2>Renovaciones — avisos enviados</h2>
+        </div>
+
+        <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
+
+        <div class="panel">
+          <div class="feed-search">
+            <input id="renewals-notif-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+            <button id="renewals-notif-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+          </div>
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Fecha / hora</th>
+                <th>Teléfono</th>
+                <th>Plataforma</th>
+                <th>Días al aviso</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="renewals-notif-tbody"></tbody>
+          </table>
+          <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
         </div>
 
       </section>

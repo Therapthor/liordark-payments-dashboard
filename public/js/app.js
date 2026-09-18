@@ -203,15 +203,16 @@
   // TABS
   // ─────────────────────────────────────────────────────────────
 
-  // "Pagos" es un desplegable con dos sub-vistas (En vivo / Historial);
-  // "Accesos" es un botón directo aparte.
+  // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
+  // Renovaciones); "Accesos" es un botón directo aparte.
   function switchView(view) {
-    document.getElementById("view-live").hidden    = view !== "live";
-    document.getElementById("view-access").hidden  = view !== "access";
-    document.getElementById("view-history").hidden = view !== "history";
-    document.getElementById("view-config").hidden  = view !== "config";
+    document.getElementById("view-live").hidden     = view !== "live";
+    document.getElementById("view-access").hidden   = view !== "access";
+    document.getElementById("view-history").hidden  = view !== "history";
+    document.getElementById("view-renewals").hidden = view !== "renewals";
+    document.getElementById("view-config").hidden   = view !== "config";
 
-    const isPagos = view === "live" || view === "history";
+    const isPagos = view === "live" || view === "history" || view === "renewals";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
     document.querySelectorAll(".tab-dropdown-item").forEach(item => {
       item.classList.toggle("active", item.dataset.view === view);
@@ -221,6 +222,7 @@
     });
 
     if (view === "history") loadHistory();
+    if (view === "renewals") loadRenewalNotifications();
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "config") switchConfigSection("catalog");
   }
@@ -861,6 +863,93 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // RENOVACIONES — avisos de vencimiento enviados (detalle por cliente)
+  // ─────────────────────────────────────────────────────────────
+
+  function fmtDateTime(iso) {
+    try {
+      return new Date(toUtcISOString(iso)).toLocaleString("es-PE", {
+        timeZone: "America/Lima", day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      });
+    } catch { return ""; }
+  }
+
+  let cachedRenewalNotifs      = [];
+  let renewalNotifSearchDigits = "";
+
+  async function loadRenewalNotifications() {
+    try {
+      const { entries, todaySent, todayFailed } = await api("/renewals/notifications?limit=300");
+      cachedRenewalNotifs = entries;
+      document.getElementById("renewals-notif-today-sent").textContent   = todaySent;
+      document.getElementById("renewals-notif-today-failed").textContent = todayFailed;
+      applyRenewalNotifSearch();
+    } catch {
+      // el bot puede estar reiniciando — se deja lo último mostrado
+    }
+  }
+
+  function applyRenewalNotifSearch() {
+    const filtered = renewalNotifSearchDigits
+      ? cachedRenewalNotifs.filter(n => n.phone.replace(/\D/g, "").includes(renewalNotifSearchDigits))
+      : cachedRenewalNotifs;
+    renderRenewalNotifTable(filtered);
+  }
+
+  function renewalNotifDaysLabel(days) {
+    if (days == null) return "—";
+    if (days < 0) return Math.abs(days) + "d vencido";
+    if (days === 0) return "Vence hoy";
+    return days + "d restantes";
+  }
+
+  function renderRenewalNotifTable(entries) {
+    const tbody = document.getElementById("renewals-notif-tbody");
+    const empty = document.getElementById("renewals-notif-empty");
+    tbody.innerHTML = "";
+
+    if (entries.length === 0) {
+      empty.textContent = renewalNotifSearchDigits ? "Sin resultados para ese número." : "No hay avisos registrados.";
+      empty.hidden = false;
+      return;
+    }
+    empty.hidden = true;
+
+    for (const n of entries) {
+      const tr = document.createElement("tr");
+      const statusHtml = n.status === "sent"
+        ? `<span class="badge sent">✅ Enviado</span>`
+        : `<span class="badge failed" title="${escapeHtml(n.error || "")}">❌ Falló</span>`;
+      tr.innerHTML = `
+        <td>${fmtDateTime(n.createdAt)}</td>
+        <td>${escapeHtml(n.phone)}</td>
+        <td>${escapeHtml(n.platform)}</td>
+        <td>${renewalNotifDaysLabel(n.daysLeft)}</td>
+        <td>${statusHtml}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function initRenewalNotifSearch() {
+    const input    = document.getElementById("renewals-notif-search");
+    const clearBtn = document.getElementById("renewals-notif-search-clear");
+
+    input.addEventListener("input", () => {
+      renewalNotifSearchDigits = input.value.replace(/\D/g, "");
+      clearBtn.hidden = !renewalNotifSearchDigits;
+      applyRenewalNotifSearch();
+    });
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      renewalNotifSearchDigits = "";
+      clearBtn.hidden = true;
+      applyRenewalNotifSearch();
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // HISTÓRICO POR MES
   // ─────────────────────────────────────────────────────────────
 
@@ -986,6 +1075,7 @@
     initOrdersActions();
     initPendingSearch();
     initApprovedSearch();
+    initRenewalNotifSearch();
     initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();
