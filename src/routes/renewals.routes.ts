@@ -24,6 +24,7 @@ router.get("/notifications", async (req, res) => {
       entries:     response.data?.entries ?? [],
       todaySent:   response.data?.todaySent ?? 0,
       todayFailed: response.data?.todayFailed ?? 0,
+      runHistory:  response.data?.runHistory ?? [],
     });
   } catch (err: any) {
     console.error("❌ No se pudo obtener notificaciones de renovación del bot:", err?.response?.status || err?.message);

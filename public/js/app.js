@@ -880,14 +880,43 @@
 
   async function loadRenewalNotifications() {
     try {
-      const { entries, todaySent, todayFailed } = await api("/renewals/notifications?limit=300");
+      const { entries, todaySent, todayFailed, runHistory } = await api("/renewals/notifications?limit=300");
       cachedRenewalNotifs = entries;
       document.getElementById("renewals-notif-today-sent").textContent   = todaySent;
       document.getElementById("renewals-notif-today-failed").textContent = todayFailed;
       applyRenewalNotifSearch();
+      renderRenewalRunHistory(runHistory || []);
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
     }
+  }
+
+  const RUN_STATUS_LABEL = { COMPLETED: "Completado", FAILED: "Interrumpido", RUNNING: "En curso" };
+
+  // Corridas de antes de que existiera el detalle por cliente — solo se
+  // sabe el total de esos días, no a quién se le avisó. Se muestra aparte
+  // para no perder ese historial ni mezclarlo con el detalle real.
+  function renderRenewalRunHistory(runs) {
+    const header = document.getElementById("renewals-run-history-header");
+    const panel  = document.getElementById("renewals-run-history-panel");
+    const tbody  = document.getElementById("renewals-run-history-tbody");
+
+    if (runs.length === 0) {
+      header.hidden = true;
+      panel.hidden  = true;
+      return;
+    }
+    header.hidden = false;
+    panel.hidden  = false;
+    tbody.innerHTML = runs.map(r => `
+      <tr>
+        <td>${fmtDateTime(r.startedAt)}</td>
+        <td>${r.total}</td>
+        <td>${r.sent}</td>
+        <td>${r.failed > 0 ? `<b style="color:var(--critical)">${r.failed}</b>` : "0"}</td>
+        <td>${escapeHtml(RUN_STATUS_LABEL[r.status] || r.status)}</td>
+      </tr>
+    `).join("");
   }
 
   function applyRenewalNotifSearch() {

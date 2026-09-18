@@ -237,6 +237,26 @@
           <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
         </div>
 
+        <!-- Corridas de ANTES de este detalle por cliente — solo se guardó
+             el total de esos días, no a quién se le avisó. -->
+        <div class="panel-header standalone" id="renewals-run-history-header" hidden>
+          <h2>Corridas anteriores (resumen por día)</h2>
+        </div>
+        <div class="panel" id="renewals-run-history-panel" hidden>
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Total</th>
+                <th>Enviados</th>
+                <th>Fallidos</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="renewals-run-history-tbody"></tbody>
+          </table>
+        </div>
+
       </section>
 
       <!-- ═══════════ VISTA: CONFIGURACIÓN ═══════════ -->
