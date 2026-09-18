@@ -523,6 +523,33 @@ button, input {
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 
+.flow-form { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
+.flow-form h3 { margin: 10px 0 -4px; font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.flow-form h3:first-child { margin-top: 0; }
+.flow-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.flow-form label code { background: var(--surface); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.flow-form input, .flow-form textarea {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+}
+.flow-form input:focus, .flow-form textarea:focus { border-color: var(--accent); }
+.flow-form textarea { resize: vertical; font-family: inherit; }
+.flow-form-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.flow-form-saved { color: var(--good); font-size: 13px; opacity: 0; transition: opacity 0.25s; }
+.flow-form-saved.show { opacity: 1; }
+
 .btn-primary, .btn-secondary {
   border: none;
   padding: 10px 18px;

@@ -18,8 +18,10 @@ import paymentMethodRoutes from "./routes/payment-method.routes";
 import providerRoutes from "./routes/provider.routes";
 import stockRoutes from "./routes/stock.routes";
 import renewalsRoutes from "./routes/renewals.routes";
+import botFlowRoutes from "./routes/bot-flow.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
+import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
 import { archiveExpiredAccounts } from "./db/access-history.repository";
 import { limaTodayISO } from "./services/access.service";
@@ -41,6 +43,7 @@ apiRouter.use("/catalog", requireAuth, catalogRoutes);
 apiRouter.use("/payment-methods", requireAuth, paymentMethodRoutes);
 apiRouter.use("/providers", requireAuth, providerRoutes);
 apiRouter.use("/renewals", requireAuth, renewalsRoutes);
+apiRouter.use("/bot-flow", requireAuth, botFlowRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
 apiRouter.use("/integrations", integrationsRoutes);
@@ -67,6 +70,7 @@ const server = app.listen(env.PORT, () => {
     .then(seedCatalogIfEmpty)
     .catch((err: any) => console.error("⚠️ No se pudo sembrar el catálogo del panel:", err?.message));
   seedPaymentMethodsIfEmpty();
+  seedBotFlowConfigIfEmpty();
 
   runArchiveExpiredAccounts();
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);

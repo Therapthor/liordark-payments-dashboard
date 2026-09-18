@@ -222,6 +222,29 @@ CREATE TABLE IF NOT EXISTS payment_methods (
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Flujo del bot (Configuración > Flujo). Fila única (id=1) — textos y
+-- títulos de botones del flujo de WhatsApp, editables sin tocar código
+-- ni redeployar el bot. El bot los lee cada pocos minutos vía
+-- /api/stock/flow-config; si no puede, sigue con lo último que tenía.
+-- La FORMA del flujo (qué botones existen, qué hacen) sigue viviendo
+-- en el código del bot — acá solo se edita el texto.
+CREATE TABLE IF NOT EXISTS bot_flow_config (
+  id                      INTEGER PRIMARY KEY CHECK (id = 1),
+  welcome_greeting        TEXT    NOT NULL DEFAULT '',
+  menu_prompt             TEXT    NOT NULL DEFAULT '',
+  btn_terms_title         TEXT    NOT NULL DEFAULT '',
+  btn_products_title      TEXT    NOT NULL DEFAULT '',
+  btn_support_title       TEXT    NOT NULL DEFAULT '',
+  terms_text              TEXT    NOT NULL DEFAULT '',
+  support_message         TEXT    NOT NULL DEFAULT '',
+  contact_phone           TEXT    NOT NULL DEFAULT '',
+  contact_wa_link         TEXT    NOT NULL DEFAULT '',
+  fallback_unknown_option TEXT    NOT NULL DEFAULT '',
+  fallback_unknown_type   TEXT    NOT NULL DEFAULT '',
+  back_main_response      TEXT    NOT NULL DEFAULT '',
+  updated_at              TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Proveedores (Configuración > Proveedores). Alimenta el desplegable de
 -- "Proveedor" al crear/editar cuentas en Accesos, y el botón 🔑 de soporte
 -- (abre WhatsApp al proveedor de esa cuenta).

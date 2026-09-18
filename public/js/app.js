@@ -228,11 +228,12 @@
   }
 
   // "Configuración" tiene su propio sub-menú (Catálogo / Métodos de pago /
-  // Proveedores) — se maneja aparte del menú principal de arriba.
+  // Proveedores / Flujo) — se maneja aparte del menú principal de arriba.
   function switchConfigSection(section) {
     document.getElementById("config-section-catalog").hidden         = section !== "catalog";
     document.getElementById("config-section-payment-methods").hidden = section !== "payment-methods";
     document.getElementById("config-section-providers").hidden       = section !== "providers";
+    document.getElementById("config-section-flow").hidden            = section !== "flow";
     document.querySelectorAll(".config-subnav-item").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.configSection === section);
     });
@@ -240,6 +241,7 @@
     if (section === "catalog" && window.LiordarkCatalog) window.LiordarkCatalog.load();
     if (section === "payment-methods" && window.LiordarkSettings) window.LiordarkSettings.loadMethods();
     if (section === "providers" && window.LiordarkSettings) window.LiordarkSettings.loadProviders();
+    if (section === "flow" && window.LiordarkFlow) window.LiordarkFlow.load();
   }
 
   function initConfigSubnav() {
@@ -1093,6 +1095,7 @@
     if (window.LiordarkAccess) window.LiordarkAccess.init();
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();
     if (window.LiordarkSettings) window.LiordarkSettings.init();
+    if (window.LiordarkFlow) window.LiordarkFlow.init();
 
     const { payments, stats } = await api("/live/initial");
     cachedLivePayments = payments;

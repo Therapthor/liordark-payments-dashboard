@@ -20,6 +20,7 @@ import {
 import { createRenewalLog, confirmRenewalLog } from "../db/renewal-log.repository";
 import { logCanvaOrder } from "../db/canva-order.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
+import { getBotFlowConfig } from "../db/bot-flow.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -227,6 +228,12 @@ router.get("/payment-methods", (_req, res) => {
       imageUrl:    m.imageUrl,
     }));
   res.json({ methods });
+});
+
+// GET /flow-config — textos/títulos editables del flujo de WhatsApp
+// (Configuración > Flujo). El bot lo refresca cada pocos minutos.
+router.get("/flow-config", (_req, res) => {
+  res.json({ config: getBotFlowConfig() });
 });
 
 export default router;

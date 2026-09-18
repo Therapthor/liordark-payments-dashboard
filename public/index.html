@@ -266,6 +266,7 @@
           <button class="config-subnav-item active" data-config-section="catalog">Catálogo</button>
           <button class="config-subnav-item" data-config-section="payment-methods">Métodos de pago</button>
           <button class="config-subnav-item" data-config-section="providers">Proveedores</button>
+          <button class="config-subnav-item" data-config-section="flow">Flujo</button>
         </div>
 
         <div id="config-section-catalog" class="config-section">
@@ -317,6 +318,71 @@
 
           <ul id="provider-list" class="catalog-list"></ul>
           <p id="provider-empty" class="feed-empty" hidden>Todavía no hay proveedores agregados.</p>
+
+        </div>
+
+        <div id="config-section-flow" class="config-section" hidden>
+
+          <div class="panel-header standalone">
+            <h2>Flujo de WhatsApp</h2>
+          </div>
+
+          <p class="panel-hint">Textos y títulos que usa el bot en WhatsApp — se editan acá, sin tocar código. El bot los toma en unos minutos (no hace falta redeploy).</p>
+
+          <form id="flow-form" class="flow-form">
+
+            <h3>Bienvenida</h3>
+            <label>Saludo inicial <code>{name}</code> = nombre del cliente
+              <textarea id="flow-welcomeGreeting" rows="2"></textarea>
+            </label>
+            <label>Texto sobre los botones del menú
+              <input id="flow-menuPrompt" type="text" />
+            </label>
+
+            <h3>Botones del menú principal</h3>
+            <label>Título — Términos y Condiciones
+              <input id="flow-btnTermsTitle" type="text" />
+            </label>
+            <label>Título — Productos
+              <input id="flow-btnProductsTitle" type="text" />
+            </label>
+            <label>Título — Soporte
+              <input id="flow-btnSupportTitle" type="text" />
+            </label>
+
+            <h3>Términos y Condiciones</h3>
+            <label>Texto que se envía al tocar el botón
+              <textarea id="flow-termsText" rows="8"></textarea>
+            </label>
+
+            <h3>Soporte y contacto</h3>
+            <label>Mensaje del botón Soporte <code>{waLink}</code> = link de WhatsApp de abajo
+              <textarea id="flow-supportMessage" rows="3"></textarea>
+            </label>
+            <label>Teléfono de contacto
+              <input id="flow-contactPhone" type="text" />
+            </label>
+            <label>Link de WhatsApp de soporte
+              <input id="flow-contactWaLink" type="text" />
+            </label>
+
+            <h3>Mensajes de error</h3>
+            <label>Cuando no reconoce un botón/opción
+              <input id="flow-fallbackUnknownOption" type="text" />
+            </label>
+            <label>Cuando no reconoce un texto escrito libre
+              <input id="flow-fallbackUnknownType" type="text" />
+            </label>
+            <label>Al volver al menú principal
+              <input id="flow-backMainResponse" type="text" />
+            </label>
+
+            <div class="flow-form-actions">
+              <button type="submit" class="btn-primary">Guardar cambios</button>
+              <span id="flow-form-saved" class="flow-form-saved">✅ Guardado</span>
+            </div>
+
+          </form>
 
         </div>
 
@@ -628,6 +694,7 @@
   <script src="js/access.js"></script>
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/flow.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
