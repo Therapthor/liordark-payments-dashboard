@@ -21,7 +21,7 @@ export type BotFlowConfig = {
 const DEFAULTS = {
   welcomeGreeting: "¡Hola, {name}! 👋 Bienvenido/a a nuestro servicio.\nEstamos aquí para ayudarte.",
   menuPrompt: "¿En qué te puedo ayudar? Elige una opción 👇",
-  btnTermsTitle: "📜 Términos y Condiciones",
+  btnTermsTitle: "📜 Términos y Cond.",
   btnProductsTitle: "🛒 Productos",
   btnSupportTitle: "📞 Soporte",
   termsText: "📜 *Términos y Condiciones*\n\n*Reembolsos*\nNo hay reembolsos de dinero una vez procesado el pago. En caso de caída de una cuenta, el dinero abonado queda como *saldo a favor* para tu próxima compra.\n\n*Garantía por caída*\nTodas las cuentas tienen garantía y serán reemplazadas en caso de caída. Si hay demora en la reposición, se añaden días extra a tu suscripción para compensar.\n\n*Cambio de cuenta*\nUna vez entregada y activada la cuenta, no se realizan cambios por otro servicio ni se desactiva por cambio de opinión.\n\n_Escribe *menu* para volver al menú principal_ 👆",
