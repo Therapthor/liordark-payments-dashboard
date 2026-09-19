@@ -501,6 +501,7 @@
     populateProviderSelect(document.getElementById("bulk-provider"));
     document.getElementById("bulk-expires").value = addDaysISO(todayISO(), 30);
     document.getElementById("bulk-expires").min = todayISO();
+    document.getElementById("bulk-renewal-fields").hidden = true;
     document.getElementById("bulk-modal").hidden = false;
   }
 
@@ -508,13 +509,22 @@
     document.getElementById("access-new-account-btn").addEventListener("click", openBulkModal);
     document.getElementById("bulk-cancel").addEventListener("click", () => { document.getElementById("bulk-modal").hidden = true; });
 
+    document.getElementById("bulk-renewal-enabled").addEventListener("change", (e) => {
+      document.getElementById("bulk-renewal-fields").hidden = !e.target.checked;
+    });
+
     document.getElementById("bulk-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const renewalEnabled = document.getElementById("bulk-renewal-enabled").checked;
       const body = {
         platform:  document.getElementById("bulk-platform").value,
         provider:  document.getElementById("bulk-provider").value,
         expiresAt: document.getElementById("bulk-expires").value,
         lines:     document.getElementById("bulk-lines").value,
+        providerRenewalEnabled:    renewalEnabled,
+        providerRenewalCost:       renewalEnabled ? document.getElementById("bulk-renewal-cost").value : "",
+        providerRenewalCurrency:   document.getElementById("bulk-renewal-currency").value,
+        providerRenewalNextDate:   renewalEnabled ? document.getElementById("bulk-renewal-next-date").value : null,
       };
       const errorEl = document.getElementById("bulk-error");
       errorEl.hidden = true;
@@ -547,14 +557,24 @@
     populateProviderSelect(document.getElementById("account-edit-provider"), account.provider);
     document.getElementById("account-edit-expires").value = account.expiresAt || "";
     document.getElementById("account-edit-link").value = account.link || "";
+    document.getElementById("account-edit-renewal-enabled").checked = !!account.providerRenewalEnabled;
+    document.getElementById("account-edit-renewal-fields").hidden = !account.providerRenewalEnabled;
+    document.getElementById("account-edit-renewal-cost").value = account.providerRenewalCost || "";
+    document.getElementById("account-edit-renewal-currency").value = account.providerRenewalCurrency || "USDT";
+    document.getElementById("account-edit-renewal-next-date").value = account.providerRenewalNextDate || "";
     document.getElementById("account-edit-modal").hidden = false;
   }
 
   function initEditModal() {
     document.getElementById("account-edit-cancel").addEventListener("click", () => { document.getElementById("account-edit-modal").hidden = true; });
 
+    document.getElementById("account-edit-renewal-enabled").addEventListener("change", (e) => {
+      document.getElementById("account-edit-renewal-fields").hidden = !e.target.checked;
+    });
+
     document.getElementById("account-edit-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const renewalEnabled = document.getElementById("account-edit-renewal-enabled").checked;
       const body = {
         platform:  document.getElementById("account-edit-platform").value,
         email:     document.getElementById("account-edit-email").value,
@@ -562,6 +582,10 @@
         provider:  document.getElementById("account-edit-provider").value,
         expiresAt: document.getElementById("account-edit-expires").value,
         link:      document.getElementById("account-edit-link").value,
+        providerRenewalEnabled:  renewalEnabled,
+        providerRenewalCost:     renewalEnabled ? document.getElementById("account-edit-renewal-cost").value : "",
+        providerRenewalCurrency: document.getElementById("account-edit-renewal-currency").value,
+        providerRenewalNextDate: renewalEnabled ? document.getElementById("account-edit-renewal-next-date").value : null,
       };
       const errorEl = document.getElementById("account-edit-error");
       errorEl.hidden = true;
@@ -876,6 +900,68 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // RENOVACIÓN CON PROVEEDOR (Pagos > Renovaciones)
+  // Cuentas de Accesos marcadas con "avisar renovación con proveedor" —
+  // se venden como plan anual pero se pagan mes a mes. Solo lectura acá;
+  // se activa/edita desde el modal de la cuenta en Accesos.
+  // ─────────────────────────────────────────────────────────────
+
+  let cachedProviderRenewals = [];
+
+  function renderProviderRenewal(a) {
+    const li = document.createElement("li");
+    li.className = "catalog-item";
+    li.dataset.id = a.id;
+    li.innerHTML = `
+      <div class="catalog-thumb catalog-thumb-empty">🔁</div>
+      <div class="catalog-main">
+        <div class="catalog-name">${escapeHtml(a.platform)} — ${escapeHtml(a.email)}</div>
+        <div class="catalog-desc">
+          💰 ${escapeHtml(a.providerRenewalCost)} ${escapeHtml(a.providerRenewalCurrency)} ·
+          📅 Próxima renovación: ${a.providerRenewalNextDate ? fmtDateLong(a.providerRenewalNextDate) : "—"}
+        </div>
+      </div>
+      <div class="catalog-actions">
+        <button class="icon-btn-sm provider-renewal-done-btn" title="Marcar como renovado (+1 mes)">✅</button>
+      </div>
+    `;
+    return li;
+  }
+
+  function renderProviderRenewalList() {
+    const list  = document.getElementById("provider-renewal-list");
+    const empty = document.getElementById("provider-renewal-empty");
+    if (!list) return;
+    list.innerHTML = "";
+    if (cachedProviderRenewals.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const a of cachedProviderRenewals) list.appendChild(renderProviderRenewal(a));
+  }
+
+  async function loadProviderRenewals() {
+    const { accounts } = await api("/provider-renewals");
+    cachedProviderRenewals = accounts;
+    renderProviderRenewalList();
+  }
+
+  function initProviderRenewalListActions() {
+    const list = document.getElementById("provider-renewal-list");
+    if (!list) return;
+    list.addEventListener("click", async (e) => {
+      if (!e.target.closest(".provider-renewal-done-btn")) return;
+      const li = e.target.closest(".catalog-item");
+      const id = Number(li.dataset.id);
+      const account = cachedProviderRenewals.find(a => a.id === id);
+      if (!account) return;
+      if (!confirm(`¿Marcar "${account.platform} — ${account.email}" como renovado? La próxima fecha se adelanta un mes.`)) return;
+      try {
+        await api("/accounts/" + id + "/provider-renewal/mark-renewed", { method: "POST" });
+        await loadProviderRenewals();
+      } catch (err) { alert(err.message || "No se pudo marcar como renovado."); }
+    });
+  }
+
   let initialized = false;
   function init() {
     if (initialized) return;
@@ -888,7 +974,8 @@
     initHistoryModal();
     initSearch();
     initClientSummarySend();
+    initProviderRenewalListActions();
   }
 
-  window.LiordarkAccess = { init, load };
+  window.LiordarkAccess = { init, load, loadProviderRenewals };
 })();

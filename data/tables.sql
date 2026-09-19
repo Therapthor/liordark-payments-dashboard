@@ -78,6 +78,13 @@ CREATE TABLE IF NOT EXISTS access_accounts (
   expires_at    TEXT,                         -- YYYY-MM-DD, vencimiento compartido por la cuenta
   link          TEXT    NOT NULL DEFAULT '',  -- enlace opcional (info que se llena a mano), botón "Abrir enlace"
   notes         TEXT    NOT NULL DEFAULT '',
+  -- Renovación con el proveedor (independiente del vencimiento del cliente)
+  -- — se vende como plan anual pero se paga/renueva mes a mes. Opcional,
+  -- se activa por cuenta al crearla o editarla.
+  provider_renewal_enabled    INTEGER NOT NULL DEFAULT 0,
+  provider_renewal_cost       TEXT    NOT NULL DEFAULT '',
+  provider_renewal_currency   TEXT    NOT NULL DEFAULT 'USDT',
+  provider_renewal_next_date  TEXT,   -- YYYY-MM-DD
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -256,20 +263,4 @@ CREATE TABLE IF NOT EXISTS providers (
   active       INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
--- Suscripciones propias (Pagos > Renovaciones). Productos que se venden al
--- cliente como plan anual pero que Liordark paga/renueva mes a mes con el
--- proveedor. El bot revisa next_renewal_date todos los días y avisa por
--- Telegram cuando se acerca — independiente del vencimiento del cliente.
-CREATE TABLE IF NOT EXISTS provider_subscriptions (
-  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-  product_name       TEXT    NOT NULL,
-  cost_amount        TEXT    NOT NULL DEFAULT '0',
-  cost_currency      TEXT    NOT NULL DEFAULT 'USDT',
-  next_renewal_date  TEXT    NOT NULL,  -- YYYY-MM-DD
-  notes              TEXT    NOT NULL DEFAULT '',
-  active             INTEGER NOT NULL DEFAULT 1,
-  created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
-  updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
 );

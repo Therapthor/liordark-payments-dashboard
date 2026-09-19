@@ -257,17 +257,17 @@
           </table>
         </div>
 
-        <!-- Suscripciones propias — productos vendidos como plan anual pero
-             que Liordark paga/renueva mes a mes con el proveedor. -->
+        <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
+             se venden al cliente como plan anual pero Liordark las paga
+             mes a mes. Se activa por cuenta al crearla/editarla en Accesos. -->
         <div class="panel-header standalone">
-          <h2>Suscripciones propias (renovación con proveedor)</h2>
-          <button id="subscription-new-btn" class="btn-primary">+ Agregar suscripción</button>
+          <h2>Renovación con proveedor</h2>
         </div>
 
-        <p class="panel-hint">Independiente del vencimiento del cliente — es para que no se te pase pagar al proveedor. El bot te avisa por Telegram unos días antes.</p>
+        <p class="panel-hint">Cuentas de Accesos marcadas para recordatorio de pago al proveedor — independiente del vencimiento del cliente. Se activa al crear o editar la cuenta.</p>
 
-        <ul id="subscription-list" class="catalog-list"></ul>
-        <p id="subscription-empty" class="feed-empty" hidden>Todavía no hay suscripciones agregadas.</p>
+        <ul id="provider-renewal-list" class="catalog-list"></ul>
+        <p id="provider-renewal-empty" class="feed-empty" hidden>No hay cuentas marcadas para renovación con proveedor.</p>
 
       </section>
 
@@ -521,39 +521,6 @@
     </form>
   </div>
 
-  <!-- ───────────── MODAL: suscripción propia (renovación proveedor) ───────────── -->
-  <div id="subscription-modal" class="modal-backdrop" hidden>
-    <form id="subscription-form" class="modal-card">
-      <div class="modal-head">
-        <h3 id="subscription-modal-title">Agregar suscripción</h3>
-        <button type="button" class="modal-x" data-close-modal="subscription-modal">✕</button>
-      </div>
-      <label>Producto
-        <input id="subscription-productName" type="text" maxlength="60" required placeholder="ej. ChatGPT Plus" />
-      </label>
-      <label>Costo
-        <input id="subscription-costAmount" type="text" required placeholder="ej. 17" />
-      </label>
-      <label>Moneda
-        <select id="subscription-costCurrency">
-          <option value="USDT">USDT</option>
-          <option value="PEN">Soles (PEN)</option>
-        </select>
-      </label>
-      <label>Próxima renovación
-        <input id="subscription-nextRenewalDate" type="date" required />
-      </label>
-      <label>Notas <span class="text-muted">(opcional)</span>
-        <textarea id="subscription-notes" maxlength="300" rows="2"></textarea>
-      </label>
-      <p id="subscription-error" class="login-error" hidden></p>
-      <div class="modal-actions">
-        <button type="button" id="subscription-cancel" class="btn-secondary">Cancelar</button>
-        <button type="submit" class="btn-primary">Guardar</button>
-      </div>
-    </form>
-  </div>
-
   <!-- ───────────── MODAL: registro manual ───────────── -->
   <div id="manual-modal" class="modal-backdrop" hidden>
     <form id="manual-form" class="modal-card">
@@ -597,6 +564,26 @@
       <label>Cuentas — una por línea, formato <code>correo:contraseña</code>
         <textarea id="bulk-lines" rows="6" placeholder="correo1@gmail.com:clave123&#10;correo2@gmail.com:clave456" required></textarea>
       </label>
+
+      <label class="catalog-checkbox-label">
+        <input id="bulk-renewal-enabled" type="checkbox" />
+        🔁 Avisar renovación con proveedor (se paga mes a mes, aunque se venda como plan anual)
+      </label>
+      <div id="bulk-renewal-fields" hidden>
+        <label>Costo
+          <input id="bulk-renewal-cost" type="text" placeholder="ej. 17" />
+        </label>
+        <label>Moneda
+          <select id="bulk-renewal-currency">
+            <option value="USDT">USDT</option>
+            <option value="PEN">Soles (PEN)</option>
+          </select>
+        </label>
+        <label>Próxima renovación con el proveedor
+          <input id="bulk-renewal-next-date" type="date" />
+        </label>
+      </div>
+
       <p id="bulk-error" class="login-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="bulk-cancel" class="btn-secondary">Cancelar</button>
@@ -630,6 +617,26 @@
       <label>Enlace <span class="text-muted">(opcional — información que llenas a mano)</span>
         <input id="account-edit-link" type="text" placeholder="https://…" />
       </label>
+
+      <label class="catalog-checkbox-label">
+        <input id="account-edit-renewal-enabled" type="checkbox" />
+        🔁 Avisar renovación con proveedor (se paga mes a mes, aunque se venda como plan anual)
+      </label>
+      <div id="account-edit-renewal-fields" hidden>
+        <label>Costo
+          <input id="account-edit-renewal-cost" type="text" placeholder="ej. 17" />
+        </label>
+        <label>Moneda
+          <select id="account-edit-renewal-currency">
+            <option value="USDT">USDT</option>
+            <option value="PEN">Soles (PEN)</option>
+          </select>
+        </label>
+        <label>Próxima renovación con el proveedor
+          <input id="account-edit-renewal-next-date" type="date" />
+        </label>
+      </div>
+
       <p id="account-edit-error" class="login-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="account-edit-cancel" class="btn-secondary">Cancelar</button>

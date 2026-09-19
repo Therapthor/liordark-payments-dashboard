@@ -21,7 +21,6 @@ import { createRenewalLog, confirmRenewalLog } from "../db/renewal-log.repositor
 import { logCanvaOrder } from "../db/canva-order.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { getBotFlowConfig } from "../db/bot-flow.repository";
-import { getDueProviderSubscriptions } from "../db/provider-subscriptions.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -235,14 +234,6 @@ router.get("/payment-methods", (_req, res) => {
 // (Configuración > Flujo). El bot lo refresca cada pocos minutos.
 router.get("/flow-config", (_req, res) => {
   res.json({ config: getBotFlowConfig() });
-});
-
-// GET /provider-subscriptions-due?days=3 — suscripciones propias (Pagos >
-// Renovaciones) cuya renovación con el proveedor cae dentro de N días (o ya
-// vencidas). El bot revisa esto una vez al día y avisa por Telegram.
-router.get("/provider-subscriptions-due", (req, res) => {
-  const days = Number(req.query.days ?? 3);
-  res.json({ subscriptions: getDueProviderSubscriptions(Number.isFinite(days) ? days : 3) });
 });
 
 export default router;

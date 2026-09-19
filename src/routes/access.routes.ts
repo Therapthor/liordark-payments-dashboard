@@ -12,6 +12,8 @@ import {
   searchAccountsByEmail,
   searchProfilesByPhone,
   createAccountFromRenewal,
+  listProviderRenewalAccounts,
+  markProviderRenewalRenewed,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
   type RenewalStatus,
@@ -80,11 +82,21 @@ router.get("/platforms/:platform/accounts", (req, res) => {
 // plataforma, proveedor y vencimiento inicial. hasProfiles se resuelve
 // del catálogo propio del panel, nunca se confía en lo que mande el cliente.
 router.post("/accounts/bulk", async (req, res) => {
-  const { platform, provider, expiresAt, lines } = req.body ?? {};
+  const {
+    platform, provider, expiresAt, lines,
+    providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
+  } = req.body ?? {};
 
   if (!platform?.trim()) { res.status(400).json({ message: "Elige una plataforma." }); return; }
   if (!expiresAt || !DATE_RE.test(expiresAt)) { res.status(400).json({ message: "Fecha de vencimiento inválida." }); return; }
   if (typeof lines !== "string" || !lines.trim()) { res.status(400).json({ message: "Pega al menos una línea correo:contraseña." }); return; }
+  if (providerRenewalEnabled) {
+    if (!providerRenewalCost?.trim()) { res.status(400).json({ message: "Falta el costo de la renovación con el proveedor." }); return; }
+    if (!providerRenewalNextDate || !DATE_RE.test(providerRenewalNextDate)) {
+      res.status(400).json({ message: "Falta la próxima fecha de renovación con el proveedor." });
+      return;
+    }
+  }
 
   const pairs = lines
     .split("\n")
@@ -107,6 +119,10 @@ router.post("/accounts/bulk", async (req, res) => {
   const accounts = createAccountsBulk({
     platform, provider: typeof provider === "string" ? provider : "",
     hasProfiles, expiresAt, pairs: pairs as { email: string; password: string }[],
+    providerRenewalEnabled:  !!providerRenewalEnabled,
+    providerRenewalCost:     typeof providerRenewalCost === "string" ? providerRenewalCost : "",
+    providerRenewalCurrency: typeof providerRenewalCurrency === "string" ? providerRenewalCurrency : "USDT",
+    providerRenewalNextDate: providerRenewalNextDate ?? null,
   });
 
   res.status(201).json({ accounts: accounts.map(withStatus) });
@@ -119,14 +135,30 @@ router.get("/accounts/:id", (req, res) => {
 });
 
 router.put("/accounts/:id", (req, res) => {
-  const { platform, email, password, provider, expiresAt, link, notes } = req.body ?? {};
+  const {
+    platform, email, password, provider, expiresAt, link, notes,
+    providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
+  } = req.body ?? {};
 
   if (expiresAt !== undefined && expiresAt !== null && !DATE_RE.test(expiresAt)) {
     res.status(400).json({ message: "Fecha inválida, usa YYYY-MM-DD." });
     return;
   }
+  if (providerRenewalEnabled) {
+    if (!providerRenewalCost?.trim()) { res.status(400).json({ message: "Falta el costo de la renovación con el proveedor." }); return; }
+    if (!providerRenewalNextDate || !DATE_RE.test(providerRenewalNextDate)) {
+      res.status(400).json({ message: "Falta la próxima fecha de renovación con el proveedor." });
+      return;
+    }
+  }
 
-  const account = updateAccount(Number(req.params.id), { platform, email, password, provider, expiresAt, link, notes });
+  const account = updateAccount(Number(req.params.id), {
+    platform, email, password, provider, expiresAt, link, notes,
+    ...(providerRenewalEnabled !== undefined ? { providerRenewalEnabled: !!providerRenewalEnabled } : {}),
+    ...(typeof providerRenewalCost === "string" ? { providerRenewalCost } : {}),
+    ...(typeof providerRenewalCurrency === "string" ? { providerRenewalCurrency } : {}),
+    ...(providerRenewalNextDate !== undefined ? { providerRenewalNextDate } : {}),
+  });
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   res.json({ account: withStatus(account) });
 });
@@ -134,6 +166,18 @@ router.put("/accounts/:id", (req, res) => {
 router.delete("/accounts/:id", (req, res) => {
   deleteAccount(Number(req.params.id));
   res.json({ ok: true });
+});
+
+// ── RENOVACIÓN CON PROVEEDOR (Pagos > Renovaciones) ──
+
+router.get("/provider-renewals", (_req, res) => {
+  res.json({ accounts: listProviderRenewalAccounts() });
+});
+
+router.post("/accounts/:id/provider-renewal/mark-renewed", (req, res) => {
+  const account = markProviderRenewalRenewed(Number(req.params.id));
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada o sin fecha de renovación." }); return; }
+  res.json({ account });
 });
 
 router.post("/accounts/:id/renew", (req, res) => {

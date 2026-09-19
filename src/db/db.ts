@@ -43,6 +43,14 @@ ensureColumn("catalog_products", "active", "active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("payment_methods", "image_url", "image_url TEXT NOT NULL DEFAULT ''");
 ensureColumn("catalog_products", "keywords", "keywords TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "order_ref", "order_ref TEXT NOT NULL DEFAULT ''");
+ensureColumn("access_accounts", "provider_renewal_enabled",   "provider_renewal_enabled INTEGER NOT NULL DEFAULT 0");
+ensureColumn("access_accounts", "provider_renewal_cost",      "provider_renewal_cost TEXT NOT NULL DEFAULT ''");
+ensureColumn("access_accounts", "provider_renewal_currency",  "provider_renewal_currency TEXT NOT NULL DEFAULT 'USDT'");
+ensureColumn("access_accounts", "provider_renewal_next_date", "provider_renewal_next_date TEXT");
+
+// La tabla de suscripciones propias como lista aparte se reemplazó por el
+// campo "renovación con proveedor" en cada cuenta de Accesos.
+db.exec(`DROP TABLE IF EXISTS provider_subscriptions`);
 
 // catalog_combos era "un combo = una plataforma con cantidad" (ej. Netflix
 // x2). Cambió a "un combo = varias plataformas juntas" (ej. 1 Netflix + 1

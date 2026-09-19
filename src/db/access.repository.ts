@@ -27,6 +27,12 @@ export type AccessAccount = {
   expiresAt:   string | null;
   link:        string;
   notes:       string;
+  // Renovación con el proveedor — independiente del vencimiento del
+  // cliente. Se paga/renueva mes a mes aunque se venda como plan anual.
+  providerRenewalEnabled:  boolean;
+  providerRenewalCost:     string;
+  providerRenewalCurrency: string;
+  providerRenewalNextDate: string | null;
   createdAt:   string;
   updatedAt:   string;
 };
@@ -85,12 +91,19 @@ export function createAccountsBulk(params: {
   hasProfiles: boolean;
   expiresAt:   string | null;
   pairs:       { email: string; password: string }[];
+  providerRenewalEnabled?:  boolean;
+  providerRenewalCost?:     string;
+  providerRenewalCurrency?: string;
+  providerRenewalNextDate?: string | null;
 }): AccessAccountWithProfiles[] {
   const slots = slotsFor(params.hasProfiles);
 
   const insertAccount = db.prepare(`
-    INSERT INTO access_accounts (platform, email, password, provider, has_profiles, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO access_accounts (
+      platform, email, password, provider, has_profiles, expires_at,
+      provider_renewal_enabled, provider_renewal_cost, provider_renewal_currency, provider_renewal_next_date
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProfile = db.prepare(`
     INSERT INTO access_profiles (account_id, slot_number, profile_name)
@@ -106,7 +119,11 @@ export function createAccountsBulk(params: {
         pair.password.trim(),
         params.provider.trim(),
         params.hasProfiles ? 1 : 0,
-        params.expiresAt
+        params.expiresAt,
+        params.providerRenewalEnabled ? 1 : 0,
+        params.providerRenewalCost ?? "",
+        params.providerRenewalCurrency || "USDT",
+        params.providerRenewalEnabled ? (params.providerRenewalNextDate ?? null) : null
       );
       const id = result.lastInsertRowid as number;
       for (let slot = 1; slot <= slots; slot++) {
@@ -128,13 +145,21 @@ export function updateAccount(id: number, params: {
   expiresAt?: string | null;
   link?:      string;
   notes?:     string;
+  providerRenewalEnabled?:  boolean;
+  providerRenewalCost?:     string;
+  providerRenewalCurrency?: string;
+  providerRenewalNextDate?: string | null;
 }): AccessAccountWithProfiles | null {
   const current = getAccountById(id);
   if (!current) return null;
 
+  const renewalEnabled = params.providerRenewalEnabled ?? current.providerRenewalEnabled;
+
   db.prepare(`
     UPDATE access_accounts
-    SET platform = ?, email = ?, password = ?, provider = ?, expires_at = ?, link = ?, notes = ?, updated_at = datetime('now')
+    SET platform = ?, email = ?, password = ?, provider = ?, expires_at = ?, link = ?, notes = ?,
+        provider_renewal_enabled = ?, provider_renewal_cost = ?, provider_renewal_currency = ?, provider_renewal_next_date = ?,
+        updated_at = datetime('now')
     WHERE id = ?
   `).run(
     (params.platform ?? current.platform).trim().toUpperCase(),
@@ -144,10 +169,39 @@ export function updateAccount(id: number, params: {
     params.expiresAt !== undefined ? params.expiresAt : current.expiresAt,
     (params.link ?? current.link).trim(),
     (params.notes ?? current.notes).trim(),
+    renewalEnabled ? 1 : 0,
+    (params.providerRenewalCost ?? current.providerRenewalCost).trim(),
+    params.providerRenewalCurrency || current.providerRenewalCurrency || "USDT",
+    renewalEnabled
+      ? (params.providerRenewalNextDate !== undefined ? params.providerRenewalNextDate : current.providerRenewalNextDate)
+      : null,
     id
   );
 
   return getAccountById(id);
+}
+
+/** Cuentas marcadas para recordatorio de renovación con el proveedor (Pagos > Renovaciones). */
+export function listProviderRenewalAccounts(): AccessAccount[] {
+  return (db.prepare(`
+    SELECT * FROM access_accounts WHERE provider_renewal_enabled = 1 ORDER BY provider_renewal_next_date ASC
+  `).all() as any[]).map(toAccount);
+}
+
+/** Adelanta un mes la fecha de renovación con el proveedor (se llama al marcar "ya renové"). */
+export function markProviderRenewalRenewed(id: number): AccessAccount | null {
+  const current = getAccountById(id);
+  if (!current || !current.providerRenewalNextDate) return null;
+  db.prepare(`
+    UPDATE access_accounts SET provider_renewal_next_date = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(addOneMonth(current.providerRenewalNextDate), id);
+  return getAccountById(id);
+}
+
+function addOneMonth(dateISO: string): string {
+  const [y, m, d] = dateISO.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1 + 1, d));
+  return dt.toISOString().slice(0, 10);
 }
 
 export function setAccountExpiry(id: number, expiresAt: string): AccessAccountWithProfiles | null {
@@ -471,6 +525,10 @@ function toAccount(row: any): AccessAccount {
     expiresAt:   row.expires_at ?? null,
     link:        row.link ?? "",
     notes:       row.notes ?? "",
+    providerRenewalEnabled:  row.provider_renewal_enabled === 1,
+    providerRenewalCost:     row.provider_renewal_cost ?? "",
+    providerRenewalCurrency: row.provider_renewal_currency || "USDT",
+    providerRenewalNextDate: row.provider_renewal_next_date ?? null,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };

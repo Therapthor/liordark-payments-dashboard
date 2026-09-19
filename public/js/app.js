@@ -224,7 +224,7 @@
     if (view === "history") loadHistory();
     if (view === "renewals") {
       loadRenewalNotifications();
-      if (window.LiordarkSettings) window.LiordarkSettings.loadSubscriptions();
+      if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "config") switchConfigSection("catalog");
