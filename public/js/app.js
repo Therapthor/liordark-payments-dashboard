@@ -222,7 +222,10 @@
     });
 
     if (view === "history") loadHistory();
-    if (view === "renewals") loadRenewalNotifications();
+    if (view === "renewals") {
+      loadRenewalNotifications();
+      if (window.LiordarkSettings) window.LiordarkSettings.loadSubscriptions();
+    }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "config") switchConfigSection("catalog");
   }

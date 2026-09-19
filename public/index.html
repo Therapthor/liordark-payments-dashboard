@@ -257,6 +257,18 @@
           </table>
         </div>
 
+        <!-- Suscripciones propias — productos vendidos como plan anual pero
+             que Liordark paga/renueva mes a mes con el proveedor. -->
+        <div class="panel-header standalone">
+          <h2>Suscripciones propias (renovación con proveedor)</h2>
+          <button id="subscription-new-btn" class="btn-primary">+ Agregar suscripción</button>
+        </div>
+
+        <p class="panel-hint">Independiente del vencimiento del cliente — es para que no se te pase pagar al proveedor. El bot te avisa por Telegram unos días antes.</p>
+
+        <ul id="subscription-list" class="catalog-list"></ul>
+        <p id="subscription-empty" class="feed-empty" hidden>Todavía no hay suscripciones agregadas.</p>
+
       </section>
 
       <!-- ═══════════ VISTA: CONFIGURACIÓN ═══════════ -->
@@ -504,6 +516,39 @@
       <p id="provider-error" class="login-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="provider-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: suscripción propia (renovación proveedor) ───────────── -->
+  <div id="subscription-modal" class="modal-backdrop" hidden>
+    <form id="subscription-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="subscription-modal-title">Agregar suscripción</h3>
+        <button type="button" class="modal-x" data-close-modal="subscription-modal">✕</button>
+      </div>
+      <label>Producto
+        <input id="subscription-productName" type="text" maxlength="60" required placeholder="ej. ChatGPT Plus" />
+      </label>
+      <label>Costo
+        <input id="subscription-costAmount" type="text" required placeholder="ej. 17" />
+      </label>
+      <label>Moneda
+        <select id="subscription-costCurrency">
+          <option value="USDT">USDT</option>
+          <option value="PEN">Soles (PEN)</option>
+        </select>
+      </label>
+      <label>Próxima renovación
+        <input id="subscription-nextRenewalDate" type="date" required />
+      </label>
+      <label>Notas <span class="text-muted">(opcional)</span>
+        <textarea id="subscription-notes" maxlength="300" rows="2"></textarea>
+      </label>
+      <p id="subscription-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="subscription-cancel" class="btn-secondary">Cancelar</button>
         <button type="submit" class="btn-primary">Guardar</button>
       </div>
     </form>

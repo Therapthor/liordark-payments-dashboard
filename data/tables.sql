@@ -257,3 +257,19 @@ CREATE TABLE IF NOT EXISTS providers (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Suscripciones propias (Pagos > Renovaciones). Productos que se venden al
+-- cliente como plan anual pero que Liordark paga/renueva mes a mes con el
+-- proveedor. El bot revisa next_renewal_date todos los días y avisa por
+-- Telegram cuando se acerca — independiente del vencimiento del cliente.
+CREATE TABLE IF NOT EXISTS provider_subscriptions (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_name       TEXT    NOT NULL,
+  cost_amount        TEXT    NOT NULL DEFAULT '0',
+  cost_currency      TEXT    NOT NULL DEFAULT 'USDT',
+  next_renewal_date  TEXT    NOT NULL,  -- YYYY-MM-DD
+  notes              TEXT    NOT NULL DEFAULT '',
+  active             INTEGER NOT NULL DEFAULT 1,
+  created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+);

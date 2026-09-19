@@ -256,6 +256,134 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // SUSCRIPCIONES PROPIAS (Pagos > Renovaciones)
+  // Productos vendidos como plan anual pero pagados/renovados mes a mes
+  // con el proveedor. El bot avisa por Telegram cuando se acerca la fecha.
+  // ─────────────────────────────────────────────────────────────
+
+  let cachedSubscriptions = [];
+
+  function subscriptionApi(path, options) { return api("/api/renewals", path, options); }
+
+  function fmtDateLocal(dateISO) {
+    const [y, m, d] = dateISO.split("-");
+    return d + "/" + m + "/" + y;
+  }
+
+  function renderSubscription(s) {
+    const li = document.createElement("li");
+    li.className = "catalog-item";
+    li.dataset.id = s.id;
+    li.innerHTML = `
+      <div class="catalog-thumb catalog-thumb-empty">🔁</div>
+      <div class="catalog-main">
+        <div class="catalog-name">${escapeHtml(s.productName)}</div>
+        <div class="catalog-desc">
+          💰 ${escapeHtml(s.costAmount)} ${escapeHtml(s.costCurrency)} ·
+          📅 Próxima renovación: ${fmtDateLocal(s.nextRenewalDate)}
+          ${s.notes ? " · " + escapeHtml(s.notes) : ""}
+        </div>
+      </div>
+      <div class="catalog-actions">
+        <button class="icon-btn-sm subscription-renewed-btn" title="Marcar como renovado (+1 mes)">✅</button>
+        <button class="icon-btn-sm subscription-edit-btn" title="Editar">✏️</button>
+        <button class="icon-btn-sm subscription-delete-btn" title="Eliminar">🗑️</button>
+      </div>
+    `;
+    return li;
+  }
+
+  function renderSubscriptionList() {
+    const list  = document.getElementById("subscription-list");
+    const empty = document.getElementById("subscription-empty");
+    list.innerHTML = "";
+    if (cachedSubscriptions.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const s of cachedSubscriptions) list.appendChild(renderSubscription(s));
+  }
+
+  async function loadSubscriptions() {
+    const { subscriptions } = await subscriptionApi("/subscriptions");
+    cachedSubscriptions = subscriptions;
+    renderSubscriptionList();
+  }
+
+  let editingSubscriptionId = null;
+
+  function openSubscriptionModal(subscription) {
+    editingSubscriptionId = subscription ? subscription.id : null;
+    document.getElementById("subscription-modal-title").textContent = subscription ? "Editar suscripción" : "Agregar suscripción";
+    document.getElementById("subscription-productName").value     = subscription?.productName ?? "";
+    document.getElementById("subscription-costAmount").value      = subscription?.costAmount ?? "";
+    document.getElementById("subscription-costCurrency").value    = subscription?.costCurrency ?? "USDT";
+    document.getElementById("subscription-nextRenewalDate").value = subscription?.nextRenewalDate ?? "";
+    document.getElementById("subscription-notes").value           = subscription?.notes ?? "";
+    document.getElementById("subscription-error").hidden = true;
+    document.getElementById("subscription-modal").hidden = false;
+  }
+
+  function initSubscriptionModal() {
+    document.getElementById("subscription-new-btn").addEventListener("click", () => openSubscriptionModal(null));
+    document.getElementById("subscription-cancel").addEventListener("click", () => {
+      document.getElementById("subscription-modal").hidden = true;
+    });
+
+    document.getElementById("subscription-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("subscription-error");
+      errorEl.hidden = true;
+
+      const body = {
+        productName:     document.getElementById("subscription-productName").value.trim(),
+        costAmount:      document.getElementById("subscription-costAmount").value.trim(),
+        costCurrency:    document.getElementById("subscription-costCurrency").value,
+        nextRenewalDate: document.getElementById("subscription-nextRenewalDate").value,
+        notes:           document.getElementById("subscription-notes").value.trim(),
+      };
+
+      try {
+        if (editingSubscriptionId) {
+          await subscriptionApi("/subscriptions/" + editingSubscriptionId, { method: "PUT", body: JSON.stringify(body) });
+        } else {
+          await subscriptionApi("/subscriptions", { method: "POST", body: JSON.stringify(body) });
+        }
+        document.getElementById("subscription-modal").hidden = true;
+        await loadSubscriptions();
+      } catch (err) {
+        errorEl.textContent = err.message || "No se pudo guardar la suscripción.";
+        errorEl.hidden = false;
+      }
+    });
+  }
+
+  function initSubscriptionListActions() {
+    document.getElementById("subscription-list").addEventListener("click", async (e) => {
+      const li = e.target.closest(".catalog-item");
+      if (!li) return;
+      const id = Number(li.dataset.id);
+      const subscription = cachedSubscriptions.find(s => s.id === id);
+      if (!subscription) return;
+
+      if (e.target.closest(".subscription-renewed-btn")) {
+        if (!confirm(`¿Marcar "${subscription.productName}" como renovado? La próxima fecha se adelanta un mes.`)) return;
+        try {
+          await subscriptionApi("/subscriptions/" + id + "/mark-renewed", { method: "POST" });
+          await loadSubscriptions();
+        } catch (err) { alert(err.message || "No se pudo marcar como renovado."); }
+        return;
+      }
+      if (e.target.closest(".subscription-edit-btn")) { openSubscriptionModal(subscription); return; }
+      if (e.target.closest(".subscription-delete-btn")) {
+        if (!confirm(`¿Eliminar la suscripción "${subscription.productName}"?`)) return;
+        try {
+          await subscriptionApi("/subscriptions/" + id, { method: "DELETE" });
+          await loadSubscriptions();
+        } catch (err) { alert(err.message || "No se pudo eliminar la suscripción."); }
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────────────
 
@@ -267,7 +395,9 @@
     initMethodListActions();
     initProviderModal();
     initProviderListActions();
+    initSubscriptionModal();
+    initSubscriptionListActions();
   }
 
-  window.LiordarkSettings = { init, loadMethods, loadProviders };
+  window.LiordarkSettings = { init, loadMethods, loadProviders, loadSubscriptions };
 })();
