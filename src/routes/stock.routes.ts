@@ -9,8 +9,9 @@ import {
   listExpiringClients,
   getProfileById,
   getAccountById,
+  createAccountsBulk,
 } from "../db/access.repository";
-import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
+import { renewAccount, accountStatus, daysLeft, limaTodayISO, addDaysISO } from "../services/access.service";
 import {
   createPendingOrder,
   confirmPendingOrderPayment,
@@ -194,15 +195,31 @@ router.post("/renewals/:orderName/confirm", (req, res) => {
   res.json({ success: true, found });
 });
 
-// ── BITÁCORA DE CANVA (reemplaza el registro en 'CANVA ANUAL' de Sheets) ──
+// ── CANVA — registro de la aprobación + alta en Accesos con vencimiento
+// a 365 días, para tener control total de las cuentas anuales (antes solo
+// quedaba en una bitácora aparte que no se veía en Accesos). ──
+
+const CANVA_PLAN_DAYS = 365;
 
 router.post("/canva-orders", (req, res) => {
-  const { orderName, phone, clientEmail } = req.body ?? {};
+  const { orderName, phone, clientEmail, platform } = req.body ?? {};
   if (!orderName?.trim() || !phone?.trim()) {
     res.status(400).json({ message: "Faltan orderName o phone." });
     return;
   }
-  logCanvaOrder({ orderName, phone, clientEmail: typeof clientEmail === "string" ? clientEmail : "" });
+  const email = typeof clientEmail === "string" ? clientEmail : "";
+  logCanvaOrder({ orderName, phone, clientEmail: email });
+
+  if (email) {
+    createAccountsBulk({
+      platform:    typeof platform === "string" && platform.trim() ? platform : "CANVA ANUAL",
+      provider:    "",
+      hasProfiles: false,
+      expiresAt:   addDaysISO(limaTodayISO(), CANVA_PLAN_DAYS),
+      pairs:       [{ email, password: "" }],
+    });
+  }
+
   res.status(201).json({ success: true });
 });
 
