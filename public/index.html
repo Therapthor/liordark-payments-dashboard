@@ -158,6 +158,7 @@
             <button id="access-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
           </div>
           <button id="access-history-btn" class="btn-secondary">🗄 Historial</button>
+          <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
           <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
         </div>
 
@@ -641,6 +642,26 @@
       <div class="modal-actions">
         <button type="button" id="account-edit-cancel" class="btn-secondary">Cancelar</button>
         <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: pedido combo (varias plataformas a un cliente) ───────────── -->
+  <div id="combo-order-modal" class="modal-backdrop" hidden>
+    <form id="combo-order-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Nuevo pedido</h3>
+        <button type="button" class="modal-x" data-close-modal="combo-order-modal">✕</button>
+      </div>
+      <label>Teléfono del cliente
+        <input id="combo-order-phone" type="text" inputmode="numeric" placeholder="51987654321" required />
+      </label>
+      <label>Plataformas a llevarse</label>
+      <ul id="combo-order-platforms" class="catalog-list combo-order-platforms"></ul>
+      <p id="combo-order-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="combo-order-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Crear pedido y preparar mensaje</button>
       </div>
     </form>
   </div>

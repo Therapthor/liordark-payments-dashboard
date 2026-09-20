@@ -14,9 +14,11 @@ import {
   createAccountFromRenewal,
   listProviderRenewalAccounts,
   markProviderRenewalRenewed,
+  sellProfile,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
   type RenewalStatus,
+  type SoldProfile,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
@@ -166,6 +168,33 @@ router.put("/accounts/:id", (req, res) => {
 router.delete("/accounts/:id", (req, res) => {
   deleteAccount(Number(req.params.id));
   res.json({ ok: true });
+});
+
+// ── PEDIDO (combo) — venta manual de varias plataformas a un solo
+// cliente de una vez, para armar combos por WhatsApp sin mandar los
+// perfiles uno por uno. Vende de verdad (ocupa perfiles reales). ──
+
+router.post("/combo-order", (req, res) => {
+  const { phone, platforms } = req.body ?? {};
+  const digits = String(phone ?? "").replace(/\D/g, "");
+
+  if (!digits) { res.status(400).json({ message: "Falta el teléfono del cliente." }); return; }
+  if (!Array.isArray(platforms) || platforms.length === 0) {
+    res.status(400).json({ message: "Elige al menos una plataforma." });
+    return;
+  }
+
+  const orderRef = "COMBO-" + digits + "-" + Date.now();
+  const sold: SoldProfile[] = [];
+  const failed: string[] = [];
+
+  for (const platform of platforms) {
+    if (typeof platform !== "string" || !platform.trim()) continue;
+    const result = sellProfile(platform, digits, orderRef);
+    if (result) sold.push(result); else failed.push(platform);
+  }
+
+  res.status(sold.length > 0 ? 201 : 409).json({ orderRef, sold, failed });
 });
 
 // ── RENOVACIÓN CON PROVEEDOR (Pagos > Renovaciones) ──

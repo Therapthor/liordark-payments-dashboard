@@ -901,6 +901,92 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // PEDIDO (combo) — vender varias plataformas de una vez al mismo
+  // cliente y armar un solo mensaje de WhatsApp con todo, para no tener
+  // que enviar cada cuenta por separado en pedidos combo.
+  // ─────────────────────────────────────────────────────────────
+
+  async function openComboOrderModal() {
+    document.getElementById("combo-order-form").reset();
+    document.getElementById("combo-order-error").hidden = true;
+
+    const list = document.getElementById("combo-order-platforms");
+    list.innerHTML = `<li>Cargando plataformas…</li>`;
+    document.getElementById("combo-order-modal").hidden = false;
+
+    const { platforms } = await api("/platforms");
+    if (platforms.length === 0) {
+      list.innerHTML = `<li>No hay plataformas cargadas en Accesos.</li>`;
+      return;
+    }
+
+    list.innerHTML = platforms.map(p => {
+      const free = p.sellableCount;
+      const disabled = free > 0 ? "" : "disabled";
+      return `
+        <li>
+          <label>
+            <input type="checkbox" value="${escapeHtml(p.platform)}" ${disabled} />
+            ${escapeHtml(p.platform)}
+          </label>
+          <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${free} disponible(s)</span>
+        </li>
+      `;
+    }).join("");
+  }
+
+  function buildComboMessage(sold) {
+    const bloques = sold.map(p => msgEntrega(p)).join("\n\n———————————————\n\n");
+    return bloques + "\n\n———————————————\n\n💜 *¡Gracias por tu compra!* <3";
+  }
+
+  function initComboOrderModal() {
+    document.getElementById("access-combo-order-btn").addEventListener("click", openComboOrderModal);
+    document.getElementById("combo-order-cancel").addEventListener("click", () => {
+      document.getElementById("combo-order-modal").hidden = true;
+    });
+
+    document.getElementById("combo-order-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("combo-order-error");
+      errorEl.hidden = true;
+
+      const phone = document.getElementById("combo-order-phone").value.trim();
+      const platforms = Array.from(
+        document.querySelectorAll("#combo-order-platforms input[type=checkbox]:checked")
+      ).map(cb => cb.value);
+
+      if (!phone) { errorEl.textContent = "Falta el teléfono del cliente."; errorEl.hidden = false; return; }
+      if (platforms.length === 0) { errorEl.textContent = "Elige al menos una plataforma."; errorEl.hidden = false; return; }
+
+      try {
+        const { sold, failed } = await api("/combo-order", {
+          method: "POST",
+          body: JSON.stringify({ phone, platforms }),
+        });
+
+        if (sold.length === 0) {
+          errorEl.textContent = "No se pudo vender ninguna plataforma (sin stock).";
+          errorEl.hidden = false;
+          return;
+        }
+
+        document.getElementById("combo-order-modal").hidden = true;
+        window.open(waLink(phone, buildComboMessage(sold)), "_blank");
+
+        if (failed.length > 0) {
+          alert("Se vendieron " + sold.length + " plataforma(s). Sin stock para: " + failed.join(", ") + ".");
+        }
+
+        await refresh();
+      } catch (err) {
+        errorEl.textContent = err.message || "No se pudo crear el pedido.";
+        errorEl.hidden = false;
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // RENOVACIÓN CON PROVEEDOR (Pagos > Renovaciones)
   // Cuentas de Accesos marcadas con "avisar renovación con proveedor" —
   // se venden como plan anual pero se pagan mes a mes. Solo lectura acá;
@@ -975,6 +1061,7 @@
     initSearch();
     initClientSummarySend();
     initProviderRenewalListActions();
+    initComboOrderModal();
   }
 
   window.LiordarkAccess = { init, load, loadProviderRenewals };
