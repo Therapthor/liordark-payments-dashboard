@@ -5,6 +5,7 @@ import {
   listPlatforms,
   sellProfile,
   releaseProfilesByPhone,
+  releaseProfilesByOrderRef,
   findAccountByClientPhone,
   listExpiringClients,
   getProfileById,
@@ -149,6 +150,19 @@ router.post("/release", (req, res) => {
     return;
   }
   const released = releaseProfilesByPhone(platform, clientPhone);
+  res.json({ released });
+});
+
+// POST /release-by-order-ref — { orderRef } → libera solo los perfiles de
+// esa orden exacta (usado por combos para revertir una venta parcial sin
+// tocar otras cuentas del mismo cliente).
+router.post("/release-by-order-ref", (req, res) => {
+  const { orderRef } = req.body ?? {};
+  if (!orderRef?.trim()) {
+    res.status(400).json({ message: "Falta orderRef." });
+    return;
+  }
+  const released = releaseProfilesByOrderRef(orderRef);
   res.json({ released });
 });
 

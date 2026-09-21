@@ -411,6 +411,20 @@ export function releaseProfilesByPhone(platform: string, clientPhone: string): n
   return result.changes;
 }
 
+/** Libera SOLO los perfiles de ese order_ref exacto — a diferencia de
+ *  releaseProfilesByPhone, no toca otras cuentas que ese mismo cliente
+ *  ya tuviera en la misma plataforma. Usado para revertir una venta
+ *  combo parcial (algunos ítems vendidos, otro sin stock). */
+export function releaseProfilesByOrderRef(orderRef: string): number {
+  if (!orderRef.trim()) return 0;
+  const result = db.prepare(`
+    UPDATE access_profiles
+    SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now')
+    WHERE order_ref = ?
+  `).run(orderRef);
+  return result.changes;
+}
+
 /** Cuenta (con perfil) de ese cliente en esa plataforma — para renovar o confirmar datos. */
 export function findAccountByClientPhone(platform: string, clientPhone: string): AccessAccountWithProfiles | null {
   const plat = platform.trim().toUpperCase();
