@@ -448,6 +448,7 @@ export function listExpiringClients(days: number): ExpiringClient[] {
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
     WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= ?
+      AND p.order_ref NOT LIKE 'combo:%'
     ORDER BY a.expires_at ASC
   `).all(limit) as ExpiringClient[];
 }

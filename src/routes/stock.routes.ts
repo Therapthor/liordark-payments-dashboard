@@ -22,6 +22,7 @@ import { createRenewalLog, confirmRenewalLog } from "../db/renewal-log.repositor
 import { logCanvaOrder } from "../db/canva-order.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { getBotFlowConfig } from "../db/bot-flow.repository";
+import { listCombos } from "../db/combo.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -65,6 +66,32 @@ router.get("/catalog", (_req, res) => {
   });
 
   res.json({ catalog });
+});
+
+// GET /combos — combos activos, con disponibilidad real de CADA plataforma
+// que lo compone (inStock = false si a alguna le falta stock vendible).
+router.get("/combos", (_req, res) => {
+  const combos = listCombos(true);
+  const summaries = listPlatforms();
+
+  const result = combos.map(c => {
+    const items = c.items.map(item => {
+      const summary = summaries.find(s => s.platform === item.platform.trim().toUpperCase());
+      const available = summary ? summary.sellableCount : 0;
+      return { platform: item.platform, available, inStock: available >= item.quantity };
+    });
+    return {
+      id:          c.id,
+      name:        c.name,
+      price:       c.price,
+      description: c.description,
+      imageUrl:    c.imageUrl,
+      items,
+      inStock: items.every(i => i.inStock),
+    };
+  });
+
+  res.json({ combos: result });
 });
 
 // POST /sell — { platform, clientPhone, orderRef? } → vende el perfil libre más próximo a vencer.
