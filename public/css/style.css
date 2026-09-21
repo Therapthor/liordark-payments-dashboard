@@ -550,6 +550,10 @@ button, input {
 .flow-form-saved { color: var(--good); font-size: 13px; opacity: 0; transition: opacity 0.25s; }
 .flow-form-saved.show { opacity: 1; }
 
+.principal-image-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.principal-image-preview { width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.principal-image-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
 .btn-primary, .btn-secondary {
   border: none;
   padding: 10px 18px;

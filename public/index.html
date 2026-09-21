@@ -342,6 +342,18 @@
 
           <p class="panel-hint">Textos y títulos que usa el bot en WhatsApp — se editan acá, sin tocar código. El bot los toma en unos minutos (no hace falta redeploy).</p>
 
+          <form id="principal-image-form" class="flow-form">
+            <h3>Imagen principal del menú</h3>
+            <div class="principal-image-row">
+              <img id="principal-image-preview" class="principal-image-preview" alt="Imagen principal actual" hidden />
+              <div class="principal-image-controls">
+                <input id="principal-image-file" type="file" accept="image/*" />
+                <button type="submit" class="btn-primary">Subir y reemplazar</button>
+              </div>
+            </div>
+            <p id="principal-image-status" class="panel-hint" hidden></p>
+          </form>
+
           <form id="flow-form" class="flow-form">
 
             <h3>Bienvenida</h3>

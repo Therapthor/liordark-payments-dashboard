@@ -23,4 +23,11 @@ export const env = {
   DASHBOARD_API_KEY: getEnv("DASHBOARD_API_KEY"),
   DASHBOARD_PASSWORD: getEnv("DASHBOARD_PASSWORD"),
   SESSION_SECRET: getEnv("SESSION_SECRET"),
+
+  // Mismas credenciales que ya usa el bot — el panel sube ahí la imagen
+  // principal del menú de WhatsApp (Configuración > Flujo).
+  CLOUDINARY_CLOUD_NAME:   getEnv("CLOUDINARY_CLOUD_NAME", false),
+  CLOUDINARY_API_KEY:      getEnv("CLOUDINARY_API_KEY", false),
+  CLOUDINARY_API_SECRET:   getEnv("CLOUDINARY_API_SECRET", false),
+  CLOUDINARY_FOLDER_UTILS: getEnv("CLOUDINARY_FOLDER_UTILS", false),
 };

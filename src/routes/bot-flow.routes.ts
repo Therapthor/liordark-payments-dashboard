@@ -1,11 +1,14 @@
 import { Router } from "express";
+import multer from "multer";
 import {
   getBotFlowConfig,
   updateBotFlowConfig,
   type BotFlowConfig,
 } from "../db/bot-flow.repository";
+import { replacePrincipalImage, getPrincipalImageUrl, isCloudinaryConfigured } from "../services/cloudinary.service";
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 function parseBody(body: any): Omit<BotFlowConfig, "updatedAt"> {
   return {
@@ -57,6 +60,36 @@ router.put("/", (req, res) => {
   }
 
   res.json({ config: updateBotFlowConfig(data) });
+});
+
+// ── Imagen principal del menú de WhatsApp ──
+// El bot la toma directo de Cloudinary (no de esta tabla) — acá solo se
+// sube/reemplaza, y se lee para mostrarla en el panel.
+
+router.get("/principal-image", async (_req, res) => {
+  try {
+    const url = await getPrincipalImageUrl();
+    res.json({ url, configured: isCloudinaryConfigured() });
+  } catch (err: any) {
+    res.status(502).json({ message: err?.message || "No se pudo consultar Cloudinary." });
+  }
+});
+
+router.post("/principal-image", upload.single("image"), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ message: "Falta la imagen." });
+    return;
+  }
+  if (!req.file.mimetype.startsWith("image/")) {
+    res.status(400).json({ message: "El archivo debe ser una imagen." });
+    return;
+  }
+  try {
+    const url = await replacePrincipalImage(req.file.buffer);
+    res.json({ url });
+  } catch (err: any) {
+    res.status(502).json({ message: err?.message || "No se pudo subir la imagen." });
+  }
 });
 
 export default router;
