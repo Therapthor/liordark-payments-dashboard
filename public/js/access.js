@@ -73,7 +73,7 @@
   function msgResumen(items) {
     const lines = items.map((it, i) => {
       const perfilLine = it.profileName ? `\n👤 Perfil: ${it.profileName}` : "";
-      return `${i + 1}️⃣ *${it.platform}*${perfilLine}\n⏳ Vence: ${fmtDateLong(it.expiresAt)} (${daysLabel(it.status, it.daysLeft)})`;
+      return `${i + 1}️⃣ *${it.platform}*${perfilLine}\n📧 Correo: ${it.email}\n🔑 Contraseña: ${it.password}\n⏳ Vence: ${fmtDateLong(it.expiresAt)} (${daysLabel(it.status, it.daysLeft)})`;
     }).join("\n\n");
     return `📋 *Resumen de tus cuentas*\n\n${lines}`;
   }
