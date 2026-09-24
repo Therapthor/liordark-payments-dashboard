@@ -228,6 +228,34 @@ button, input {
 .stat-sub { color: var(--text-secondary); font-size: 14px; margin-top: 6px; }
 
 /* ─────────────────────────────────────────────────────────────
+   RESUMEN — estado de conectores
+───────────────────────────────────────────────────────────── */
+.connectors-panel { margin-bottom: 20px; }
+
+.connectors-list { display: flex; flex-direction: column; gap: 4px; }
+
+.connector-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--gridline);
+}
+.connector-item:last-child { border-bottom: none; }
+
+.connector-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+.connector-dot--ok   { background: var(--good); box-shadow: 0 0 6px rgba(22,163,74,0.5); }
+.connector-dot--warn { background: var(--warning); box-shadow: 0 0 6px rgba(180,120,10,0.4); }
+
+.connector-name { font-size: 14px; font-weight: 600; flex: 1; }
+.connector-state { font-size: 13px; color: var(--text-secondary); }
+
+/* ─────────────────────────────────────────────────────────────
    PANELS
 ───────────────────────────────────────────────────────────── */
 .panel-grid {

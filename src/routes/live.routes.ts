@@ -3,6 +3,7 @@ import { getRecentPayments, searchByCode } from "../db/payments.repository";
 import { getSummary } from "../services/stats.service";
 import { onDashboardEvent } from "../utils/live-events.util";
 import { getConnectionStatus } from "../services/sync.service";
+import { checkCloudinaryStatus } from "../services/cloudinary.service";
 
 const router = Router();
 
@@ -11,6 +12,16 @@ router.get("/initial", (_req, res) => {
   res.json({
     payments: getRecentPayments(50),
     stats:    getSummary(),
+  });
+});
+
+// Estado de las integraciones externas — para el panel "Resumen".
+// El bot ya se chequea solo (stream SSE); Cloudinary se pinguea al vuelo
+// porque no hay una conexión persistente que avise sola si se cae.
+router.get("/connectors", async (_req, res) => {
+  res.json({
+    bot:        getConnectionStatus(),
+    cloudinary: await checkCloudinaryStatus(),
   });
 });
 

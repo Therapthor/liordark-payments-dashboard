@@ -31,12 +31,12 @@
       </div>
 
       <nav class="tabs">
+        <button class="tab-btn active" data-view="resumen">Resumen</button>
         <div class="tab-dropdown" id="pagos-dropdown">
-          <button class="tab-btn tab-dropdown-toggle active" id="pagos-toggle" type="button">
+          <button class="tab-btn tab-dropdown-toggle" id="pagos-toggle" type="button">
             Pagos <span class="tab-dropdown-caret">▾</span>
           </button>
           <div class="tab-dropdown-menu" id="pagos-menu" hidden>
-            <button class="tab-dropdown-item active" data-view="live">En vivo</button>
             <button class="tab-dropdown-item" data-view="history">Historial</button>
             <button class="tab-dropdown-item" data-view="renewals">Renovaciones</button>
           </div>
@@ -57,8 +57,27 @@
 
     <main class="content">
 
-      <!-- ═══════════ VISTA: EN VIVO ═══════════ -->
+      <!-- ═══════════ VISTA: RESUMEN ═══════════ -->
       <section id="view-live" class="view">
+
+        <!-- Estado de las integraciones externas — de un vistazo, sin tener que ir a mirar logs. -->
+        <div class="panel connectors-panel">
+          <div class="panel-header">
+            <h2>Estado de conectores</h2>
+          </div>
+          <div class="connectors-list">
+            <div class="connector-item">
+              <span id="connector-dot-bot" class="connector-dot"></span>
+              <span class="connector-name">Bot de WhatsApp</span>
+              <span id="connector-state-bot" class="connector-state">Conectando…</span>
+            </div>
+            <div class="connector-item">
+              <span id="connector-dot-cloudinary" class="connector-dot"></span>
+              <span class="connector-name">Cloudinary (imágenes)</span>
+              <span id="connector-state-cloudinary" class="connector-state">Verificando…</span>
+            </div>
+          </div>
+        </div>
 
         <!-- Arriba de todo — para ver la tendencia de un vistazo antes de los montos puntuales. -->
         <div class="panel chart-panel">

@@ -206,13 +206,13 @@
   // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
   // Renovaciones); "Accesos" es un botón directo aparte.
   function switchView(view) {
-    document.getElementById("view-live").hidden     = view !== "live";
+    document.getElementById("view-live").hidden     = view !== "resumen";
     document.getElementById("view-access").hidden   = view !== "access";
     document.getElementById("view-history").hidden  = view !== "history";
     document.getElementById("view-renewals").hidden = view !== "renewals";
     document.getElementById("view-config").hidden   = view !== "config";
 
-    const isPagos = view === "live" || view === "history" || view === "renewals";
+    const isPagos = view === "history" || view === "renewals";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
     document.querySelectorAll(".tab-dropdown-item").forEach(item => {
       item.classList.toggle("active", item.dataset.view === view);
@@ -452,6 +452,37 @@
     } else {
       el.classList.add("conn-connecting");
       el.innerHTML = `<span class="conn-dot"></span> Conectando…`;
+    }
+    setConnectorRow("bot", status === "connected", status === "connected" ? "En línea" : "Reconectando…");
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // RESUMEN — estado de conectores (bot + Cloudinary)
+  // ─────────────────────────────────────────────────────────────
+
+  const CONNECTORS_POLL_MS = 30_000;
+  const CLOUDINARY_STATE_LABEL = {
+    ok:             "Conectado",
+    error:          "Con errores",
+    not_configured: "No configurado",
+  };
+
+  function setConnectorRow(key, ok, text) {
+    const dot   = document.getElementById(`connector-dot-${key}`);
+    const state = document.getElementById(`connector-state-${key}`);
+    if (!dot || !state) return;
+    dot.classList.toggle("connector-dot--ok", ok);
+    dot.classList.toggle("connector-dot--warn", !ok);
+    state.textContent = text;
+  }
+
+  async function loadConnectorsStatus() {
+    try {
+      const { bot, cloudinary } = await api("/live/connectors");
+      setConnectorRow("bot", bot === "connected", bot === "connected" ? "En línea" : "Reconectando…");
+      setConnectorRow("cloudinary", cloudinary === "ok", CLOUDINARY_STATE_LABEL[cloudinary] || "Sin datos");
+    } catch {
+      setConnectorRow("cloudinary", false, "Sin datos");
     }
   }
 
@@ -1116,6 +1147,9 @@
     loadPendingOrders();
     loadApprovedOrders();
     setInterval(loadPendingOrders, ORDERS_POLL_MS);
+
+    loadConnectorsStatus();
+    setInterval(loadConnectorsStatus, CONNECTORS_POLL_MS);
   }
 
   checkAuth();

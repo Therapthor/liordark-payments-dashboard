@@ -9,6 +9,18 @@ export function isCloudinaryConfigured(): boolean {
   return !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
 }
 
+/** Ping real a la cuenta de Cloudinary — para el panel de "Estado de conectores". */
+export async function checkCloudinaryStatus(): Promise<"ok" | "error" | "not_configured"> {
+  if (!isCloudinaryConfigured()) return "not_configured";
+  ensureConfigured();
+  try {
+    await cloudinary.api.ping();
+    return "ok";
+  } catch {
+    return "error";
+  }
+}
+
 function principalFolder(): string {
   return `${env.CLOUDINARY_FOLDER_UTILS || "utilitarios"}/principal`;
 }
