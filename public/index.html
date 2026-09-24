@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Liordark — Panel de Pagos</title>
 <link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -187,7 +188,20 @@
           </div>
         </div>
 
-        <p class="panel-hint" id="history-lastmonth-hint">Mes pasado: <b id="history-lastmonth-total">S/ 0.00</b> · <span id="history-lastmonth-count">0 pagos</span></p>
+        <p class="panel-hint">
+          Este mes: <b id="history-month-total">S/ 0.00</b> · <span id="history-month-count">0 pagos</span>
+          &nbsp;·&nbsp;
+          <span id="history-lastmonth-label">Mes pasado</span>: <b id="history-lastmonth-total">S/ 0.00</b> · <span id="history-lastmonth-count">0 pagos</span>
+        </p>
+
+        <div class="panel chart-panel">
+          <div class="panel-header">
+            <h2>Últimos 30 días</h2>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="chart-daily"></canvas>
+          </div>
+        </div>
 
         <div class="panel">
           <table class="history-table">

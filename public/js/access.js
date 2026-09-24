@@ -987,34 +987,6 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // PEDIR STOCK AL PROVEEDOR (usado desde el aviso de "Sin stock" del
-  // Resumen) — busca el proveedor de la cuenta más reciente de esa
-  // plataforma (aunque esté sin perfiles libres) y abre WhatsApp.
-  // ─────────────────────────────────────────────────────────────
-
-  async function requestStockFromProvider(platform) {
-    const [{ accounts }] = await Promise.all([
-      api("/platforms/" + encodeURIComponent(platform) + "/accounts"),
-      loadProviderCatalog(),
-    ]);
-
-    const withProvider = accounts.find(a => a.provider);
-    if (!withProvider) {
-      alert(`"${platform}" no tiene proveedor asignado en ninguna cuenta. Asígnalo editando una cuenta en Accesos.`);
-      return;
-    }
-
-    const phone = providerWhatsapp(withProvider.provider);
-    if (!phone) {
-      alert(`No hay WhatsApp guardado para "${withProvider.provider}". Agrégalo en Configuración > Proveedores.`);
-      return;
-    }
-
-    const msg = `Hola! Se acabó el stock de *${platform}*. ¿Tienes cuentas disponibles?`;
-    window.open(waLink(phone, msg), "_blank");
-  }
-
-  // ─────────────────────────────────────────────────────────────
   // RENOVACIÓN CON PROVEEDOR (Pagos > Renovaciones)
   // Cuentas de Accesos marcadas con "avisar renovación con proveedor" —
   // se venden como plan anual pero se pagan mes a mes. Solo lectura acá;
@@ -1092,5 +1064,5 @@
     initComboOrderModal();
   }
 
-  window.LiordarkAccess = { init, load, loadProviderRenewals, openComboOrderModal, requestStockFromProvider };
+  window.LiordarkAccess = { init, load, loadProviderRenewals, openComboOrderModal };
 })();

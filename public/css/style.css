@@ -252,25 +252,12 @@ button, input {
 .dock-stock-list {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column; gap: 4px;
-  max-height: 180px; overflow-y: auto;
 }
 .dock-stock-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .dock-stock-name {
   font-size: 12px; font-weight: 600; flex: 1;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dock-stock-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 999px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.dock-stock-btn:hover { border-color: var(--accent); color: var(--text-primary); }
 .dock-stock-ok { margin: 2px 0; font-size: 12px; color: var(--good); }
 
 .resumen-top-grid { margin-bottom: 20px; align-items: stretch; }
@@ -319,6 +306,9 @@ button, input {
 .panel-header h2 { margin: 0; font-size: 18px; font-weight: 700; }
 .panel-header.standalone { margin-bottom: 18px; }
 .panel-hint { color: var(--text-muted); font-size: 13px; }
+
+.chart-panel { margin-bottom: 20px; margin-top: 16px; }
+.chart-wrap { height: 320px; position: relative; }
 
 /* ─────────────────────────────────────────────────────────────
    FEED EN VIVO

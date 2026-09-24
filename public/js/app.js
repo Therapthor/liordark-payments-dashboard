@@ -215,7 +215,7 @@
       btn.classList.toggle("active", btn.dataset.view === view);
     });
 
-    if (view === "history") loadHistory();
+    if (view === "history") { loadHistory(); loadChart(); }
     if (view === "renewals") {
       loadRenewalNotifications();
       if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
@@ -283,14 +283,19 @@
     setMoneyText(document.getElementById("stat-today-total"), fmtMoney(stats.today.total));
     document.getElementById("stat-today-count").textContent   = pluralPagos(stats.today.count);
 
+    // Resumido arriba del gráfico/tabla de Historial.
+    const monthTotal = document.getElementById("history-month-total");
+    const monthCount = document.getElementById("history-month-count");
+    if (monthTotal) setMoneyText(monthTotal, fmtMoney(stats.month.total));
+    if (monthCount) monthCount.textContent = pluralPagos(stats.month.count);
+
     if (stats.lastMonth) {
-      // Resumido arriba de la tabla de Historial.
       const histTotal = document.getElementById("history-lastmonth-total");
       const histCount = document.getElementById("history-lastmonth-count");
       if (histTotal) setMoneyText(histTotal, fmtMoney(stats.lastMonth.total));
       if (histCount) histCount.textContent = pluralPagos(stats.lastMonth.count);
-      const hint = document.getElementById("history-lastmonth-hint");
-      if (hint) hint.firstChild.textContent = "Mes pasado (" + fmtMonthName(stats.lastMonth.month) + "): ";
+      const label = document.getElementById("history-lastmonth-label");
+      if (label) label.textContent = "Mes pasado (" + fmtMonthName(stats.lastMonth.month) + ")";
     }
   }
 
@@ -495,15 +500,8 @@
         <li class="dock-stock-item">
           <span class="connector-dot connector-dot--warn"></span>
           <span class="dock-stock-name">${escapeHtml(p.platform)}</span>
-          <button class="dock-stock-btn stock-request-btn" data-platform="${escapeHtml(p.platform)}">Solicitar</button>
         </li>
       `).join("");
-
-      list.querySelectorAll(".stock-request-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          if (window.LiordarkAccess) window.LiordarkAccess.requestStockFromProvider(btn.dataset.platform);
-        });
-      });
     } catch {
       list.innerHTML = "";
       ok.hidden = true;
@@ -535,6 +533,7 @@
 
       if (evt.type === "stats") {
         renderStats(evt.stats);
+        refreshChartIfStale();
       }
 
       if (evt.type === "order_approved") {
@@ -814,6 +813,81 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // GRÁFICO — últimos 30 días (Pagos > Historial)
+  // ─────────────────────────────────────────────────────────────
+
+  let chart = null;
+  let lastChartLoad = 0;
+
+  async function loadChart() {
+    const { days } = await api("/history?days=30");
+    const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date));
+
+    const labels = ordered.map(d => fmtDateShort(d.date));
+    const totals = ordered.map(d => d.total);
+    const today  = todayLima();
+
+    const canvas = document.getElementById("chart-daily");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const barColors = ordered.map(d => d.date === today ? "#16a34a" : "rgba(22,163,74,0.55)");
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Ingresos",
+          data: totals,
+          backgroundColor: barColors,
+          borderRadius: 4,
+          maxBarThickness: 22,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => moneyHidden ? "S/ " + MONEY_MASK : "S/ " + ctx.parsed.y.toLocaleString("es-PE", { minimumFractionDigits: 2 }),
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: "#9a9a9a", font: { size: 11 } },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: "#efefef" },
+            ticks: {
+              color: "#9a9a9a",
+              font: { size: 11 },
+              callback: (v) => moneyHidden ? MONEY_MASK : "S/ " + v,
+            },
+          },
+        },
+      },
+    });
+
+    lastChartLoad = Date.now();
+  }
+
+  function refreshChartIfStale() {
+    if (Date.now() - lastChartLoad > 30_000) loadChart();
+  }
+
+  function fmtDateShort(ymd) {
+    const [, m, d] = ymd.split("-");
+    const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+    return `${Number(d)} ${meses[Number(m) - 1]}`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // HISTORIAL
   // ─────────────────────────────────────────────────────────────
 
@@ -1061,6 +1135,7 @@
       });
       manualModal.hidden = true;
       loadHistory();
+      loadChart();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
