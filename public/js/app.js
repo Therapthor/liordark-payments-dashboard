@@ -775,7 +775,7 @@
     const today  = todayLima();
 
     const ctx = document.getElementById("chart-daily").getContext("2d");
-    const barColors = ordered.map(d => d.date === today ? "#3987e5" : "rgba(57,135,229,0.55)");
+    const barColors = ordered.map(d => d.date === today ? "#16a34a" : "rgba(22,163,74,0.55)");
 
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
