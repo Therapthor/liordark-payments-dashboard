@@ -213,23 +213,34 @@ button, input {
 .stat-sub { color: var(--text-secondary); font-size: 14px; margin-top: 6px; }
 
 /* ─────────────────────────────────────────────────────────────
-   RESUMEN — estado de conectores
+   RESUMEN — dock flotante (conectores + stock), esquina inf. izquierda
 ───────────────────────────────────────────────────────────── */
-.connectors-panel { margin-bottom: 20px; }
-
-.connectors-list { display: flex; flex-direction: column; gap: 4px; }
-
-.connector-item {
+.resumen-dock {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 40;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--gridline);
+  flex-direction: column;
+  gap: 8px;
+  width: 210px;
+  max-width: 60vw;
 }
-.connector-item:last-child { border-bottom: none; }
+
+.dock-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.10);
+}
+
+.dock-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.dock-label { font-size: 12px; font-weight: 600; flex: 1; }
+.dock-state { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 
 .connector-dot {
-  width: 9px; height: 9px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--text-muted);
@@ -237,8 +248,26 @@ button, input {
 .connector-dot--ok   { background: var(--good); box-shadow: 0 0 6px rgba(22,163,74,0.5); }
 .connector-dot--warn { background: var(--warning); box-shadow: 0 0 6px rgba(180,120,10,0.4); }
 
-.connector-name { font-size: 14px; font-weight: 600; flex: 1; }
-.connector-state { font-size: 13px; color: var(--text-secondary); }
+/* "rectángulo delgado" — filas chicas, una por plataforma sin stock */
+.dock-stock-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dock-stock-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+.dock-stock-name {
+  font-size: 12px; font-weight: 600; flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dock-stock-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dock-stock-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+.dock-stock-ok { margin: 2px 0; font-size: 12px; color: var(--good); }
 
 .resumen-top-grid { margin-bottom: 20px; align-items: stretch; }
 
@@ -249,6 +278,16 @@ button, input {
 
 .resumen-quick-action { display: flex; align-items: center; justify-content: center; }
 .resumen-quick-assign-btn { width: 100%; height: 100%; font-size: 15px; padding: 16px; }
+
+/* ── OPERATIVA DEL DÍA — 4 paneles en una sola fila ── */
+.resumen-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1200px) {
+  .resumen-ops-grid { grid-template-columns: repeat(2, 1fr); }
+}
 
 /* ─────────────────────────────────────────────────────────────
    PANELS
@@ -344,7 +383,6 @@ button, input {
 /* ─────────────────────────────────────────────────────────────
    PEDIDOS — pendientes / aprobados
 ───────────────────────────────────────────────────────────── */
-.orders-grid { margin-top: 16px; }
 .orders-count-badge {
   background: rgba(180,120,10,0.15); color: var(--warning);
   min-width: 22px; justify-content: center;
@@ -844,4 +882,6 @@ button, input {
   .access-search { max-width: none; }
   .catalog-item { flex-wrap: wrap; }
   .catalog-desc { max-width: 100%; white-space: normal; }
+  .resumen-ops-grid { grid-template-columns: 1fr; }
+  .resumen-dock { position: static; width: 100%; max-width: none; margin-bottom: 20px; }
 }

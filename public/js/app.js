@@ -492,12 +492,18 @@
 
       ok.hidden = true;
       list.innerHTML = withoutStock.map(p => `
-        <li class="connector-item">
+        <li class="dock-stock-item">
           <span class="connector-dot connector-dot--warn"></span>
-          <span class="connector-name">${escapeHtml(p.platform)}</span>
-          <span class="connector-state">Sin stock</span>
+          <span class="dock-stock-name">${escapeHtml(p.platform)}</span>
+          <button class="dock-stock-btn stock-request-btn" data-platform="${escapeHtml(p.platform)}">Solicitar</button>
         </li>
       `).join("");
+
+      list.querySelectorAll(".stock-request-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (window.LiordarkAccess) window.LiordarkAccess.requestStockFromProvider(btn.dataset.platform);
+        });
+      });
     } catch {
       list.innerHTML = "";
       ok.hidden = true;

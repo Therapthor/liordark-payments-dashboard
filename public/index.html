@@ -59,22 +59,24 @@
       <!-- ═══════════ VISTA: RESUMEN ═══════════ -->
       <section id="view-live" class="view">
 
-        <!-- Estado de las integraciones externas — de un vistazo, sin tener que ir a mirar logs. -->
-        <div class="panel connectors-panel">
-          <div class="panel-header">
-            <h2>Estado de conectores</h2>
-          </div>
-          <div class="connectors-list">
-            <div class="connector-item">
+        <!-- Estado de conectores + stock — flotante, minimal, esquina inferior izquierda. -->
+        <div class="resumen-dock">
+          <div class="dock-card">
+            <div class="dock-row">
               <span id="connector-dot-bot" class="connector-dot"></span>
-              <span class="connector-name">Bot de WhatsApp</span>
-              <span id="connector-state-bot" class="connector-state">Conectando…</span>
+              <span class="dock-label">Bot</span>
+              <span id="connector-state-bot" class="dock-state">Conectando…</span>
             </div>
-            <div class="connector-item">
+            <div class="dock-row">
               <span id="connector-dot-cloudinary" class="connector-dot"></span>
-              <span class="connector-name">Cloudinary (imágenes)</span>
-              <span id="connector-state-cloudinary" class="connector-state">Verificando…</span>
+              <span class="dock-label">Cloudinary</span>
+              <span id="connector-state-cloudinary" class="dock-state">Verificando…</span>
             </div>
+          </div>
+
+          <div class="dock-card dock-stock">
+            <ul id="stock-alert-list" class="dock-stock-list"></ul>
+            <p id="stock-alert-ok" class="dock-stock-ok" hidden>Stock OK ✅</p>
           </div>
         </div>
 
@@ -91,17 +93,8 @@
           </div>
         </div>
 
-        <!-- ── STOCK — solo avisa si algo se está por quedar sin perfiles libres ── -->
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Stock</h2>
-          </div>
-          <ul id="stock-alert-list" class="connectors-list"></ul>
-          <p id="stock-alert-ok" class="feed-empty" hidden>Todas las plataformas tienen stock ✅</p>
-        </div>
-
-        <!-- ── RENOVACIONES — mismas 3 opciones que Telegram (Nueva cuenta / Solo mensaje / Rechazar) ── -->
-        <div class="panel-grid">
+        <!-- ── OPERATIVA DEL DÍA — las 4 en una sola fila ── -->
+        <div class="resumen-ops-grid">
           <div class="panel">
             <div class="panel-header">
               <h2>Renovaciones pendientes</h2>
@@ -123,10 +116,7 @@
             <ul id="feed-list" class="feed-list"></ul>
             <p id="feed-empty" class="feed-empty">Todavía no hay pagos registrados.</p>
           </div>
-        </div>
 
-        <!-- ── PEDIDOS — control de pendientes/aprobados, como en Telegram ── -->
-        <div class="panel-grid orders-grid">
           <div class="panel">
             <div class="panel-header">
               <h2>Pedidos pendientes</h2>
