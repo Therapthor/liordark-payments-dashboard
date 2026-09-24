@@ -2,23 +2,24 @@
    PALETA — valores validados (ver skill de dataviz del proyecto)
 ───────────────────────────────────────────────────────────── */
 :root {
-  --page:           #0d0d0d;
-  --surface:        #1a1a19;
-  --surface-raised: #212120;
-  --border:         rgba(255,255,255,0.10);
-  --gridline:       #2c2c2a;
+  --page:           #ffffff;
+  --surface:        #fafafa;
+  --surface-raised: #f0f0f0;
+  --border:         #e7e7e7;
+  --gridline:       #efefef;
 
-  --text-primary:   #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted:     #898781;
+  --text-primary:   #111111;
+  --text-secondary: #6b6b6b;
+  --text-muted:     #9a9a9a;
 
-  --accent:         #3987e5; /* categórico slot 1 — azul, oscuro */
-  --accent-dim:     #1c5cab;
+  --accent:         #f5a623; /* Minimal — ámbar */
+  --accent-dim:     #d6900f;
+  --on-accent:      #171717;
 
-  --good:           #0ca30c;
-  --warning:        #fab219;
-  --serious:        #ec835a;
-  --critical:       #d03b3b;
+  --good:           #16a34a;
+  --warning:        #b4780a;
+  --serious:        #e8834c;
+  --critical:       #d93636;
 
   --radius-sm: 8px;
   --radius-md: 14px;
@@ -53,8 +54,8 @@ button, input {
   justify-content: center;
   padding: 16px;
   background:
-    radial-gradient(circle at 20% 20%, rgba(57,135,229,0.15), transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(12,163,12,0.10), transparent 40%),
+    radial-gradient(circle at 20% 20%, rgba(245,166,35,0.12), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(22,163,74,0.08), transparent 40%),
     var(--page);
 }
 
@@ -69,7 +70,7 @@ button, input {
   flex-direction: column;
   gap: 14px;
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.12);
 }
 
 .login-logo { font-size: 40px; }
@@ -89,7 +90,7 @@ button, input {
 
 .login-card button {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   padding: 12px;
   border-radius: var(--radius-sm);
@@ -134,7 +135,7 @@ button, input {
   font-weight: 500;
 }
 .tab-btn:hover { background: var(--surface-raised); }
-.tab-btn.active { background: var(--accent); color: #fff; }
+.tab-btn.active { background: var(--accent); color: var(--on-accent); }
 
 .tab-dropdown { position: relative; }
 .tab-dropdown-toggle { display: inline-flex; align-items: center; gap: 4px; }
@@ -152,7 +153,7 @@ button, input {
   flex-direction: column;
   gap: 2px;
   min-width: 140px;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.14);
   z-index: 20;
 }
 .tab-dropdown-menu[hidden] { display: none; }
@@ -168,7 +169,7 @@ button, input {
   font-size: 14px;
 }
 .tab-dropdown-item:hover { background: var(--surface); color: var(--text-primary); }
-.tab-dropdown-item.active { background: var(--accent); color: #fff; }
+.tab-dropdown-item.active { background: var(--accent); color: var(--on-accent); }
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
@@ -220,7 +221,7 @@ button, input {
   border-radius: var(--radius-md);
   padding: 26px 24px;
 }
-.stat-card--accent { border-color: rgba(57,135,229,0.4); background: linear-gradient(180deg, rgba(57,135,229,0.10), var(--surface)); }
+.stat-card--accent { border-color: rgba(245,166,35,0.4); background: linear-gradient(180deg, rgba(245,166,35,0.08), var(--surface)); }
 
 .stat-label { color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
 .stat-value { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -282,7 +283,7 @@ button, input {
 }
 .feed-item.is-new { animation: feed-flash 1.4s ease-out; }
 @keyframes feed-flash {
-  0%   { background: rgba(57,135,229,0.35); border-color: var(--accent); }
+  0%   { background: rgba(245,166,35,0.25); border-color: var(--accent); }
   100% { background: var(--surface-raised); }
 }
 
@@ -312,8 +313,8 @@ button, input {
   font-size: 11px;
   font-weight: 600;
   color: var(--good);
-  background: rgba(46, 204, 113, 0.12);
-  border: 1px solid rgba(46, 204, 113, 0.3);
+  background: rgba(22, 163, 74, 0.12);
+  border: 1px solid rgba(22, 163, 74, 0.3);
   border-radius: 6px;
   padding: 2px 6px;
 }
@@ -325,7 +326,7 @@ button, input {
 ───────────────────────────────────────────────────────────── */
 .orders-grid { margin-top: 16px; }
 .orders-count-badge {
-  background: rgba(250,178,25,0.15); color: var(--warning);
+  background: rgba(180,120,10,0.15); color: var(--warning);
   min-width: 22px; justify-content: center;
 }
 .orders-approved-list .feed-badge { align-self: flex-start; margin-top: 4px; }
@@ -365,7 +366,7 @@ button, input {
 .btn-spinner {
   display: inline-block;
   width: 12px; height: 12px;
-  border: 2px solid rgba(255,255,255,0.35);
+  border: 2px solid rgba(0,0,0,0.15);
   border-top-color: var(--text-primary);
   border-radius: 50%;
   animation: btn-spin 0.6s linear infinite;
@@ -431,11 +432,11 @@ button, input {
   font-size: 11px;
   font-weight: 600;
 }
-.badge.auto   { background: rgba(12,163,12,0.15); color: var(--good); }
-.badge.manual { background: rgba(250,178,25,0.15); color: var(--warning); }
-.badge.none   { background: rgba(137,135,129,0.15); color: var(--text-muted); }
-.badge.sent   { background: rgba(12,163,12,0.15); color: var(--good); }
-.badge.failed { background: rgba(208,59,59,0.15); color: var(--critical); cursor: help; }
+.badge.auto   { background: rgba(22,163,74,0.15); color: var(--good); }
+.badge.manual { background: rgba(180,120,10,0.15); color: var(--warning); }
+.badge.none   { background: rgba(154,154,154,0.15); color: var(--text-muted); }
+.badge.sent   { background: rgba(22,163,74,0.15); color: var(--good); }
+.badge.failed { background: rgba(217,54,54,0.15); color: var(--critical); cursor: help; }
 
 .row-delete-btn {
   background: transparent;
@@ -562,7 +563,7 @@ button, input {
   font-weight: 600;
   cursor: pointer;
 }
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
 .btn-primary:hover { background: var(--accent-dim); }
 .btn-secondary { background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border); }
 
@@ -672,10 +673,10 @@ button, input {
 .access-table tr:last-child td { border-bottom: none; }
 .access-table small { color: var(--text-muted); }
 
-.access-badge-libre   { background: rgba(137,135,129,0.15); color: var(--text-muted); }
-.access-badge-matched { background: rgba(12,163,12,0.15);   color: var(--good); }
-.access-badge-pending { background: rgba(250,178,25,0.15);  color: var(--warning); }
-.access-badge-expired { background: rgba(208,59,59,0.15);   color: var(--critical); }
+.access-badge-libre   { background: rgba(154,154,154,0.15); color: var(--text-muted); }
+.access-badge-matched { background: rgba(22,163,74,0.15);   color: var(--good); }
+.access-badge-pending { background: rgba(180,120,10,0.15);  color: var(--warning); }
+.access-badge-expired { background: rgba(217,54,54,0.15);   color: var(--critical); }
 
 .access-row-actions { display: flex; gap: 4px; flex-wrap: wrap; }
 .row-action {
@@ -702,8 +703,8 @@ button, input {
   opacity: 0.55;
 }
 .row-renewal:hover { opacity: 1; border-color: var(--accent); }
-.row-renewal.renewal-yes { opacity: 1; border-color: rgba(12,163,12,0.4); background: rgba(12,163,12,0.10); }
-.row-renewal.renewal-no  { opacity: 1; border-color: rgba(208,59,59,0.4); background: rgba(208,59,59,0.10); }
+.row-renewal.renewal-yes { opacity: 1; border-color: rgba(22,163,74,0.4); background: rgba(22,163,74,0.08); }
+.row-renewal.renewal-no  { opacity: 1; border-color: rgba(217,54,54,0.4); background: rgba(217,54,54,0.08); }
 
 .access-client-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .access-client-item {
@@ -765,7 +766,7 @@ button, input {
 .catalog-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .catalog-tag {
   font-size: 11px; font-weight: 600; color: var(--warning);
-  background: rgba(250,178,25,0.15); border-radius: 6px; padding: 2px 6px;
+  background: rgba(180,120,10,0.15); border-radius: 6px; padding: 2px 6px;
 }
 .catalog-desc {
   font-size: 12px; color: var(--text-muted);
@@ -775,7 +776,7 @@ button, input {
 .catalog-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .catalog-item-off { opacity: 0.5; }
-.catalog-tag-off { color: var(--critical); background: rgba(230,80,80,0.15); }
+.catalog-tag-off { color: var(--critical); background: rgba(217,54,54,0.15); }
 
 .catalog-combos-header { margin-top: 28px; }
 
