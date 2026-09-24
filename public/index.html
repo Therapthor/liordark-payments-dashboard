@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Liordark — Panel de Pagos</title>
 <link rel="stylesheet" href="css/style.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -79,37 +78,26 @@
           </div>
         </div>
 
-        <!-- Arriba de todo — para ver la tendencia de un vistazo antes de los montos puntuales. -->
-        <div class="panel chart-panel">
-          <div class="panel-header">
-            <h2>Últimos 30 días</h2>
-          </div>
-          <div class="chart-wrap">
-            <canvas id="chart-daily"></canvas>
-          </div>
-        </div>
-
-        <div class="stat-cards">
-          <div class="stat-card stat-card--accent">
-            <div class="stat-label">Hoy</div>
+        <!-- ── GANANCIAS DE HOY + ACCIÓN RÁPIDA ── -->
+        <div class="panel-grid resumen-top-grid">
+          <div class="panel resumen-today-card">
+            <div class="stat-label">Ganancias de hoy</div>
             <div class="stat-value" id="stat-today-total">S/ 0.00</div>
             <div class="stat-sub" id="stat-today-count">0 pagos</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-label">Este mes</div>
-            <div class="stat-value" id="stat-month-total">S/ 0.00</div>
-            <div class="stat-sub" id="stat-month-count">0 pagos</div>
+
+          <div class="panel resumen-quick-action">
+            <button id="resumen-quick-assign-btn" class="btn-primary resumen-quick-assign-btn">➕ Agregar cliente a una cuenta</button>
           </div>
-          <div class="stat-card">
-            <div class="stat-label" id="stat-lastmonth-label">Mes pasado</div>
-            <div class="stat-value" id="stat-lastmonth-total">S/ 0.00</div>
-            <div class="stat-sub" id="stat-lastmonth-count">0 pagos</div>
+        </div>
+
+        <!-- ── STOCK — solo avisa si algo se está por quedar sin perfiles libres ── -->
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Stock</h2>
           </div>
-          <div class="stat-card">
-            <div class="stat-label">Histórico total</div>
-            <div class="stat-value" id="stat-alltime-total">S/ 0.00</div>
-            <div class="stat-sub" id="stat-alltime-count">0 pagos</div>
-          </div>
+          <ul id="stock-alert-list" class="connectors-list"></ul>
+          <p id="stock-alert-ok" class="feed-empty" hidden>Todas las plataformas tienen stock ✅</p>
         </div>
 
         <!-- ── RENOVACIONES — mismas 3 opciones que Telegram (Nueva cuenta / Solo mensaje / Rechazar) ── -->

@@ -1064,5 +1064,5 @@
     initComboOrderModal();
   }
 
-  window.LiordarkAccess = { init, load, loadProviderRenewals };
+  window.LiordarkAccess = { init, load, loadProviderRenewals, openComboOrderModal };
 })();

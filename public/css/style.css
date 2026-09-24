@@ -206,23 +206,8 @@ button, input {
 .view { display: block; }
 
 /* ─────────────────────────────────────────────────────────────
-   STAT CARDS
+   STAT — usado por la tarjeta "Ganancias de hoy" del Resumen
 ───────────────────────────────────────────────────────────── */
-.stat-cards {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.stat-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 26px 24px;
-}
-.stat-card--accent { border-color: rgba(245,166,35,0.4); background: linear-gradient(180deg, rgba(245,166,35,0.08), var(--surface)); }
-
 .stat-label { color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
 .stat-value { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat-sub { color: var(--text-secondary); font-size: 14px; margin-top: 6px; }
@@ -255,6 +240,16 @@ button, input {
 .connector-name { font-size: 14px; font-weight: 600; flex: 1; }
 .connector-state { font-size: 13px; color: var(--text-secondary); }
 
+.resumen-top-grid { margin-bottom: 20px; align-items: stretch; }
+
+.resumen-today-card {
+  border-color: rgba(245,166,35,0.4);
+  background: linear-gradient(180deg, rgba(245,166,35,0.08), var(--surface));
+}
+
+.resumen-quick-action { display: flex; align-items: center; justify-content: center; }
+.resumen-quick-assign-btn { width: 100%; height: 100%; font-size: 15px; padding: 16px; }
+
 /* ─────────────────────────────────────────────────────────────
    PANELS
 ───────────────────────────────────────────────────────────── */
@@ -282,9 +277,6 @@ button, input {
 .panel-header h2 { margin: 0; font-size: 18px; font-weight: 700; }
 .panel-header.standalone { margin-bottom: 18px; }
 .panel-hint { color: var(--text-muted); font-size: 13px; }
-
-.chart-panel { margin-bottom: 20px; }
-.chart-wrap { height: 400px; position: relative; }
 
 /* ─────────────────────────────────────────────────────────────
    FEED EN VIVO
@@ -842,7 +834,6 @@ button, input {
 ───────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .panel-grid { grid-template-columns: 1fr; }
-  .stat-cards { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 480px) {
@@ -851,7 +842,6 @@ button, input {
   .tabs { order: 3; width: 100%; margin-left: 0; }
   .history-table, .access-table { display: block; overflow-x: auto; white-space: nowrap; }
   .access-search { max-width: none; }
-  .stat-cards { grid-template-columns: 1fr; }
   .catalog-item { flex-wrap: wrap; }
   .catalog-desc { max-width: 100%; white-space: normal; }
 }

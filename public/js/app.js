@@ -57,12 +57,6 @@
     btn.classList.toggle("muted", moneyHidden);
   }
 
-  function fmtDateShort(ymd) {
-    const [, m, d] = ymd.split("-");
-    const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-    return `${Number(d)} ${meses[Number(m) - 1]}`;
-  }
-
   function fmtDateLong(ymd) {
     const [y, m, d] = ymd.split("-");
     return `${d}/${m}/${y}`;
@@ -288,17 +282,9 @@
   function renderStats(stats) {
     setMoneyText(document.getElementById("stat-today-total"), fmtMoney(stats.today.total));
     document.getElementById("stat-today-count").textContent   = pluralPagos(stats.today.count);
-    setMoneyText(document.getElementById("stat-month-total"), fmtMoney(stats.month.total));
-    document.getElementById("stat-month-count").textContent   = pluralPagos(stats.month.count);
-    setMoneyText(document.getElementById("stat-alltime-total"), fmtMoney(stats.allTime.total));
-    document.getElementById("stat-alltime-count").textContent = pluralPagos(stats.allTime.count);
 
     if (stats.lastMonth) {
-      document.getElementById("stat-lastmonth-label").textContent = "Mes pasado";
-      setMoneyText(document.getElementById("stat-lastmonth-total"), fmtMoney(stats.lastMonth.total));
-      document.getElementById("stat-lastmonth-count").textContent = pluralPagos(stats.lastMonth.count);
-
-      // Mismo dato, resumido arriba de la tabla de Historial.
+      // Resumido arriba de la tabla de Historial.
       const histTotal = document.getElementById("history-lastmonth-total");
       const histCount = document.getElementById("history-lastmonth-count");
       if (histTotal) setMoneyText(histTotal, fmtMoney(stats.lastMonth.total));
@@ -486,6 +472,38 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // RESUMEN — aviso de stock (solo lo que está en 0, para no llenar
+  // la pantalla con todas las plataformas que sí tienen)
+  // ─────────────────────────────────────────────────────────────
+
+  async function loadStockAlert() {
+    const list = document.getElementById("stock-alert-list");
+    const ok   = document.getElementById("stock-alert-ok");
+    try {
+      const { platforms } = await api("/access/platforms");
+      const withoutStock = platforms.filter(p => p.sellableCount === 0);
+
+      if (withoutStock.length === 0) {
+        list.innerHTML = "";
+        ok.hidden = false;
+        return;
+      }
+
+      ok.hidden = true;
+      list.innerHTML = withoutStock.map(p => `
+        <li class="connector-item">
+          <span class="connector-dot connector-dot--warn"></span>
+          <span class="connector-name">${escapeHtml(p.platform)}</span>
+          <span class="connector-state">Sin stock</span>
+        </li>
+      `).join("");
+    } catch {
+      list.innerHTML = "";
+      ok.hidden = true;
+    }
+  }
+
   let evtSource = null;
   function connectLive() {
     if (evtSource) evtSource.close();
@@ -511,7 +529,6 @@
 
       if (evt.type === "stats") {
         renderStats(evt.stats);
-        refreshChartIfStale();
       }
 
       if (evt.type === "order_approved") {
@@ -791,73 +808,6 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // GRÁFICO — últimos 30 días
-  // ─────────────────────────────────────────────────────────────
-
-  let chart = null;
-  let lastChartLoad = 0;
-
-  async function loadChart() {
-    const { days } = await api("/history?days=30");
-    const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date));
-
-    const labels = ordered.map(d => fmtDateShort(d.date));
-    const totals = ordered.map(d => d.total);
-    const today  = todayLima();
-
-    const ctx = document.getElementById("chart-daily").getContext("2d");
-    const barColors = ordered.map(d => d.date === today ? "#16a34a" : "rgba(22,163,74,0.55)");
-
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          label: "Ingresos",
-          data: totals,
-          backgroundColor: barColors,
-          borderRadius: 4,
-          maxBarThickness: 22,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => moneyHidden ? "S/ " + MONEY_MASK : "S/ " + ctx.parsed.y.toLocaleString("es-PE", { minimumFractionDigits: 2 }),
-            },
-          },
-        },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { color: "#898781", font: { size: 11 } },
-          },
-          y: {
-            beginAtZero: true,
-            grid: { color: "#2c2c2a" },
-            ticks: {
-              color: "#898781",
-              font: { size: 11 },
-              callback: (v) => moneyHidden ? MONEY_MASK : "S/ " + v,
-            },
-          },
-        },
-      },
-    });
-
-    lastChartLoad = Date.now();
-  }
-
-  function refreshChartIfStale() {
-    if (Date.now() - lastChartLoad > 30_000) loadChart();
-  }
-
-  // ─────────────────────────────────────────────────────────────
   // HISTORIAL
   // ─────────────────────────────────────────────────────────────
 
@@ -1105,7 +1055,6 @@
       });
       manualModal.hidden = true;
       loadHistory();
-      loadChart();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
@@ -1135,7 +1084,6 @@
     cachedLivePayments = payments;
     renderStats(stats);
     renderFeedList(payments);
-    await loadChart();
     connectLive();
 
     initOrdersActions();
@@ -1150,6 +1098,13 @@
 
     loadConnectorsStatus();
     setInterval(loadConnectorsStatus, CONNECTORS_POLL_MS);
+
+    loadStockAlert();
+    setInterval(loadStockAlert, CONNECTORS_POLL_MS);
+
+    document.getElementById("resumen-quick-assign-btn").addEventListener("click", () => {
+      if (window.LiordarkAccess) window.LiordarkAccess.openComboOrderModal();
+    });
   }
 
   checkAuth();
