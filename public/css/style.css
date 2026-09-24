@@ -249,7 +249,11 @@ button, input {
 .connector-dot--warn { background: var(--warning); box-shadow: 0 0 6px rgba(180,120,10,0.4); }
 
 /* "rectángulo delgado" — filas chicas, una por plataforma sin stock */
-.dock-stock-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dock-stock-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 180px; overflow-y: auto;
+}
 .dock-stock-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .dock-stock-name {
   font-size: 12px; font-weight: 600; flex: 1;
@@ -279,14 +283,13 @@ button, input {
 .resumen-quick-action { display: flex; align-items: center; justify-content: center; }
 .resumen-quick-assign-btn { width: 100%; height: 100%; font-size: 15px; padding: 16px; }
 
-/* ── OPERATIVA DEL DÍA — 4 paneles en una sola fila ── */
+/* ── OPERATIVA DEL DÍA — 2 columnas × 2 filas: 4 en una sola fila
+   quedaba muy comprimido para el contenido de estas listas (nombre +
+   hora + estado + monto en una sola línea necesita más ancho). ── */
 .resumen-ops-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-}
-@media (max-width: 1200px) {
-  .resumen-ops-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -872,6 +875,7 @@ button, input {
 ───────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .panel-grid { grid-template-columns: 1fr; }
+  .resumen-ops-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
@@ -882,6 +886,5 @@ button, input {
   .access-search { max-width: none; }
   .catalog-item { flex-wrap: wrap; }
   .catalog-desc { max-width: 100%; white-space: normal; }
-  .resumen-ops-grid { grid-template-columns: 1fr; }
   .resumen-dock { position: static; width: 100%; max-width: none; margin-bottom: 20px; }
 }
