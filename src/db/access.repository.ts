@@ -33,6 +33,10 @@ export type AccessAccount = {
   providerRenewalCost:     string;
   providerRenewalCurrency: string;
   providerRenewalNextDate: string | null;
+  // Renovación manual en dos pasos (Accesos > Renovar) — fecha en que se
+  // presionó "Renovar", pendiente de que el cliente pague. null = no hay
+  // renovación pendiente para esta cuenta.
+  renewalPendingAt: string | null;
   createdAt:   string;
   updatedAt:   string;
 };
@@ -213,6 +217,15 @@ export function setAccountExpiry(id: number, expiresAt: string): AccessAccountWi
 
 export function deleteAccount(id: number): void {
   db.prepare(`DELETE FROM access_accounts WHERE id = ?`).run(id);
+}
+
+// ── Renovación manual en dos pasos (Accesos > Renovar) ──
+
+export function setRenewalPending(id: number, pending: boolean): AccessAccountWithProfiles | null {
+  db.prepare(`
+    UPDATE access_accounts SET renewal_pending_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(pending ? new Date().toISOString() : null, id);
+  return getAccountById(id);
 }
 
 /**
@@ -544,6 +557,7 @@ function toAccount(row: any): AccessAccount {
     providerRenewalCost:     row.provider_renewal_cost ?? "",
     providerRenewalCurrency: row.provider_renewal_currency || "USDT",
     providerRenewalNextDate: row.provider_renewal_next_date ?? null,
+    renewalPendingAt: row.renewal_pending_at ?? null,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };

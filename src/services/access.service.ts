@@ -2,6 +2,7 @@ import {
   getAccountById,
   setAccountExpiry,
   resetRenewalMarkers,
+  setRenewalPending,
   type AccessAccountWithProfiles,
 } from "../db/access.repository";
 
@@ -70,6 +71,10 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
   // Ciclo nuevo, marca en blanco de nuevo — evita arrastrar un "renueva"
   // o "no renueva" que ya no aplica al período que recién empieza.
   resetRenewalMarkers(id);
+
+  // Confirma cualquier renovación pendiente de pago que hubiera quedado
+  // (ej. el cliente terminó pagando por el bot en vez de por acá).
+  setRenewalPending(id, false);
 
   return getAccountById(id);
 }

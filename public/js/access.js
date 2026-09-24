@@ -147,12 +147,19 @@
   // CARGA Y RENDER — plataformas / cuentas / perfiles
   // ─────────────────────────────────────────────────────────────
 
+  let activePlatformDetail = null; // plataforma cuyo detalle está abierto (o null)
+  let cachedPlatformSummaries = [];
+
   async function load() {
     loadProviderCatalog(); // se necesita para el botón 🔑 de soporte — no bloquea el render
     document.getElementById("access-client-summary").hidden = true;
     document.getElementById("access-search-results").hidden = true;
+    document.getElementById("access-platform-detail").hidden = true;
     document.getElementById("access-platforms").hidden = false;
+    activePlatformDetail = null;
+
     const { platforms } = await api("/platforms");
+    cachedPlatformSummaries = platforms;
     const container = document.getElementById("access-platforms");
     const empty = document.getElementById("access-empty");
 
@@ -163,29 +170,54 @@
     }
     empty.hidden = true;
 
-    container.innerHTML = "";
-    for (const p of platforms) {
-      const details = document.createElement("details");
-      details.className = "access-platform";
-      const free = p.sellableCount;
-      details.innerHTML = `
-        <summary>
-          <span class="access-platform-name">${escapeHtml(p.platform)}</span>
-          <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${free} disponible(s)</span>
-        </summary>
-        <div class="access-accounts" data-platform="${escapeHtml(p.platform)}"></div>
-      `;
-      container.appendChild(details);
-      details.addEventListener("toggle", () => {
-        if (details.open) loadAccountsForPlatform(p.platform, details.querySelector(".access-accounts"));
-      });
-    }
+    container.innerHTML = platforms.map(p => renderPlatformCard(p)).join("");
+    container.querySelectorAll(".access-platform-card").forEach(card => {
+      card.addEventListener("click", () => openPlatformDetail(card.dataset.platform));
+    });
   }
 
-  async function loadAccountsForPlatform(platform, target) {
+  function renderPlatformCard(p) {
+    const free = p.sellableCount;
+    return `
+      <button type="button" class="access-platform-card" data-platform="${escapeHtml(p.platform)}">
+        <span class="access-platform-card-name">${escapeHtml(p.platform)}</span>
+        <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${free} disponible(s)</span>
+        <span class="access-platform-card-stats">
+          <span class="access-platform-card-stat">${p.accountCount} cuenta(s)</span>
+          <span class="access-platform-card-stat">${p.occupiedCount} cliente(s)</span>
+        </span>
+      </button>
+    `;
+  }
+
+  // Detalle de UNA plataforma — todas sus cuentas y clientes, ya abiertos
+  // (antes había que ir abriendo cuenta por cuenta), con un botón para
+  // compactar todo de nuevo y ver más de un vistazo.
+  async function openPlatformDetail(platform) {
+    activePlatformDetail = platform;
+    document.getElementById("access-platforms").hidden = true;
+    document.getElementById("access-platform-detail").hidden = false;
+    document.getElementById("access-platform-detail-title").textContent = platform;
+    document.getElementById("access-platform-compact-toggle").textContent = "🗜 Compactar todo";
+
+    const target = document.getElementById("access-platform-detail-accounts");
+    target.innerHTML = `<p class="feed-empty">Cargando…</p>`;
     const { accounts } = await api("/platforms/" + encodeURIComponent(platform) + "/accounts");
-    target.innerHTML = accounts.map(a => renderAccountCard(a)).join("");
+    target.innerHTML = accounts.map(a => renderAccountCard(a, { open: true })).join("");
     wireAccountCardEvents(target);
+  }
+
+  function closePlatformDetail() {
+    load();
+  }
+
+  function togglePlatformCompact() {
+    const target = document.getElementById("access-platform-detail-accounts");
+    const items  = target.querySelectorAll(".access-account");
+    const anyOpen = Array.from(items).some(d => d.open);
+    items.forEach(d => { d.open = !anyOpen; });
+    document.getElementById("access-platform-compact-toggle").textContent =
+      anyOpen ? "⬜ Expandir todo" : "🗜 Compactar todo";
   }
 
   // Reemplaza en el DOM solo la tarjeta de esta cuenta, sin recargar todo
@@ -194,7 +226,7 @@
   async function refreshAccountInPlace(accountId, platformHint) {
     const container = activeQuery
       ? document.getElementById("access-search-results")
-      : document.getElementById("access-platforms");
+      : document.getElementById("access-platform-detail-accounts");
     const el = container.querySelector(`.access-account[data-account-id="${accountId}"]`);
     if (!el) { await refresh(); return; }
     const wasOpen = el.open;
@@ -209,23 +241,18 @@
     refreshPlatformSummaryText(platformHint || account.platform);
   }
 
-  // Actualiza solo el contador de la cabecera de la plataforma (cuentas /
-  // perfiles ocupados) sin tocar qué acordeones están abiertos.
+  // Actualiza solo la tarjeta de la plataforma en la grilla (stock/cuentas/
+  // clientes) sin recargar ni cerrar el detalle que esté abierto.
   async function refreshPlatformSummaryText(platform) {
     try {
       const { platforms } = await api("/platforms");
+      cachedPlatformSummaries = platforms;
       const info = platforms.find(p => p.platform === platform);
       if (!info) return;
-      document.querySelectorAll(".access-platform").forEach(details => {
-        const nameEl = details.querySelector(".access-platform-name");
-        if (nameEl && nameEl.textContent === platform) {
-          const free = info.sellableCount;
-          const countEl = details.querySelector(".access-platform-count");
-          countEl.textContent = `${free} disponible(s)`;
-          countEl.classList.toggle("has-stock", free > 0);
-          countEl.classList.toggle("no-stock", free === 0);
-        }
-      });
+      const card = document.querySelector(`.access-platform-card[data-platform="${CSS.escape(platform)}"]`);
+      if (card) card.outerHTML = renderPlatformCard(info);
+      const newCard = document.querySelector(`.access-platform-card[data-platform="${CSS.escape(platform)}"]`);
+      if (newCard) newCard.addEventListener("click", () => openPlatformDetail(newCard.dataset.platform));
     } catch { /* no crítico */ }
   }
 
@@ -234,6 +261,19 @@
   // vez, y con varias cuentas por plataforma eso llenaba la pantalla de
   // scroll. Ahora solo se ve una línea resumen por cuenta hasta que se
   // abre la que interesa.
+  // Renovar en dos pasos: "Renovar" solo marca pendiente de pago; recién
+  // "Confirmar pago" suma los 30 días de verdad. Así queda registro de que
+  // el cliente pagó antes de extender la cuenta, en vez de fiarse del clic.
+  function renderRenewControls(account) {
+    if (account.renewalPendingAt) {
+      return `
+        <button class="btn-primary btn-sm access-renew-confirm" data-account-id="${account.id}">✅ Confirmar pago</button>
+        <button class="btn-secondary btn-sm access-renew-cancel" data-account-id="${account.id}">✕ Cancelar</button>
+      `;
+    }
+    return `<button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">🔄 Renovar</button>`;
+  }
+
   function renderAccountCard(account, opts) {
     const open = !!(opts && opts.open);
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
@@ -251,6 +291,7 @@
           <span class="access-account-meta">
             ${account.provider ? `<span>🏷 ${escapeHtml(account.provider)}</span>` : ""}
             <span class="badge access-badge-${STATUS_CLASS[account.status]}">${STATUS_LABEL[account.status]}</span>
+            ${account.renewalPendingAt ? `<span class="badge access-badge-pending" title="Renovar: pendiente de pago">⏳ Pendiente de pago</span>` : ""}
             <span>${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
             <span class="access-occupancy">${occupancyLabel}</span>
           </span>
@@ -270,7 +311,7 @@
               ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
               <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
               <button class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte proveedor</button>
-              <button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">➕30 días</button>
+              ${renderRenewControls(account)}
               ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
               <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
               <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
@@ -379,7 +420,23 @@
     target.querySelectorAll(".access-renew-account").forEach(btn => {
       btn.addEventListener("click", async () => {
         const accountId = Number(btn.dataset.accountId);
+        await api("/accounts/" + accountId + "/renewal-pending", { method: "POST" });
+        refreshAccountInPlace(accountId);
+      });
+    });
+
+    target.querySelectorAll(".access-renew-confirm").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const accountId = Number(btn.dataset.accountId);
         await api("/accounts/" + accountId + "/renew", { method: "POST" });
+        refreshAccountInPlace(accountId);
+      });
+    });
+
+    target.querySelectorAll(".access-renew-cancel").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const accountId = Number(btn.dataset.accountId);
+        await api("/accounts/" + accountId + "/renewal-pending/cancel", { method: "POST" });
         refreshAccountInPlace(accountId);
       });
     });
@@ -751,11 +808,15 @@
     activeQuery = "";
     document.getElementById("access-client-summary").hidden = true;
     document.getElementById("access-search-results").hidden = true;
+    document.getElementById("access-platform-detail").hidden = true;
     document.getElementById("access-platforms").hidden = false;
+    activePlatformDetail = null;
   }
 
   async function runSearch(q) {
     activeQuery = q;
+    activePlatformDetail = null;
+    document.getElementById("access-platform-detail").hidden = true;
     const result = await api("/search?q=" + encodeURIComponent(q));
     const summaryBox = document.getElementById("access-client-summary");
     const resultsBox = document.getElementById("access-search-results");
@@ -1062,6 +1123,8 @@
     initClientSummarySend();
     initProviderRenewalListActions();
     initComboOrderModal();
+    document.getElementById("access-platform-back").addEventListener("click", closePlatformDetail);
+    document.getElementById("access-platform-compact-toggle").addEventListener("click", togglePlatformCompact);
   }
 
   window.LiordarkAccess = { init, load, loadProviderRenewals, openComboOrderModal };

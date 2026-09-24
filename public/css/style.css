@@ -650,29 +650,39 @@ button, input {
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 
-.access-platforms { display: flex; flex-direction: column; gap: 12px; }
+/* Cuadrícula de tarjetas — una por plataforma, en vez del acordeón
+   anterior. Clic en una tarjeta abre el detalle de esa plataforma sola. */
+.access-platforms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
 
-.access-platform {
+.access-platform-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 4px 20px;
-}
-.access-platform summary {
-  list-style: none;
+  padding: 16px 18px;
   cursor: pointer;
-  padding: 16px 0;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  color: var(--text-primary);
+  font: inherit;
 }
-.access-platform summary::-webkit-details-marker { display: none; }
-.access-platform-name { font-weight: 700; font-size: 16px; }
-.access-platform-count { color: var(--text-muted); font-size: 13px; }
+.access-platform-card:hover { border-color: var(--accent); }
+.access-platform-card-name { font-weight: 700; font-size: 15px; }
+.access-platform-card-stats { display: flex; flex-direction: column; gap: 3px; }
+.access-platform-card-stat { font-size: 12px; color: var(--text-secondary); }
+
+.access-platform-count { font-size: 13px; font-weight: 600; }
 .access-platform-count.has-stock { color: var(--good); }
 .access-platform-count.no-stock  { color: var(--critical); }
+
+/* Vista detalle — todas las cuentas de una sola plataforma, abiertas */
+.access-platform-detail-head { display: flex; align-items: center; gap: 12px; }
+.access-platform-detail-head h2 { margin: 0; }
 
 .access-accounts { display: flex; flex-direction: column; gap: 8px; padding-bottom: 18px; }
 

@@ -14,6 +14,7 @@ import {
   createAccountFromRenewal,
   listProviderRenewalAccounts,
   markProviderRenewalRenewed,
+  setRenewalPending,
   sellProfile,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
@@ -211,6 +212,22 @@ router.post("/accounts/:id/provider-renewal/mark-renewed", (req, res) => {
 
 router.post("/accounts/:id/renew", (req, res) => {
   const account = renewAccount(Number(req.params.id));
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  res.json({ account: withStatus(account) });
+});
+
+// Renovar en dos pasos: "Renovar" solo marca pendiente de pago (no toca el
+// vencimiento) — recién /renew de arriba, llamado desde "Confirmar pago",
+// suma los 30 días de verdad. Sirve para no perder registro de si el
+// cliente ya pagó antes de extender la cuenta.
+router.post("/accounts/:id/renewal-pending", (req, res) => {
+  const account = setRenewalPending(Number(req.params.id), true);
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  res.json({ account: withStatus(account) });
+});
+
+router.post("/accounts/:id/renewal-pending/cancel", (req, res) => {
+  const account = setRenewalPending(Number(req.params.id), false);
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   res.json({ account: withStatus(account) });
 });

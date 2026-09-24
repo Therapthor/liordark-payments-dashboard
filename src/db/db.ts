@@ -48,6 +48,12 @@ ensureColumn("access_accounts", "provider_renewal_cost",      "provider_renewal_
 ensureColumn("access_accounts", "provider_renewal_currency",  "provider_renewal_currency TEXT NOT NULL DEFAULT 'USDT'");
 ensureColumn("access_accounts", "provider_renewal_next_date", "provider_renewal_next_date TEXT");
 
+// Renovación manual (Accesos > Renovar) en dos pasos: al presionar "Renovar"
+// se marca esta fecha (pendiente de pago), y recién al confirmar el pago se
+// suman los 30 días de verdad — antes "➕30 días" extendía al toque, sin
+// dejar registro de si el cliente ya había pagado o no.
+ensureColumn("access_accounts", "renewal_pending_at", "renewal_pending_at TEXT");
+
 // La tabla de suscripciones propias como lista aparte se reemplazó por el
 // campo "renovación con proveedor" en cada cuenta de Accesos.
 db.exec(`DROP TABLE IF EXISTS provider_subscriptions`);
