@@ -521,6 +521,7 @@ button, input {
   gap: 12px;
 }
 .modal-card--wide { max-width: 480px; max-height: 80vh; }
+.modal-card--xwide { max-width: 900px; max-height: 80vh; }
 
 .modal-card h3 { margin: 0 0 4px; }
 

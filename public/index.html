@@ -250,10 +250,32 @@
 
         <div class="panel-header standalone">
           <h2>Renovaciones — avisos enviados</h2>
-          <button id="renewals-notif-history-btn" class="btn-secondary">🗄 Historial</button>
         </div>
 
         <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
+
+        <div class="panel-header standalone" id="renewals-run-history-header">
+          <h2>Corridas anteriores (resumen por día)</h2>
+        </div>
+        <p class="panel-hint">Click en una fila para ver los números de esa fecha.</p>
+
+        <!-- Click en una fila abre el detalle (números de esa fecha) en
+             el modal de historial. -->
+        <div class="panel" id="renewals-run-history-panel">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Total</th>
+                <th>Enviados</th>
+                <th>Fallidos</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="renewals-run-history-tbody"></tbody>
+          </table>
+        </div>
+        <p id="renewals-run-history-empty" class="feed-empty" hidden>Todavía no hay corridas registradas.</p>
 
       </section>
 
@@ -763,9 +785,9 @@
   </div>
 
   <div id="renewals-notif-history-modal" class="modal-backdrop" hidden>
-    <div class="modal-card modal-card--wide">
+    <div class="modal-card modal-card--xwide">
       <div class="modal-head">
-        <h3>Historial de avisos de vencimiento</h3>
+        <h3 id="renewals-notif-day-title">Historial de avisos</h3>
         <button type="button" class="modal-x" data-close-modal="renewals-notif-history-modal">✕</button>
       </div>
       <div class="feed-search">
@@ -786,26 +808,6 @@
           <tbody id="renewals-notif-tbody"></tbody>
         </table>
         <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
-
-        <!-- Corridas de ANTES de este detalle por cliente — solo se guardó
-             el total de esos días, no a quién se le avisó. -->
-        <div class="panel-header standalone" id="renewals-run-history-header" hidden>
-          <h2>Corridas anteriores (resumen por día)</h2>
-        </div>
-        <div class="panel" id="renewals-run-history-panel" hidden>
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Total</th>
-                <th>Enviados</th>
-                <th>Fallidos</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="renewals-run-history-tbody"></tbody>
-          </table>
-        </div>
       </div>
     </div>
   </div>

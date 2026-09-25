@@ -941,7 +941,16 @@
     } catch { return ""; }
   }
 
+  // "YYYY-MM-DD" en hora Lima a partir de un ISO — para agrupar cada
+  // aviso bajo la fecha (Lima) de la corrida a la que pertenece.
+  function limaDateKey(iso) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date(toUtcISOString(iso)));
+    } catch { return ""; }
+  }
+
   let cachedRenewalNotifs      = [];
+  let currentDayEntries        = [];
   let renewalNotifSearchDigits = "";
 
   async function loadRenewalNotifications() {
@@ -950,7 +959,6 @@
       cachedRenewalNotifs = entries;
       document.getElementById("renewals-notif-today-sent").textContent   = todaySent;
       document.getElementById("renewals-notif-today-failed").textContent = todayFailed;
-      applyRenewalNotifSearch();
       renderRenewalRunHistory(runHistory || []);
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
@@ -959,23 +967,23 @@
 
   const RUN_STATUS_LABEL = { COMPLETED: "Completado", FAILED: "Interrumpido", RUNNING: "En curso" };
 
-  // Corridas de antes de que existiera el detalle por cliente — solo se
-  // sabe el total de esos días, no a quién se le avisó. Se muestra aparte
-  // para no perder ese historial ni mezclarlo con el detalle real.
+  // Resumen por día — clickear una fila abre el detalle (los números de
+  // esa fecha) en el modal de historial.
   function renderRenewalRunHistory(runs) {
     const header = document.getElementById("renewals-run-history-header");
     const panel  = document.getElementById("renewals-run-history-panel");
+    const empty  = document.getElementById("renewals-run-history-empty");
     const tbody  = document.getElementById("renewals-run-history-tbody");
 
     if (runs.length === 0) {
-      header.hidden = true;
-      panel.hidden  = true;
+      panel.hidden = true;
+      empty.hidden = false;
       return;
     }
-    header.hidden = false;
-    panel.hidden  = false;
+    panel.hidden = false;
+    empty.hidden = true;
     tbody.innerHTML = runs.map(r => `
-      <tr>
+      <tr data-date-key="${limaDateKey(r.startedAt)}">
         <td>${fmtDateTime(r.startedAt)}</td>
         <td>${r.total}</td>
         <td>${r.sent}</td>
@@ -983,12 +991,33 @@
         <td>${escapeHtml(RUN_STATUS_LABEL[r.status] || r.status)}</td>
       </tr>
     `).join("");
+
+    tbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", () => openRenewalNotifDay(tr.dataset.dateKey));
+    });
+  }
+
+  // Abre el modal de historial con solo los avisos de la fecha elegida
+  // (comparando en hora Lima, igual que se agrupó la fila clickeada).
+  function openRenewalNotifDay(dateKey) {
+    currentDayEntries = cachedRenewalNotifs.filter(n => limaDateKey(n.createdAt) === dateKey);
+
+    const input = document.getElementById("renewals-notif-search");
+    const clearBtn = document.getElementById("renewals-notif-search-clear");
+    input.value = "";
+    renewalNotifSearchDigits = "";
+    clearBtn.hidden = true;
+
+    document.getElementById("renewals-notif-day-title").textContent =
+      "Historial de avisos — " + fmtDateLong(dateKey);
+    applyRenewalNotifSearch();
+    document.getElementById("renewals-notif-history-modal").hidden = false;
   }
 
   function applyRenewalNotifSearch() {
     const filtered = renewalNotifSearchDigits
-      ? cachedRenewalNotifs.filter(n => n.phone.replace(/\D/g, "").includes(renewalNotifSearchDigits))
-      : cachedRenewalNotifs;
+      ? currentDayEntries.filter(n => n.phone.replace(/\D/g, "").includes(renewalNotifSearchDigits))
+      : currentDayEntries;
     renderRenewalNotifTable(filtered);
   }
 
@@ -1025,12 +1054,6 @@
       `;
       tbody.appendChild(tr);
     }
-  }
-
-  function initRenewalNotifHistoryModal() {
-    document.getElementById("renewals-notif-history-btn").addEventListener("click", () => {
-      document.getElementById("renewals-notif-history-modal").hidden = false;
-    });
   }
 
   function initRenewalNotifSearch() {
@@ -1177,7 +1200,6 @@
     initPendingSearch();
     initApprovedSearch();
     initRenewalNotifSearch();
-    initRenewalNotifHistoryModal();
     initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();
