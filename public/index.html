@@ -235,55 +235,10 @@
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
 
-        <div class="panel-header standalone">
-          <h2>Renovaciones — avisos enviados</h2>
-        </div>
-
-        <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
-
-        <div class="panel">
-          <div class="feed-search">
-            <input id="renewals-notif-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
-            <button id="renewals-notif-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
-          </div>
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Fecha / hora</th>
-                <th>Teléfono</th>
-                <th>Plataforma</th>
-                <th>Días al aviso</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="renewals-notif-tbody"></tbody>
-          </table>
-          <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
-        </div>
-
-        <!-- Corridas de ANTES de este detalle por cliente — solo se guardó
-             el total de esos días, no a quién se le avisó. -->
-        <div class="panel-header standalone" id="renewals-run-history-header" hidden>
-          <h2>Corridas anteriores (resumen por día)</h2>
-        </div>
-        <div class="panel" id="renewals-run-history-panel" hidden>
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Total</th>
-                <th>Enviados</th>
-                <th>Fallidos</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="renewals-run-history-tbody"></tbody>
-          </table>
-        </div>
-
         <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
              se venden al cliente como plan anual pero Liordark las paga
-             mes a mes. Se activa por cuenta al crearla/editarla en Accesos. -->
+             mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
+             Va primero: es lo que más importa revisar acá. -->
         <div class="panel-header standalone">
           <h2>Renovación con proveedor</h2>
         </div>
@@ -292,6 +247,13 @@
 
         <ul id="provider-renewal-list" class="catalog-list"></ul>
         <p id="provider-renewal-empty" class="feed-empty" hidden>No hay cuentas marcadas para renovación con proveedor.</p>
+
+        <div class="panel-header standalone">
+          <h2>Renovaciones — avisos enviados</h2>
+          <button id="renewals-notif-history-btn" class="btn-secondary">🗄 Historial</button>
+        </div>
+
+        <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
 
       </section>
 
@@ -797,6 +759,54 @@
       <p class="panel-hint">Se archivan solas cuando vencen — de solo lectura, para resolver reclamos futuros.</p>
       <div id="access-history-body" class="modal-scroll-body"></div>
       <p id="access-history-empty" class="feed-empty" hidden>No hay cuentas archivadas todavía.</p>
+    </div>
+  </div>
+
+  <div id="renewals-notif-history-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>Historial de avisos de vencimiento</h3>
+        <button type="button" class="modal-x" data-close-modal="renewals-notif-history-modal">✕</button>
+      </div>
+      <div class="feed-search">
+        <input id="renewals-notif-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+        <button id="renewals-notif-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Fecha / hora</th>
+              <th>Teléfono</th>
+              <th>Plataforma</th>
+              <th>Días al aviso</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="renewals-notif-tbody"></tbody>
+        </table>
+        <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
+
+        <!-- Corridas de ANTES de este detalle por cliente — solo se guardó
+             el total de esos días, no a quién se le avisó. -->
+        <div class="panel-header standalone" id="renewals-run-history-header" hidden>
+          <h2>Corridas anteriores (resumen por día)</h2>
+        </div>
+        <div class="panel" id="renewals-run-history-panel" hidden>
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Total</th>
+                <th>Enviados</th>
+                <th>Fallidos</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="renewals-run-history-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 

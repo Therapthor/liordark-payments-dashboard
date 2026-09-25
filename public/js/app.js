@@ -1027,6 +1027,12 @@
     }
   }
 
+  function initRenewalNotifHistoryModal() {
+    document.getElementById("renewals-notif-history-btn").addEventListener("click", () => {
+      document.getElementById("renewals-notif-history-modal").hidden = false;
+    });
+  }
+
   function initRenewalNotifSearch() {
     const input    = document.getElementById("renewals-notif-search");
     const clearBtn = document.getElementById("renewals-notif-search-clear");
@@ -1171,6 +1177,7 @@
     initPendingSearch();
     initApprovedSearch();
     initRenewalNotifSearch();
+    initRenewalNotifHistoryModal();
     initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();
