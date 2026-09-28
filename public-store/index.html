@@ -35,7 +35,7 @@
         </form>
         <div class="divider"><span>o</span></div>
         <button class="btn-ghost btn-block" id="show-register-btn" type="button">Crear cuenta nueva</button>
-        <button class="btn-ghost btn-block" id="show-guest-btn" type="button">Comprar sin cuenta</button>
+        <button class="btn-guest btn-block" id="show-guest-btn" type="button">Comprar sin cuenta</button>
       </div>
 
       <div class="card auth-card" id="register-card" hidden>
@@ -162,7 +162,8 @@
       <div id="checkout-success" class="checkout-state" hidden>
         <div class="success-check">✓</div>
         <h2>¡Listo!</h2>
-        <p class="muted">Tu cuenta ya está en <b>Mis cuentas</b>.</p>
+        <p class="muted">Ya quedó guardada en <b>Mis cuentas</b>. Podés copiar los datos ahora mismo:</p>
+        <div id="checkout-success-accounts" class="checkout-success-accounts"></div>
         <button class="btn-primary btn-block" id="checkout-goto-dashboard" type="button">Ver mis cuentas</button>
       </div>
 

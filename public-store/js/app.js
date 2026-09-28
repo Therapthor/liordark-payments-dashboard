@@ -416,7 +416,7 @@
     }
 
     try {
-      const beforeCount = cachedDashboard.length || (await api("/dashboard")).accounts.length;
+      const beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
       const body = kind === "combo" ? { comboId: id } : { platform: id };
       const order = await api("/checkout", { method: "POST", body });
 
@@ -433,14 +433,25 @@
       document.getElementById("checkout-waiting-text").textContent = "Esperando tu pago…";
 
       showCheckoutState("ready");
-      startPolling(beforeCount, targetNewAccounts);
+      startPolling(beforeAccounts, targetNewAccounts);
     } catch (err) {
       document.getElementById("checkout-error-text").textContent = err.message;
       showCheckoutState("error");
     }
   }
 
-  function startPolling(beforeCount, targetNewAccounts) {
+  // Identifica una cuenta sin depender de un id (la API no devuelve uno) —
+  // la combinación plataforma+correo+perfil+vencimiento es única por fila.
+  function accountKey(a) {
+    return [a.platform, a.email, a.profileName, a.expiresAt].join("|");
+  }
+
+  function diffNewAccounts(before, after) {
+    const beforeKeys = new Set(before.map(accountKey));
+    return after.filter(a => !beforeKeys.has(accountKey(a)));
+  }
+
+  function startPolling(beforeAccounts, targetNewAccounts) {
     stopPolling();
     pollExpiry = Date.now() + POLL_TIMEOUT_MS;
 
@@ -448,9 +459,9 @@
       try {
         const { accounts } = await api("/dashboard");
         cachedDashboard = accounts || [];
-        if (cachedDashboard.length >= beforeCount + targetNewAccounts) {
+        if (cachedDashboard.length >= beforeAccounts.length + targetNewAccounts) {
           stopPolling();
-          showCheckoutState("success");
+          showCheckoutSuccess(diffNewAccounts(beforeAccounts, cachedDashboard));
           return;
         }
       } catch { /* red momentánea — sigue intentando */ }
@@ -459,6 +470,42 @@
         document.getElementById("checkout-waiting-text").textContent = "Seguimos esperando tu pago…";
       }
     }, POLL_MS);
+  }
+
+  function successAccountHtml(a, idx) {
+    return `
+      <div class="success-account-card">
+        <div class="success-account-head">
+          <span class="success-account-platform">${escapeHtml(a.platform)}</span>
+          <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar todo</button>
+        </div>
+        <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
+        <div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>
+        ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
+      </div>`;
+  }
+
+  function accountCopyText(a) {
+    return `Manguitope — ${a.platform}\nCorreo: ${a.email}\nContraseña: ${a.password}` +
+      (a.profileName ? `\nPerfil: ${a.profileName}` : "");
+  }
+
+  function showCheckoutSuccess(newAccounts) {
+    const container = document.getElementById("checkout-success-accounts");
+    container.innerHTML = newAccounts.map(successAccountHtml).join("");
+    container.querySelectorAll(".success-copy-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(accountCopyText(newAccounts[Number(btn.dataset.idx)]));
+          const original = btn.textContent;
+          btn.textContent = "✅ Copiado";
+          setTimeout(() => { btn.textContent = original; }, 1800);
+        } catch {
+          alert("No se pudo copiar. Copiá los datos manualmente.");
+        }
+      });
+    });
+    showCheckoutState("success");
   }
 
   function closeCheckout() {
