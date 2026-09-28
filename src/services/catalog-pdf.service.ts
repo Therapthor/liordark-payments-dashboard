@@ -1,6 +1,5 @@
 import PDFDocument from "pdfkit";
 import axios from "axios";
-import sharp from "sharp";
 import { listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
 import { listCombos, type Combo } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
@@ -64,13 +63,22 @@ function drawSectionChip(doc: PDFKit.PDFDocument, label: string): void {
 }
 
 // pdfkit solo lee JPEG y PNG — Cloudinary puede servir WEBP/AVIF según el
-// navegador que las subió o cómo se armó la URL, así que toda imagen pasa
-// por sharp para garantizar un PNG que pdfkit sepa abrir siempre.
+// navegador que las subió o cómo se armó la URL. En vez de convertir la
+// imagen localmente (necesitaba "sharp", que no corre en este servidor —
+// su CPU no soporta el set de instrucciones que exige el binario), se le
+// pide a Cloudinary que la entregue ya en PNG agregando f_png a la URL.
+function toPngUrl(url: string): string {
+  const marker = "/upload/";
+  const i = url.indexOf(marker);
+  if (!url.includes("res.cloudinary.com") || i === -1) return url;
+  return url.slice(0, i + marker.length) + "f_png/" + url.slice(i + marker.length);
+}
+
 async function fetchImageBuffer(url: string | undefined): Promise<Buffer | null> {
   if (!url) return null;
   try {
-    const res = await axios.get(url, { responseType: "arraybuffer", timeout: 10_000 });
-    return await sharp(Buffer.from(res.data)).png().toBuffer();
+    const res = await axios.get(toPngUrl(url), { responseType: "arraybuffer", timeout: 10_000 });
+    return Buffer.from(res.data);
   } catch {
     return null;
   }
