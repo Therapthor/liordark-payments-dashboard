@@ -1,6 +1,6 @@
-import { randomInt } from "crypto";
 import { Router } from "express";
 import { env } from "../config/env";
+import { emitDashboardEvent } from "../utils/live-events.util";
 import {
   createCustomer,
   findCustomerByPhone,
@@ -12,20 +12,12 @@ import {
   checkPassword,
   createCustomerSessionToken,
   CUSTOMER_SESSION_COOKIE,
+  generatePassword,
   hashPassword,
   verifyCustomerSessionToken,
 } from "../services/customer-auth.service";
 
 const router = Router();
-
-// Sin 0/O/1/I/l para que no se confundan al transcribirla desde la pantalla.
-const GUEST_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
-function generateGuestPassword(): string {
-  let out = "";
-  for (let i = 0; i < 8; i++) out += GUEST_PASSWORD_CHARS[randomInt(GUEST_PASSWORD_CHARS.length)];
-  return out;
-}
 
 function setSessionCookie(res: import("express").Response, customerId: number): void {
   const { token, expires } = createCustomerSessionToken(customerId);
@@ -54,6 +46,7 @@ router.post("/register", async (req, res) => {
   const passwordHash = await hashPassword(password);
   const customer      = createCustomer(phone, passwordHash, password);
 
+  emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: false });
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone });
 });
@@ -90,10 +83,11 @@ router.post("/guest", async (req, res) => {
     return res.status(409).json({ message: "Ya existe una cuenta con ese celular. Iniciá sesión." });
   }
 
-  const generatedPassword = generateGuestPassword();
+  const generatedPassword = generatePassword();
   const passwordHash      = await hashPassword(generatedPassword);
   const customer           = createCustomer(phone, passwordHash, generatedPassword, true);
 
+  emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone, password: generatedPassword });
 });

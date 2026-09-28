@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto, { randomInt } from "crypto";
 import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
@@ -50,6 +50,16 @@ export function verifyCustomerSessionToken(token: string | undefined): number | 
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, BCRYPT_ROUNDS);
+}
+
+// Sin 0/O/1/I/l para que no se confundan al transcribirla desde la pantalla.
+// La usan "Comprar sin cuenta" y el reset de contraseña del panel admin.
+const GENERATED_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+export function generatePassword(): string {
+  let out = "";
+  for (let i = 0; i < 8; i++) out += GENERATED_PASSWORD_CHARS[randomInt(GENERATED_PASSWORD_CHARS.length)];
+  return out;
 }
 
 export async function checkPassword(plain: string, hash: string): Promise<boolean> {

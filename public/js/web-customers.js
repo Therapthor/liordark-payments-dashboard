@@ -53,7 +53,16 @@
 
     const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
 
-    const msg = `Hola! Estos son tus accesos a Manguitope 🥭\n\nCelular: ${c.phone}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`;
+    // Cuentas registradas antes de guardar password_plain no tienen
+    // contraseña visible (quedó solo como hash) — se les puede generar
+    // una nueva en vez de mostrar un envío vacío.
+    const passwordArea = c.password
+      ? `
+        <span class="web-customer-password">${escapeHtml(c.password)}</span>
+        <a class="btn-secondary btn-sm" href="${waLink(c.phone, `Hola! Estos son tus accesos a Manguitope 🥭\n\nCelular: ${c.phone}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`)}" target="_blank" rel="noopener">📲 Enviar accesos</a>`
+      : `
+        <span class="web-customer-password web-customer-password-none">Sin contraseña guardada</span>
+        <button class="btn-secondary btn-sm web-customer-reset-btn" type="button">🔑 Generar contraseña</button>`;
 
     div.innerHTML = `
       <div class="web-customer-main">
@@ -63,8 +72,7 @@
       </div>
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
       <div class="web-customer-actions">
-        <span class="web-customer-password">${escapeHtml(c.password)}</span>
-        <a class="btn-secondary btn-sm" href="${waLink(c.phone, msg)}" target="_blank" rel="noopener">📲 Enviar accesos</a>
+        ${passwordArea}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
         <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
       </div>`;
@@ -75,6 +83,16 @@
     if (!confirm("¿Suspender esta cuenta por 3 días? El cliente no va a poder iniciar sesión hasta entonces.")) return;
     try {
       await api(`/${id}/suspend`, { method: "POST" });
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function resetPassword(id) {
+    if (!confirm("Esto le genera una contraseña NUEVA al cliente (la original no se puede recuperar). ¿Continuar?")) return;
+    try {
+      await api(`/${id}/reset-password`, { method: "POST" });
       await load();
     } catch (err) {
       alert(err.message);
@@ -98,6 +116,7 @@
       if (!row) return;
       const id = Number(row.dataset.id);
       if (e.target.closest(".web-customer-suspend-btn")) suspend(id, row);
+      if (e.target.closest(".web-customer-reset-btn")) resetPassword(id);
       if (e.target.closest(".web-customer-ban-btn")) ban(id);
     });
   }

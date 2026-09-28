@@ -395,6 +395,7 @@ button, input {
   font-family: monospace; font-size: 13px; font-weight: 700;
   background: var(--surface-raised); padding: 4px 10px; border-radius: 8px; letter-spacing: .5px;
 }
+.web-customer-password-none { font-family: var(--font); font-weight: 400; font-style: italic; color: var(--text-muted); background: none; padding: 0; }
 
 /* ─────────────────────────────────────────────────────────────
    PEDIDOS — pendientes / aprobados

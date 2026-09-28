@@ -134,6 +134,28 @@
     } catch { /* navegador sin soporte de audio — no crítico */ }
   }
 
+  // Aviso de "nuevo cliente registrado en liordark.com" — distinto del
+  // beep de pagos (onda triangular, 3 notas en vez de 2, más largo).
+  function playCustomerChime() {
+    if (localStorage.getItem("ldp_muted") === "1") return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioCtx.currentTime;
+      [660, 880, 1100].forEach((freq, i) => {
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + i * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.16, now + i * 0.12 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.4);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(now + i * 0.12);
+        osc.stop(now + i * 0.12 + 0.45);
+      });
+    } catch { /* navegador sin soporte de audio — no crítico */ }
+  }
+
   function initSoundToggle() {
     const btn = document.getElementById("sound-toggle");
     const muted = localStorage.getItem("ldp_muted") === "1";
@@ -541,6 +563,11 @@
       if (evt.type === "order_approved") {
         prependApprovedOrder(evt);
         loadPendingOrders(); // lo más probable es que un pendiente se acaba de resolver
+      }
+
+      if (evt.type === "customer_registered") {
+        playCustomerChime();
+        if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
       }
     };
   }

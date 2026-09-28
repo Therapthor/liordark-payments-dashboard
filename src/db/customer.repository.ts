@@ -79,3 +79,15 @@ export function suspendCustomer(id: number, days: number): Customer | null {
 export function deleteCustomer(id: number): void {
   db.prepare(`DELETE FROM customers WHERE id = ?`).run(id);
 }
+
+/**
+ * Genera una contraseña nueva para una cuenta ya existente (ej. las que
+ * se registraron antes de guardar password_plain: su contraseña original
+ * quedó solo como hash, irrecuperable). Cambia el login real del cliente
+ * — se usa cuando el admin necesita poder verla/reenviarla igual.
+ */
+export function setCustomerPassword(id: number, passwordHash: string, passwordPlain: string): Customer | null {
+  db.prepare(`UPDATE customers SET password_hash = ?, password_plain = ? WHERE id = ?`)
+    .run(passwordHash, passwordPlain, id);
+  return findCustomerById(id);
+}
