@@ -123,35 +123,42 @@
   // ─────────────────────────────────────────────────────────────
 
   let cachedCombos = [];
+  let cachedProducts = [];
 
   function isAnnual(item) {
     const haystack = ((item.title || item.name || "") + " " + (item.keywords || "")).toLowerCase();
     return haystack.includes("anual");
   }
 
+  function productDesc(p, kind) {
+    return kind === "combo"
+      ? p.items.map(i => i.quantity > 1 ? `${i.platform} x${i.quantity}` : i.platform).join(" + ")
+      : p.description;
+  }
+
+  function productImgHtml(p, kind) {
+    const fallbackTag = (kind === "combo" ? "COMBO" : p.platform).slice(0, 3).toUpperCase();
+    return p.imageUrl
+      ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'product-img-fallback\\'>${escapeHtml(fallbackTag)}</span>'">`
+      : `<span class="product-img-fallback">${escapeHtml(fallbackTag)}</span>`;
+  }
+
   function productCardHtml(p, kind) {
     const annual = isAnnual(p);
     const title  = kind === "combo" ? p.name : p.title;
-    const desc   = kind === "combo"
-      ? p.items.map(i => i.platform).join(" + ")
-      : p.description;
-    const buyAttr = kind === "combo" ? `data-combo="${p.id}"` : `data-platform="${escapeHtml(p.platform)}"`;
-    const img = p.imageUrl
-      ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'product-img-fallback\\'>${escapeHtml((kind === "combo" ? "COMBO" : p.platform).slice(0,3).toUpperCase())}</span>'">`
-      : `<span class="product-img-fallback">${escapeHtml((kind === "combo" ? "COMBO" : p.platform).slice(0, 3).toUpperCase())}</span>`;
+    const detailAttr = kind === "combo" ? `data-detail-combo="${p.id}"` : `data-detail-platform="${escapeHtml(p.platform)}"`;
 
     return `
-      <div class="product-card">
-        <div class="product-img-wrap">${img}</div>
+      <div class="product-card" ${detailAttr} role="button" tabindex="0">
+        <div class="product-img-wrap">${productImgHtml(p, kind)}</div>
         <div class="product-body">
           <div class="product-title-row">
             <span class="product-title">${escapeHtml(title)}</span>
             ${annual ? '<span class="badge-annual">ANUAL</span>' : ""}
           </div>
-          <p class="product-desc">${escapeHtml(desc)}</p>
           <div class="product-footer">
             <span class="product-price">S/ ${escapeHtml(p.price)}</span>
-            <button class="btn-primary btn-sm" ${buyAttr}>Comprar</button>
+            <span class="product-more">Ver detalles</span>
           </div>
         </div>
       </div>`;
@@ -172,6 +179,7 @@
       empty.hidden = true;
 
       const sortedProducts = [...(products || [])].sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+      cachedProducts = sortedProducts;
 
       let html = "";
       if (sortedProducts.length > 0) {
@@ -195,10 +203,57 @@
 
   function initCatalogClicks() {
     document.getElementById("catalog-sections").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-platform], [data-combo]");
-      if (!btn) return;
-      if (btn.dataset.platform) startCheckout({ kind: "platform", id: btn.dataset.platform });
-      else startCheckout({ kind: "combo", id: Number(btn.dataset.combo) });
+      const card = e.target.closest("[data-detail-platform], [data-detail-combo]");
+      if (!card) return;
+      if (card.dataset.detailPlatform) openProductDetail({ kind: "platform", id: card.dataset.detailPlatform });
+      else openProductDetail({ kind: "combo", id: Number(card.dataset.detailCombo) });
+    });
+    document.getElementById("catalog-sections").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const card = e.target.closest("[data-detail-platform], [data-detail-combo]");
+      if (!card) return;
+      e.preventDefault();
+      card.click();
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // DETALLE DE PRODUCTO — la tarjeta solo muestra lo esencial; la
+  // descripción y el botón de comprar aparecen acá, al hacer click.
+  // ─────────────────────────────────────────────────────────────
+
+  function openProductDetail({ kind, id }) {
+    const item = kind === "combo"
+      ? cachedCombos.find(c => c.id === id)
+      : cachedProducts.find(p => p.platform === id);
+    if (!item) return;
+
+    const title = kind === "combo" ? item.name : item.title;
+    const desc  = productDesc(item, kind);
+
+    document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
+    document.getElementById("detail-title").textContent = title;
+    document.getElementById("detail-annual").hidden = !isAnnual(item);
+    document.getElementById("detail-desc").textContent = desc || "";
+    document.getElementById("detail-desc").hidden = !desc;
+    document.getElementById("detail-price").textContent = "S/ " + item.price;
+
+    document.getElementById("detail-buy-btn").onclick = () => {
+      closeProductDetail();
+      startCheckout({ kind, id });
+    };
+
+    document.getElementById("product-detail-modal").hidden = false;
+  }
+
+  function closeProductDetail() {
+    document.getElementById("product-detail-modal").hidden = true;
+  }
+
+  function initProductDetailModal() {
+    document.getElementById("detail-close").addEventListener("click", closeProductDetail);
+    document.getElementById("product-detail-modal").addEventListener("click", (e) => {
+      if (e.target.id === "product-detail-modal") closeProductDetail();
     });
   }
 
@@ -377,6 +432,7 @@
     initCatalogClicks();
     initDashboardClicks();
     initCheckoutModal();
+    initProductDetailModal();
 
     try {
       const me = await api("/auth/me");

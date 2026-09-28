@@ -85,6 +85,23 @@
     </main>
   </div>
 
+  <!-- ═══════════ MODAL DE DETALLE DE PRODUCTO ═══════════ -->
+  <div id="product-detail-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="detail-close" type="button" aria-label="Cerrar">✕</button>
+      <div class="detail-img-wrap" id="detail-img-wrap"></div>
+      <div class="detail-title-row">
+        <h2 id="detail-title"></h2>
+        <span class="badge-annual" id="detail-annual" hidden>ANUAL</span>
+      </div>
+      <p class="muted" id="detail-desc"></p>
+      <div class="detail-footer">
+        <span class="product-price" id="detail-price"></span>
+        <button class="btn-primary" id="detail-buy-btn" type="button">Comprar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════ MODAL DE CHECKOUT ═══════════ -->
   <div id="checkout-modal" class="modal-backdrop" hidden>
     <div class="modal-card">
