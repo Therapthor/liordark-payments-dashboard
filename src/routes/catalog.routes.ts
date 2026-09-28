@@ -16,8 +16,24 @@ import {
   type ComboInput,
   type ComboItem,
 } from "../db/combo.repository";
+import { generateCatalogPdf } from "../services/catalog-pdf.service";
 
 const router = Router();
+
+// GET /api/catalog/pdf — catálogo actual en PDF, con el número de
+// soporte en cada página y Yape al final. Para mandarle al cliente que
+// escribe al WhatsApp de soporte mientras la web no está lista.
+router.get("/pdf", async (_req, res) => {
+  try {
+    const pdf = await generateCatalogPdf();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="catalogo-manguitope.pdf"');
+    res.send(pdf);
+  } catch (err: any) {
+    console.error("❌ Error generando PDF del catálogo:", err?.message);
+    res.status(500).json({ message: "No se pudo generar el PDF." });
+  }
+});
 
 // ── PRODUCTOS ──
 
