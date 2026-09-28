@@ -8,6 +8,7 @@ import {
   releaseProfilesByOrderRef,
   findAccountByClientPhone,
   listExpiringClients,
+  listAllClientPhones,
   getProfileById,
   getAccountById,
   createAccountsBulk,
@@ -193,6 +194,12 @@ router.get("/expiring", (req, res) => {
     daysLeft: daysLeft(c.expiresAt),
   }));
   res.json({ clients });
+});
+
+// GET /all-client-phones — toda la base (activos + historial), sin
+// repetidos. Para campañas puntuales (ej. aviso de cambio de número).
+router.get("/all-client-phones", (_req, res) => {
+  res.json({ phones: listAllClientPhones() });
 });
 
 // ── BITÁCORA DE PEDIDOS (reemplaza PEDIDOS_PENDIENTES de Sheets) ──

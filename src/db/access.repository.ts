@@ -480,6 +480,38 @@ export function listExpiringClients(days: number): ExpiringClient[] {
   `).all(limit) as ExpiringClient[];
 }
 
+/**
+ * Todos los teléfonos de clientes que hayamos tenido alguna vez —
+ * perfiles activos (access_profiles) + perfiles archivados cuando su
+ * cuenta venció (access_accounts_history.profiles_json) — sin repetir
+ * el mismo número. Para campañas puntuales (ej. avisar cambio de
+ * número), no para operar cuentas.
+ */
+export function listAllClientPhones(): string[] {
+  const activeRows = db.prepare(`
+    SELECT DISTINCT client_phone AS clientPhone
+    FROM access_profiles
+    WHERE client_phone != ''
+  `).all() as { clientPhone: string }[];
+
+  const historyRows = db.prepare(`
+    SELECT profiles_json AS profilesJson FROM access_accounts_history
+  `).all() as { profilesJson: string }[];
+
+  const phones = new Set<string>();
+  for (const r of activeRows) phones.add(r.clientPhone);
+
+  for (const row of historyRows) {
+    let profiles: { clientPhone?: string }[] = [];
+    try { profiles = JSON.parse(row.profilesJson || "[]"); } catch { /* fila corrupta — se salta */ }
+    for (const p of profiles) {
+      if (p.clientPhone) phones.add(p.clientPhone);
+    }
+  }
+
+  return [...phones];
+}
+
 function limaTodayISOLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
 }
