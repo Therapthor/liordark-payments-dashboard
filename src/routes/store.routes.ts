@@ -49,8 +49,8 @@ router.get("/dashboard", (req, res) => {
   res.json({ accounts });
 });
 
-// POST /api/store/checkout — { platform } → reserva el monto único en
-// el bot (mismo mecanismo que ya usa WhatsApp) y lo devuelve.
+// POST /api/store/checkout — { platform } o { comboId } → reserva el
+// monto único en el bot (mismo mecanismo que ya usa WhatsApp) y lo devuelve.
 router.post("/checkout", async (req, res) => {
   const customerId = (req as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
@@ -58,15 +58,16 @@ router.post("/checkout", async (req, res) => {
     return res.status(401).json({ message: "Sesión inválida." });
   }
 
-  const platform = String(req.body?.platform ?? "").trim();
-  if (!platform) {
-    return res.status(400).json({ message: "Falta 'platform'." });
+  const platform = req.body?.platform ? String(req.body.platform).trim() : undefined;
+  const comboId  = req.body?.comboId ? Number(req.body.comboId) : undefined;
+  if (!platform && !comboId) {
+    return res.status(400).json({ message: "Falta 'platform' o 'comboId'." });
   }
 
   try {
     const response = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
-      { phone: customer.phone, platform, clientEmail: customer.email },
+      { phone: customer.phone, platform, comboId, clientEmail: customer.email },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     res.json({ orderName: response.data.orderName, amount: response.data.amount });

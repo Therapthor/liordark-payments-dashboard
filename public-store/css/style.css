@@ -1,0 +1,248 @@
+:root {
+  --bg:        #fffaf3;
+  --card:      #ffffff;
+  --text:      #241a10;
+  --muted:     #8a7660;
+  --accent:    #ff7a1a;
+  --accent2:   #ffb020;
+  --btn:       #e35d00;
+  --border:    #f1e4d3;
+  --chip-bg:   #fdf0e4;
+  --danger:    #d1373d;
+  --ok:        #0ea968;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Manrope', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 { font-family: 'Space Grotesk', sans-serif; margin: 0 0 4px; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+
+a { color: var(--btn); }
+
+/* ─── Botones ─────────────────────────────────────────────── */
+
+.btn-primary, .btn-ghost {
+  border-radius: 11px;
+  padding: 12px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter .15s ease, background .15s ease, transform .1s ease;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.btn-primary { background: var(--btn); color: #fff; }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: .6; cursor: default; filter: none; }
+.btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+.btn-ghost:hover { background: rgba(0,0,0,0.03); }
+.btn-block { width: 100%; }
+.btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 9px; }
+
+/* ─── Gate de login/registro ─────────────────────────────────── */
+
+.view-auth {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
+}
+.auth-blob {
+  position: absolute;
+  top: -120px; right: -120px;
+  width: 360px; height: 360px;
+  border-radius: 50%;
+  background: var(--accent2);
+  opacity: .16;
+}
+.auth-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+  animation: riseIn .5s ease both;
+}
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-center { flex-direction: column; margin-bottom: 28px; }
+.brand-logo { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; box-shadow: 0 10px 28px -12px rgba(255,122,26,.35); }
+.brand-logo-sm { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+.brand-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: .3px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 26px 24px;
+  box-shadow: 0 16px 40px -22px rgba(255,122,26,.28);
+}
+
+.auth-card form { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
+.auth-card label { font-size: 11.5px; color: var(--muted); margin: 10px 0 2px; }
+.auth-card input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: #fcfcfc;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.auth-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+.auth-card button[type="submit"] { margin-top: 16px; }
+
+.divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.divider span { font-size: 11px; color: var(--muted); }
+
+.form-error { color: var(--danger); font-size: 12.5px; margin: 8px 0 0; }
+
+/* ─── App (post-login) ───────────────────────────────────────── */
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.topnav { display: flex; align-items: center; gap: 6px; }
+.nav-btn {
+  border: none; background: transparent; color: var(--muted);
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  padding: 8px 14px; border-radius: 9px; cursor: pointer;
+}
+.nav-btn:hover { background: var(--chip-bg); color: var(--text); }
+.nav-btn.active { background: var(--accent); color: #fff; }
+.nav-btn-ghost { color: var(--muted); }
+
+.content { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
+.page { animation: fadeIn .35s ease both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ─── Catálogo ────────────────────────────────────────────────── */
+
+.section-chip {
+  display: inline-block;
+  background: var(--chip-bg);
+  color: var(--accent);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: .4px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  margin: 26px 0 14px;
+}
+.section-chip:first-child { margin-top: 0; }
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.product-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  animation: cardIn .4s ease forwards;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.product-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px -18px rgba(255,122,26,.35); }
+@keyframes cardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.product-img-wrap { width: 100%; aspect-ratio: 16/10; background: var(--chip-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.product-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.product-img-fallback { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--accent); font-size: 22px; }
+
+.product-body { padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.product-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.product-title { font-weight: 700; font-size: 14.5px; }
+.badge-annual {
+  background: var(--accent); color: #fff; font-size: 9.5px; font-weight: 700;
+  padding: 3px 8px; border-radius: 999px; letter-spacing: .3px;
+}
+.product-desc { font-size: 12.5px; color: var(--muted); flex: 1; }
+.product-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.product-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--accent); font-size: 16px; }
+
+/* ─── Mis cuentas ─────────────────────────────────────────────── */
+
+.dashboard-list { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+.account-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px; display: flex; align-items: center; gap: 14px;
+  opacity: 0; animation: cardIn .4s ease forwards;
+}
+.account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; min-width: 110px; }
+.account-details { flex: 1; font-size: 13px; color: var(--muted); }
+.account-details b { color: var(--text); }
+.account-reveal { cursor: pointer; color: var(--btn); font-weight: 600; font-size: 12.5px; }
+.account-days { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+.account-days.ok { background: #e7f8f0; color: var(--ok); }
+.account-days.soon { background: #fff1e0; color: var(--btn); }
+.account-days.over { background: #fce9ea; color: var(--danger); }
+.account-renew-hint { font-size: 11.5px; margin-top: 4px; }
+
+/* ─── Modal de checkout ───────────────────────────────────────── */
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(36,26,16,.45);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100;
+  animation: fadeIn .2s ease both;
+}
+.modal-card {
+  background: var(--card); border-radius: 20px; padding: 28px 24px;
+  width: 100%; max-width: 380px; position: relative;
+  box-shadow: 0 30px 60px -20px rgba(0,0,0,.35);
+  animation: riseIn .25s ease both;
+}
+.modal-close {
+  position: absolute; top: 14px; right: 14px; border: none; background: transparent;
+  color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px;
+}
+.checkout-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+.checkout-amount { font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700; color: var(--accent); margin: 6px 0; }
+.checkout-qr { width: 190px; height: 190px; object-fit: contain; border: 1px solid var(--border); border-radius: 14px; padding: 8px; margin: 4px 0; }
+.checkout-waiting { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 13px; }
+.success-check {
+  width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: #fff;
+  font-size: 28px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px;
+}
+
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: spin .7s linear infinite;
+}
+.spinner-sm { width: 13px; height: 13px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 480px) {
+  .topbar { padding: 12px 14px; }
+  .nav-btn { font-size: 12px; padding: 7px 10px; }
+  .brand-name { font-size: 16px; }
+}

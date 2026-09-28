@@ -64,9 +64,24 @@ app.get("/api/health", (_req, res) => {
 // Frontend estático — sin build, HTML/CSS/JS planos servidos directo.
 // no-cache: sin esto el navegador a veces sirve una versión vieja de un
 // .js/.css cacheada aunque el archivo ya se haya reemplazado en el deploy.
-app.use(express.static(path.resolve(process.cwd(), "public"), {
-  setHeaders: (res) => res.setHeader("Cache-Control", "no-cache"),
-}));
+//
+// Un solo proceso sirve DOS sitios distintos según el dominio con el que
+// entren (mismo servidor, nginx apunta ambos acá): liordark.com es la
+// tienda para clientes (public-store/), cualquier otro host (panel.
+// liordark.com, IP directa, localhost) sigue siendo el panel de admin
+// (public/) — no cambia nada de cómo ya se accede a él.
+const noCacheHeaders = { setHeaders: (res: any) => res.setHeader("Cache-Control", "no-cache") };
+const storeStatic = express.static(path.resolve(process.cwd(), "public-store"), noCacheHeaders);
+const panelStatic = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
+
+app.use((req, res, next) => {
+  const host = req.hostname;
+  if (host === "liordark.com" || host === "www.liordark.com") {
+    storeStatic(req, res, next);
+  } else {
+    panelStatic(req, res, next);
+  }
+});
 
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);
