@@ -264,3 +264,21 @@ CREATE TABLE IF NOT EXISTS providers (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ═══════════════════════════════════════════════════════════════════
+-- CLIENTES DE LA TIENDA WEB (liordark.com) — login propio, separado
+-- del login de admin (que sigue siendo una sola contraseña compartida).
+--
+-- phone vincula al cliente con sus compras ya existentes en
+-- access_profiles/access_accounts_history (mismo teléfono que usaba
+-- con el bot de WhatsApp) — así alguien que ya compró antes ve sus
+-- cuentas activas apenas se registra con el mismo número.
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS customers (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  email         TEXT    NOT NULL UNIQUE,
+  password_hash TEXT    NOT NULL,
+  phone         TEXT    NOT NULL DEFAULT '',
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);

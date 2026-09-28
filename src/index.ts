@@ -19,6 +19,8 @@ import providerRoutes from "./routes/provider.routes";
 import stockRoutes from "./routes/stock.routes";
 import renewalsRoutes from "./routes/renewals.routes";
 import botFlowRoutes from "./routes/bot-flow.routes";
+import customerAuthRoutes from "./routes/customer-auth.routes";
+import storeRoutes from "./routes/store.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
@@ -49,6 +51,10 @@ apiRouter.use("/bot-flow", requireAuth, botFlowRoutes);
 apiRouter.use("/integrations", integrationsRoutes);
 // Igual que integrations — su propio candado (x-bot-key) adentro del router.
 apiRouter.use("/stock", stockRoutes);
+// ─── Tienda web (liordark.com) — clientes, no admins. Login propio,
+// separado del de arriba (requireAuth es el del panel de administración). ──
+apiRouter.use("/store/auth", customerAuthRoutes);
+apiRouter.use("/store", storeRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {

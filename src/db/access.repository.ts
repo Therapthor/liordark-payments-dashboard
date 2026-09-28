@@ -454,6 +454,31 @@ export function findAccountByClientPhone(platform: string, clientPhone: string):
   return row ? { ...toAccount(row), profiles: getProfilesByAccount(row.id) } : null;
 }
 
+export type CustomerAccount = {
+  platform:    string;
+  email:       string;
+  password:    string;
+  link:        string;
+  profileName: string;
+  expiresAt:   string | null;
+};
+
+/** Todas las cuentas activas de un cliente (cualquier plataforma) — para
+ *  su dashboard en la tienda web. Sin datos internos (provider, notes). */
+export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[] {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return [];
+
+  return (db.prepare(`
+    SELECT a.platform AS platform, a.email AS email, a.password AS password,
+           a.link AS link, p.profile_name AS profileName, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.client_phone = ?
+    ORDER BY a.expires_at ASC
+  `).all(digits) as CustomerAccount[]);
+}
+
 export type ExpiringClient = {
   profileId:   number;
   clientPhone: string;
