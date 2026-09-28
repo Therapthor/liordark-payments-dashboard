@@ -228,6 +228,18 @@
       </div>`;
   }
 
+  // Tarjeta promocional dentro de Combos — no vende nada puntual, solo
+  // explica la idea de combinar plataformas para ahorrar. Por eso no
+  // lleva data-detail-* (no abre el modal de detalle) ni precio.
+  function smartBuyCardHtml() {
+    return `
+      <div class="product-card smart-buy-card">
+        <div class="smart-buy-icon">🧠</div>
+        <div class="smart-buy-title">Compra inteligente</div>
+        <p class="smart-buy-text">Combiná varias plataformas en un solo pago y ahorrá más que comprándolas por separado.</p>
+      </div>`;
+  }
+
   async function loadCatalog() {
     const container = document.getElementById("catalog-sections");
     const empty     = document.getElementById("catalog-empty");
@@ -258,7 +270,7 @@
       }
       if (combos && combos.length > 0) {
         html += `<div class="section-chip">Combos</div>`;
-        html += `<div class="product-grid">${combos.map(c => productCardHtml(c, "combo")).join("")}</div>`;
+        html += `<div class="product-grid">${combos.map(c => productCardHtml(c, "combo")).join("")}${smartBuyCardHtml()}</div>`;
       }
       container.innerHTML = html;
 
