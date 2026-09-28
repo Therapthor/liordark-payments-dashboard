@@ -171,10 +171,12 @@
       }
       empty.hidden = true;
 
+      const sortedProducts = [...(products || [])].sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+
       let html = "";
-      if (products && products.length > 0) {
-        html += `<div class="section-chip">Catálogo</div>`;
-        html += `<div class="product-grid">${products.map(p => productCardHtml(p, "platform")).join("")}</div>`;
+      if (sortedProducts.length > 0) {
+        html += `<div class="section-chip">Perfiles</div>`;
+        html += `<div class="product-grid">${sortedProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
       }
       if (combos && combos.length > 0) {
         html += `<div class="section-chip">Combos</div>`;
