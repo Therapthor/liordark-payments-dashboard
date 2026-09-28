@@ -465,6 +465,20 @@ export type CustomerAccount = {
 
 /** Todas las cuentas activas de un cliente (cualquier plataforma) — para
  *  su dashboard en la tienda web. Sin datos internos (provider, notes). */
+/** Cuántos perfiles/cuentas se le asignaron a cada celular — para el panel de "Clientes web". */
+export function countProfilesByPhone(): Record<string, number> {
+  const rows = db.prepare(`
+    SELECT client_phone AS phone, COUNT(*) AS count
+    FROM access_profiles
+    WHERE client_phone IS NOT NULL AND client_phone != ''
+    GROUP BY client_phone
+  `).all() as { phone: string; count: number }[];
+
+  const map: Record<string, number> = {};
+  for (const r of rows) map[r.phone] = r.count;
+  return map;
+}
+
 export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[] {
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return [];

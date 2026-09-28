@@ -2,6 +2,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
+import { findCustomerById, isCustomerSuspended } from "../db/customer.repository";
 
 // ─────────────────────────────────────────────────────────────
 // SESIÓN DE CLIENTE (tienda web) — mismo patrón de token firmado que
@@ -65,6 +66,20 @@ export function requireCustomerSession(req: Request, res: Response, next: NextFu
     res.status(401).json({ message: "Necesitás iniciar sesión." });
     return;
   }
+
+  // Se chequea acá (no solo en /login) para que una suspensión corte
+  // también una sesión que ya estaba abierta, no solo los logins nuevos.
+  const customer = findCustomerById(customerId);
+  if (!customer) {
+    res.status(401).json({ message: "Necesitás iniciar sesión." });
+    return;
+  }
+  if (isCustomerSuspended(customer)) {
+    res.clearCookie(CUSTOMER_SESSION_COOKIE);
+    res.status(403).json({ message: "Tu cuenta está suspendida temporalmente. Contáctanos si es un error." });
+    return;
+  }
+
   (req as RequestWithCustomer).customerId = customerId;
   next();
 }

@@ -388,8 +388,9 @@ button, input {
 .web-customer-badge-guest { background: #fdf0e4; color: var(--accent-dim); }
 .web-customer-badge-own   { background: #eaf6ee; color: var(--good); }
 .web-customer-status { font-size: 12px; color: var(--good); }
+.web-customer-status-suspended { color: var(--warning); }
 .web-customer-sub { font-size: 12px; color: var(--text-muted); flex-basis: 100%; }
-.web-customer-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.web-customer-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-basis: 100%; }
 .web-customer-password {
   font-family: monospace; font-size: 13px; font-weight: 700;
   background: var(--surface-raised); padding: 4px 10px; border-radius: 8px; letter-spacing: .5px;
@@ -640,6 +641,12 @@ button, input {
 .btn-primary { background: var(--accent); color: var(--on-accent); }
 .btn-primary:hover { background: var(--accent-dim); }
 .btn-secondary { background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-danger {
+  border: none; padding: 10px 18px; border-radius: var(--radius-sm);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  background: #fceded; color: var(--critical);
+}
+.btn-danger:hover { background: #f9dcdc; }
 
 .day-detail-row {
   display: flex; justify-content: space-between;

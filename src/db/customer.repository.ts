@@ -3,25 +3,31 @@ import { db } from "./db";
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB — ver tables.sql (customers)
 // Login/registro es solo con celular + contraseña, sin correo.
+// Se guarda la contraseña en texto plano (además del hash, que es lo
+// que realmente valida el login) para que el panel admin la pueda
+// mostrar y reenviar por WhatsApp si el cliente la pierde — mismo
+// criterio que ya se usa con las cuentas de streaming (Accesos).
 // ─────────────────────────────────────────────────────────────
 
 export type Customer = {
-  id:                number;
-  phone:             string;
-  passwordHash:      string;
-  isGuest:           boolean;
-  generatedPassword: string;
-  createdAt:         string;
+  id:              number;
+  phone:           string;
+  passwordHash:    string;
+  passwordPlain:   string;
+  isGuest:         boolean;
+  suspendedUntil:  string | null;
+  createdAt:       string;
 };
 
 function toCustomer(row: any): Customer {
   return {
-    id:                row.id,
-    phone:             row.phone,
-    passwordHash:      row.password_hash,
-    isGuest:           !!row.is_guest,
-    generatedPassword: row.generated_password,
-    createdAt:         row.created_at,
+    id:              row.id,
+    phone:           row.phone,
+    passwordHash:    row.password_hash,
+    passwordPlain:   row.password_plain,
+    isGuest:         !!row.is_guest,
+    suspendedUntil:  row.suspended_until,
+    createdAt:       row.created_at,
   };
 }
 
@@ -29,19 +35,19 @@ export function normalizeCustomerPhone(phone: string): string {
   return phone.replace(/\D/g, "");
 }
 
+export function isCustomerSuspended(customer: Customer): boolean {
+  return !!customer.suspendedUntil && new Date(customer.suspendedUntil).getTime() > Date.now();
+}
+
 export function createCustomer(
   phone: string,
   passwordHash: string,
-  opts?: { isGuest?: boolean; generatedPassword?: string }
+  passwordPlain: string,
+  isGuest = false
 ): Customer {
   const info = db.prepare(`
-    INSERT INTO customers (phone, password_hash, is_guest, generated_password) VALUES (?, ?, ?, ?)
-  `).run(
-    normalizeCustomerPhone(phone),
-    passwordHash,
-    opts?.isGuest ? 1 : 0,
-    opts?.generatedPassword ?? ""
-  );
+    INSERT INTO customers (phone, password_hash, password_plain, is_guest) VALUES (?, ?, ?, ?)
+  `).run(normalizeCustomerPhone(phone), passwordHash, passwordPlain, isGuest ? 1 : 0);
 
   return findCustomerById(info.lastInsertRowid as number) as Customer;
 }
@@ -60,4 +66,16 @@ export function findCustomerById(id: number): Customer | null {
 export function listAllCustomers(): Customer[] {
   const rows = db.prepare(`SELECT * FROM customers ORDER BY created_at DESC`).all();
   return rows.map(toCustomer);
+}
+
+/** Suspender = pausar el login por `days` días (no borra nada). */
+export function suspendCustomer(id: number, days: number): Customer | null {
+  const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(`UPDATE customers SET suspended_until = ? WHERE id = ?`).run(until, id);
+  return findCustomerById(id);
+}
+
+/** Banear = borra la cuenta y sus datos de este panel (no toca cuentas de streaming ya entregadas). */
+export function deleteCustomer(id: number): void {
+  db.prepare(`DELETE FROM customers WHERE id = ?`).run(id);
 }

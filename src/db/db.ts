@@ -161,7 +161,19 @@ db.exec(`DROP TABLE IF EXISTS provider_subscriptions`);
     console.log(`🗄️  Migración: customers pasó a usar el celular como identificador (${oldCustomers.length} cuenta(s) revisadas)`);
   }
 }
-ensureColumn("customers", "is_guest",           "is_guest INTEGER NOT NULL DEFAULT 0");
-ensureColumn("customers", "generated_password", "generated_password TEXT NOT NULL DEFAULT ''");
+ensureColumn("customers", "is_guest", "is_guest INTEGER NOT NULL DEFAULT 0");
+ensureColumn("customers", "suspended_until", "suspended_until TEXT");
+
+// generated_password (solo cuentas "Comprar sin cuenta") → password_plain
+// (todas las cuentas), para poder reenviar accesos por WhatsApp sin
+// importar si el cliente puso su propia contraseña o se la generamos.
+{
+  const cols = db.prepare(`PRAGMA table_info(customers)`).all() as { name: string }[];
+  if (cols.some(c => c.name === "generated_password") && !cols.some(c => c.name === "password_plain")) {
+    db.exec(`ALTER TABLE customers RENAME COLUMN generated_password TO password_plain`);
+    console.log("🗄️  Migración: customers.generated_password → password_plain");
+  }
+}
+ensureColumn("customers", "password_plain", "password_plain TEXT NOT NULL DEFAULT ''");
 
 console.log("🗄️  SQLite inicializado:", DB_PATH);

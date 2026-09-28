@@ -3,15 +3,19 @@
 
   // ─────────────────────────────────────────────────────────────
   // CLIENTES DE LA TIENDA WEB (liordark.com) — lista de cuentas
-  // registradas. Las creadas con "Comprar sin cuenta" muestran la
-  // contraseña generada (con botón para reenviarla por WhatsApp);
-  // las que el cliente registró con su propia contraseña no la
-  // muestran (nunca se guarda en texto plano).
+  // registradas, con su contraseña (guardada en texto plano, igual
+  // que las cuentas de streaming en Accesos) para poder reenviarla,
+  // cuántas cuentas se le entregaron, y acciones de suspender/banear.
   // ─────────────────────────────────────────────────────────────
 
-  async function api(path) {
-    const res = await fetch("/api/customers" + path, { credentials: "include" });
+  async function api(path, options) {
+    const res = await fetch("/api/customers" + path, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
     if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
+    if (res.status === 204) return {};
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || "Error de red");
     return data;
@@ -37,32 +41,65 @@
   function renderRow(c) {
     const div = document.createElement("div");
     div.className = "web-customer-row";
+    div.dataset.id = c.id;
 
     const originBadge = c.isGuest
       ? `<span class="web-customer-badge web-customer-badge-guest">Automática</span>`
       : `<span class="web-customer-badge web-customer-badge-own">Registro propio</span>`;
 
-    const passwordCol = c.isGuest
-      ? `<span class="web-customer-password">${escapeHtml(c.password)}</span>`
-      : `<span class="web-customer-sub">—</span>`;
+    const statusBadge = c.suspended
+      ? `<span class="web-customer-status web-customer-status-suspended">⏸ Suspendida hasta ${formatDate(c.suspendedUntil)}</span>`
+      : `<span class="web-customer-status">✅ Cuenta creada</span>`;
 
-    const msg = `Hola! Tu cuenta de Manguitope quedó creada 🥭\n\nCelular: ${c.phone}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`;
-    const sendBtn = c.isGuest
-      ? `<a class="btn-secondary btn-sm" href="${waLink(c.phone, msg)}" target="_blank" rel="noopener">📲 Enviar por WhatsApp</a>`
-      : "";
+    const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
+
+    const msg = `Hola! Estos son tus accesos a Manguitope 🥭\n\nCelular: ${c.phone}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`;
 
     div.innerHTML = `
       <div class="web-customer-main">
         <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
         ${originBadge}
-        <span class="web-customer-status">✅ Cuenta creada</span>
+        ${statusBadge}
       </div>
-      <div class="web-customer-sub">${formatDate(c.createdAt)}</div>
+      <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
       <div class="web-customer-actions">
-        ${passwordCol}
-        ${sendBtn}
+        <span class="web-customer-password">${escapeHtml(c.password)}</span>
+        <a class="btn-secondary btn-sm" href="${waLink(c.phone, msg)}" target="_blank" rel="noopener">📲 Enviar accesos</a>
+        <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
+        <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
       </div>`;
     return div;
+  }
+
+  async function suspend(id, row) {
+    if (!confirm("¿Suspender esta cuenta por 3 días? El cliente no va a poder iniciar sesión hasta entonces.")) return;
+    try {
+      await api(`/${id}/suspend`, { method: "POST" });
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function ban(id) {
+    if (!confirm("Esto BORRA la cuenta y su contraseña de este panel. No se puede deshacer. ¿Continuar?")) return;
+    if (!confirm("Confirmá de nuevo: ¿estás seguro de banear y borrar esta cuenta?")) return;
+    try {
+      await api(`/${id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function initRowActions(list) {
+    list.addEventListener("click", (e) => {
+      const row = e.target.closest(".web-customer-row");
+      if (!row) return;
+      const id = Number(row.dataset.id);
+      if (e.target.closest(".web-customer-suspend-btn")) suspend(id, row);
+      if (e.target.closest(".web-customer-ban-btn")) ban(id);
+    });
   }
 
   async function load() {
@@ -81,6 +118,8 @@
       list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
     }
   }
+
+  initRowActions(document.getElementById("web-customers-list"));
 
   window.LiordarkWebCustomers = { load };
 })();

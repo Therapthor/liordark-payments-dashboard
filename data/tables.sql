@@ -278,7 +278,8 @@ CREATE TABLE IF NOT EXISTS customers (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,
   phone               TEXT    NOT NULL UNIQUE,
   password_hash       TEXT    NOT NULL,
+  password_plain      TEXT    NOT NULL DEFAULT '', -- para reenviar accesos por WhatsApp desde el panel
   is_guest            INTEGER NOT NULL DEFAULT 0,
-  generated_password  TEXT    NOT NULL DEFAULT '',
+  suspended_until     TEXT,                        -- ISO datetime; NULL o pasado = no suspendida
   created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );

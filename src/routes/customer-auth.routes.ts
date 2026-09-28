@@ -5,6 +5,7 @@ import {
   createCustomer,
   findCustomerByPhone,
   findCustomerById,
+  isCustomerSuspended,
   normalizeCustomerPhone,
 } from "../db/customer.repository";
 import {
@@ -51,7 +52,7 @@ router.post("/register", async (req, res) => {
   }
 
   const passwordHash = await hashPassword(password);
-  const customer      = createCustomer(phone, passwordHash);
+  const customer      = createCustomer(phone, passwordHash, password);
 
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone });
@@ -64,6 +65,9 @@ router.post("/login", async (req, res) => {
   const customer = findCustomerByPhone(phone);
   if (!customer || !(await checkPassword(password, customer.passwordHash))) {
     return res.status(401).json({ message: "Celular o contraseña incorrectos." });
+  }
+  if (isCustomerSuspended(customer)) {
+    return res.status(403).json({ message: "Tu cuenta está suspendida temporalmente. Contáctanos si es un error." });
   }
 
   setSessionCookie(res, customer.id);
@@ -88,7 +92,7 @@ router.post("/guest", async (req, res) => {
 
   const generatedPassword = generateGuestPassword();
   const passwordHash      = await hashPassword(generatedPassword);
-  const customer           = createCustomer(phone, passwordHash, { isGuest: true, generatedPassword });
+  const customer           = createCustomer(phone, passwordHash, generatedPassword, true);
 
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone, password: generatedPassword });
