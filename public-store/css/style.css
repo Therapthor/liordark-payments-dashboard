@@ -121,6 +121,23 @@ a { color: var(--btn); }
 
 .form-error { color: var(--danger); font-size: 12.5px; margin: 8px 0 0; }
 
+/* ─── Comprar sin cuenta — pantalla de credenciales generadas ────── */
+
+.guest-success-card { text-align: center; }
+.guest-success-icon {
+  font-size: 40px; width: 72px; height: 72px; margin: 0 auto 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--chip-bg); border-radius: 50%;
+}
+.guest-creds-box {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 16px; padding: 18px 20px; margin: 18px 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.guest-creds-row { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.guest-creds-label { font-size: 11px; color: rgba(255,255,255,.85); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.guest-creds-value { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: #fff; letter-spacing: .5px; }
+
 /* ─── App (post-login) ───────────────────────────────────────── */
 
 .topbar {

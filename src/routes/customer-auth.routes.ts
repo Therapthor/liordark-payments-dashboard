@@ -1,8 +1,9 @@
+import { randomInt } from "crypto";
 import { Router } from "express";
 import { env } from "../config/env";
 import {
   createCustomer,
-  findCustomerByEmail,
+  findCustomerByPhone,
   findCustomerById,
   normalizeCustomerPhone,
 } from "../db/customer.repository";
@@ -16,59 +17,81 @@ import {
 
 const router = Router();
 
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+// Sin 0/O/1/I/l para que no se confundan al transcribirla desde la pantalla.
+const GUEST_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function generateGuestPassword(): string {
+  let out = "";
+  for (let i = 0; i < 8; i++) out += GUEST_PASSWORD_CHARS[randomInt(GUEST_PASSWORD_CHARS.length)];
+  return out;
+}
+
+function setSessionCookie(res: import("express").Response, customerId: number): void {
+  const { token, expires } = createCustomerSessionToken(customerId);
+  res.cookie(CUSTOMER_SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure:   env.NODE_ENV === "production",
+    sameSite: "lax",
+    expires,
+  });
 }
 
 router.post("/register", async (req, res) => {
-  const email    = String(req.body?.email ?? "").trim();
-  const password = String(req.body?.password ?? "");
   const phone    = String(req.body?.phone ?? "");
+  const password = String(req.body?.password ?? "");
 
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ message: "Correo inválido." });
+  if (normalizeCustomerPhone(phone).length < 9) {
+    return res.status(400).json({ message: "Número de celular inválido." });
   }
   if (password.length < 6) {
     return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres." });
   }
-  if (normalizeCustomerPhone(phone).length < 9) {
-    return res.status(400).json({ message: "Número de celular inválido." });
-  }
-
-  if (findCustomerByEmail(email)) {
-    return res.status(409).json({ message: "Ya existe una cuenta con ese correo." });
+  if (findCustomerByPhone(phone)) {
+    return res.status(409).json({ message: "Ya existe una cuenta con ese celular." });
   }
 
   const passwordHash = await hashPassword(password);
-  const customer      = createCustomer(email, passwordHash, phone);
+  const customer      = createCustomer(phone, passwordHash);
 
-  const { token, expires } = createCustomerSessionToken(customer.id);
-  res.cookie(CUSTOMER_SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure:   env.NODE_ENV === "production",
-    sameSite: "lax",
-    expires,
-  });
-  res.json({ ok: true, email: customer.email });
+  setSessionCookie(res, customer.id);
+  res.json({ ok: true, phone: customer.phone });
 });
 
 router.post("/login", async (req, res) => {
-  const email    = String(req.body?.email ?? "").trim();
+  const phone    = String(req.body?.phone ?? "");
   const password = String(req.body?.password ?? "");
 
-  const customer = findCustomerByEmail(email);
+  const customer = findCustomerByPhone(phone);
   if (!customer || !(await checkPassword(password, customer.passwordHash))) {
-    return res.status(401).json({ message: "Correo o contraseña incorrectos." });
+    return res.status(401).json({ message: "Celular o contraseña incorrectos." });
   }
 
-  const { token, expires } = createCustomerSessionToken(customer.id);
-  res.cookie(CUSTOMER_SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure:   env.NODE_ENV === "production",
-    sameSite: "lax",
-    expires,
-  });
-  res.json({ ok: true, email: customer.email });
+  setSessionCookie(res, customer.id);
+  res.json({ ok: true, phone: customer.phone });
+});
+
+// POST /guest — "Comprar sin cuenta": el cliente solo escribe su celular,
+// el sistema genera una contraseña y crea la cuenta al toque (login
+// automático), para que pueda comprar sin llenar el formulario de
+// registro. La contraseña generada queda guardada (además del hash, que
+// es lo que se usa para loguear) para que el panel admin la pueda ver y
+// reenviar por WhatsApp si el cliente la pierde.
+router.post("/guest", async (req, res) => {
+  const phone = String(req.body?.phone ?? "");
+
+  if (normalizeCustomerPhone(phone).length < 9) {
+    return res.status(400).json({ message: "Número de celular inválido." });
+  }
+  if (findCustomerByPhone(phone)) {
+    return res.status(409).json({ message: "Ya existe una cuenta con ese celular. Iniciá sesión." });
+  }
+
+  const generatedPassword = generateGuestPassword();
+  const passwordHash      = await hashPassword(generatedPassword);
+  const customer           = createCustomer(phone, passwordHash, { isGuest: true, generatedPassword });
+
+  setSessionCookie(res, customer.id);
+  res.json({ ok: true, phone: customer.phone, password: generatedPassword });
 });
 
 router.post("/logout", (_req, res) => {
@@ -83,7 +106,7 @@ router.get("/me", (req, res) => {
   if (!customer) {
     return res.json({ authenticated: false });
   }
-  res.json({ authenticated: true, email: customer.email, phone: customer.phone });
+  res.json({ authenticated: true, phone: customer.phone });
 });
 
 export default router;

@@ -21,6 +21,7 @@ import renewalsRoutes from "./routes/renewals.routes";
 import botFlowRoutes from "./routes/bot-flow.routes";
 import customerAuthRoutes from "./routes/customer-auth.routes";
 import storeRoutes from "./routes/store.routes";
+import customersRoutes from "./routes/customers.routes";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
@@ -55,6 +56,7 @@ apiRouter.use("/stock", stockRoutes);
 // separado del de arriba (requireAuth es el del panel de administración). ──
 apiRouter.use("/store/auth", customerAuthRoutes);
 apiRouter.use("/store", storeRoutes);
+apiRouter.use("/customers", requireAuth, customersRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {

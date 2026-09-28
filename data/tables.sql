@@ -275,10 +275,10 @@ CREATE TABLE IF NOT EXISTS providers (
 -- cuentas activas apenas se registra con el mismo número.
 -- ═══════════════════════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS customers (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  email         TEXT    NOT NULL UNIQUE,
-  password_hash TEXT    NOT NULL,
-  phone         TEXT    NOT NULL DEFAULT '',
-  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone               TEXT    NOT NULL UNIQUE,
+  password_hash       TEXT    NOT NULL,
+  is_guest            INTEGER NOT NULL DEFAULT 0,
+  generated_password  TEXT    NOT NULL DEFAULT '',
+  created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);

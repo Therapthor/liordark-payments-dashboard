@@ -200,11 +200,12 @@
   // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
   // Renovaciones); "Accesos" es un botón directo aparte.
   function switchView(view) {
-    document.getElementById("view-live").hidden     = view !== "resumen";
-    document.getElementById("view-access").hidden   = view !== "access";
-    document.getElementById("view-history").hidden  = view !== "history";
-    document.getElementById("view-renewals").hidden = view !== "renewals";
-    document.getElementById("view-config").hidden   = view !== "config";
+    document.getElementById("view-live").hidden          = view !== "resumen";
+    document.getElementById("view-access").hidden        = view !== "access";
+    document.getElementById("view-web-customers").hidden = view !== "web-customers";
+    document.getElementById("view-history").hidden       = view !== "history";
+    document.getElementById("view-renewals").hidden      = view !== "renewals";
+    document.getElementById("view-config").hidden        = view !== "config";
 
     const isPagos = view === "history" || view === "renewals";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
@@ -221,6 +222,7 @@
       if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
+    if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "config") switchConfigSection("catalog");
   }
 

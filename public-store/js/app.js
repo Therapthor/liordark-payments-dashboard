@@ -37,6 +37,7 @@
   function showAuth() {
     document.getElementById("view-auth").hidden = false;
     document.getElementById("view-app").hidden = true;
+    showAuthCard("login-card");
   }
 
   function showApp() {
@@ -44,15 +45,22 @@
     document.getElementById("view-app").hidden = false;
   }
 
+  function hideAllAuthCards() {
+    ["login-card", "register-card", "guest-card", "guest-success-card"].forEach(id => {
+      document.getElementById(id).hidden = true;
+    });
+  }
+
+  function showAuthCard(id) {
+    hideAllAuthCards();
+    document.getElementById(id).hidden = false;
+  }
+
   function initAuthToggle() {
-    document.getElementById("show-register-btn").addEventListener("click", () => {
-      document.getElementById("login-card").hidden = true;
-      document.getElementById("register-card").hidden = false;
-    });
-    document.getElementById("show-login-btn").addEventListener("click", () => {
-      document.getElementById("register-card").hidden = true;
-      document.getElementById("login-card").hidden = false;
-    });
+    document.getElementById("show-register-btn").addEventListener("click", () => showAuthCard("register-card"));
+    document.getElementById("show-login-btn").addEventListener("click", () => showAuthCard("login-card"));
+    document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
+    document.getElementById("show-login-from-guest-btn").addEventListener("click", () => showAuthCard("login-card"));
   }
 
   function setFormError(id, message) {
@@ -66,10 +74,10 @@
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       setFormError("login-error", "");
-      const email    = document.getElementById("login-email").value.trim();
+      const phone    = document.getElementById("login-phone").value.trim();
       const password = document.getElementById("login-password").value;
       try {
-        await api("/auth/login", { method: "POST", body: { email, password } });
+        await api("/auth/login", { method: "POST", body: { phone, password } });
         await onAuthenticated();
       } catch (err) {
         setFormError("login-error", err.message);
@@ -79,16 +87,31 @@
     document.getElementById("register-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       setFormError("register-error", "");
-      const email    = document.getElementById("register-email").value.trim();
       const phone    = document.getElementById("register-phone").value.trim();
       const password = document.getElementById("register-password").value;
       try {
-        await api("/auth/register", { method: "POST", body: { email, phone, password } });
+        await api("/auth/register", { method: "POST", body: { phone, password } });
         await onAuthenticated();
       } catch (err) {
         setFormError("register-error", err.message);
       }
     });
+
+    document.getElementById("guest-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setFormError("guest-error", "");
+      const phone = document.getElementById("guest-phone").value.trim();
+      try {
+        const result = await api("/auth/guest", { method: "POST", body: { phone } });
+        document.getElementById("guest-success-phone").textContent = result.phone;
+        document.getElementById("guest-success-password").textContent = result.password;
+        showAuthCard("guest-success-card");
+      } catch (err) {
+        setFormError("guest-error", err.message);
+      }
+    });
+
+    document.getElementById("guest-continue-btn").addEventListener("click", onAuthenticated);
 
     document.getElementById("logout-btn").addEventListener("click", async () => {
       try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }

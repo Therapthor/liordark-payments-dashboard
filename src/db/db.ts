@@ -124,4 +124,44 @@ db.exec(`DROP TABLE IF EXISTS provider_subscriptions`);
   }
 }
 
+// customers: dejó de usarse el correo (login/registro es solo con celular).
+// Se reconstruye la tabla con "phone" como identificador único — antes el
+// único era "email", así que podían existir dos cuentas con el mismo
+// celular. Si eso pasa acá, se conserva la primera y se descartan las
+// demás (fueron pruebas de los primeros días de la tienda).
+{
+  const customerCols = db.prepare(`PRAGMA table_info(customers)`).all() as { name: string }[];
+  if (customerCols.some(c => c.name === "email")) {
+    const oldCustomers = db.prepare(`SELECT * FROM customers ORDER BY id`).all() as any[];
+
+    db.exec(`DROP TABLE customers`);
+    db.exec(`
+      CREATE TABLE customers (
+        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone               TEXT    NOT NULL UNIQUE,
+        password_hash       TEXT    NOT NULL,
+        is_guest            INTEGER NOT NULL DEFAULT 0,
+        generated_password  TEXT    NOT NULL DEFAULT '',
+        created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    const insertCustomer = db.prepare(`
+      INSERT OR IGNORE INTO customers (id, phone, password_hash, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    const migrate = db.transaction((rows: any[]) => {
+      for (const r of rows) {
+        if (!r.phone) continue; // sin celular no hay forma de loguearlo — eran pruebas
+        insertCustomer.run(r.id, r.phone, r.password_hash, r.created_at);
+      }
+    });
+    migrate(oldCustomers);
+
+    console.log(`🗄️  Migración: customers pasó a usar el celular como identificador (${oldCustomers.length} cuenta(s) revisadas)`);
+  }
+}
+ensureColumn("customers", "is_guest",           "is_guest INTEGER NOT NULL DEFAULT 0");
+ensureColumn("customers", "generated_password", "generated_password TEXT NOT NULL DEFAULT ''");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

@@ -26,8 +26,8 @@
         <h1>Bienvenido de nuevo</h1>
         <p class="muted">Iniciá sesión para ver el catálogo</p>
         <form id="login-form">
-          <label for="login-email">Correo</label>
-          <input type="email" id="login-email" required placeholder="tu@correo.com" autocomplete="email">
+          <label for="login-phone">Celular</label>
+          <input type="tel" id="login-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
           <label for="login-password">Contraseña</label>
           <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password">
           <p class="form-error" id="login-error" hidden></p>
@@ -35,14 +35,13 @@
         </form>
         <div class="divider"><span>o</span></div>
         <button class="btn-ghost btn-block" id="show-register-btn" type="button">Crear cuenta nueva</button>
+        <button class="btn-ghost btn-block" id="show-guest-btn" type="button">Comprar sin cuenta</button>
       </div>
 
       <div class="card auth-card" id="register-card" hidden>
         <h1>Crear cuenta</h1>
         <p class="muted">Con tu número vinculamos las compras que ya hiciste antes</p>
         <form id="register-form">
-          <label for="register-email">Correo</label>
-          <input type="email" id="register-email" required placeholder="tu@correo.com" autocomplete="email">
           <label for="register-phone">Celular</label>
           <input type="tel" id="register-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
           <label for="register-password">Contraseña</label>
@@ -52,6 +51,37 @@
         </form>
         <div class="divider"><span>o</span></div>
         <button class="btn-ghost btn-block" id="show-login-btn" type="button">Ya tengo cuenta</button>
+      </div>
+
+      <div class="card auth-card" id="guest-card" hidden>
+        <h1>Comprar sin cuenta</h1>
+        <p class="muted">Escribí tu celular y te creamos una cuenta al toque, con contraseña incluida</p>
+        <form id="guest-form">
+          <label for="guest-phone">Celular</label>
+          <input type="tel" id="guest-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
+          <p class="form-error" id="guest-error" hidden></p>
+          <button type="submit" class="btn-primary btn-block">Crear y continuar</button>
+        </form>
+        <div class="divider"><span>o</span></div>
+        <button class="btn-ghost btn-block" id="show-login-from-guest-btn" type="button">Ya tengo cuenta</button>
+      </div>
+
+      <div class="card auth-card guest-success-card" id="guest-success-card" hidden>
+        <div class="guest-success-icon">🥭</div>
+        <h1>¡Tu cuenta está lista!</h1>
+        <p class="muted">Guardá estos datos — los vas a necesitar para volver a entrar</p>
+        <div class="guest-creds-box">
+          <div class="guest-creds-row">
+            <span class="guest-creds-label">Celular</span>
+            <span class="guest-creds-value" id="guest-success-phone"></span>
+          </div>
+          <div class="guest-creds-row">
+            <span class="guest-creds-label">Contraseña</span>
+            <span class="guest-creds-value" id="guest-success-password"></span>
+          </div>
+        </div>
+        <p class="muted small">¿La perdiste? Escribinos por soporte y te la reenviamos.</p>
+        <button class="btn-primary btn-block" id="guest-continue-btn" type="button">Empezar a comprar</button>
       </div>
     </div>
   </section>

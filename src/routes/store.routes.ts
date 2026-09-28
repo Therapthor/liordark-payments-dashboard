@@ -67,7 +67,7 @@ router.post("/checkout", async (req, res) => {
   try {
     const response = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
-      { phone: customer.phone, platform, comboId, clientEmail: customer.email },
+      { phone: customer.phone, platform, comboId },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     res.json({ orderName: response.data.orderName, amount: response.data.amount });
