@@ -236,6 +236,15 @@ a { color: var(--btn); }
 .detail-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .detail-title-row h2 { font-size: 19px; }
 #detail-desc { font-size: 13.5px; margin: 8px 0 0; }
+.detail-canva-email { margin-top: 14px; text-align: left; }
+.detail-canva-email label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.detail-canva-email input {
+  width: 100%; padding: 11px 13px; border-radius: 11px;
+  border: 1px solid var(--border); background: #fcfcfc; color: var(--text);
+  font-size: 14px; font-family: inherit; box-sizing: border-box;
+}
+.detail-canva-email input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+
 .detail-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
 .detail-footer .product-price { font-size: 19px; color: var(--accent); }
 

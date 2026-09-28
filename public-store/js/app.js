@@ -285,6 +285,17 @@
   // descripción y el botón de comprar aparecen acá, al hacer click.
   // ─────────────────────────────────────────────────────────────
 
+  // CANVA es la única plataforma que se activa a mano en Canva.com con el
+  // correo del cliente — no tiene nada que ver con su cuenta/login acá,
+  // es un dato de ESA orden nada más (como una contraseña de streaming).
+  function isCanvaPlatform(platform) {
+    return /canva/i.test(platform || "");
+  }
+
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
   function openProductDetail({ kind, id }) {
     const item = kind === "combo"
       ? cachedCombos.find(c => c.id === id)
@@ -293,6 +304,7 @@
 
     const title = kind === "combo" ? item.name : item.title;
     const desc  = productDesc(item, kind);
+    const needsCanvaEmail = kind === "platform" && isCanvaPlatform(item.platform);
 
     document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
     document.getElementById("detail-title").textContent = title;
@@ -300,9 +312,21 @@
     renderDesc(document.getElementById("detail-desc"), desc);
     document.getElementById("detail-price").textContent = "S/ " + item.price;
 
+    document.getElementById("detail-canva-email").hidden = !needsCanvaEmail;
+    document.getElementById("detail-canva-email-input").value = "";
+    setFormError("detail-canva-email-error", "");
+
     document.getElementById("detail-buy-btn").onclick = () => {
+      let clientEmail;
+      if (needsCanvaEmail) {
+        clientEmail = document.getElementById("detail-canva-email-input").value.trim();
+        if (!isValidEmail(clientEmail)) {
+          setFormError("detail-canva-email-error", "Escribí un correo válido para activar Canva.");
+          return;
+        }
+      }
       closeProductDetail();
-      startCheckout({ kind, id });
+      startCheckout({ kind, id, clientEmail });
     };
 
     document.getElementById("product-detail-modal").hidden = false;
@@ -369,7 +393,7 @@
     }
   }
 
-  async function startCheckout({ kind, id }) {
+  async function startCheckout({ kind, id, clientEmail }) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -382,7 +406,7 @@
 
     try {
       const beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
-      const body = kind === "combo" ? { comboId: id } : { platform: id };
+      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail };
       const order = await api("/checkout", { method: "POST", body });
 
       await ensureYapeInfo();

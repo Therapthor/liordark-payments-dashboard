@@ -58,16 +58,23 @@ router.post("/checkout", async (req, res) => {
     return res.status(401).json({ message: "Sesión inválida." });
   }
 
-  const platform = req.body?.platform ? String(req.body.platform).trim() : undefined;
-  const comboId  = req.body?.comboId ? Number(req.body.comboId) : undefined;
+  const platform    = req.body?.platform ? String(req.body.platform).trim() : undefined;
+  const comboId     = req.body?.comboId ? Number(req.body.comboId) : undefined;
+  const clientEmail = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
   if (!platform && !comboId) {
     return res.status(400).json({ message: "Falta 'platform' o 'comboId'." });
+  }
+
+  // CANVA se activa a mano en Canva.com con el correo del cliente — sin
+  // eso el pedido llega sin forma de completarse.
+  if (platform && /canva/i.test(platform) && !clientEmail) {
+    return res.status(400).json({ message: "Falta el correo para activar Canva." });
   }
 
   try {
     const response = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
-      { phone: customer.phone, platform, comboId },
+      { phone: customer.phone, platform, comboId, clientEmail },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     res.json({ orderName: response.data.orderName, amount: response.data.amount });
