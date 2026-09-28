@@ -212,7 +212,7 @@ a { color: var(--btn); }
 .product-img-fallback { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--accent); font-size: 22px; }
 
 .product-body { padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
-.product-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.product-title-row { display: flex; align-items: center; justify-content: center; text-align: center; gap: 6px; flex-wrap: wrap; }
 .product-title { font-weight: 700; font-size: 14.5px; }
 .badge-annual {
   background: var(--accent); color: #fff; font-size: 9.5px; font-weight: 700;

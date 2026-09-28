@@ -245,6 +245,11 @@
       cachedProducts = sortedProducts;
 
       let html = "";
+      const annualProducts = sortedProducts.filter(p => isAnnual(p));
+      if (annualProducts.length > 0) {
+        html += `<div class="section-chip">Anuales</div>`;
+        html += `<div class="product-grid">${annualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
+      }
       if (sortedProducts.length > 0) {
         html += `<div class="section-chip">Perfiles</div>`;
         html += `<div class="product-grid">${sortedProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;

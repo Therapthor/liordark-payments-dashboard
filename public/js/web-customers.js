@@ -30,9 +30,14 @@
     return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
   }
 
+  // SQLite guarda created_at como "YYYY-MM-DD HH:MM:SS" (UTC, sin
+  // indicarlo) — sin la "Z" el navegador lo toma como hora LOCAL y la
+  // muestra corrida (5h antes/después según el huso). Se normaliza a
+  // ISO con "Z" antes de parsearla.
   function formatDate(iso) {
     try {
-      return new Date(iso).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" });
+      const isoUtc = /[Zz]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso.replace(" ", "T") + "Z";
+      return new Date(isoUtc).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" });
     } catch {
       return iso;
     }
