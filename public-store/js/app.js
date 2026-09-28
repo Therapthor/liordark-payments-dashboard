@@ -171,17 +171,10 @@
       }
       empty.hidden = true;
 
-      const byPlatform = new Map();
-      for (const p of products) {
-        const list = byPlatform.get(p.platform) || [];
-        list.push(p);
-        byPlatform.set(p.platform, list);
-      }
-
       let html = "";
-      for (const [platform, items] of byPlatform) {
-        html += `<div class="section-chip">${escapeHtml(platform)}</div>`;
-        html += `<div class="product-grid">${items.map(p => productCardHtml(p, "platform")).join("")}</div>`;
+      if (products && products.length > 0) {
+        html += `<div class="section-chip">Catálogo</div>`;
+        html += `<div class="product-grid">${products.map(p => productCardHtml(p, "platform")).join("")}</div>`;
       }
       if (combos && combos.length > 0) {
         html += `<div class="section-chip">Combos</div>`;
