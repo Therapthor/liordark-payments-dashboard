@@ -119,8 +119,14 @@
     });
   }
 
+  let currentPhone = "";
+
   async function onAuthenticated() {
     showApp();
+    try {
+      const me = await api("/auth/me");
+      currentPhone = me.phone || "";
+    } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
     await loadCatalog();
   }
 
@@ -139,7 +145,7 @@
     document.querySelectorAll(".nav-btn[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
-    if (view === "dashboard") loadDashboard();
+    if (view === "dashboard") initDashboardRequestLink();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -164,7 +170,10 @@
   // ej. "✅ 1 Mes\n✅ Garantía y Soporte"). Si tiene más de una línea la
   // mostramos como lista; si es una sola, como párrafo normal.
   function renderDesc(el, desc) {
-    const lines = (desc || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    // El precio ya se muestra aparte (footer/detalle) — si el texto lo
+    // repite (ej. "PRECIO ➡ S/5.00"), se filtra para no mostrarlo 2 veces.
+    const lines = (desc || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+      .filter(l => !/precio/i.test(l) && !/S\/\s*\d/.test(l));
     el.hidden = lines.length === 0;
     if (lines.length > 1) {
       el.innerHTML = `<ul class="detail-list">${lines.map(l => `<li>${escapeHtml(l)}</li>`).join("")}</ul>`;
@@ -211,10 +220,9 @@
             <span class="product-title">${escapeHtml(title)}</span>
             ${annual ? '<span class="badge-annual">ANUAL</span>' : ""}
           </div>
-          <div class="product-footer">
-            <span class="product-price">S/ ${escapeHtml(p.price)}</span>
-            <span class="product-more">Ver detalles</span>
-          </div>
+        </div>
+        <div class="product-price-banner">
+          <span class="product-price">S/ ${escapeHtml(p.price)}</span>
         </div>
       </div>`;
   }
@@ -312,64 +320,21 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MIS CUENTAS
+  // MIS CUENTAS — en vez de listar automático (poco confiable para
+  // compras viejas/hechas por WhatsApp antes de existir la web), el
+  // cliente pide su historial por WhatsApp con su celular registrado
+  // y el soporte se lo manda a mano. Las compras recién hechas ya se
+  // muestran directo en el éxito del checkout (showCheckoutSuccess).
+  // `cachedDashboard` lo sigue usando el checkout para detectar la
+  // cuenta nueva por polling.
   // ─────────────────────────────────────────────────────────────
 
   let cachedDashboard = [];
 
-  function daysLabel(days) {
-    if (days == null) return { text: "—", cls: "ok" };
-    if (days < 0) return { text: Math.abs(days) + "d vencido", cls: "over" };
-    if (days === 0) return { text: "Vence hoy", cls: "soon" };
-    if (days <= 5) return { text: days + "d restantes", cls: "soon" };
-    return { text: days + "d restantes", cls: "ok" };
-  }
-
-  function accountCardHtml(a, idx) {
-    const d = daysLabel(a.daysLeft);
-    const soon = a.daysLeft != null && a.daysLeft <= 5;
-    return `
-      <div class="account-card" style="animation-delay:${Math.min(idx * 40, 300)}ms">
-        <div class="account-platform">${escapeHtml(a.platform)}</div>
-        <div class="account-details">
-          <div class="account-reveal" data-idx="${idx}">Ver credenciales</div>
-          <div class="account-creds" data-idx="${idx}" hidden>
-            <div><b>Correo:</b> ${escapeHtml(a.email)}</div>
-            <div><b>Contraseña:</b> ${escapeHtml(a.password)}</div>
-            ${a.profileName ? `<div><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
-          </div>
-          ${soon ? `<div class="account-renew-hint"><a href="https://wa.me/${SUPPORT_PHONE}" target="_blank" rel="noopener">Vence pronto — escribinos para renovar</a></div>` : ""}
-        </div>
-        <span class="account-days ${d.cls}">${d.text}</span>
-      </div>`;
-  }
-
-  async function loadDashboard() {
-    const list  = document.getElementById("dashboard-list");
-    const empty = document.getElementById("dashboard-empty");
-    try {
-      const { accounts } = await api("/dashboard");
-      cachedDashboard = accounts || [];
-      if (cachedDashboard.length === 0) {
-        list.innerHTML = "";
-        empty.hidden = false;
-        return;
-      }
-      empty.hidden = true;
-      list.innerHTML = cachedDashboard.map(accountCardHtml).join("");
-    } catch (err) {
-      list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    }
-  }
-
-  function initDashboardClicks() {
-    document.getElementById("dashboard-list").addEventListener("click", (e) => {
-      const reveal = e.target.closest(".account-reveal");
-      if (!reveal) return;
-      const creds = document.querySelector(`.account-creds[data-idx="${reveal.dataset.idx}"]`);
-      if (creds) creds.hidden = !creds.hidden;
-      reveal.textContent = creds && !creds.hidden ? "Ocultar credenciales" : "Ver credenciales";
-    });
+  function initDashboardRequestLink() {
+    const link = document.getElementById("dashboard-request-link");
+    const msg = `Hola! Ya compré antes (celular ${currentPhone}) y quiero ver mi historial de cuentas. ¿Me ayudan?`;
+    link.href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(msg);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -516,11 +481,7 @@
   function initCheckoutModal() {
     document.getElementById("checkout-close").addEventListener("click", closeCheckout);
     document.getElementById("checkout-retry").addEventListener("click", closeCheckout);
-    document.getElementById("checkout-goto-dashboard").addEventListener("click", () => {
-      closeCheckout();
-      switchPage("dashboard");
-      loadDashboard();
-    });
+    document.getElementById("checkout-goto-dashboard").addEventListener("click", closeCheckout);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -532,7 +493,6 @@
     initAuthForms();
     initNav();
     initCatalogClicks();
-    initDashboardClicks();
     initCheckoutModal();
     initProductDetailModal();
 

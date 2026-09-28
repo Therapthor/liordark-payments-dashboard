@@ -109,9 +109,11 @@
 
       <section id="page-dashboard" class="page" hidden>
         <h2>Mis cuentas</h2>
-        <p class="muted">Acá ves las cuentas que ya te entregamos, con los días que les quedan.</p>
-        <div id="dashboard-list" class="dashboard-list"></div>
-        <p id="dashboard-empty" class="muted" hidden>Todavía no tenés cuentas activas. ¡Comprá algo del catálogo!</p>
+        <div class="dashboard-request-card">
+          <div class="dashboard-request-icon">🥭</div>
+          <p class="muted">¿Ya compraste antes (por acá o por WhatsApp) y querés ver tus cuentas? Te las mandamos directo por WhatsApp.</p>
+          <a class="btn-primary btn-block" id="dashboard-request-link" href="#" target="_blank" rel="noopener">Solicitar historial por WhatsApp</a>
+        </div>
       </section>
     </main>
   </div>
@@ -162,9 +164,9 @@
       <div id="checkout-success" class="checkout-state" hidden>
         <div class="success-check">✓</div>
         <h2>¡Listo!</h2>
-        <p class="muted">Ya quedó guardada en <b>Mis cuentas</b>. Podés copiar los datos ahora mismo:</p>
+        <p class="muted">Copiá los datos ahora — guardalos, por si los necesitás después:</p>
         <div id="checkout-success-accounts" class="checkout-success-accounts"></div>
-        <button class="btn-primary btn-block" id="checkout-goto-dashboard" type="button">Ver mis cuentas</button>
+        <button class="btn-primary btn-block" id="checkout-goto-dashboard" type="button">Listo, seguir comprando</button>
       </div>
 
       <div id="checkout-error" class="checkout-state" hidden>
