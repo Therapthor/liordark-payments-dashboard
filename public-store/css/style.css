@@ -139,6 +139,13 @@ a { color: var(--btn); }
 .nav-btn:hover { background: var(--chip-bg); color: var(--text); }
 .nav-btn.active { background: var(--accent); color: #fff; }
 .nav-btn-ghost { color: var(--muted); }
+.nav-support-btn {
+  display: inline-flex; align-items: center;
+  background: #25D366; color: #fff; text-decoration: none;
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  padding: 8px 14px; border-radius: 9px; margin-left: 2px;
+}
+.nav-support-btn:hover { filter: brightness(1.05); }
 
 .content { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
 .page { animation: fadeIn .35s ease both; }
@@ -215,7 +222,13 @@ a { color: var(--btn); }
 
 /* ─── Soporte dentro del checkout ─────────────────────────────── */
 
-.checkout-cents-note { margin-top: 10px; }
+.yape-info {
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--chip-bg); border-radius: 12px; padding: 12px 14px; margin: 4px 0;
+}
+.yape-info-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.yape-info-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.yape-info-value { font-size: 13.5px; color: var(--text); font-weight: 700; }
 
 .checkout-support-row {
   display: flex; flex-direction: column; align-items: center; gap: 10px;

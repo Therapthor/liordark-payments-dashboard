@@ -66,6 +66,7 @@
       <nav class="topnav">
         <button class="nav-btn active" data-view="catalog">Catálogo</button>
         <button class="nav-btn" data-view="dashboard">Mis cuentas</button>
+        <a class="nav-support-btn" id="topbar-support-link" href="#" target="_blank" rel="noopener">Soporte</a>
         <button class="nav-btn nav-btn-ghost" id="logout-btn" type="button">Salir</button>
       </nav>
     </header>
@@ -117,11 +118,7 @@
         <p class="muted">Envía exactamente este monto por Yape:</p>
         <div class="checkout-amount" id="checkout-amount">S/ 0.00</div>
         <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
-        <p class="muted small" id="checkout-instructions"></p>
-        <p class="muted small checkout-cents-note">
-          Los centavos son parte del monto: nos permiten identificar tu pago
-          y confirmarlo automáticamente, sin que tengas que avisarnos.
-        </p>
+        <div class="yape-info" id="checkout-instructions"></div>
         <div class="checkout-waiting">
           <span class="spinner spinner-sm"></span>
           <span id="checkout-waiting-text">Esperando tu pago…</span>

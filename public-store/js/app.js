@@ -109,6 +109,7 @@
     document.querySelectorAll(".nav-btn[data-view]").forEach(btn => {
       btn.addEventListener("click", () => switchPage(btn.dataset.view));
     });
+    document.getElementById("topbar-support-link").href = "https://wa.me/" + SUPPORT_PHONE;
   }
 
   function switchPage(view) {
@@ -147,6 +148,24 @@
     } else {
       el.textContent = lines[0] || "";
     }
+  }
+
+  // Datos del método de pago (ej. "Yape: 924173087\nTitular: Gustavo
+  // Melendez") — una fila "etiqueta: valor" por línea, en vez de texto
+  // corrido que colapsa los saltos de línea.
+  function renderInfoRows(el, text) {
+    // Puede venir con saltos de línea reales, o todo en una sola línea
+    // separado por varios espacios (según cómo se haya tipeado en el
+    // panel) — se parte por cualquiera de los dos casos.
+    const lines = (text || "").split(/\r?\n|(?<=\S) {2,}(?=\S)/).map(l => l.trim()).filter(Boolean);
+    el.hidden = lines.length === 0;
+    el.innerHTML = lines.map(line => {
+      const i = line.indexOf(":");
+      if (i === -1) return `<div class="yape-info-row"><span class="yape-info-value">${escapeHtml(line)}</span></div>`;
+      const label = line.slice(0, i).trim();
+      const value = line.slice(i + 1).trim();
+      return `<div class="yape-info-row"><span class="yape-info-label">${escapeHtml(label)}</span><span class="yape-info-value">${escapeHtml(value)}</span></div>`;
+    }).join("");
   }
 
   function productImgHtml(p, kind) {
@@ -383,7 +402,7 @@
       document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
       const qrImg = document.getElementById("checkout-qr");
       if (cachedYapeQr) { qrImg.src = cachedYapeQr; qrImg.hidden = false; } else { qrImg.hidden = true; }
-      document.getElementById("checkout-instructions").textContent = cachedYapeText || "";
+      renderInfoRows(document.getElementById("checkout-instructions"), cachedYapeText);
       document.getElementById("checkout-support-link").href = "https://wa.me/" + SUPPORT_PHONE
         + "?text=" + encodeURIComponent(`Hola, tengo dudas con mi pago de S/ ${order.amount} por Yape.`);
       document.getElementById("checkout-wrong-amount-link").href = "https://wa.me/" + SUPPORT_PHONE
