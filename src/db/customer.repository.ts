@@ -91,3 +91,24 @@ export function setCustomerPassword(id: number, passwordHash: string, passwordPl
     .run(passwordHash, passwordPlain, id);
   return findCustomerById(id);
 }
+
+export function countAllCustomers(): number {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM customers`).get() as { n: number };
+  return row.n;
+}
+
+/**
+ * Registros por día del mes en curso, para el gráfico de "Clientes web".
+ * created_at se guarda en UTC sin indicarlo — se resta 5h (Lima, sin
+ * horario de verano) antes de agrupar por día, mismo criterio que
+ * limaTodayISO() en access.service.ts.
+ */
+export function dailyRegistrationsThisMonth(): { day: string; count: number }[] {
+  return db.prepare(`
+    SELECT date(created_at, '-5 hours') AS day, COUNT(*) AS count
+    FROM customers
+    WHERE date(created_at, '-5 hours') >= date('now', '-5 hours', 'start of month')
+    GROUP BY day
+    ORDER BY day ASC
+  `).all() as { day: string; count: number }[];
+}

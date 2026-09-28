@@ -134,13 +134,64 @@
       list.innerHTML = "";
       if (!customers || customers.length === 0) {
         empty.hidden = false;
-        return;
+      } else {
+        empty.hidden = true;
+        customers.forEach(c => list.appendChild(renderRow(c)));
       }
-      empty.hidden = true;
-      customers.forEach(c => list.appendChild(renderRow(c)));
     } catch (err) {
       list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
     }
+    loadStats();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // RESUMEN + CURVA — total de clientes y registros por día del mes,
+  // para ver de un vistazo si el tráfico de la web sube o baja.
+  // ─────────────────────────────────────────────────────────────
+
+  let statsChart = null;
+
+  function fmtDayShort(dateStr) {
+    const parts = dateStr.split("-");
+    return `${parts[2]}/${parts[1]}`;
+  }
+
+  async function loadStats() {
+    try {
+      const { totalCustomers, registrationsThisMonth } = await api("/stats");
+      document.getElementById("web-customers-total").textContent = totalCustomers;
+
+      const canvas = document.getElementById("chart-web-customers");
+      if (!canvas || typeof Chart === "undefined") return;
+
+      const labels    = registrationsThisMonth.map(r => fmtDayShort(r.date));
+      const counts    = registrationsThisMonth.map(r => r.count);
+      const todayIdx  = registrationsThisMonth.length - 1;
+      const barColors = registrationsThisMonth.map((_, i) => i === todayIdx ? "#d6900f" : "rgba(245,166,35,0.55)");
+
+      if (statsChart) statsChart.destroy();
+      statsChart = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [{ label: "Registros", data: counts, backgroundColor: barColors, borderRadius: 4, maxBarThickness: 22 }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: (ctx) => ctx.parsed.y + (ctx.parsed.y === 1 ? " registro" : " registros") },
+            },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: "#9a9a9a", font: { size: 11 } } },
+            y: { beginAtZero: true, ticks: { color: "#9a9a9a", font: { size: 11 }, precision: 0 }, grid: { color: "#efefef" } },
+          },
+        },
+      });
+    } catch { /* no crítico — la lista de clientes ya se mostró igual */ }
   }
 
   initRowActions(document.getElementById("web-customers-list"));

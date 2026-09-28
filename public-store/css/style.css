@@ -185,11 +185,30 @@ a { color: var(--btn); }
   margin: 26px 0 14px;
 }
 .section-chip:first-child { margin-top: 0; }
+.section-chip-exclusive {
+  background: linear-gradient(135deg, #ffd76a, #e35d00);
+  color: #fff;
+}
 
 .product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
+}
+
+/* Anuales — centrada, no estirada a lo ancho, para que se sienta */
+/* como una vitrina aparte y no una columna más del grid normal.  */
+.product-grid-exclusive {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
+  justify-content: center;
+}
+.product-card-exclusive {
+  border: 1px solid #f0c86a;
+  box-shadow: 0 10px 26px -16px rgba(227,93,0,.45);
+}
+.badge-exclusive {
+  background: linear-gradient(135deg, #ffd76a, #e35d00); color: #fff;
+  font-size: 9.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; letter-spacing: .3px;
 }
 
 .product-card {
@@ -221,8 +240,9 @@ a { color: var(--btn); }
 .product-price-banner {
   background: var(--accent);
   display: flex; align-items: center; justify-content: center;
-  padding: 10px 14px;
+  padding: 6px 14px;
 }
+.product-price-banner .product-price { font-size: 14px; }
 .product-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #fff; font-size: 17px; }
 
 /* ─── Modal de detalle de producto ───────────────────────────── */

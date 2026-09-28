@@ -6,9 +6,12 @@ import {
   isCustomerSuspended,
   findCustomerById,
   setCustomerPassword,
+  countAllCustomers,
+  dailyRegistrationsThisMonth,
 } from "../db/customer.repository";
 import { countProfilesByPhone } from "../db/access.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
+import { limaTodayISO } from "../services/access.service";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -34,6 +37,23 @@ router.get("/", (_req, res) => {
     createdAt:      c.createdAt,
   }));
   res.json({ customers });
+});
+
+// GET /stats — total de clientes + registros por día del mes en curso,
+// para el resumen y la curva de tráfico en el panel "Clientes web".
+router.get("/stats", (_req, res) => {
+  const today = limaTodayISO(); // "YYYY-MM-DD"
+  const parts = today.split("-").map(Number);
+  const year = parts[0] as number, month = parts[1] as number, dayOfMonth = parts[2] as number;
+
+  const byDay = new Map(dailyRegistrationsThisMonth().map(r => [r.day, r.count]));
+  const series: { date: string; count: number }[] = [];
+  for (let d = 1; d <= dayOfMonth; d++) {
+    const date = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    series.push({ date, count: byDay.get(date) ?? 0 });
+  }
+
+  res.json({ totalCustomers: countAllCustomers(), registrationsThisMonth: series });
 });
 
 router.post("/:id/suspend", (req, res) => {

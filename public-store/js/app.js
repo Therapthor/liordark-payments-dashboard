@@ -207,18 +207,19 @@
       : `<span class="product-img-fallback">${escapeHtml(fallbackTag)}</span>`;
   }
 
-  function productCardHtml(p, kind) {
-    const annual = isAnnual(p);
-    const title  = kind === "combo" ? p.name : p.title;
+  function productCardHtml(p, kind, opts) {
+    const annual    = isAnnual(p);
+    const exclusive = !!(opts && opts.exclusive);
+    const title     = kind === "combo" ? p.name : p.title;
     const detailAttr = kind === "combo" ? `data-detail-combo="${p.id}"` : `data-detail-platform="${escapeHtml(p.platform)}"`;
 
     return `
-      <div class="product-card" ${detailAttr} role="button" tabindex="0">
+      <div class="product-card${exclusive ? " product-card-exclusive" : ""}" ${detailAttr} role="button" tabindex="0">
         <div class="product-img-wrap">${productImgHtml(p, kind)}</div>
         <div class="product-body">
           <div class="product-title-row">
             <span class="product-title">${escapeHtml(title)}</span>
-            ${annual ? '<span class="badge-annual">ANUAL</span>' : ""}
+            ${exclusive ? '<span class="badge-exclusive">★ EXCLUSIVO</span>' : (annual ? '<span class="badge-annual">ANUAL</span>' : "")}
           </div>
         </div>
         <div class="product-price-banner">
@@ -245,14 +246,15 @@
       cachedProducts = sortedProducts;
 
       let html = "";
-      const annualProducts = sortedProducts.filter(p => isAnnual(p));
+      const annualProducts    = sortedProducts.filter(p => isAnnual(p));
+      const nonAnnualProducts = sortedProducts.filter(p => !isAnnual(p));
       if (annualProducts.length > 0) {
-        html += `<div class="section-chip">Anuales</div>`;
-        html += `<div class="product-grid">${annualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
+        html += `<div class="section-chip section-chip-exclusive">✨ Anuales — Exclusivos</div>`;
+        html += `<div class="product-grid product-grid-exclusive">${annualProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
       }
-      if (sortedProducts.length > 0) {
+      if (nonAnnualProducts.length > 0) {
         html += `<div class="section-chip">Perfiles</div>`;
-        html += `<div class="product-grid">${sortedProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
+        html += `<div class="product-grid">${nonAnnualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
       }
       if (combos && combos.length > 0) {
         html += `<div class="section-chip">Combos</div>`;
