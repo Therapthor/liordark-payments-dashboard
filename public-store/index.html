@@ -94,7 +94,7 @@
         <h2 id="detail-title"></h2>
         <span class="badge-annual" id="detail-annual" hidden>ANUAL</span>
       </div>
-      <p class="muted" id="detail-desc"></p>
+      <div class="muted" id="detail-desc"></div>
       <div class="detail-footer">
         <span class="product-price" id="detail-price"></span>
         <button class="btn-primary" id="detail-buy-btn" type="button">Comprar</button>
@@ -118,14 +118,18 @@
         <div class="checkout-amount" id="checkout-amount">S/ 0.00</div>
         <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
         <p class="muted small" id="checkout-instructions"></p>
+        <p class="muted small checkout-cents-note">
+          Los centavos son parte del monto: nos permiten identificar tu pago
+          y confirmarlo automáticamente, sin que tengas que avisarnos.
+        </p>
         <div class="checkout-waiting">
           <span class="spinner spinner-sm"></span>
           <span id="checkout-waiting-text">Esperando tu pago…</span>
         </div>
-        <p class="muted small" id="checkout-support-hint" hidden>
-          ¿Ya pagaste y no aparece? Escribinos:
-          <a id="checkout-support-link" href="#" target="_blank" rel="noopener">Soporte por WhatsApp</a>
-        </p>
+        <div class="checkout-support-row">
+          <a class="checkout-wrong-amount" id="checkout-wrong-amount-link" href="#" target="_blank" rel="noopener">¿Enviaste un monto erróneo? Contáctanos</a>
+          <a class="checkout-wa-btn" id="checkout-support-link" href="#" target="_blank" rel="noopener" title="Soporte por WhatsApp" aria-label="Soporte por WhatsApp">WhatsApp soporte</a>
+        </div>
       </div>
 
       <div id="checkout-success" class="checkout-state" hidden>

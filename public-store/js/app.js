@@ -132,8 +132,21 @@
 
   function productDesc(p, kind) {
     return kind === "combo"
-      ? p.items.map(i => i.quantity > 1 ? `${i.platform} x${i.quantity}` : i.platform).join(" + ")
+      ? p.items.map(i => i.quantity > 1 ? `${i.platform} x${i.quantity}` : i.platform).join("\n")
       : p.description;
+  }
+
+  // La descripción se carga como texto libre (a veces una línea por ítem,
+  // ej. "✅ 1 Mes\n✅ Garantía y Soporte"). Si tiene más de una línea la
+  // mostramos como lista; si es una sola, como párrafo normal.
+  function renderDesc(el, desc) {
+    const lines = (desc || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    el.hidden = lines.length === 0;
+    if (lines.length > 1) {
+      el.innerHTML = `<ul class="detail-list">${lines.map(l => `<li>${escapeHtml(l)}</li>`).join("")}</ul>`;
+    } else {
+      el.textContent = lines[0] || "";
+    }
   }
 
   function productImgHtml(p, kind) {
@@ -234,8 +247,7 @@
     document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
     document.getElementById("detail-title").textContent = title;
     document.getElementById("detail-annual").hidden = !isAnnual(item);
-    document.getElementById("detail-desc").textContent = desc || "";
-    document.getElementById("detail-desc").hidden = !desc;
+    renderDesc(document.getElementById("detail-desc"), desc);
     document.getElementById("detail-price").textContent = "S/ " + item.price;
 
     document.getElementById("detail-buy-btn").onclick = () => {
@@ -372,8 +384,10 @@
       const qrImg = document.getElementById("checkout-qr");
       if (cachedYapeQr) { qrImg.src = cachedYapeQr; qrImg.hidden = false; } else { qrImg.hidden = true; }
       document.getElementById("checkout-instructions").textContent = cachedYapeText || "";
-      document.getElementById("checkout-support-hint").hidden = true;
-      document.getElementById("checkout-support-link").href = "https://wa.me/" + SUPPORT_PHONE;
+      document.getElementById("checkout-support-link").href = "https://wa.me/" + SUPPORT_PHONE
+        + "?text=" + encodeURIComponent(`Hola, tengo dudas con mi pago de S/ ${order.amount} por Yape.`);
+      document.getElementById("checkout-wrong-amount-link").href = "https://wa.me/" + SUPPORT_PHONE
+        + "?text=" + encodeURIComponent(`Hola, envié un monto distinto al indicado (S/ ${order.amount}) por Yape. ¿Me ayudan?`);
       document.getElementById("checkout-waiting-text").textContent = "Esperando tu pago…";
 
       showCheckoutState("ready");
@@ -400,7 +414,6 @@
       } catch { /* red momentánea — sigue intentando */ }
 
       if (Date.now() > pollExpiry) {
-        document.getElementById("checkout-support-hint").hidden = false;
         document.getElementById("checkout-waiting-text").textContent = "Seguimos esperando tu pago…";
       }
     }, POLL_MS);
