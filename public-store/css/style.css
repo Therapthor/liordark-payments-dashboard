@@ -14,6 +14,12 @@
 
 * { box-sizing: border-box; }
 
+/* [hidden] debe ganarle siempre a display:flex de las clases de abajo
+   (misma especificidad, y el orden del archivo hace que si no, las clases
+   .checkout-state / .page / etc ganen y el elemento quede visible aunque
+   tenga el atributo hidden puesto por JS). */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
