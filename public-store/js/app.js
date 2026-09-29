@@ -207,14 +207,24 @@
       : `<span class="product-img-fallback">${escapeHtml(fallbackTag)}</span>`;
   }
 
+  function isOutOfStock(p, kind) {
+    return kind === "combo" ? p.inStock === false : (p.available ?? 0) <= 0;
+  }
+
   function productCardHtml(p, kind, opts) {
-    const annual    = isAnnual(p);
-    const exclusive = !!(opts && opts.exclusive);
-    const title     = kind === "combo" ? p.name : p.title;
+    const annual     = isAnnual(p);
+    const exclusive  = !!(opts && opts.exclusive);
+    const outOfStock = isOutOfStock(p, kind);
+    const title      = kind === "combo" ? p.name : p.title;
     const detailAttr = kind === "combo" ? `data-detail-combo="${p.id}"` : `data-detail-platform="${escapeHtml(p.platform)}"`;
+    const cardClass  = [exclusive && "product-card-exclusive", outOfStock && "product-card-outofstock"].filter(Boolean).join(" ");
+
+    const priceArea = outOfStock
+      ? `<div class="product-price-banner product-price-banner-off"><span class="product-price">Rellenando stock</span></div>`
+      : `<div class="product-price-banner"><span class="product-price">S/ ${escapeHtml(p.price)}</span></div>`;
 
     return `
-      <div class="product-card${exclusive ? " product-card-exclusive" : ""}" ${detailAttr} role="button" tabindex="0">
+      <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
         <div class="product-img-wrap">${productImgHtml(p, kind)}</div>
         <div class="product-body">
           <div class="product-title-row">
@@ -222,21 +232,7 @@
             ${exclusive ? '<span class="badge-exclusive">★ EXCLUSIVO</span>' : (annual ? '<span class="badge-annual">ANUAL</span>' : "")}
           </div>
         </div>
-        <div class="product-price-banner">
-          <span class="product-price">S/ ${escapeHtml(p.price)}</span>
-        </div>
-      </div>`;
-  }
-
-  // Tarjeta promocional dentro de Combos — no vende nada puntual, solo
-  // explica la idea de combinar plataformas para ahorrar. Por eso no
-  // lleva data-detail-* (no abre el modal de detalle) ni precio.
-  function smartBuyCardHtml() {
-    return `
-      <div class="product-card smart-buy-card">
-        <div class="smart-buy-icon">🧠</div>
-        <div class="smart-buy-title">Compra inteligente</div>
-        <p class="smart-buy-text">Combiná varias plataformas en un solo pago y ahorrá más que comprándolas por separado.</p>
+        ${priceArea}
       </div>`;
   }
 
@@ -261,7 +257,7 @@
       const annualProducts    = sortedProducts.filter(p => isAnnual(p));
       const nonAnnualProducts = sortedProducts.filter(p => !isAnnual(p));
       if (annualProducts.length > 0) {
-        html += `<div class="section-chip section-chip-exclusive">✨ Anuales — Exclusivos</div>`;
+        html += `<div class="section-chip section-chip-exclusive">✨ Anuales — Exclusivos ✨</div>`;
         html += `<div class="product-grid product-grid-exclusive">${annualProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
       }
       if (nonAnnualProducts.length > 0) {
@@ -269,8 +265,8 @@
         html += `<div class="product-grid">${nonAnnualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
       }
       if (combos && combos.length > 0) {
-        html += `<div class="section-chip">Combos</div>`;
-        html += `<div class="product-grid">${combos.map(c => productCardHtml(c, "combo")).join("")}${smartBuyCardHtml()}</div>`;
+        html += `<div class="section-chip section-chip-combos">🎁 Combos</div>`;
+        html += `<div class="product-grid">${combos.map(c => productCardHtml(c, "combo")).join("")}</div>`;
       }
       container.innerHTML = html;
 
@@ -324,18 +320,22 @@
     const title = kind === "combo" ? item.name : item.title;
     const desc  = productDesc(item, kind);
     const needsCanvaEmail = kind === "platform" && isCanvaPlatform(item.platform);
+    const outOfStock = isOutOfStock(item, kind);
 
     document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
     document.getElementById("detail-title").textContent = title;
     document.getElementById("detail-annual").hidden = !isAnnual(item);
     renderDesc(document.getElementById("detail-desc"), desc);
-    document.getElementById("detail-price").textContent = "S/ " + item.price;
+    document.getElementById("detail-price").textContent = outOfStock ? "Rellenando stock" : "S/ " + item.price;
 
-    document.getElementById("detail-canva-email").hidden = !needsCanvaEmail;
+    document.getElementById("detail-canva-email").hidden = !needsCanvaEmail || outOfStock;
     document.getElementById("detail-canva-email-input").value = "";
     setFormError("detail-canva-email-error", "");
 
-    document.getElementById("detail-buy-btn").onclick = () => {
+    const buyBtn = document.getElementById("detail-buy-btn");
+    buyBtn.disabled = outOfStock;
+    buyBtn.textContent = outOfStock ? "Rellenando stock" : "Comprar";
+    buyBtn.onclick = outOfStock ? null : () => {
       let clientEmail;
       if (needsCanvaEmail) {
         clientEmail = document.getElementById("detail-canva-email-input").value.trim();

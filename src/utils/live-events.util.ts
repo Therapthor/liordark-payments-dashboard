@@ -11,7 +11,8 @@ export type DashboardLiveEvent =
   | { type: "connection"; status: "connected" | "reconnecting" }
   | { type: "status_update"; id: number; status: string }
   | { type: "order_approved"; message: string; createdAt: string }
-  | { type: "customer_registered"; phone: string; isGuest: boolean };
+  | { type: "customer_registered"; phone: string; isGuest: boolean }
+  | { type: "order_needs_review"; orderName: string; platform: string };
 
 export function onDashboardEvent(listener: (evt: DashboardLiveEvent) => void): () => void {
   emitter.on("event", listener);

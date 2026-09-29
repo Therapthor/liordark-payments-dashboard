@@ -6,8 +6,17 @@ import { findCustomerById } from "../db/customer.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
-import { listAccountsByClientPhone } from "../db/access.repository";
+import { listAccountsByClientPhone, listPlatforms } from "../db/access.repository";
 import { daysLeft } from "../services/access.service";
+
+// Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
+// (GET /api/stock/catalog y /combos) — sellableCount ya excluye
+// perfiles libres pero a punto de vencer, no se vuelve a inventar acá.
+function availabilityByPlatform(): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const s of listPlatforms()) map.set(s.platform.trim().toUpperCase(), s.sellableCount);
+  return map;
+}
 
 // ─────────────────────────────────────────────────────────────
 // TIENDA WEB (liordark.com) — todo detrás de sesión de cliente, como
@@ -18,12 +27,23 @@ const router = Router();
 
 router.use(requireCustomerSession);
 
-// GET /api/store/catalog — productos + combos activos
+// GET /api/store/catalog — productos + combos activos, con disponibilidad
+// real (mismo dato que ya usa el bot) para que la web no venda algo que
+// no se puede entregar.
 router.get("/catalog", (_req, res) => {
-  res.json({
-    products: listCatalogProducts(true),
-    combos:   listCombos(true),
-  });
+  const available = availabilityByPlatform();
+
+  const products = listCatalogProducts(true).map(p => ({
+    ...p,
+    available: available.get(p.platform.trim().toUpperCase()) ?? 0,
+  }));
+
+  const combos = listCombos(true).map(c => ({
+    ...c,
+    inStock: c.items.every(i => (available.get(i.platform.trim().toUpperCase()) ?? 0) >= i.quantity),
+  }));
+
+  res.json({ products, combos });
 });
 
 // GET /api/store/payment-methods — para mostrar el QR de Yape, etc.
@@ -69,6 +89,24 @@ router.post("/checkout", async (req, res) => {
   // eso el pedido llega sin forma de completarse.
   if (platform && /canva/i.test(platform) && !clientEmail) {
     return res.status(400).json({ message: "Falta el correo para activar Canva." });
+  }
+
+  // Defensa por si algo saltea la validación del navegador (ej. una
+  // pestaña vieja que no recargó el catálogo) — nunca vender sin stock real.
+  const available = availabilityByPlatform();
+  if (platform) {
+    if ((available.get(platform.trim().toUpperCase()) ?? 0) <= 0) {
+      return res.status(409).json({ message: "Sin stock disponible ahora mismo para esta plataforma." });
+    }
+  } else if (comboId) {
+    const combo = listCombos(true).find(c => c.id === comboId);
+    if (!combo) {
+      return res.status(404).json({ message: "Combo no encontrado." });
+    }
+    const inStock = combo.items.every(i => (available.get(i.platform.trim().toUpperCase()) ?? 0) >= i.quantity);
+    if (!inStock) {
+      return res.status(409).json({ message: "Sin stock disponible ahora mismo para este combo." });
+    }
   }
 
   try {

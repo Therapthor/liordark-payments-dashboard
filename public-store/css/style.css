@@ -189,6 +189,12 @@ a { color: var(--btn); }
   background: linear-gradient(135deg, #ffd76a, #e35d00);
   color: #fff;
 }
+.section-chip-combos {
+  background: linear-gradient(135deg, #7b3fe4, #e35d00);
+  color: #fff;
+  font-size: 14px;
+  padding: 9px 20px;
+}
 
 .product-grid {
   display: grid;
@@ -211,19 +217,12 @@ a { color: var(--btn); }
   font-size: 9.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; letter-spacing: .3px;
 }
 
-/* Compra inteligente — tarjeta promocional dentro de Combos, no un */
-/* producto: fondo oscuro propio para que se note que es distinta.  */
-.smart-buy-card {
-  cursor: default;
-  background: linear-gradient(160deg, #241a10, #402a12);
-  padding: 22px 18px;
-  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;
-  justify-content: center;
-}
-.smart-buy-card:hover { transform: none; box-shadow: none; }
-.smart-buy-icon { font-size: 26px; }
-.smart-buy-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #fff; font-size: 15px; }
-.smart-buy-text { color: rgba(255,255,255,.75); font-size: 12.5px; margin: 0; }
+/* Sin stock — se mantiene visible (no desaparece del catálogo) pero */
+/* apagada, para que quede claro que no se puede comprar ahora mismo. */
+.product-card-outofstock { opacity: .55; cursor: default; }
+.product-card-outofstock:hover { transform: none; box-shadow: none; }
+.product-price-banner-off { background: var(--muted); }
+.product-price-banner-off .product-price { font-size: 13px; }
 
 .product-card {
   background: var(--card);

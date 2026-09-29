@@ -156,6 +156,29 @@
     } catch { /* navegador sin soporte de audio — no crítico */ }
   }
 
+  // Aviso de "pedido cayó a revisión manual" — necesita atención porque
+  // el cliente ya pagó pero no se detectó solo. Onda cuadrada, alarmante
+  // a propósito (distinto de los otros dos, que son "buenas noticias").
+  function playReviewAlertChime() {
+    if (localStorage.getItem("ldp_muted") === "1") return;
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioCtx.currentTime;
+      [0, 0.22].forEach((offset) => {
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square";
+        osc.frequency.value = 740;
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.09, now + offset + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.16);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.18);
+      });
+    } catch { /* navegador sin soporte de audio — no crítico */ }
+  }
+
   function initSoundToggle() {
     const btn = document.getElementById("sound-toggle");
     const muted = localStorage.getItem("ldp_muted") === "1";
@@ -566,6 +589,11 @@
       if (evt.type === "customer_registered") {
         playCustomerChime();
         if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
+      }
+
+      if (evt.type === "order_needs_review") {
+        playReviewAlertChime();
+        loadPendingOrders();
       }
     };
   }
