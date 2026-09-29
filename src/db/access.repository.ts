@@ -504,9 +504,21 @@ export type ExpiringClient = {
   reminderSentAt: string | null;
 };
 
-/** Clientes ocupados cuya cuenta vence en los próximos `days` días (o ya venció y sigue sin archivarse). */
-export function listExpiringClients(days: number): ExpiringClient[] {
-  const limit = addDaysISOLocal(limaTodayISOLocal(), days);
+/**
+ * Clientes ocupados cuya cuenta vence en los próximos `days` días (o ya
+ * venció y sigue sin archivarse).
+ *
+ * `excludeAlreadyExpired` — para la tanda manual de recordatorios del
+ * panel (Renovaciones): los que ya vencieron antes de hoy y nunca se les
+ * mandó recordatorio, se omiten por ahora en vez de arrastrarse en cada
+ * tanda — cada día que pasa la ventana avanza sola y van entrando los que
+ * de verdad vencen pronto. No aplica a /api/stock/expiring (el bot sigue
+ * viendo también los ya vencidos, para el aviso automático de WhatsApp).
+ */
+export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired?: boolean }): ExpiringClient[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE(c.title, '') AS platformTag,
@@ -515,10 +527,11 @@ export function listExpiringClients(days: number): ExpiringClient[] {
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
-    WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= ?
+    WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
+      ${lowerBound}
       AND p.order_ref NOT LIKE 'combo:%'
     ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
-  `).all(limit) as ExpiringClient[];
+  `).all({ today, limit }) as ExpiringClient[];
 }
 
 /** Recordatorio manual de vencimiento mandado (panel > Renovaciones) — para no repetirle a la misma persona en la próxima tanda. */
