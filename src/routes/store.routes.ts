@@ -18,6 +18,20 @@ function availabilityByPlatform(): Map<string, number> {
   return map;
 }
 
+// CANVA no tiene perfiles pre-cargados (se activa a mano por correo tras
+// cada pedido), así que su sellableCount real es siempre 0 — sin este
+// caso especial la web lo mostraría como "sin stock" permanentemente.
+function isUnlimitedPlatform(platform: string): boolean {
+  return /canva/i.test(platform);
+}
+
+// 999 en vez de Infinity: esto viaja como JSON y JSON.stringify(Infinity)
+// serializa a null, lo que volvería a mostrarlo como "sin stock".
+function availableFor(platform: string, stock: Map<string, number>): number {
+  if (isUnlimitedPlatform(platform)) return 999;
+  return stock.get(platform.trim().toUpperCase()) ?? 0;
+}
+
 // ─────────────────────────────────────────────────────────────
 // TIENDA WEB (liordark.com) — todo detrás de sesión de cliente, como
 // pidió el negocio: nada se ve sin loguearse primero.
@@ -35,12 +49,12 @@ router.get("/catalog", (_req, res) => {
 
   const products = listCatalogProducts(true).map(p => ({
     ...p,
-    available: available.get(p.platform.trim().toUpperCase()) ?? 0,
+    available: availableFor(p.platform, available),
   }));
 
   const combos = listCombos(true).map(c => ({
     ...c,
-    inStock: c.items.every(i => (available.get(i.platform.trim().toUpperCase()) ?? 0) >= i.quantity),
+    inStock: c.items.every(i => availableFor(i.platform, available) >= i.quantity),
   }));
 
   res.json({ products, combos });
@@ -95,7 +109,7 @@ router.post("/checkout", async (req, res) => {
   // pestaña vieja que no recargó el catálogo) — nunca vender sin stock real.
   const available = availabilityByPlatform();
   if (platform) {
-    if ((available.get(platform.trim().toUpperCase()) ?? 0) <= 0) {
+    if (availableFor(platform, available) <= 0) {
       return res.status(409).json({ message: "Sin stock disponible ahora mismo para esta plataforma." });
     }
   } else if (comboId) {
@@ -103,7 +117,7 @@ router.post("/checkout", async (req, res) => {
     if (!combo) {
       return res.status(404).json({ message: "Combo no encontrado." });
     }
-    const inStock = combo.items.every(i => (available.get(i.platform.trim().toUpperCase()) ?? 0) >= i.quantity);
+    const inStock = combo.items.every(i => availableFor(i.platform, available) >= i.quantity);
     if (!inStock) {
       return res.status(409).json({ message: "Sin stock disponible ahora mismo para este combo." });
     }
