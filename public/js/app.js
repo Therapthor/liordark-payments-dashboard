@@ -1016,6 +1016,11 @@
 
   const REMINDERS_BATCH_SIZE   = 5;
   const REMINDERS_COOLDOWN_MS  = 3000;
+  // Ventana chica a propósito — con 5 días el backlog daba 30+ tandas de
+  // una sola vez (imposible de mandar manual a 1 tanda cada 3-5h). Con 1-2
+  // días la tanda del día es manejable, y cada día entran solos los que
+  // recién les toca, sin acumular todo de golpe.
+  const REMINDERS_WINDOW_DAYS  = 2;
   let cachedExpiringClients    = [];
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -1056,7 +1061,7 @@
 
   async function loadReminders() {
     try {
-      const { clients } = await api("/renewals/expiring?days=5");
+      const { clients } = await api("/renewals/expiring?days=" + REMINDERS_WINDOW_DAYS);
       cachedExpiringClients = clients || [];
     } catch (err) {
       cachedExpiringClients = [];
