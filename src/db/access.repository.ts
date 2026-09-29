@@ -498,6 +498,7 @@ export type ExpiringClient = {
   clientPhone:    string;
   platform:       string;
   platformTag:    string; // título "amigable" del catálogo, para el mensaje al cliente
+  price:          string; // precio del catálogo — para que el recordatorio diga cuánto pagar
   email:          string;
   password:       string;
   expiresAt:      string;
@@ -521,7 +522,7 @@ export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired
   const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
-           COALESCE(c.title, '') AS platformTag,
+           COALESCE(c.title, '') AS platformTag, COALESCE(c.price, '') AS price,
            a.email AS email, a.password AS password, a.expires_at AS expiresAt,
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p

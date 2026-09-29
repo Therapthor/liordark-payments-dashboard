@@ -1028,10 +1028,23 @@
     return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
   }
 
-  function reminderMessage() {
-    return "Hola! 👋 Te escribo porque tu plan está por vencer pronto. Si querés seguir " +
-      "disfrutándolo, podés renovarlo entrando a liordark.com, o respondeme por acá y lo " +
-      "coordinamos. ¡Gracias por tu confianza! 🙌";
+  // "15.00" → "15" (sin .00 de más, se ve más limpio en el mensaje).
+  function formatReminderPrice(price) {
+    const num = parseFloat(price);
+    if (!Number.isFinite(num)) return "";
+    return Number.isInteger(num) ? String(num) : num.toFixed(2);
+  }
+
+  function reminderMessage(client) {
+    const accountName = (client.platformTag || client.platform || "").trim();
+    const price = formatReminderPrice(client.price);
+
+    const accountLine = accountName ? " de *" + accountName + "*" : "";
+    const priceLine    = price ? " Son *S/ " + price + "*." : "";
+
+    return "Hola! 👋 Te escribo porque tu cuenta" + accountLine + " está por vencer pronto." + priceLine + "\n\n" +
+      "Para renovarla podés entrar a liordark.com, o respondeme por acá y lo coordinamos.\n\n" +
+      "¡Gracias por tu confianza! 🙌";
   }
 
   // Un celular real (con código de país 51) tiene 11 dígitos — algo mucho
@@ -1089,7 +1102,7 @@
     btn.disabled = true;
 
     for (let i = 0; i < batch.length; i++) {
-      const link = remindersWaLink(batch[i].clientPhone, reminderMessage());
+      const link = remindersWaLink(batch[i].clientPhone, reminderMessage(batch[i]));
       if (windows[i]) windows[i].location = link;
       try {
         await api(`/renewals/${batch[i].profileId}/mark-reminded`, { method: "POST" });
