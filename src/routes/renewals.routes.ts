@@ -14,8 +14,8 @@ const router = Router();
 // ─────────────────────────────────────────────────────────────
 
 router.get("/expiring", (req, res) => {
-  const days = Number(req.query.days ?? 2);
-  const clients = listExpiringClients(Number.isFinite(days) ? days : 2, { excludeAlreadyExpired: true });
+  const days = Number(req.query.days ?? 0);
+  const clients = listExpiringClients(Number.isFinite(days) ? days : 0, { excludeAlreadyExpired: true });
   res.json({ clients });
 });
 

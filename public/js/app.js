@@ -1016,11 +1016,9 @@
 
   const REMINDERS_BATCH_SIZE   = 5;
   const REMINDERS_COOLDOWN_MS  = 3000;
-  // Ventana chica a propósito — con 5 días el backlog daba 30+ tandas de
-  // una sola vez (imposible de mandar manual a 1 tanda cada 3-5h). Con 1-2
-  // días la tanda del día es manejable, y cada día entran solos los que
-  // recién les toca, sin acumular todo de golpe.
-  const REMINDERS_WINDOW_DAYS  = 2;
+  // Solo lo que vence HOY — cada día entra solo lo que le toca vencer ese
+  // día, sin acumular nada del resto de la semana.
+  const REMINDERS_WINDOW_DAYS  = 0;
   let cachedExpiringClients    = [];
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
