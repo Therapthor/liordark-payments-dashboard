@@ -290,9 +290,16 @@ a { color: var(--btn); }
   display: flex; flex-direction: column; gap: 6px;
   background: var(--chip-bg); border-radius: 12px; padding: 12px 14px; margin: 4px 0;
 }
-.yape-info-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.yape-info-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .yape-info-label { font-size: 12px; color: var(--muted); font-weight: 600; }
-.yape-info-value { font-size: 13.5px; color: var(--text); font-weight: 700; }
+.yape-info-value { font-size: 13.5px; color: var(--text); font-weight: 700; flex: 1; text-align: right; }
+
+.yape-copy-btn {
+  border: 1px solid var(--border); background: #fff; border-radius: 8px;
+  padding: 4px 8px; font-size: 13px; line-height: 1; cursor: pointer; flex-shrink: 0;
+}
+.yape-copy-btn:hover { background: var(--chip-bg); }
+.yape-copy-btn-amount { margin-left: 8px; }
 
 .checkout-support-row {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
@@ -337,7 +344,8 @@ a { color: var(--btn); }
   color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px;
 }
 .checkout-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
-.checkout-amount { font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700; color: var(--accent); margin: 6px 0; }
+.checkout-amount-row { display: flex; align-items: center; justify-content: center; margin: 6px 0; }
+.checkout-amount { font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700; color: var(--accent); }
 .checkout-qr { width: 190px; height: 190px; object-fit: contain; border: 1px solid var(--border); border-radius: 14px; padding: 8px; margin: 4px 0; }
 .checkout-waiting { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 13px; }
 .success-check {

@@ -263,6 +263,7 @@
 
     if (view === "history") { loadHistory(); loadChart(); }
     if (view === "renewals") {
+      loadReminders();
       loadRenewalNotifications();
       if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
     }
@@ -1004,6 +1005,102 @@
     } catch { return ""; }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // RECORDATORIOS DE VENCIMIENTO — tandas manuales de WhatsApp.
+  // Reemplaza el aviso automático por WhatsApp Business API (dado de
+  // baja por Meta): acá se arman tandas de 5 con el mensaje ya escrito
+  // (sin mencionar ninguna plataforma) y el admin las manda él mismo,
+  // espaciadas cada 3-5 horas, para no repetir el patrón que causó el
+  // bloqueo del número anterior.
+  // ─────────────────────────────────────────────────────────────
+
+  const REMINDERS_BATCH_SIZE   = 5;
+  const REMINDERS_COOLDOWN_MS  = 3000;
+  let cachedExpiringClients    = [];
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  function remindersWaLink(phone, text) {
+    const digits = String(phone).replace(/\D/g, "");
+    return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
+  }
+
+  function reminderMessage() {
+    return "Hola! 👋 Te escribo porque tu plan está por vencer pronto. Si querés seguir " +
+      "disfrutándolo, podés renovarlo entrando a liordark.com, o respondeme por acá y lo " +
+      "coordinamos. ¡Gracias por tu confianza! 🙌";
+  }
+
+  function reminderRowHtml(c) {
+    const sent = !!c.reminderSentAt;
+    return `
+      <li class="catalog-item${sent ? " catalog-item-off" : ""}">
+        <div class="catalog-main">
+          <div class="catalog-name">${escapeHtml(c.clientPhone)}</div>
+          <div class="catalog-desc">Vence ${escapeHtml(c.expiresAt)}${sent ? " · ya se le recordó" : ""}</div>
+        </div>
+      </li>`;
+  }
+
+  async function loadReminders() {
+    const list  = document.getElementById("reminders-list");
+    const empty = document.getElementById("reminders-empty");
+    try {
+      const { clients } = await api("/renewals/expiring?days=5");
+      cachedExpiringClients = clients || [];
+      if (cachedExpiringClients.length === 0) {
+        list.innerHTML = "";
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      list.innerHTML = cachedExpiringClients.map(reminderRowHtml).join("");
+    } catch (err) {
+      list.innerHTML = `<li class="feed-empty">${escapeHtml(err.message)}</li>`;
+    }
+  }
+
+  async function prepareReminderBatch(btn) {
+    const pending = cachedExpiringClients.filter(c => !c.reminderSentAt);
+    if (pending.length === 0) {
+      alert("No quedan clientes pendientes de recordatorio en los próximos días.");
+      return;
+    }
+
+    const batch = pending.slice(0, REMINDERS_BATCH_SIZE);
+
+    // Mismo truco que el envío masivo de Accesos: las ventanas se abren
+    // TODAS durante el clic real (si no, el navegador las bloquea como
+    // pop-up no solicitado) y recién después se les asigna el link real,
+    // una por una con una pequeña pausa entre cada una.
+    const windows = batch.map(() => window.open("", "_blank"));
+    const somethingBlocked = windows.some(w => !w);
+
+    const original = btn.textContent;
+    btn.disabled = true;
+
+    for (let i = 0; i < batch.length; i++) {
+      const link = remindersWaLink(batch[i].clientPhone, reminderMessage());
+      if (windows[i]) windows[i].location = link;
+      try { await api(`/renewals/${batch[i].profileId}/mark-reminded`, { method: "POST" }); } catch { /* no crítico */ }
+      btn.textContent = `Preparando ${i + 1}/${batch.length}…`;
+      if (i < batch.length - 1) await sleep(REMINDERS_COOLDOWN_MS);
+    }
+
+    btn.disabled = false;
+    btn.textContent = original;
+
+    if (somethingBlocked) {
+      alert("El navegador bloqueó una o más ventanas. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.");
+    }
+
+    await loadReminders();
+  }
+
+  function initReminders() {
+    document.getElementById("reminders-prepare-btn").addEventListener("click", (e) => prepareReminderBatch(e.currentTarget));
+  }
+
   let cachedRenewalNotifs      = [];
   let currentDayEntries        = [];
   let renewalNotifSearchDigits = "";
@@ -1240,6 +1337,7 @@
     initSoundToggle();
     initMoneyToggle();
     initCodeSearch();
+    initReminders();
     if (window.LiordarkAccess) window.LiordarkAccess.init();
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();
     if (window.LiordarkSettings) window.LiordarkSettings.init();

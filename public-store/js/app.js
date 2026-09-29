@@ -193,11 +193,29 @@
     el.hidden = lines.length === 0;
     el.innerHTML = lines.map(line => {
       const i = line.indexOf(":");
-      if (i === -1) return `<div class="yape-info-row"><span class="yape-info-value">${escapeHtml(line)}</span></div>`;
-      const label = line.slice(0, i).trim();
-      const value = line.slice(i + 1).trim();
-      return `<div class="yape-info-row"><span class="yape-info-label">${escapeHtml(label)}</span><span class="yape-info-value">${escapeHtml(value)}</span></div>`;
+      const label = i === -1 ? "" : line.slice(0, i).trim();
+      const value = i === -1 ? line : line.slice(i + 1).trim();
+      const copyBtn = `<button class="yape-copy-btn" type="button" data-copy="${escapeHtml(value)}" aria-label="Copiar" title="Copiar">📋</button>`;
+      return `<div class="yape-info-row">${label ? `<span class="yape-info-label">${escapeHtml(label)}</span>` : ""}<span class="yape-info-value">${escapeHtml(value)}</span>${copyBtn}</div>`;
     }).join("");
+  }
+
+  async function handleYapeCopyClick(e) {
+    const btn = e.target.closest(".yape-copy-btn");
+    if (!btn) return;
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      const original = btn.textContent;
+      btn.textContent = "✅";
+      setTimeout(() => { btn.textContent = original; }, 1200);
+    } catch {
+      alert("No se pudo copiar. Copiá manualmente: " + btn.dataset.copy);
+    }
+  }
+
+  function initYapeCopyButtons() {
+    document.getElementById("checkout-instructions").addEventListener("click", handleYapeCopyClick);
+    document.getElementById("checkout-amount-copy").addEventListener("click", handleYapeCopyClick);
   }
 
   function productImgHtml(p, kind) {
@@ -431,6 +449,7 @@
       await ensureYapeInfo();
 
       document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
+      document.getElementById("checkout-amount-copy").dataset.copy = order.amount;
       const qrImg = document.getElementById("checkout-qr");
       if (cachedYapeQr) { qrImg.src = cachedYapeQr; qrImg.hidden = false; } else { qrImg.hidden = true; }
       renderInfoRows(document.getElementById("checkout-instructions"), cachedYapeText);
@@ -525,6 +544,7 @@
     document.getElementById("checkout-close").addEventListener("click", closeCheckout);
     document.getElementById("checkout-retry").addEventListener("click", closeCheckout);
     document.getElementById("checkout-goto-dashboard").addEventListener("click", closeCheckout);
+    initYapeCopyButtons();
   }
 
   // ─────────────────────────────────────────────────────────────

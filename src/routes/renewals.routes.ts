@@ -1,8 +1,32 @@
 import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
+import { listExpiringClients, markReminderSent } from "../db/access.repository";
 
 const router = Router();
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/renewals/expiring — clientes por vencer, para armar tandas de
+// recordatorio MANUAL por WhatsApp (panel > Renovaciones). Reemplaza el
+// aviso automático por WhatsApp Business API (dado de baja por Meta) —
+// acá el admin arma tandas de 5 y las manda él mismo, espaciadas, para no
+// repetir el patrón que causó el bloqueo.
+// ─────────────────────────────────────────────────────────────
+
+router.get("/expiring", (req, res) => {
+  const days = Number(req.query.days ?? 5);
+  const clients = listExpiringClients(Number.isFinite(days) ? days : 5);
+  res.json({ clients });
+});
+
+router.post("/:profileId/mark-reminded", (req, res) => {
+  const profileId = Number(req.params.profileId);
+  if (!Number.isFinite(profileId)) {
+    return res.status(400).json({ message: "profileId inválido." });
+  }
+  markReminderSent(profileId);
+  res.json({ ok: true });
+});
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/renewals/notifications

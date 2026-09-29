@@ -494,13 +494,14 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
 }
 
 export type ExpiringClient = {
-  profileId:   number;
-  clientPhone: string;
-  platform:    string;
-  platformTag: string; // título "amigable" del catálogo, para el mensaje al cliente
-  email:       string;
-  password:    string;
-  expiresAt:   string;
+  profileId:      number;
+  clientPhone:    string;
+  platform:       string;
+  platformTag:    string; // título "amigable" del catálogo, para el mensaje al cliente
+  email:          string;
+  password:       string;
+  expiresAt:      string;
+  reminderSentAt: string | null;
 };
 
 /** Clientes ocupados cuya cuenta vence en los próximos `days` días (o ya venció y sigue sin archivarse). */
@@ -509,14 +510,20 @@ export function listExpiringClients(days: number): ExpiringClient[] {
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE(c.title, '') AS platformTag,
-           a.email AS email, a.password AS password, a.expires_at AS expiresAt
+           a.email AS email, a.password AS password, a.expires_at AS expiresAt,
+           p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
     WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= ?
       AND p.order_ref NOT LIKE 'combo:%'
-    ORDER BY a.expires_at ASC
+    ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
   `).all(limit) as ExpiringClient[];
+}
+
+/** Recordatorio manual de vencimiento mandado (panel > Renovaciones) — para no repetirle a la misma persona en la próxima tanda. */
+export function markReminderSent(profileId: number): void {
+  db.prepare(`UPDATE access_profiles SET reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
 /**

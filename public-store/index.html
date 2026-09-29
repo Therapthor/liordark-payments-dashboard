@@ -153,7 +153,10 @@
       <div id="checkout-ready" class="checkout-state" hidden>
         <h2>Completá tu pago</h2>
         <p class="muted">Envía exactamente este monto por Yape:</p>
-        <div class="checkout-amount" id="checkout-amount">S/ 0.00</div>
+        <div class="checkout-amount-row">
+          <span class="checkout-amount" id="checkout-amount">S/ 0.00</span>
+          <button class="yape-copy-btn yape-copy-btn-amount" id="checkout-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
+        </div>
         <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
         <div class="yape-info" id="checkout-instructions"></div>
         <div class="checkout-waiting">

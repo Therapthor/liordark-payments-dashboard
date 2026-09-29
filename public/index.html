@@ -262,6 +262,25 @@
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
 
+        <!-- Recordatorios manuales de vencimiento — reemplaza el aviso
+             automático por WhatsApp Business API (dado de baja por Meta).
+             El admin arma tandas de 5 y las manda él mismo, espaciadas
+             cada 3-5 horas, para no repetir el patrón que causó el
+             bloqueo (sin nombres de marca, sin automatizar el envío). -->
+        <div class="panel-header standalone">
+          <h2>Recordatorios de vencimiento</h2>
+          <button id="reminders-prepare-btn" class="btn-primary">Preparar tanda de 5</button>
+        </div>
+
+        <p class="panel-hint">
+          Manual, no automático — se abren 5 chats de WhatsApp con el mensaje ya escrito
+          (sin mencionar plataformas) y los mandás vos. Repetí cada 3-5 horas para que no
+          parezca un envío masivo.
+        </p>
+
+        <ul id="reminders-list" class="catalog-list"></ul>
+        <p id="reminders-empty" class="feed-empty" hidden>No hay clientes por vencer en los próximos días.</p>
+
         <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
              se venden al cliente como plan anual pero Liordark las paga
              mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
