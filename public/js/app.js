@@ -1031,37 +1031,43 @@
       "coordinamos. ¡Gracias por tu confianza! 🙌";
   }
 
-  function reminderRowHtml(c) {
-    const sent = !!c.reminderSentAt;
-    return `
-      <li class="catalog-item${sent ? " catalog-item-off" : ""}">
-        <div class="catalog-main">
-          <div class="catalog-name">${escapeHtml(c.clientPhone)}</div>
-          <div class="catalog-desc">Vence ${escapeHtml(c.expiresAt)}${sent ? " · ya se le recordó" : ""}</div>
-        </div>
-      </li>`;
+  // Un celular real (con código de país 51) tiene 11 dígitos — algo mucho
+  // más largo es dato corrupto (visto en producción: un client_phone de
+  // 16 dígitos). Se descarta acá para no gastar una tanda en un link que
+  // ni va a abrir un chat de WhatsApp válido.
+  function isValidReminderPhone(phone) {
+    const digits = String(phone || "").replace(/\D/g, "");
+    return digits.length >= 9 && digits.length <= 12;
+  }
+
+  function renderRemindersSummary() {
+    const valid   = cachedExpiringClients.filter(c => isValidReminderPhone(c.clientPhone));
+    const pending = valid.filter(c => !c.reminderSentAt);
+    const sent    = valid.length - pending.length;
+    const batchesLeft = Math.ceil(pending.length / REMINDERS_BATCH_SIZE);
+
+    const el = document.getElementById("reminders-summary");
+    if (valid.length === 0) {
+      el.textContent = "No hay clientes por vencer en los próximos días.";
+      return;
+    }
+    el.textContent = `${pending.length} pendientes de recordatorio · ${batchesLeft} tanda${batchesLeft === 1 ? "" : "s"} de ${REMINDERS_BATCH_SIZE} por mandar · ${sent} ya recordados`;
   }
 
   async function loadReminders() {
-    const list  = document.getElementById("reminders-list");
-    const empty = document.getElementById("reminders-empty");
     try {
       const { clients } = await api("/renewals/expiring?days=5");
       cachedExpiringClients = clients || [];
-      if (cachedExpiringClients.length === 0) {
-        list.innerHTML = "";
-        empty.hidden = false;
-        return;
-      }
-      empty.hidden = true;
-      list.innerHTML = cachedExpiringClients.map(reminderRowHtml).join("");
     } catch (err) {
-      list.innerHTML = `<li class="feed-empty">${escapeHtml(err.message)}</li>`;
+      cachedExpiringClients = [];
+      document.getElementById("reminders-summary").textContent = err.message;
+      return;
     }
+    renderRemindersSummary();
   }
 
   async function prepareReminderBatch(btn) {
-    const pending = cachedExpiringClients.filter(c => !c.reminderSentAt);
+    const pending = cachedExpiringClients.filter(c => !c.reminderSentAt && isValidReminderPhone(c.clientPhone));
     if (pending.length === 0) {
       alert("No quedan clientes pendientes de recordatorio en los próximos días.");
       return;
@@ -1082,7 +1088,10 @@
     for (let i = 0; i < batch.length; i++) {
       const link = remindersWaLink(batch[i].clientPhone, reminderMessage());
       if (windows[i]) windows[i].location = link;
-      try { await api(`/renewals/${batch[i].profileId}/mark-reminded`, { method: "POST" }); } catch { /* no crítico */ }
+      try {
+        await api(`/renewals/${batch[i].profileId}/mark-reminded`, { method: "POST" });
+        batch[i].reminderSentAt = new Date().toISOString(); // optimista, evita re-pedir todo al servidor
+      } catch { /* no crítico */ }
       btn.textContent = `Preparando ${i + 1}/${batch.length}…`;
       if (i < batch.length - 1) await sleep(REMINDERS_COOLDOWN_MS);
     }
@@ -1094,7 +1103,7 @@
       alert("El navegador bloqueó una o más ventanas. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.");
     }
 
-    await loadReminders();
+    renderRemindersSummary();
   }
 
   function initReminders() {
