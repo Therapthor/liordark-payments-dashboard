@@ -11,11 +11,15 @@ import { findCodesEnabledAccountByEmailInText, saveIncomingCode } from "../../db
 // Sin CODES_GMAIL_USER/CODES_GMAIL_APP_PASSWORD configurados, este
 // poller queda inactivo — no rompe nada del resto del panel.
 //
-// Cómo atribuye el código a una cuenta: busca, dentro del asunto+cuerpo
-// del correo, el email de alguna cuenta marcada — así no depende de que
-// el remitente diga explícito a quién pertenece. Si no encuentra
-// ninguna coincidencia, el correo se deja SIN LEER (por si en verdad
-// era para una cuenta que no está marcada, y hay que revisarlo a mano).
+// Cómo atribuye el código a una cuenta: busca el email de alguna cuenta
+// marcada dentro del asunto, el cuerpo, el destinatario (To) y los
+// encabezados que un reenvío automático conserva con la dirección
+// original (Delivered-To / X-Original-To) — así funciona tanto si el
+// correo se reenvía a mano (queda citado en el cuerpo) como si se
+// reenvía automático (el cuerpo no lo menciona, solo el encabezado).
+// Si no encuentra ninguna coincidencia, el correo se deja SIN LEER (por
+// si en verdad era para una cuenta que no está marcada, y hay que
+// revisarlo a mano).
 // ─────────────────────────────────────────────────────────────
 
 // Ajustar si Netflix/ChatGPT/etc. no vienen en 4-8 dígitos — pensado para
@@ -46,7 +50,18 @@ export async function pollGmailForCodes(): Promise<void> {
         if (!msg.source) continue;
 
         const parsed = await simpleParser(msg.source);
-        const text = [parsed.subject ?? "", parsed.text ?? ""].join("\n");
+        const headerVal = (name: string): string => {
+          const v = parsed.headers.get(name);
+          return typeof v === "string" ? v : "";
+        };
+        const toObj = Array.isArray(parsed.to) ? parsed.to[0] : parsed.to;
+        const text = [
+          parsed.subject ?? "",
+          toObj?.text ?? "",
+          headerVal("delivered-to"),
+          headerVal("x-original-to"),
+          parsed.text ?? "",
+        ].join("\n");
 
         const account = findCodesEnabledAccountByEmailInText(text);
         const codeMatch = text.match(CODE_REGEX);
