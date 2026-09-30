@@ -27,6 +27,8 @@ import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
 import { archiveExpiredAccounts } from "./db/access-history.repository";
+import { startGmailCodesPoller } from "./services/codes/gmail-codes.service";
+import { cleanupOldCodes } from "./db/codes.repository";
 import { limaTodayISO } from "./services/access.service";
 
 const app = express();
@@ -97,6 +99,10 @@ const server = app.listen(env.PORT, () => {
 
   runArchiveExpiredAccounts();
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
+
+  startGmailCodesPoller();
+  runCleanupOldCodes();
+  setInterval(runCleanupOldCodes, CODES_CLEANUP_INTERVAL_MS);
 });
 
 // Cuentas vencidas (Accesos) — se archivan solas a Historial y se borran de
@@ -109,6 +115,18 @@ function runArchiveExpiredAccounts(): void {
     if (archived > 0) console.log(`🗄️  ${archived} cuenta(s) vencida(s) archivadas a Historial`);
   } catch (err: any) {
     console.error("⚠️ Error archivando cuentas vencidas:", err?.message);
+  }
+}
+
+// Códigos — limpieza cada 24h (a pedido: "se hace limpia cada 24 horas").
+const CODES_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function runCleanupOldCodes(): void {
+  try {
+    const removed = cleanupOldCodes();
+    if (removed > 0) console.log(`🧹 ${removed} código(s) viejo(s) borrados (Códigos)`);
+  } catch (err: any) {
+    console.error("⚠️ Error limpiando códigos viejos:", err?.message);
   }
 }
 

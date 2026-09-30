@@ -30,4 +30,10 @@ export const env = {
   CLOUDINARY_API_KEY:      getEnv("CLOUDINARY_API_KEY", false),
   CLOUDINARY_API_SECRET:   getEnv("CLOUDINARY_API_SECRET", false),
   CLOUDINARY_FOLDER_UTILS: getEnv("CLOUDINARY_FOLDER_UTILS", false),
+
+  // Códigos — cuenta Gmail DEDICADA que recibe (por reenvío) los correos
+  // de código de las cuentas marcadas. Sin esto configurado, el poller
+  // queda inactivo (no rompe nada, solo no busca códigos nuevos).
+  CODES_GMAIL_USER:         getEnv("CODES_GMAIL_USER", false),
+  CODES_GMAIL_APP_PASSWORD: getEnv("CODES_GMAIL_APP_PASSWORD", false),
 };

@@ -38,6 +38,9 @@ export type AccessAccount = {
   // presionó "Renovar", pendiente de que el cliente pague. null = no hay
   // renovación pendiente para esta cuenta.
   renewalPendingAt: string | null;
+  // "🔑 Código" — si esta cuenta puede recibir código (Netflix, ChatGPT,
+  // etc.) para que el cliente lo pida desde liordark.com. Ver codes.repository.ts.
+  codesEnabled: boolean;
   createdAt:   string;
   updatedAt:   string;
 };
@@ -719,6 +722,7 @@ function toAccount(row: any): AccessAccount {
     providerRenewalCurrency: row.provider_renewal_currency || "USDT",
     providerRenewalNextDate: row.provider_renewal_next_date ?? null,
     renewalPendingAt: row.renewal_pending_at ?? null,
+    codesEnabled: row.codes_enabled === 1,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };

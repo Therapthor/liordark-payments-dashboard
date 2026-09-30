@@ -99,6 +99,7 @@
         <button class="nav-btn" data-view="dashboard">Mis cuentas</button>
         <a class="nav-support-btn" id="topbar-support-link" href="#" target="_blank" rel="noopener">💬 Soporte</a>
         <button class="nav-btn nav-btn-ghost" id="topbar-renewals-btn" type="button">Renovaciones</button>
+        <button class="nav-btn" data-view="codes" id="topbar-codes-btn" hidden>🔑 Códigos</button>
         <button class="nav-btn nav-btn-ghost" id="logout-btn" type="button">Salir</button>
       </nav>
     </header>
@@ -128,6 +129,13 @@
           <p class="muted">¿No ves algo que compraste antes? Te lo mandamos directo por WhatsApp.</p>
           <a class="btn-primary btn-block" id="dashboard-request-link" href="#" target="_blank" rel="noopener">Solicitar historial por WhatsApp</a>
         </div>
+      </section>
+
+      <section id="page-codes" class="page" hidden>
+        <h2>🔑 Códigos</h2>
+        <p class="muted small">En pruebas — te avisamos por WhatsApp cuando esté lista para todos.</p>
+        <div id="codes-list" class="renewal-accounts-list"></div>
+        <p class="muted" id="codes-empty" hidden>Ninguna de tus cuentas activas tiene "Código" habilitado todavía.</p>
       </section>
     </main>
   </div>

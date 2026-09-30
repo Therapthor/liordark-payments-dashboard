@@ -10,6 +10,21 @@ import { listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone } 
 import { listArchivedAccountsByPhone } from "../db/access-history.repository";
 import { daysLeft } from "../services/access.service";
 import { normalizePeruPhone } from "../utils/phone.util";
+import {
+  listClientCodesAccounts,
+  clientOwnsCodesAccount,
+  getCodeRequestState,
+  registerCodeRequest,
+  getLatestCodeForAccount,
+  MAX_CODE_REQUESTS_PER_ACCOUNT,
+} from "../db/codes.repository";
+
+// Códigos — en pruebas, solo para este celular (a pedido explícito). Se
+// quita esta restricción cuando se dé por probado.
+const CODES_TEST_PHONE = "977430941";
+function isCodesTestUser(phone: string): boolean {
+  return phone.replace(/\D/g, "").slice(-9) === CODES_TEST_PHONE;
+}
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
 // (GET /api/stock/catalog y /combos) — sellableCount ya excluye
@@ -117,6 +132,58 @@ router.post("/renewals/checkout", async (req, res) => {
 });
 
 router.use(requireCustomerSession);
+
+// ─────────────────────────────────────────────────────────────
+// CÓDIGOS — en pruebas, solo para CODES_TEST_PHONE. El cliente ve sus
+// cuentas con "🔑 Código" habilitado (Accesos) mientras sigan activas, y
+// puede pedir el código hasta MAX_CODE_REQUESTS_PER_ACCOUNT veces por
+// cuenta (para siempre, sin reset automático — solo el admin resetea).
+// ─────────────────────────────────────────────────────────────
+
+router.get("/codes", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+
+  if (!isCodesTestUser(customer.phone)) {
+    return res.status(403).json({ message: "Códigos todavía está en pruebas." });
+  }
+
+  const accounts = listClientCodesAccounts(customer.phone).map(a => {
+    const state = getCodeRequestState(customer.phone, a.accountId);
+    return { ...a, requestsUsed: state.requestCount, requestsMax: MAX_CODE_REQUESTS_PER_ACCOUNT };
+  });
+
+  res.json({ accounts });
+});
+
+router.post("/codes/:accountId/request", (req, res) => {
+  const customerId = (req as unknown as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+
+  if (!isCodesTestUser(customer.phone)) {
+    return res.status(403).json({ message: "Códigos todavía está en pruebas." });
+  }
+
+  const accountId = Number(req.params.accountId);
+  if (!clientOwnsCodesAccount(customer.phone, accountId)) {
+    return res.status(404).json({ message: "No encontramos esa cuenta activa para tu celular." });
+  }
+
+  const allowed = registerCodeRequest(customer.phone, accountId);
+  if (!allowed) {
+    return res.status(429).json({
+      message: `Ya usaste tus ${MAX_CODE_REQUESTS_PER_ACCOUNT} pedidos de código para esta cuenta. Escríbenos por soporte si necesitas otro.`,
+    });
+  }
+
+  const latest = getLatestCodeForAccount(accountId);
+  res.json({
+    code:       latest?.code ?? null,
+    receivedAt: latest?.receivedAt ?? null,
+  });
+});
 
 // GET /api/store/catalog — productos + combos activos, con disponibilidad
 // real (mismo dato que ya usa el bot) para que la web no venda algo que

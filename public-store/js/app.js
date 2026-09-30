@@ -121,12 +121,14 @@
   }
 
   let currentPhone = "";
+  const CODES_TEST_PHONE = "977430941"; // Códigos en pruebas — solo este celular, ver store.routes.ts
 
   async function onAuthenticated() {
     showApp();
     try {
       const me = await api("/auth/me");
       currentPhone = me.phone || "";
+      document.getElementById("topbar-codes-btn").hidden = currentPhone.replace(/\D/g, "").slice(-9) !== CODES_TEST_PHONE;
     } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
     await loadCatalog();
   }
@@ -146,7 +148,9 @@
     document.querySelectorAll(".nav-btn[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
+    document.getElementById("page-codes").hidden = view !== "codes";
     if (view === "dashboard") { initDashboardRequestLink(); loadDashboardAccounts(); }
+    if (view === "codes") loadCodesAccounts();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -920,6 +924,81 @@
     document.getElementById("checkout-modal").hidden = true;
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // CÓDIGOS — en pruebas, solo CODES_TEST_PHONE (ver onAuthenticated)
+  // ─────────────────────────────────────────────────────────────
+
+  function codesCardHtml(a) {
+    const remaining = a.requestsMax - a.requestsUsed;
+    const canRequest = remaining > 0;
+    return `
+      <div class="renewal-account-card" data-account-id="${a.accountId}">
+        <div class="renewal-account-head">
+          <span class="renewal-account-platform">${escapeHtml(a.platform)}</span>
+          <span class="renewal-account-status">${escapeHtml(a.expiresAt ? "Vence: " + a.expiresAt : "")}</span>
+        </div>
+        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
+        <div class="codes-result" data-role="result" hidden></div>
+        <div class="renewal-account-footer">
+          <span class="codes-remaining" data-role="remaining">${remaining} de ${a.requestsMax} pedido(s) disponibles</span>
+          <button class="btn-primary btn-sm codes-request-btn" type="button" ${canRequest ? "" : "disabled"}>Pedir código</button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadCodesAccounts() {
+    const list  = document.getElementById("codes-list");
+    const empty = document.getElementById("codes-empty");
+    try {
+      const { accounts } = await api("/codes");
+      if (!accounts || accounts.length === 0) {
+        list.innerHTML = "";
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+        list.innerHTML = accounts.map(codesCardHtml).join("");
+      }
+    } catch (err) {
+      list.innerHTML = "";
+      empty.textContent = err.message;
+      empty.hidden = false;
+    }
+  }
+
+  function initCodesView() {
+    document.getElementById("codes-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".codes-request-btn");
+      if (!btn) return;
+      const card = btn.closest(".renewal-account-card");
+      const accountId = card.dataset.accountId;
+      const resultEl = card.querySelector("[data-role='result']");
+      const remainingEl = card.querySelector("[data-role='remaining']");
+
+      btn.disabled = true;
+      resultEl.hidden = true;
+      try {
+        const { code, receivedAt } = await api("/codes/" + accountId + "/request", { method: "POST" });
+        resultEl.hidden = false;
+        if (code) {
+          resultEl.innerHTML = `<div class="codes-value">${escapeHtml(code)}</div><div class="codes-meta">Llegó: ${escapeHtml(receivedAt)}</div>`;
+        } else {
+          resultEl.innerHTML = `<div class="codes-meta">Todavía no llegó ningún código. Intenta de nuevo en un rato.</div>`;
+        }
+        const match = remainingEl.textContent.match(/^(\d+) de (\d+)/);
+        if (match) {
+          const left = Math.max(0, Number(match[1]) - 1);
+          remainingEl.textContent = `${left} de ${match[2]} pedido(s) disponibles`;
+          btn.disabled = left <= 0;
+        }
+      } catch (err) {
+        resultEl.hidden = false;
+        resultEl.innerHTML = `<div class="codes-meta">${escapeHtml(err.message)}</div>`;
+        btn.disabled = false;
+      }
+    });
+  }
+
   function initCheckoutModal() {
     document.getElementById("checkout-close").addEventListener("click", closeCheckout);
     document.getElementById("checkout-retry").addEventListener("click", closeCheckout);
@@ -940,6 +1019,7 @@
     initProductDetailModal();
     initRenewalsView();
     initComboBuilder();
+    initCodesView();
 
     try {
       const me = await api("/auth/me");

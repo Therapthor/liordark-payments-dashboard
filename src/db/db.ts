@@ -177,4 +177,34 @@ ensureColumn("customers", "suspended_until", "suspended_until TEXT");
 }
 ensureColumn("customers", "password_plain", "password_plain TEXT NOT NULL DEFAULT ''");
 
+// ─────────────────────────────────────────────────────────────
+// CÓDIGOS — cuentas marcadas para recibir código (Netflix/ChatGPT/etc.),
+// los códigos que van llegando (Gmail por ahora, después scraping externo)
+// y cuántas veces pidió código cada cliente por cuenta (límite fijo).
+// En prueba: solo habilitado para el celular de test (ver codes.service.ts).
+// ─────────────────────────────────────────────────────────────
+ensureColumn("access_accounts", "codes_enabled", "codes_enabled INTEGER NOT NULL DEFAULT 0");
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS account_codes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    code       TEXT    NOT NULL,
+    snippet    TEXT    NOT NULL DEFAULT '',
+    source     TEXT    NOT NULL DEFAULT 'gmail',
+    received_at TEXT   NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_account_codes_account ON account_codes(account_id);
+
+  CREATE TABLE IF NOT EXISTS code_requests (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_phone   TEXT    NOT NULL,
+    account_id     INTEGER NOT NULL,
+    request_count  INTEGER NOT NULL DEFAULT 0,
+    last_requested_at TEXT,
+    UNIQUE(client_phone, account_id)
+  );
+`);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

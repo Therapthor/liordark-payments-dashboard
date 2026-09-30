@@ -26,6 +26,13 @@ import { renewAccount, accountStatus, daysLeft } from "../services/access.servic
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
+import {
+  setAccountCodesEnabled,
+  listCodesEnabledAccounts,
+  getLatestCodeForAccount,
+  resetCodeRequests,
+  getCodeRequestState,
+} from "../db/codes.repository";
 
 const router = Router();
 
@@ -215,6 +222,38 @@ router.post("/accounts/:id/renew", (req, res) => {
   const account = renewAccount(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   res.json({ account: withStatus(account) });
+});
+
+// ── CÓDIGOS — marcar cuenta, ver últimos códigos, resetear pedidos ──
+// (prueba: solo habilitado en liordark.com para el celular de test, ver
+// src/routes/store.routes.ts / codes.service.ts — acá el toggle ya
+// funciona para cualquier cuenta, sin restricción, para poder probarlo).
+
+router.post("/accounts/:id/codes-enabled", (req, res) => {
+  const accountId = Number(req.params.id);
+  const enabled   = req.body?.enabled === true;
+  if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  setAccountCodesEnabled(accountId, enabled);
+  res.json({ account: withStatus(getAccountById(accountId)!) });
+});
+
+router.get("/codes", (_req, res) => {
+  const accounts = listCodesEnabledAccounts().map(a => ({
+    ...a,
+    latestCode: getLatestCodeForAccount(a.id),
+  }));
+  res.json({ accounts });
+});
+
+router.post("/codes/reset", (req, res) => {
+  const clientPhone = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
+  const accountId   = Number(req.body?.accountId);
+  if (!clientPhone || !accountId) {
+    res.status(400).json({ message: "Falta clientPhone o accountId." });
+    return;
+  }
+  resetCodeRequests(clientPhone, accountId);
+  res.json({ ok: true, state: getCodeRequestState(clientPhone, accountId) });
 });
 
 // Renovar en dos pasos: "Renovar" solo marca pendiente de pago (no toca el
