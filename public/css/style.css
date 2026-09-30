@@ -874,6 +874,7 @@ button, input {
 }
 .access-renewing-item .renewing-view-btn { margin-left: auto; }
 .access-account-highlight { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row-highlight-yellow { background: #fff3b0; transition: background 0.3s ease; }
 .access-history-detail { padding: 0 0 14px; font-size: 13px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; }
 .access-history-clients ul { margin: 4px 0 0; padding-left: 18px; }
 

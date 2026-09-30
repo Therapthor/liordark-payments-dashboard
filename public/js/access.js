@@ -362,7 +362,7 @@
     cells.push(`<td>${occupied ? renderRenewalButton(p) : ""}</td>`);
     cells.push(`<td class="access-row-actions">${actions}</td>`);
 
-    return `<tr>${cells.join("")}</tr>`;
+    return `<tr data-profile-id="${p.id}">${cells.join("")}</tr>`;
   }
 
   function wireAccountCardEvents(target) {
@@ -874,6 +874,7 @@
           <span class="badge access-badge-${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span>
           <span>${fmtDateLong(p.expiresAt)} · ${daysLabel(p.status, p.daysLeft)}</span>
           <div class="access-client-item-actions">
+            <button class="btn-secondary btn-sm client-view-account" data-idx="${idx}">👁 Ver cuenta</button>
             <button class="btn-secondary btn-sm client-send-account" data-idx="${idx}">📧 Enviar cuenta</button>
             ${renderRenewalButton(p)}
             <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
@@ -883,15 +884,40 @@
     `).join("");
   }
 
+  // Abre el detalle de la plataforma (todas sus cuentas ya expandidas) y
+  // resalta en amarillo la fila puntual de este cliente por 4 segundos,
+  // para encontrarla de un vistazo entre todos los perfiles de la cuenta.
+  async function viewClientAccountRow(p) {
+    document.getElementById("access-search-input").value = "";
+    document.getElementById("access-search-clear").hidden = true;
+    resetSearch();
+    await openPlatformDetail(p.platform);
+
+    const row = document.querySelector(
+      `#access-platform-detail-accounts tr[data-profile-id="${p.id}"]`
+    );
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("row-highlight-yellow");
+      setTimeout(() => row.classList.remove("row-highlight-yellow"), 4000);
+    }
+  }
+
   // Delegado en la lista (se re-dibuja entera en cada búsqueda) — vuelve a
   // correr la misma búsqueda después de cada acción para reflejar el
   // cambio, en vez de tratar de actualizar la fila a mano.
   function initClientSummaryActions() {
     document.getElementById("access-client-list").addEventListener("click", async (e) => {
+      const viewBtn    = e.target.closest(".client-view-account");
       const sendBtn    = e.target.closest(".client-send-account");
       const renewalBtn = e.target.closest(".row-renewal");
       const releaseBtn = e.target.closest(".client-release-profile");
 
+      if (viewBtn) {
+        const p = lastClientProfiles[Number(viewBtn.dataset.idx)];
+        if (p) viewClientAccountRow(p);
+        return;
+      }
       if (sendBtn) {
         const p = lastClientProfiles[Number(sendBtn.dataset.idx)];
         if (p) window.open(waLink(p.clientPhone, msgEntrega(p)), "_blank");
