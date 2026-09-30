@@ -121,14 +121,14 @@
   }
 
   let currentPhone = "";
-  const CODES_TEST_PHONE = "977430941"; // Códigos en pruebas — solo este celular, ver store.routes.ts
 
   async function onAuthenticated() {
     showApp();
     try {
       const me = await api("/auth/me");
       currentPhone = me.phone || "";
-      document.getElementById("topbar-codes-btn").hidden = currentPhone.replace(/\D/g, "").slice(-9) !== CODES_TEST_PHONE;
+      // Códigos — apagado por ahora (el reenvío de Gmail resultó más
+      // complicado de lo esperado); el botón queda oculto para todos.
     } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
     await loadCatalog();
   }

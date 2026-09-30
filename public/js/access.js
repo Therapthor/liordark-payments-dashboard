@@ -319,7 +319,6 @@
               <button class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte proveedor</button>
               ${renderRenewControls(account)}
               ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
-              <button class="btn-secondary btn-sm access-toggle-codes" data-account-id="${account.id}" data-enabled="${account.codesEnabled ? "1" : "0"}" title="Habilita que los clientes de esta cuenta pidan su código en liordark.com">${account.codesEnabled ? "🔑 Código: activado" : "🔑 Código: desactivado"}</button>
               <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
               <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
             </div>
@@ -450,15 +449,6 @@
 
     target.querySelectorAll(".access-renew-new").forEach(btn => {
       btn.addEventListener("click", () => openRenewNewModal(Number(btn.dataset.accountId), Number(btn.dataset.renewingCount)));
-    });
-
-    target.querySelectorAll(".access-toggle-codes").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const accountId = Number(btn.dataset.accountId);
-        const enabled = btn.dataset.enabled !== "1";
-        await api("/accounts/" + accountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled }) });
-        refreshAccountInPlace(accountId);
-      });
     });
 
     target.querySelectorAll(".access-edit-account").forEach(btn => {
