@@ -870,7 +870,7 @@
       return;
     }
 
-    list.innerHTML = profiles.map(p => `
+    list.innerHTML = profiles.map((p, idx) => `
       <li class="access-client-item">
         <div>
           <b>${escapeHtml(p.platform)}</b>${p.profileName ? " — " + escapeHtml(p.profileName) : ""}
@@ -881,6 +881,7 @@
           <span class="badge access-badge-${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span>
           <span>${fmtDateLong(p.expiresAt)} · ${daysLabel(p.status, p.daysLeft)}</span>
           <div class="access-client-item-actions">
+            <button class="btn-secondary btn-sm client-send-account" data-idx="${idx}">📧 Enviar cuenta</button>
             ${renderClientRenewControls(p)}
             <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
           </div>
@@ -894,11 +895,17 @@
   // cambio, en vez de tratar de actualizar la fila a mano.
   function initClientSummaryActions() {
     document.getElementById("access-client-list").addEventListener("click", async (e) => {
-      const renewBtn   = e.target.closest(".client-renew-account");
-      const confirmBtn = e.target.closest(".client-renew-confirm");
-      const cancelBtn  = e.target.closest(".client-renew-cancel");
-      const releaseBtn = e.target.closest(".client-release-profile");
+      const sendBtn     = e.target.closest(".client-send-account");
+      const renewBtn    = e.target.closest(".client-renew-account");
+      const confirmBtn  = e.target.closest(".client-renew-confirm");
+      const cancelBtn   = e.target.closest(".client-renew-cancel");
+      const releaseBtn  = e.target.closest(".client-release-profile");
 
+      if (sendBtn) {
+        const p = lastClientProfiles[Number(sendBtn.dataset.idx)];
+        if (p) window.open(waLink(p.clientPhone, msgEntrega(p)), "_blank");
+        return;
+      }
       if (renewBtn) {
         await api("/accounts/" + renewBtn.dataset.accountId + "/renewal-pending", { method: "POST" });
       } else if (confirmBtn) {
