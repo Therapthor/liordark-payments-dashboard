@@ -210,7 +210,7 @@
       btn.textContent = "✅";
       setTimeout(() => { btn.textContent = original; }, 1200);
     } catch {
-      alert("No se pudo copiar. Copiá manualmente: " + btn.dataset.copy);
+      alert("No se pudo copiar. Copia manualmente: " + btn.dataset.copy);
     }
   }
 
@@ -359,7 +359,7 @@
       if (needsCanvaEmail) {
         clientEmail = document.getElementById("detail-canva-email-input").value.trim();
         if (!isValidEmail(clientEmail)) {
-          setFormError("detail-canva-email-error", "Escribí un correo válido para activar Canva.");
+          setFormError("detail-canva-email-error", "Escribe un correo válido para activar Canva.");
           return;
         }
       }
@@ -466,6 +466,14 @@
     document.getElementById("view-auth").hidden = true;
     document.getElementById("view-app").hidden = true;
     document.getElementById("view-renewals").hidden = false;
+
+    // Ya logueado — no tiene sentido volver a pedirle el celular, ya lo
+    // sabemos de su sesión. Directo a sus cuentas.
+    if (fromApp && currentPhone) {
+      loadRenewalAccounts(currentPhone);
+      return;
+    }
+
     document.getElementById("renewal-lookup-form").reset();
     setFormError("renewal-lookup-error", "");
     showRenewalCard("renewal-lookup-card");
@@ -505,11 +513,7 @@
     `;
   }
 
-  async function submitRenewalLookup(e) {
-    e.preventDefault();
-    setFormError("renewal-lookup-error", "");
-    const phone = document.getElementById("renewal-phone-input").value.trim();
-
+  async function loadRenewalAccounts(phone) {
     try {
       const { accounts } = await api("/renewals?phone=" + encodeURIComponent(phone));
       cachedRenewalAccounts = accounts || [];
@@ -519,6 +523,7 @@
       const empty = document.getElementById("renewal-accounts-empty");
       if (cachedRenewalAccounts.length === 0) {
         list.innerHTML = "";
+        empty.textContent = "No encontramos cuentas con ese celular. Si crees que es un error, escríbenos por soporte.";
         empty.hidden = false;
       } else {
         empty.hidden = true;
@@ -526,8 +531,23 @@
       }
       showRenewalCard("renewal-results-card");
     } catch (err) {
-      setFormError("renewal-lookup-error", err.message);
+      // Logueado: no hay a dónde mostrar el error salvo el propio resultado.
+      if (renewalsCameFromApp) {
+        document.getElementById("renewal-accounts-empty").hidden = false;
+        document.getElementById("renewal-accounts-empty").textContent = err.message;
+        document.getElementById("renewal-accounts-list").innerHTML = "";
+        showRenewalCard("renewal-results-card");
+      } else {
+        setFormError("renewal-lookup-error", err.message);
+      }
     }
+  }
+
+  async function submitRenewalLookup(e) {
+    e.preventDefault();
+    setFormError("renewal-lookup-error", "");
+    const phone = document.getElementById("renewal-phone-input").value.trim();
+    await loadRenewalAccounts(phone);
   }
 
   async function startRenewalCheckout(platform, clientEmail) {
@@ -587,7 +607,7 @@
         const errorEl = document.querySelector(`.renewal-canva-email-error[data-idx="${idx}"]`);
         clientEmail = input.value.trim();
         if (!isValidEmail(clientEmail)) {
-          errorEl.textContent = "Escribí un correo válido para activar Canva.";
+          errorEl.textContent = "Escribe un correo válido para activar Canva.";
           errorEl.hidden = false;
           return;
         }
@@ -726,7 +746,7 @@
           btn.textContent = "✅ Copiado";
           setTimeout(() => { btn.textContent = original; }, 1800);
         } catch {
-          alert("No se pudo copiar. Copiá los datos manualmente.");
+          alert("No se pudo copiar. Copia los datos manualmente.");
         }
       });
     });

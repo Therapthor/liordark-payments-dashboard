@@ -1043,7 +1043,7 @@
     const priceLine    = price ? " Son *S/ " + price + "*." : "";
 
     return "Hola! 👋 Te escribo porque tu cuenta" + accountLine + " está por vencer pronto." + priceLine + "\n\n" +
-      "Para renovarla podés entrar a liordark.com, o respondeme por acá y lo coordinamos.\n\n" +
+      "Para renovarla puedes entrar a liordark.com, o respondeme por acá y lo coordinamos.\n\n" +
       "¡Gracias por tu confianza! 🙌";
   }
 

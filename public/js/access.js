@@ -1018,12 +1018,15 @@
   // nueva sin abrir cada plataforma por separado.
   // ─────────────────────────────────────────────────────────────
 
-  function renderRenewingItem(p) {
+  let cachedRenewingProfiles = [];
+
+  function renderRenewingItem(p, idx) {
     return `
-      <div class="access-history-item">
+      <div class="access-history-item access-renewing-item">
         <span class="access-history-platform">${escapeHtml(p.platformTag || p.platform)}</span>
         <span class="text-muted">${escapeHtml(p.clientPhone)}</span>
         <span class="text-muted">Vence: ${fmtDateLong(p.expiresAt)}</span>
+        <button class="btn-secondary btn-sm renewing-view-btn" data-idx="${idx}" type="button">👁 Ver</button>
       </div>
     `;
   }
@@ -1033,6 +1036,7 @@
     const empty = document.getElementById("access-renewing-empty");
     try {
       const { profiles } = await api("/profiles/renewing");
+      cachedRenewingProfiles = profiles;
       body.innerHTML = profiles.map(renderRenewingItem).join("");
       empty.hidden = profiles.length > 0;
     } catch (err) {
@@ -1042,10 +1046,36 @@
     }
   }
 
+  // Cierra el modal, abre el detalle de la plataforma (todas sus cuentas
+  // ya expandidas, como en la vista normal de Accesos) y resalta/lleva la
+  // vista hasta la cuenta puntual de este cliente.
+  async function viewRenewingAccount(p) {
+    document.getElementById("access-renewing-modal").hidden = true;
+    document.getElementById("access-search-input").value = "";
+    document.getElementById("access-search-clear").hidden = true;
+    resetSearch();
+    await openPlatformDetail(p.platform);
+
+    const el = document.querySelector(
+      `#access-platform-detail-accounts .access-account[data-account-id="${p.accountId}"]`
+    );
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("access-account-highlight");
+      setTimeout(() => el.classList.remove("access-account-highlight"), 2000);
+    }
+  }
+
   function initRenewingModal() {
     document.getElementById("access-renewing-btn").addEventListener("click", () => {
       document.getElementById("access-renewing-modal").hidden = false;
       loadRenewing();
+    });
+    document.getElementById("access-renewing-body").addEventListener("click", (e) => {
+      const btn = e.target.closest(".renewing-view-btn");
+      if (!btn) return;
+      const p = cachedRenewingProfiles[Number(btn.dataset.idx)];
+      if (p) viewRenewingAccount(p);
     });
   }
 

@@ -359,6 +359,7 @@ export function resetRenewalMarkers(accountId: number): void {
 
 export type RenewingProfile = {
   profileId:   number;
+  accountId:   number;
   clientPhone: string;
   platform:    string;
   platformTag: string;
@@ -369,7 +370,7 @@ export type RenewingProfile = {
  *  juntos en un solo lugar en vez de abrir cuenta por cuenta en Accesos. */
 export function listRenewingProfiles(): RenewingProfile[] {
   return db.prepare(`
-    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
+    SELECT p.id AS profileId, a.id AS accountId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE(c.title, '') AS platformTag, a.expires_at AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
