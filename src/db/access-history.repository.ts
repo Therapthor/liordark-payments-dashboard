@@ -88,7 +88,10 @@ export function listArchivedAccountsByPhone(clientPhone: string): ArchivedAccoun
     let profiles: ArchivedProfile[] = [];
     try { profiles = JSON.parse(row.profiles_json || "[]"); } catch { continue; }
     for (const p of profiles) {
-      if (p.clientPhone === digits) {
+      // Comparación por los últimos 9 dígitos — el mismo celular puede
+      // haber quedado guardado con o sin el prefijo "51" según por dónde
+      // entró el dato (ver listAccountsByClientPhone, mismo caso).
+      if (p.clientPhone.replace(/\D/g, "").slice(-9) === digits.slice(-9)) {
         result.push({ platform: row.platform, email: row.email, expiresAt: row.expires_at ?? null, profileName: p.profileName });
       }
     }

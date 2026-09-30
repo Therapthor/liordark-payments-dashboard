@@ -589,10 +589,6 @@
     document.getElementById("topbar-renewals-btn").addEventListener("click", () => showRenewals(true));
     document.getElementById("renewals-back-btn").addEventListener("click", backFromRenewals);
     document.getElementById("renewals-back-btn-2").addEventListener("click", backFromRenewals);
-    document.getElementById("renewal-search-again-btn").addEventListener("click", () => {
-      document.getElementById("renewal-lookup-form").reset();
-      showRenewalCard("renewal-lookup-card");
-    });
     document.getElementById("renewal-lookup-form").addEventListener("submit", submitRenewalLookup);
     document.getElementById("renewal-accounts-list").addEventListener("click", (e) => {
       const btn = e.target.closest(".renewal-renew-btn");

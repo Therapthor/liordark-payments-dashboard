@@ -502,6 +502,18 @@ export function countProfilesByPhone(): Record<string, number> {
   return map;
 }
 
+// Un mismo celular queda guardado a veces con "51" adelante y a veces sin
+// él, según por dónde haya entrado el dato (WhatsApp siempre manda con
+// 51, pero cargas manuales/antiguas muchas veces sin) — un cliente real
+// (967250368, sin prefijo, y 51967250368, con prefijo) apareció con
+// cuentas repartidas entre las dos variantes, y una comparación exacta
+// dejaba a la mitad invisibles en su propio "Mis cuentas". Los celulares
+// de Perú son siempre 9 dígitos, así que comparar por los últimos 9
+// ignora el prefijo sin importar de qué lado esté.
+function last9(digits: string): string {
+  return digits.slice(-9);
+}
+
 export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[] {
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return [];
@@ -511,9 +523,9 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
            a.link AS link, p.profile_name AS profileName, a.expires_at AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone = ?
+    WHERE substr(p.client_phone, -9) = ?
     ORDER BY a.expires_at ASC
-  `).all(digits) as CustomerAccount[]);
+  `).all(last9(digits)) as CustomerAccount[]);
 }
 
 export type RenewalAccountView = {
@@ -541,9 +553,9 @@ export function listRenewalAccountsByPhone(clientPhone: string): RenewalAccountV
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
-    WHERE p.client_phone = ? AND p.order_ref NOT LIKE 'combo:%'
+    WHERE substr(p.client_phone, -9) = ? AND p.order_ref NOT LIKE 'combo:%'
     ORDER BY a.expires_at ASC
-  `).all(digits) as RenewalAccountView[];
+  `).all(last9(digits)) as RenewalAccountView[];
 }
 
 export type ExpiringClient = {

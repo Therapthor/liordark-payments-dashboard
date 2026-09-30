@@ -847,19 +847,6 @@
     wireAccountCardEvents(resultsBox);
   }
 
-  // Mismo flujo de 2 pasos que ya usa la tarjeta de cuenta (marca pendiente
-  // de pago, recién /renew suma los 30 días) — reutiliza los endpoints,
-  // pero con wiring propio porque acá no vive dentro de un .access-account.
-  function renderClientRenewControls(p) {
-    if (p.renewalPendingAt) {
-      return `
-        <button class="btn-primary btn-sm client-renew-confirm" data-account-id="${p.accountId}">✅ Confirmar pago</button>
-        <button class="btn-secondary btn-sm client-renew-cancel" data-account-id="${p.accountId}">✕ Cancelar</button>
-      `;
-    }
-    return `<button class="btn-secondary btn-sm client-renew-account" data-account-id="${p.accountId}">🔄 Renovar</button>`;
-  }
-
   function renderClientSummary(profiles) {
     const box = document.getElementById("access-client-summary");
     const list = document.getElementById("access-client-list");
@@ -882,7 +869,7 @@
           <span>${fmtDateLong(p.expiresAt)} · ${daysLabel(p.status, p.daysLeft)}</span>
           <div class="access-client-item-actions">
             <button class="btn-secondary btn-sm client-send-account" data-idx="${idx}">📧 Enviar cuenta</button>
-            ${renderClientRenewControls(p)}
+            ${renderRenewalButton(p)}
             <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
           </div>
         </div>
@@ -895,23 +882,21 @@
   // cambio, en vez de tratar de actualizar la fila a mano.
   function initClientSummaryActions() {
     document.getElementById("access-client-list").addEventListener("click", async (e) => {
-      const sendBtn     = e.target.closest(".client-send-account");
-      const renewBtn    = e.target.closest(".client-renew-account");
-      const confirmBtn  = e.target.closest(".client-renew-confirm");
-      const cancelBtn   = e.target.closest(".client-renew-cancel");
-      const releaseBtn  = e.target.closest(".client-release-profile");
+      const sendBtn    = e.target.closest(".client-send-account");
+      const renewalBtn = e.target.closest(".row-renewal");
+      const releaseBtn = e.target.closest(".client-release-profile");
 
       if (sendBtn) {
         const p = lastClientProfiles[Number(sendBtn.dataset.idx)];
         if (p) window.open(waLink(p.clientPhone, msgEntrega(p)), "_blank");
         return;
       }
-      if (renewBtn) {
-        await api("/accounts/" + renewBtn.dataset.accountId + "/renewal-pending", { method: "POST" });
-      } else if (confirmBtn) {
-        await api("/accounts/" + confirmBtn.dataset.accountId + "/renew", { method: "POST" });
-      } else if (cancelBtn) {
-        await api("/accounts/" + cancelBtn.dataset.accountId + "/renewal-pending/cancel", { method: "POST" });
+      // Solo marca el check (renewal_status) — NO toca el vencimiento de
+      // la cuenta. Renovar la cuenta de verdad es un proceso aparte que
+      // hace el admin a mano (Accesos > la cuenta > 🔄 Renovar).
+      if (renewalBtn) {
+        const next = RENEWAL_NEXT[renewalBtn.dataset.status || ""];
+        await api("/profiles/" + renewalBtn.dataset.profileId + "/renewal", { method: "POST", body: JSON.stringify({ status: next }) });
       } else if (releaseBtn) {
         if (!confirm("¿Liberar este perfil? Se borrará el cliente asignado y el espacio queda disponible para otro.")) return;
         await api("/profiles/" + releaseBtn.dataset.profileId + "/release", { method: "POST" });
