@@ -287,6 +287,9 @@
         html += `<div class="section-chip section-chip-combos">🎁 Combos</div>`;
         html += `<div class="product-grid">${combos.map(c => productCardHtml(c, "combo")).join("")}</div>`;
       }
+      if (sortedProducts.filter(p => !isOutOfStock(p, "platform")).length >= MIN_CUSTOM_COMBO_ITEMS) {
+        html += buildComboPromptHtml();
+      }
       container.innerHTML = html;
 
       // Animación escalonada de entrada
@@ -300,6 +303,7 @@
 
   function initCatalogClicks() {
     document.getElementById("catalog-sections").addEventListener("click", (e) => {
+      if (e.target.closest("#build-combo-btn")) { openComboBuilder(); return; }
       const card = e.target.closest("[data-detail-platform], [data-detail-combo]");
       if (!card) return;
       if (card.dataset.detailPlatform) openProductDetail({ kind: "platform", id: card.dataset.detailPlatform });
@@ -311,6 +315,164 @@
       if (!card) return;
       e.preventDefault();
       card.click();
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ARMA TU COMBO — carrito interactivo: el cliente elige 2 o más
+  // productos sueltos y arma su propio combo con descuento por cantidad
+  // (2 = 5%, 3+ = 15%). El precio final SIEMPRE lo recalcula el servidor
+  // en /checkout — acá solo se muestra una vista previa.
+  // ─────────────────────────────────────────────────────────────
+
+  const MIN_CUSTOM_COMBO_ITEMS = 2;
+  let comboBuilderCart = []; // platforms elegidas, sin repetir
+
+  function buildComboPromptHtml() {
+    return `
+      <div class="build-combo-prompt">
+        <p class="build-combo-prompt-text">¿Quieres armar tu combo? ¡Hazlo!</p>
+        <button class="btn-primary" id="build-combo-btn" type="button">🛒 Armar combo</button>
+      </div>
+    `;
+  }
+
+  function comboDiscountRate(count) {
+    if (count >= 3) return 0.15;
+    if (count === 2) return 0.05;
+    return 0;
+  }
+
+  function comboBuilderSelection() {
+    const items = comboBuilderCart
+      .map(platform => cachedProducts.find(p => p.platform === platform))
+      .filter(Boolean);
+    const sum  = items.reduce((s, p) => s + parseFloat(p.price), 0);
+    const rate = comboDiscountRate(items.length);
+    const total = sum * (1 - rate);
+    return { items, sum, rate, total };
+  }
+
+  function renderComboBuilderCatalog() {
+    const container = document.getElementById("build-combo-catalog");
+    const inStock = cachedProducts.filter(p => !isOutOfStock(p, "platform"));
+    container.innerHTML = inStock.map(p => {
+      const added = comboBuilderCart.includes(p.platform);
+      return `
+        <div class="build-combo-item">
+          <span class="build-combo-item-name">${escapeHtml(p.title)}</span>
+          <span class="build-combo-item-price">S/ ${escapeHtml(p.price)}</span>
+          <button class="btn-secondary btn-sm build-combo-add-btn" data-platform="${escapeHtml(p.platform)}" type="button" ${added ? "disabled" : ""}>
+            ${added ? "✓ Agregado" : "+ Agregar"}
+          </button>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderComboBuilderCart() {
+    const list  = document.getElementById("build-combo-cart-list");
+    const empty = document.getElementById("build-combo-cart-empty");
+    const discountLabel = document.getElementById("build-combo-discount-label");
+    const totalEl        = document.getElementById("build-combo-total");
+    const buyBtn          = document.getElementById("build-combo-buy-btn");
+    const { items, rate, total } = comboBuilderSelection();
+
+    if (items.length === 0) {
+      list.innerHTML = "";
+      empty.hidden = false;
+    } else {
+      empty.hidden = true;
+      list.innerHTML = items.map(p => `
+        <div class="build-combo-cart-row">
+          <span>${escapeHtml(p.title)}</span>
+          <span>S/ ${escapeHtml(p.price)}</span>
+          <button class="build-combo-remove-btn" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Quitar">✕</button>
+        </div>
+      `).join("");
+    }
+
+    if (items.length === 0) {
+      discountLabel.textContent = "";
+      totalEl.textContent = "";
+    } else if (items.length < MIN_CUSTOM_COMBO_ITEMS) {
+      discountLabel.textContent = "Agrega 1 más para desbloquear 5% dcto";
+      totalEl.textContent = "S/ " + total.toFixed(2);
+    } else if (rate < 0.15) {
+      discountLabel.textContent = "5% de descuento — agrega 1 más para 15%";
+      totalEl.textContent = "S/ " + total.toFixed(2);
+    } else {
+      discountLabel.textContent = "🎉 15% de descuento aplicado";
+      totalEl.textContent = "S/ " + total.toFixed(2);
+    }
+
+    buyBtn.disabled = items.length < MIN_CUSTOM_COMBO_ITEMS;
+    renderComboBuilderCatalog();
+  }
+
+  function openComboBuilder() {
+    comboBuilderCart = [];
+    document.getElementById("build-combo-error").hidden = true;
+    renderComboBuilderCart();
+    document.getElementById("build-combo-modal").hidden = false;
+  }
+
+  function closeComboBuilder() {
+    document.getElementById("build-combo-modal").hidden = true;
+  }
+
+  async function startCustomComboCheckout(platforms) {
+    const modal = document.getElementById("checkout-modal");
+    modal.hidden = false;
+    showCheckoutState("loading");
+
+    try {
+      const beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
+      const order = await api("/checkout", { method: "POST", body: { customComboPlatforms: platforms } });
+
+      await ensureYapeInfo();
+      document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
+      document.getElementById("checkout-amount-copy").dataset.copy = order.amount;
+      const qrImg = document.getElementById("checkout-qr");
+      if (cachedYapeQr) { qrImg.src = cachedYapeQr; qrImg.hidden = false; } else { qrImg.hidden = true; }
+      renderInfoRows(document.getElementById("checkout-instructions"), cachedYapeText);
+      document.getElementById("checkout-support-link").href = "https://wa.me/" + SUPPORT_PHONE
+        + "?text=" + encodeURIComponent(`Hola, tengo dudas con mi pago de S/ ${order.amount} por Yape.`);
+      document.getElementById("checkout-wrong-amount-link").href = "https://wa.me/" + SUPPORT_PHONE
+        + "?text=" + encodeURIComponent(`Hola, envié un monto distinto al indicado (S/ ${order.amount}) por Yape. ¿Me ayudan?`);
+      document.getElementById("checkout-waiting-text").textContent = "Esperando tu pago…";
+
+      showCheckoutState("ready");
+      startPolling(beforeAccounts, platforms.length);
+    } catch (err) {
+      document.getElementById("checkout-error-text").textContent = err.message;
+      showCheckoutState("error");
+    }
+  }
+
+  function initComboBuilder() {
+    document.getElementById("build-combo-close").addEventListener("click", closeComboBuilder);
+
+    document.getElementById("build-combo-catalog").addEventListener("click", (e) => {
+      const btn = e.target.closest(".build-combo-add-btn");
+      if (!btn || btn.disabled) return;
+      const platform = btn.dataset.platform;
+      if (!comboBuilderCart.includes(platform)) comboBuilderCart.push(platform);
+      renderComboBuilderCart();
+    });
+
+    document.getElementById("build-combo-cart-list").addEventListener("click", (e) => {
+      const btn = e.target.closest(".build-combo-remove-btn");
+      if (!btn) return;
+      comboBuilderCart = comboBuilderCart.filter(p => p !== btn.dataset.platform);
+      renderComboBuilderCart();
+    });
+
+    document.getElementById("build-combo-buy-btn").addEventListener("click", () => {
+      if (comboBuilderCart.length < MIN_CUSTOM_COMBO_ITEMS) return;
+      const platforms = [...comboBuilderCart];
+      closeComboBuilder();
+      startCustomComboCheckout(platforms);
     });
   }
 
@@ -779,6 +941,7 @@
     initCheckoutModal();
     initProductDetailModal();
     initRenewalsView();
+    initComboBuilder();
 
     try {
       const me = await api("/auth/me");

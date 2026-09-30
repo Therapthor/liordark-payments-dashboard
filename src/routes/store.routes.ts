@@ -35,6 +35,19 @@ function availableFor(platform: string, stock: Map<string, number>): number {
 }
 
 // ─────────────────────────────────────────────────────────────
+// COMBO ARMADO POR EL CLIENTE ("¿Quieres armar tu combo? ¡Hazlo!") —
+// descuento por cantidad de productos distintos, no por catálogo fijo.
+// ─────────────────────────────────────────────────────────────
+
+const MIN_CUSTOM_COMBO_ITEMS = 2;
+
+function customComboDiscountRate(itemCount: number): number {
+  if (itemCount >= 3) return 0.15;
+  if (itemCount === 2) return 0.05;
+  return 0;
+}
+
+// ─────────────────────────────────────────────────────────────
 // TIENDA WEB (liordark.com) — todo detrás de sesión de cliente, como
 // pidió el negocio: nada se ve sin loguearse primero.
 // ─────────────────────────────────────────────────────────────
@@ -162,8 +175,18 @@ router.post("/checkout", async (req, res) => {
   const platform    = req.body?.platform ? String(req.body.platform).trim() : undefined;
   const comboId     = req.body?.comboId ? Number(req.body.comboId) : undefined;
   const clientEmail = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
-  if (!platform && !comboId) {
-    return res.status(400).json({ message: "Falta 'platform' o 'comboId'." });
+
+  // Combo armado por el cliente ("¿Quieres armar tu combo? ¡Hazlo!") —
+  // lista de plataformas elegidas, sin id de catálogo. Se valida y se
+  // calcula el precio ACÁ (el panel es la fuente real de precios), nunca
+  // se confía en un total que mande el navegador.
+  const rawCustomCombo: unknown[] | undefined = Array.isArray(req.body?.customComboPlatforms) ? req.body.customComboPlatforms : undefined;
+  const customComboPlatforms: string[] | undefined = rawCustomCombo
+    ? [...new Set(rawCustomCombo.map((p: unknown) => String(p).trim().toUpperCase()).filter((s: string) => s.length > 0))]
+    : undefined;
+
+  if (!platform && !comboId && !customComboPlatforms) {
+    return res.status(400).json({ message: "Falta 'platform', 'comboId' o 'customComboPlatforms'." });
   }
 
   // CANVA se activa a mano en Canva.com con el correo del cliente — sin
@@ -175,6 +198,8 @@ router.post("/checkout", async (req, res) => {
   // Defensa por si algo saltea la validación del navegador (ej. una
   // pestaña vieja que no recargó el catálogo) — nunca vender sin stock real.
   const available = availabilityByPlatform();
+  let customComboTotalPrice = 0;
+
   if (platform) {
     if (availableFor(platform, available) <= 0) {
       return res.status(409).json({ message: "Sin stock disponible ahora mismo para esta plataforma." });
@@ -188,6 +213,24 @@ router.post("/checkout", async (req, res) => {
     if (!inStock) {
       return res.status(409).json({ message: "Sin stock disponible ahora mismo para este combo." });
     }
+  } else if (customComboPlatforms) {
+    if (customComboPlatforms.length < MIN_CUSTOM_COMBO_ITEMS) {
+      return res.status(400).json({ message: `Un combo armado necesita al menos ${MIN_CUSTOM_COMBO_ITEMS} productos.` });
+    }
+    const catalog = listCatalogProducts(true);
+    let sum = 0;
+    for (const plat of customComboPlatforms) {
+      const product = catalog.find(p => p.platform.trim().toUpperCase() === plat);
+      if (!product) {
+        return res.status(404).json({ message: "Producto no encontrado: " + plat });
+      }
+      if (availableFor(plat, available) <= 0) {
+        return res.status(409).json({ message: "Sin stock disponible ahora mismo para " + product.title + "." });
+      }
+      sum += parseFloat(product.price);
+    }
+    const rate = customComboDiscountRate(customComboPlatforms.length);
+    customComboTotalPrice = Math.round(sum * (1 - rate) * 100) / 100;
   }
 
   try {
@@ -196,7 +239,17 @@ router.post("/checkout", async (req, res) => {
     // /renewals/checkout, evita mandar una orden sin el prefijo completo.
     const response = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
-      { phone: normalizePeruPhone(customer.phone), platform, comboId, clientEmail },
+      {
+        phone: normalizePeruPhone(customer.phone),
+        platform, comboId, clientEmail,
+        customCombo: customComboPlatforms
+          ? {
+              platforms:  customComboPlatforms,
+              totalPrice: customComboTotalPrice,
+              comboName:  "Combo armado (" + customComboPlatforms.length + ")",
+            }
+          : undefined,
+      },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     res.json({ orderName: response.data.orderName, amount: response.data.amount });

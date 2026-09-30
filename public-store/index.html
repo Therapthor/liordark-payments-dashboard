@@ -198,7 +198,7 @@
       </div>
 
       <div id="checkout-ready" class="checkout-state" hidden>
-        <h2>Completá tu pago</h2>
+        <h2>Completa tu pago</h2>
         <p class="muted">Envía exactamente este monto por Yape:</p>
         <div class="checkout-amount-row">
           <span class="checkout-amount" id="checkout-amount">S/ 0.00</span>
@@ -227,6 +227,29 @@
       <div id="checkout-error" class="checkout-state" hidden>
         <p class="form-error" id="checkout-error-text"></p>
         <button class="btn-ghost btn-block" id="checkout-retry" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODAL: ARMA TU COMBO (carrito interactivo) ═══════════ -->
+  <div id="build-combo-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <button class="modal-close" id="build-combo-close" type="button" aria-label="Cerrar">✕</button>
+      <h2>Arma tu combo</h2>
+      <p class="muted small">Agrega 2 o más productos — 2 = 5% dcto, 3 o más = 15% dcto.</p>
+
+      <div id="build-combo-catalog" class="build-combo-catalog"></div>
+
+      <div class="build-combo-cart">
+        <h3>Tu combo</h3>
+        <div id="build-combo-cart-list" class="build-combo-cart-list"></div>
+        <p class="muted small" id="build-combo-cart-empty">Todavía no agregaste productos.</p>
+        <div class="build-combo-summary">
+          <span class="build-combo-discount-label" id="build-combo-discount-label"></span>
+          <span class="build-combo-total" id="build-combo-total"></span>
+        </div>
+        <p class="form-error" id="build-combo-error" hidden></p>
+        <button class="btn-primary btn-block" id="build-combo-buy-btn" type="button" disabled>Comprar combo</button>
       </div>
     </div>
   </div>
