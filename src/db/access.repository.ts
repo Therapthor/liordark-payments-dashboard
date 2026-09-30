@@ -640,12 +640,13 @@ function addDaysISOLocal(dateISO: string, days: number): string {
 // ─────────────────────────────────────────────────────────────
 
 export type ProfileWithAccount = AccessProfile & {
-  platform:    string;
-  email:       string;
-  password:    string;
-  provider:    string;
-  hasProfiles: boolean;
-  expiresAt:   string | null;
+  platform:         string;
+  email:            string;
+  password:         string;
+  provider:         string;
+  hasProfiles:      boolean;
+  expiresAt:        string | null;
+  renewalPendingAt: string | null;
 };
 
 /** Cuentas cuyo correo contiene el término buscado. */
@@ -664,7 +665,8 @@ export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
   const rows = db.prepare(`
     SELECT p.*,
            a.platform AS platform, a.email AS email, a.password AS password,
-           a.provider AS provider, a.has_profiles AS has_profiles, a.expires_at AS account_expires_at
+           a.provider AS provider, a.has_profiles AS has_profiles, a.expires_at AS account_expires_at,
+           a.renewal_pending_at AS renewal_pending_at
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.client_phone LIKE ?
@@ -673,12 +675,13 @@ export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
 
   return rows.map(row => ({
     ...toProfile(row),
-    platform:    row.platform,
-    email:       row.email,
-    password:    row.password,
-    provider:    row.provider ?? "",
-    hasProfiles: row.has_profiles === 1,
-    expiresAt:   row.account_expires_at ?? null,
+    platform:         row.platform,
+    email:            row.email,
+    password:         row.password,
+    provider:         row.provider ?? "",
+    hasProfiles:      row.has_profiles === 1,
+    expiresAt:        row.account_expires_at ?? null,
+    renewalPendingAt: row.renewal_pending_at ?? null,
   }));
 }
 

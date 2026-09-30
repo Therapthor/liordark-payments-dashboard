@@ -773,7 +773,8 @@ button, input {
   padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-raised);
   border: 1px solid var(--border); font-size: 14px; flex-wrap: wrap;
 }
-.access-client-item-right { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+.access-client-item-right { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); flex-wrap: wrap; }
+.access-client-item-actions { display: flex; gap: 6px; }
 .access-client-empty { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
 
 .access-search-platform-label {

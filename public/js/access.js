@@ -847,6 +847,19 @@
     wireAccountCardEvents(resultsBox);
   }
 
+  // Mismo flujo de 2 pasos que ya usa la tarjeta de cuenta (marca pendiente
+  // de pago, recién /renew suma los 30 días) — reutiliza los endpoints,
+  // pero con wiring propio porque acá no vive dentro de un .access-account.
+  function renderClientRenewControls(p) {
+    if (p.renewalPendingAt) {
+      return `
+        <button class="btn-primary btn-sm client-renew-confirm" data-account-id="${p.accountId}">✅ Confirmar pago</button>
+        <button class="btn-secondary btn-sm client-renew-cancel" data-account-id="${p.accountId}">✕ Cancelar</button>
+      `;
+    }
+    return `<button class="btn-secondary btn-sm client-renew-account" data-account-id="${p.accountId}">🔄 Renovar</button>`;
+  }
+
   function renderClientSummary(profiles) {
     const box = document.getElementById("access-client-summary");
     const list = document.getElementById("access-client-list");
@@ -867,9 +880,40 @@
         <div class="access-client-item-right">
           <span class="badge access-badge-${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span>
           <span>${fmtDateLong(p.expiresAt)} · ${daysLabel(p.status, p.daysLeft)}</span>
+          <div class="access-client-item-actions">
+            ${renderClientRenewControls(p)}
+            <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
+          </div>
         </div>
       </li>
     `).join("");
+  }
+
+  // Delegado en la lista (se re-dibuja entera en cada búsqueda) — vuelve a
+  // correr la misma búsqueda después de cada acción para reflejar el
+  // cambio, en vez de tratar de actualizar la fila a mano.
+  function initClientSummaryActions() {
+    document.getElementById("access-client-list").addEventListener("click", async (e) => {
+      const renewBtn   = e.target.closest(".client-renew-account");
+      const confirmBtn = e.target.closest(".client-renew-confirm");
+      const cancelBtn  = e.target.closest(".client-renew-cancel");
+      const releaseBtn = e.target.closest(".client-release-profile");
+
+      if (renewBtn) {
+        await api("/accounts/" + renewBtn.dataset.accountId + "/renewal-pending", { method: "POST" });
+      } else if (confirmBtn) {
+        await api("/accounts/" + confirmBtn.dataset.accountId + "/renew", { method: "POST" });
+      } else if (cancelBtn) {
+        await api("/accounts/" + cancelBtn.dataset.accountId + "/renewal-pending/cancel", { method: "POST" });
+      } else if (releaseBtn) {
+        if (!confirm("¿Liberar este perfil? Se borrará el cliente asignado y el espacio queda disponible para otro.")) return;
+        await api("/profiles/" + releaseBtn.dataset.profileId + "/release", { method: "POST" });
+      } else {
+        return;
+      }
+
+      runSearch(activeQuery);
+    });
   }
 
   function initClientSummarySend() {
@@ -1159,6 +1203,7 @@
     initRenewingModal();
     initSearch();
     initClientSummarySend();
+    initClientSummaryActions();
     initProviderRenewalListActions();
     initComboOrderModal();
     document.getElementById("access-platform-back").addEventListener("click", closePlatformDetail);
