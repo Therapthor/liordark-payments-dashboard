@@ -259,10 +259,9 @@
     const container = document.getElementById("catalog-sections");
     const empty     = document.getElementById("catalog-empty");
     try {
-      const { products, combos } = await api("/catalog");
-      cachedCombos = combos || [];
+      const { products } = await api("/catalog");
 
-      if ((!products || products.length === 0) && (!combos || combos.length === 0)) {
+      if (!products || products.length === 0) {
         container.innerHTML = "";
         empty.hidden = false;
         return;
@@ -283,10 +282,9 @@
         html += `<div class="section-chip">Perfiles</div>`;
         html += `<div class="product-grid">${nonAnnualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
       }
-      if (combos && combos.length > 0) {
-        html += `<div class="section-chip section-chip-combos">🎁 Combos</div>`;
-        html += `<div class="product-grid">${combos.map(c => productCardHtml(c, "combo")).join("")}</div>`;
-      }
+      // Los combos fijos del catálogo ya no se muestran en la web — el
+      // cliente arma el suyo con "¿Quieres armar tu combo?" (más abajo),
+      // que reemplaza a estos con descuento real por cantidad.
       if (sortedProducts.filter(p => !isOutOfStock(p, "platform")).length >= MIN_CUSTOM_COMBO_ITEMS) {
         html += buildComboPromptHtml();
       }
