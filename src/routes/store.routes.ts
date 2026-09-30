@@ -6,7 +6,8 @@ import { findCustomerById } from "../db/customer.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
-import { listAccountsByClientPhone, listPlatforms } from "../db/access.repository";
+import { listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone } from "../db/access.repository";
+import { listArchivedAccountsByPhone } from "../db/access-history.repository";
 import { daysLeft } from "../services/access.service";
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -38,6 +39,64 @@ function availableFor(platform: string, stock: Map<string, number>): number {
 // ─────────────────────────────────────────────────────────────
 
 const router = Router();
+
+// ─────────────────────────────────────────────────────────────
+// RENOVACIONES — PÚBLICO, sin sesión de cliente a propósito. Muchos
+// clientes compraron por WhatsApp y nunca se registraron en la web, así
+// que exigir login los dejaría afuera. El celular ya es la identidad que
+// se usa en todo el negocio (WhatsApp, Accesos) — acá se reutiliza igual,
+// nunca se expone contraseña, solo correo (para reconocer la cuenta) y
+// precio (para saber cuánto pagar).
+// ─────────────────────────────────────────────────────────────
+
+router.get("/renewals", (req, res) => {
+  const phone = String(req.query.phone ?? "").replace(/\D/g, "");
+  if (phone.length < 9) {
+    return res.status(400).json({ message: "Ingresa un celular válido." });
+  }
+
+  const accounts = listRenewalAccountsByPhone(phone).map(a => ({
+    ...a,
+    daysLeft: daysLeft(a.expiresAt),
+  }));
+
+  res.json({ accounts });
+});
+
+router.post("/renewals/checkout", async (req, res) => {
+  const phone       = String(req.body?.phone ?? "").replace(/\D/g, "");
+  const platform    = req.body?.platform ? String(req.body.platform).trim() : undefined;
+  const clientEmail = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+
+  if (phone.length < 9 || !platform) {
+    return res.status(400).json({ message: "Falta 'phone' o 'platform'." });
+  }
+
+  // CANVA se activa a mano en Canva.com con el correo del cliente — igual
+  // que en una compra nueva, sin eso el pedido llega sin forma de completarse.
+  if (/canva/i.test(platform) && !clientEmail) {
+    return res.status(400).json({ message: "Falta el correo para activar Canva." });
+  }
+
+  // Nunca renovar algo que ese celular no tiene — evita que cualquiera
+  // arme una orden de renovación con un platform inventado.
+  const owns = listRenewalAccountsByPhone(phone).some(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
+  if (!owns) {
+    return res.status(404).json({ message: "No encontramos esa cuenta para este celular." });
+  }
+
+  try {
+    const response = await axios.post(
+      env.BOT_BASE_URL + "/api/web-orders",
+      { phone, platform, clientEmail, isRenewal: true },
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
+    );
+    res.json({ orderName: response.data.orderName, amount: response.data.amount });
+  } catch (err: any) {
+    const message = err?.response?.data?.message || "No se pudo crear la orden. Intenta de nuevo.";
+    res.status(err?.response?.status || 502).json({ message });
+  }
+});
 
 router.use(requireCustomerSession);
 
@@ -80,7 +139,10 @@ router.get("/dashboard", (req, res) => {
     daysLeft: daysLeft(a.expiresAt),
   }));
 
-  res.json({ accounts });
+  // Vencidas — sin password, ver listArchivedAccountsByPhone.
+  const expiredAccounts = listArchivedAccountsByPhone(customer.phone);
+
+  res.json({ accounts, expiredAccounts });
 });
 
 // POST /api/store/checkout — { platform } o { comboId } → reserva el

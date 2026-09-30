@@ -962,6 +962,43 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // RENOVADOS — todos los clientes marcados "✅ Renueva", de cualquier
+  // cuenta, para ver de un vistazo a quién hay que pasarle a la cuenta
+  // nueva sin abrir cada plataforma por separado.
+  // ─────────────────────────────────────────────────────────────
+
+  function renderRenewingItem(p) {
+    return `
+      <div class="access-history-item">
+        <span class="access-history-platform">${escapeHtml(p.platformTag || p.platform)}</span>
+        <span class="text-muted">${escapeHtml(p.clientPhone)}</span>
+        <span class="text-muted">Vence: ${fmtDateLong(p.expiresAt)}</span>
+      </div>
+    `;
+  }
+
+  async function loadRenewing() {
+    const body  = document.getElementById("access-renewing-body");
+    const empty = document.getElementById("access-renewing-empty");
+    try {
+      const { profiles } = await api("/profiles/renewing");
+      body.innerHTML = profiles.map(renderRenewingItem).join("");
+      empty.hidden = profiles.length > 0;
+    } catch (err) {
+      body.innerHTML = "";
+      empty.hidden = false;
+      empty.textContent = "⚠️ No se pudo cargar: " + (err?.message || "error desconocido");
+    }
+  }
+
+  function initRenewingModal() {
+    document.getElementById("access-renewing-btn").addEventListener("click", () => {
+      document.getElementById("access-renewing-modal").hidden = false;
+      loadRenewing();
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // PEDIDO (combo) — vender varias plataformas de una vez al mismo
   // cliente y armar un solo mensaje de WhatsApp con todo, para no tener
   // que enviar cada cuenta por separado en pedidos combo.
@@ -1119,6 +1156,7 @@
     initPasswordModal();
     initRenewNewModal();
     initHistoryModal();
+    initRenewingModal();
     initSearch();
     initClientSummarySend();
     initProviderRenewalListActions();

@@ -375,3 +375,22 @@ a { color: var(--btn); }
   .nav-btn { font-size: 12px; padding: 7px 10px; }
   .brand-name { font-size: 16px; }
 }
+
+/* ─── Renovaciones (público, sin login) ──────────────────────── */
+
+.renewal-accounts-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; text-align: left; }
+.renewal-account-card {
+  background: var(--chip-bg); border-radius: 14px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.renewal-account-card-due { border: 1.5px solid var(--accent); }
+.renewal-account-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.renewal-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; }
+.renewal-account-status { font-size: 12px; color: var(--muted); }
+.renewal-account-card-due .renewal-account-status { color: var(--btn); font-weight: 600; }
+.renewal-account-email { font-size: 13px; color: var(--text); word-break: break-all; }
+.renewal-account-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.renewal-account-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--btn); }
+
+.dashboard-subtitle { font-size: 15px; margin: 18px 0 8px; color: var(--muted); }
+.dashboard-subtitle:first-of-type { margin-top: 0; }

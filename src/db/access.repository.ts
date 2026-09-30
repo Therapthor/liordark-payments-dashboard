@@ -357,6 +357,28 @@ export function resetRenewalMarkers(accountId: number): void {
   db.prepare(`UPDATE access_profiles SET renewal_status = '' WHERE account_id = ?`).run(accountId);
 }
 
+export type RenewingProfile = {
+  profileId:   number;
+  clientPhone: string;
+  platform:    string;
+  platformTag: string;
+  expiresAt:   string | null;
+};
+
+/** Clientes marcados "✅ Renueva" (cualquier cuenta) — para verlos todos
+ *  juntos en un solo lugar en vez de abrir cuenta por cuenta en Accesos. */
+export function listRenewingProfiles(): RenewingProfile[] {
+  return db.prepare(`
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
+           COALESCE(c.title, '') AS platformTag, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
+    WHERE p.renewal_status = 'yes' AND p.client_phone != ''
+    ORDER BY a.expires_at ASC
+  `).all() as RenewingProfile[];
+}
+
 // ─────────────────────────────────────────────────────────────
 // STOCK — usado por la API que consume el bot de WhatsApp (Telegram/venta)
 //
@@ -491,6 +513,36 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
     WHERE p.client_phone = ?
     ORDER BY a.expires_at ASC
   `).all(digits) as CustomerAccount[]);
+}
+
+export type RenewalAccountView = {
+  platform:    string;
+  platformTag: string;
+  email:       string;
+  expiresAt:   string | null;
+  price:       string;
+};
+
+/**
+ * Para el check público de renovaciones en liordark.com — el cliente solo
+ * pone su celular, sin login. A propósito NO trae password ni link, solo
+ * lo necesario para decidir si renovar: qué cuenta, el correo (para
+ * reconocerla) y cuánto cuesta. Los combos no se renuevan (se vuelven a
+ * comprar), así que se excluyen acá.
+ */
+export function listRenewalAccountsByPhone(clientPhone: string): RenewalAccountView[] {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return [];
+
+  return db.prepare(`
+    SELECT a.platform AS platform, COALESCE(c.title, '') AS platformTag,
+           a.email AS email, a.expires_at AS expiresAt, COALESCE(c.price, '') AS price
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
+    WHERE p.client_phone = ? AND p.order_ref NOT LIKE 'combo:%'
+    ORDER BY a.expires_at ASC
+  `).all(digits) as RenewalAccountView[];
 }
 
 export type ExpiringClient = {

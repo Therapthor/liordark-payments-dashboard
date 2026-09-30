@@ -57,6 +57,45 @@ export function listArchivedAccounts(): ArchivedAccount[] {
   `).all() as any[]).map(toArchived);
 }
 
+export type ArchivedAccountView = {
+  platform:    string;
+  email:       string;
+  expiresAt:   string | null;
+  profileName: string;
+};
+
+/**
+ * Cuentas VENCIDAS de un cliente puntual — para su "Mis cuentas" en
+ * liordark.com. Un mismo registro archivado puede traer perfiles de
+ * VARIOS clientes (cuenta compartida) — acá se filtra para devolver solo
+ * el/los perfiles de este celular, nunca los de otros. A propósito NO
+ * incluye password: una cuenta vencida ya no sirve para entrar, mostrar
+ * la contraseña vieja no aporta nada y sí es una exposición de más.
+ */
+export function listArchivedAccountsByPhone(clientPhone: string): ArchivedAccountView[] {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return [];
+
+  const rows = db.prepare(`
+    SELECT platform, email, expires_at, profiles_json
+    FROM access_accounts_history
+    WHERE profiles_json LIKE ?
+    ORDER BY archived_at DESC LIMIT 500
+  `).all(`%${digits}%`) as any[];
+
+  const result: ArchivedAccountView[] = [];
+  for (const row of rows) {
+    let profiles: ArchivedProfile[] = [];
+    try { profiles = JSON.parse(row.profiles_json || "[]"); } catch { continue; }
+    for (const p of profiles) {
+      if (p.clientPhone === digits) {
+        result.push({ platform: row.platform, email: row.email, expiresAt: row.expires_at ?? null, profileName: p.profileName });
+      }
+    }
+  }
+  return result;
+}
+
 /** Busca por correo, plataforma, o teléfono de cliente (dentro del snapshot de perfiles). */
 export function searchArchivedAccounts(term: string): ArchivedAccount[] {
   const like = `%${term}%`;

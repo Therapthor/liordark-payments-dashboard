@@ -61,6 +61,7 @@
     document.getElementById("show-login-btn").addEventListener("click", () => showAuthCard("login-card"));
     document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
     document.getElementById("show-login-from-guest-btn").addEventListener("click", () => showAuthCard("login-card"));
+    document.getElementById("show-renewals-btn").addEventListener("click", () => showRenewals(false));
   }
 
   function setFormError(id, message) {
@@ -145,7 +146,7 @@
     document.querySelectorAll(".nav-btn[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
-    if (view === "dashboard") initDashboardRequestLink();
+    if (view === "dashboard") { initDashboardRequestLink(); loadDashboardAccounts(); }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -381,12 +382,11 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MIS CUENTAS — en vez de listar automático (poco confiable para
-  // compras viejas/hechas por WhatsApp antes de existir la web), el
-  // cliente pide su historial por WhatsApp con su celular registrado
-  // y el soporte se lo manda a mano. Las compras recién hechas ya se
-  // muestran directo en el éxito del checkout (showCheckoutSuccess).
-  // `cachedDashboard` lo sigue usando el checkout para detectar la
+  // MIS CUENTAS — activas (con credenciales, para poder entrar) y
+  // vencidas (solo correo, sin contraseña — ya no sirven para entrar,
+  // es puro registro). El link de WhatsApp queda como respaldo por si
+  // algo no calzó por teléfono (ej. compró con otro número).
+  // `cachedDashboard` también lo usa el checkout para detectar la
   // cuenta nueva por polling.
   // ─────────────────────────────────────────────────────────────
 
@@ -396,6 +396,206 @@
     const link = document.getElementById("dashboard-request-link");
     const msg = `Hola! Ya compré antes (celular ${currentPhone}) y quiero ver mi historial de cuentas. ¿Me ayudan?`;
     link.href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(msg);
+  }
+
+  function expiredAccountCardHtml(a) {
+    return `
+      <div class="renewal-account-card">
+        <div class="renewal-account-head">
+          <span class="renewal-account-platform">${escapeHtml(a.platform)}</span>
+          <span class="renewal-account-status">Venció${a.expiresAt ? ": " + escapeHtml(a.expiresAt) : ""}</span>
+        </div>
+        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
+        ${a.profileName ? `<div class="muted small">Perfil: ${escapeHtml(a.profileName)}</div>` : ""}
+      </div>
+    `;
+  }
+
+  async function loadDashboardAccounts() {
+    const activeList  = document.getElementById("dashboard-active-list");
+    const activeEmpty = document.getElementById("dashboard-active-empty");
+    const expiredSection = document.getElementById("dashboard-expired-section");
+    const expiredList = document.getElementById("dashboard-expired-list");
+
+    try {
+      const { accounts, expiredAccounts } = await api("/dashboard");
+      cachedDashboard = accounts || [];
+
+      if (cachedDashboard.length === 0) {
+        activeList.innerHTML = "";
+        activeEmpty.hidden = false;
+      } else {
+        activeEmpty.hidden = true;
+        activeList.innerHTML = cachedDashboard.map(successAccountHtml).join("");
+        wireSuccessCopyButtons(activeList, cachedDashboard);
+      }
+
+      if (expiredAccounts && expiredAccounts.length > 0) {
+        expiredSection.hidden = false;
+        expiredList.innerHTML = expiredAccounts.map(expiredAccountCardHtml).join("");
+      } else {
+        expiredSection.hidden = true;
+      }
+    } catch { /* se deja lo último mostrado — el link de WhatsApp sigue de respaldo */ }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // RENOVACIONES — público, SIN login: el celular ya es la identidad que
+  // se usa en todo el negocio (WhatsApp, panel), así que alcanza con
+  // ponerlo para ver qué cuentas tiene y cuándo vencen. Nunca se muestra
+  // contraseña, solo correo (para reconocer la cuenta).
+  // ─────────────────────────────────────────────────────────────
+
+  let renewalsCameFromApp = false;
+  let cachedRenewalAccounts = [];
+  let renewalPhoneDigits = "";
+
+  function hideAllRenewalCards() {
+    ["renewal-lookup-card", "renewal-results-card"].forEach(id => {
+      document.getElementById(id).hidden = true;
+    });
+  }
+
+  function showRenewalCard(id) {
+    hideAllRenewalCards();
+    document.getElementById(id).hidden = false;
+  }
+
+  function showRenewals(fromApp) {
+    renewalsCameFromApp = !!fromApp;
+    document.getElementById("view-auth").hidden = true;
+    document.getElementById("view-app").hidden = true;
+    document.getElementById("view-renewals").hidden = false;
+    document.getElementById("renewal-lookup-form").reset();
+    setFormError("renewal-lookup-error", "");
+    showRenewalCard("renewal-lookup-card");
+  }
+
+  function backFromRenewals() {
+    document.getElementById("view-renewals").hidden = true;
+    if (renewalsCameFromApp) showApp(); else showAuth();
+  }
+
+  function renewalStatusText(daysLeft) {
+    if (daysLeft === null || daysLeft === undefined) return "";
+    if (daysLeft < 0)  return `Venció hace ${Math.abs(daysLeft)} día(s)`;
+    if (daysLeft === 0) return "Vence hoy";
+    return `Vence en ${daysLeft} día(s)`;
+  }
+
+  function renewalAccountCardHtml(a, idx) {
+    const dueSoon = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 5;
+    const needsCanvaEmail = isCanvaPlatform(a.platform);
+    return `
+      <div class="renewal-account-card${dueSoon ? " renewal-account-card-due" : ""}">
+        <div class="renewal-account-head">
+          <span class="renewal-account-platform">${escapeHtml(a.platformTag || a.platform)}</span>
+          <span class="renewal-account-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
+        </div>
+        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
+        ${needsCanvaEmail ? `
+          <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar Canva">
+          <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
+        ` : ""}
+        <div class="renewal-account-footer">
+          <span class="renewal-account-price">${a.price ? "S/ " + escapeHtml(a.price) : ""}</span>
+          <button class="btn-primary btn-sm renewal-renew-btn" data-idx="${idx}" type="button">Renovar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function submitRenewalLookup(e) {
+    e.preventDefault();
+    setFormError("renewal-lookup-error", "");
+    const phone = document.getElementById("renewal-phone-input").value.trim();
+
+    try {
+      const { accounts } = await api("/renewals?phone=" + encodeURIComponent(phone));
+      cachedRenewalAccounts = accounts || [];
+      renewalPhoneDigits = phone.replace(/\D/g, "");
+
+      const list  = document.getElementById("renewal-accounts-list");
+      const empty = document.getElementById("renewal-accounts-empty");
+      if (cachedRenewalAccounts.length === 0) {
+        list.innerHTML = "";
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+        list.innerHTML = cachedRenewalAccounts.map(renewalAccountCardHtml).join("");
+      }
+      showRenewalCard("renewal-results-card");
+    } catch (err) {
+      setFormError("renewal-lookup-error", err.message);
+    }
+  }
+
+  async function startRenewalCheckout(platform, clientEmail) {
+    const modal = document.getElementById("checkout-modal");
+    modal.hidden = false;
+    showCheckoutState("loading");
+
+    try {
+      const order = await api("/renewals/checkout", {
+        method: "POST",
+        body: { phone: renewalPhoneDigits, platform, clientEmail },
+      });
+      await ensureYapeInfo();
+
+      document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
+      document.getElementById("checkout-amount-copy").dataset.copy = order.amount;
+      const qrImg = document.getElementById("checkout-qr");
+      if (cachedYapeQr) { qrImg.src = cachedYapeQr; qrImg.hidden = false; } else { qrImg.hidden = true; }
+      renderInfoRows(document.getElementById("checkout-instructions"), cachedYapeText);
+      document.getElementById("checkout-support-link").href = "https://wa.me/" + SUPPORT_PHONE
+        + "?text=" + encodeURIComponent(`Hola, tengo dudas con mi pago de renovación de S/ ${order.amount} por Yape.`);
+      document.getElementById("checkout-wrong-amount-link").href = "https://wa.me/" + SUPPORT_PHONE
+        + "?text=" + encodeURIComponent(`Hola, envié un monto distinto al indicado (S/ ${order.amount}) por una renovación. ¿Me ayudan?`);
+
+      // Las renovaciones SIEMPRE se aprueban a mano (nunca automático,
+      // aunque Yape detecte el pago al instante) — no hay nada que
+      // "pollear": se le avisa que espere el mensaje de confirmación.
+      document.getElementById("checkout-waiting-text").textContent =
+        "En cuanto confirmemos tu pago, tu renovación queda pendiente de aprobación final — te avisamos por WhatsApp.";
+
+      showCheckoutState("ready");
+    } catch (err) {
+      document.getElementById("checkout-error-text").textContent = err.message;
+      showCheckoutState("error");
+    }
+  }
+
+  function initRenewalsView() {
+    document.getElementById("topbar-renewals-btn").addEventListener("click", () => showRenewals(true));
+    document.getElementById("renewals-back-btn").addEventListener("click", backFromRenewals);
+    document.getElementById("renewals-back-btn-2").addEventListener("click", backFromRenewals);
+    document.getElementById("renewal-search-again-btn").addEventListener("click", () => {
+      document.getElementById("renewal-lookup-form").reset();
+      showRenewalCard("renewal-lookup-card");
+    });
+    document.getElementById("renewal-lookup-form").addEventListener("submit", submitRenewalLookup);
+    document.getElementById("renewal-accounts-list").addEventListener("click", (e) => {
+      const btn = e.target.closest(".renewal-renew-btn");
+      if (!btn) return;
+      const idx = Number(btn.dataset.idx);
+      const acc = cachedRenewalAccounts[idx];
+      if (!acc) return;
+
+      let clientEmail;
+      if (isCanvaPlatform(acc.platform)) {
+        const input   = document.querySelector(`.renewal-canva-email-input[data-idx="${idx}"]`);
+        const errorEl = document.querySelector(`.renewal-canva-email-error[data-idx="${idx}"]`);
+        clientEmail = input.value.trim();
+        if (!isValidEmail(clientEmail)) {
+          errorEl.textContent = "Escribí un correo válido para activar Canva.";
+          errorEl.hidden = false;
+          return;
+        }
+        errorEl.hidden = true;
+      }
+
+      startRenewalCheckout(acc.platform, clientEmail);
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -517,13 +717,11 @@
       (a.profileName ? `\nPerfil: ${a.profileName}` : "");
   }
 
-  function showCheckoutSuccess(newAccounts) {
-    const container = document.getElementById("checkout-success-accounts");
-    container.innerHTML = newAccounts.map(successAccountHtml).join("");
+  function wireSuccessCopyButtons(container, accounts) {
     container.querySelectorAll(".success-copy-btn").forEach(btn => {
       btn.addEventListener("click", async () => {
         try {
-          await navigator.clipboard.writeText(accountCopyText(newAccounts[Number(btn.dataset.idx)]));
+          await navigator.clipboard.writeText(accountCopyText(accounts[Number(btn.dataset.idx)]));
           const original = btn.textContent;
           btn.textContent = "✅ Copiado";
           setTimeout(() => { btn.textContent = original; }, 1800);
@@ -532,6 +730,12 @@
         }
       });
     });
+  }
+
+  function showCheckoutSuccess(newAccounts) {
+    const container = document.getElementById("checkout-success-accounts");
+    container.innerHTML = newAccounts.map(successAccountHtml).join("");
+    wireSuccessCopyButtons(container, newAccounts);
     showCheckoutState("success");
   }
 
@@ -558,6 +762,7 @@
     initCatalogClicks();
     initCheckoutModal();
     initProductDetailModal();
+    initRenewalsView();
 
     try {
       const me = await api("/auth/me");

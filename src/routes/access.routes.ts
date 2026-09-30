@@ -16,6 +16,7 @@ import {
   markProviderRenewalRenewed,
   setRenewalPending,
   sellProfile,
+  listRenewingProfiles,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
   type RenewalStatus,
@@ -279,6 +280,12 @@ router.post("/profiles/:id/renewal", (req, res) => {
   const profile = setProfileRenewal(Number(req.params.id), status);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   res.json({ profile });
+});
+
+// GET /profiles/renewing — todos los clientes marcados "✅ Renueva", de
+// cualquier cuenta, en un solo lugar (en vez de revisar cuenta por cuenta).
+router.get("/profiles/renewing", (_req, res) => {
+  res.json({ profiles: listRenewingProfiles() });
 });
 
 // ── BUSCADOR ──
