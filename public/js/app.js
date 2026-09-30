@@ -1023,8 +1023,11 @@
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+  // Celulares de Perú son siempre 9 dígitos — sin el prefijo "51" (dato
+  // viejo, o cargado a mano sin él) WhatsApp no abre el chat correcto.
   function remindersWaLink(phone, text) {
-    const digits = String(phone).replace(/\D/g, "");
+    let digits = String(phone).replace(/\D/g, "");
+    if (digits.length === 9) digits = "51" + digits;
     return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
   }
 

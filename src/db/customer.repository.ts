@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { normalizePeruPhone } from "../utils/phone.util";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB — ver tables.sql (customers)
@@ -47,13 +48,19 @@ export function createCustomer(
 ): Customer {
   const info = db.prepare(`
     INSERT INTO customers (phone, password_hash, password_plain, is_guest) VALUES (?, ?, ?, ?)
-  `).run(normalizeCustomerPhone(phone), passwordHash, passwordPlain, isGuest ? 1 : 0);
+  `).run(normalizePeruPhone(phone), passwordHash, passwordPlain, isGuest ? 1 : 0);
 
   return findCustomerById(info.lastInsertRowid as number) as Customer;
 }
 
+// Últimos 9 dígitos — el mismo celular puede haber quedado guardado con o
+// sin el prefijo "51" (dato viejo, o un cliente que lo tipeó distinto al
+// loguearse vs. al registrarse). Los celulares de Perú son siempre 9
+// dígitos, así que comparar por los últimos 9 encuentra al cliente sin
+// importar qué formato tenga guardado o cómo lo haya tipeado ahora.
 export function findCustomerByPhone(phone: string): Customer | null {
-  const row = db.prepare(`SELECT * FROM customers WHERE phone = ?`).get(normalizeCustomerPhone(phone));
+  const digits = normalizeCustomerPhone(phone);
+  const row = db.prepare(`SELECT * FROM customers WHERE substr(phone, -9) = substr(?, -9)`).get(digits);
   return row ? toCustomer(row) : null;
 }
 

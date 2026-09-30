@@ -54,8 +54,14 @@
   // de Google Sheets, para no romper la costumbre de los clientes.
   // ─────────────────────────────────────────────────────────────
 
+  // Celulares de Perú son siempre 9 dígitos — si viene sin el prefijo "51"
+  // (dato guardado antes del fix, o cargado a mano sin el prefijo),
+  // WhatsApp no puede abrir el chat correcto con solo esos 9 dígitos. Se
+  // agrega acá para que los links funcionen ya mismo, sin esperar a
+  // corregir el dato guardado.
   function waLink(phone, text) {
-    const digits = String(phone).replace(/\D/g, "");
+    let digits = String(phone).replace(/\D/g, "");
+    if (digits.length === 9) digits = "51" + digits;
     return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
   }
 

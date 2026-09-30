@@ -9,6 +9,7 @@ import { listPaymentMethods } from "../db/payment-method.repository";
 import { listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone } from "../db/access.repository";
 import { listArchivedAccountsByPhone } from "../db/access-history.repository";
 import { daysLeft } from "../services/access.service";
+import { normalizePeruPhone } from "../utils/phone.util";
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
 // (GET /api/stock/catalog y /combos) — sellableCount ya excluye
@@ -64,7 +65,11 @@ router.get("/renewals", (req, res) => {
 });
 
 router.post("/renewals/checkout", async (req, res) => {
-  const phone       = String(req.body?.phone ?? "").replace(/\D/g, "");
+  // Normalizado ACÁ (con el "51" si hace falta) antes de mandarlo al bot —
+  // si no, un cliente que tipeó su celular sin el prefijo terminaría con
+  // una orden/perfil sin el prefijo, y WhatsApp nunca le llegaría el
+  // mensaje de confirmación (la API de Meta exige el número completo).
+  const phone       = normalizePeruPhone(String(req.body?.phone ?? ""));
   const platform    = req.body?.platform ? String(req.body.platform).trim() : undefined;
   const clientEmail = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
 
@@ -186,9 +191,12 @@ router.post("/checkout", async (req, res) => {
   }
 
   try {
+    // normalizePeruPhone por si el customer.phone quedó guardado sin el
+    // "51" (cuenta creada antes del fix, o dato viejo) — igual que en
+    // /renewals/checkout, evita mandar una orden sin el prefijo completo.
     const response = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
-      { phone: customer.phone, platform, comboId, clientEmail },
+      { phone: normalizePeruPhone(customer.phone), platform, comboId, clientEmail },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     res.json({ orderName: response.data.orderName, amount: response.data.amount });

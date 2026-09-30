@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { normalizePeruPhone } from "../utils/phone.util";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -329,7 +330,7 @@ export function getProfileById(id: number): AccessProfile | null {
 export function assignProfileClient(id: number, clientPhone: string): AccessProfile | null {
   const result = db.prepare(`
     UPDATE access_profiles SET client_phone = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(clientPhone.replace(/\D/g, ""), id);
+  `).run(normalizePeruPhone(clientPhone), id);
   if (result.changes === 0) return null;
   return getProfileById(id);
 }
@@ -407,7 +408,7 @@ export type SoldProfile = {
  */
 export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string): SoldProfile | null => {
   const plat = platform.trim().toUpperCase();
-  const digits = clientPhone.replace(/\D/g, "");
+  const digits = normalizePeruPhone(clientPhone);
   const floor = minSellableDateISO();
 
   const row = db.prepare(`
@@ -440,7 +441,7 @@ export function releaseProfilesByPhone(platform: string, clientPhone: string): n
   const result = db.prepare(`
     UPDATE access_profiles
     SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now')
-    WHERE client_phone = ?
+    WHERE substr(client_phone, -9) = substr(?, -9)
       AND account_id IN (SELECT id FROM access_accounts WHERE platform = ?)
   `).run(digits, plat);
 
