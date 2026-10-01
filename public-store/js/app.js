@@ -276,6 +276,12 @@
       cachedProducts = sortedProducts;
 
       let html = "";
+      // Los combos fijos del catálogo ya no se muestran en la web — el
+      // cliente arma el suyo con "¿Quieres armar tu combo?", arriba de
+      // todo para que se note antes de ver el catálogo normal.
+      if (sortedProducts.filter(p => !isOutOfStock(p, "platform")).length >= MIN_CUSTOM_COMBO_ITEMS) {
+        html += buildComboPromptHtml();
+      }
       const annualProducts    = sortedProducts.filter(p => isAnnual(p));
       const nonAnnualProducts = sortedProducts.filter(p => !isAnnual(p));
       if (annualProducts.length > 0) {
@@ -285,12 +291,6 @@
       if (nonAnnualProducts.length > 0) {
         html += `<div class="section-chip">Perfiles</div>`;
         html += `<div class="product-grid">${nonAnnualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
-      }
-      // Los combos fijos del catálogo ya no se muestran en la web — el
-      // cliente arma el suyo con "¿Quieres armar tu combo?" (más abajo),
-      // que reemplaza a estos con descuento real por cantidad.
-      if (sortedProducts.filter(p => !isOutOfStock(p, "platform")).length >= MIN_CUSTOM_COMBO_ITEMS) {
-        html += buildComboPromptHtml();
       }
       container.innerHTML = html;
 
