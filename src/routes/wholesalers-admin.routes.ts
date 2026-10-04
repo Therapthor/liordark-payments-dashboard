@@ -14,6 +14,7 @@ import {
   markFullAccountDelivered,
 } from "../db/wholesale-full-account.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
+import type { Wholesaler } from "../db/wholesaler.repository";
 
 // ─────────────────────────────────────────────────────────────
 // GESTIÓN DE MAYORISTAS — desde panel.liordark.com (admin). Crear/editar
@@ -26,8 +27,17 @@ import { generatePassword, hashPassword } from "../services/customer-auth.servic
 
 const router = Router();
 
+// El admin puede ver/resetear la contraseña por sus propios endpoints
+// dedicados (reset-password, y el "password" que devuelve el alta) —
+// las respuestas con el resto de datos del mayorista nunca necesitan
+// cargar password_hash NI password_plain.
+function toPublic(w: Wholesaler) {
+  const { passwordHash, passwordPlain, ...rest } = w;
+  return rest;
+}
+
 router.get("/", (_req, res) => {
-  res.json({ wholesalers: listAllWholesalers().map(w => ({ ...w, passwordHash: undefined })) });
+  res.json({ wholesalers: listAllWholesalers().map(toPublic) });
 });
 
 router.post("/", async (req, res) => {
@@ -39,7 +49,7 @@ router.post("/", async (req, res) => {
   const passwordHash = await hashPassword(password);
   const wholesaler    = createWholesaler(phone, passwordHash, password, displayName);
 
-  res.status(201).json({ wholesaler: { ...wholesaler, passwordHash: undefined }, password });
+  res.status(201).json({ wholesaler: toPublic(wholesaler), password });
 });
 
 router.patch("/:id/status", (req, res) => {
@@ -47,7 +57,7 @@ router.patch("/:id/status", (req, res) => {
   setWholesalerStatus(Number(req.params.id), status);
   const wholesaler = findWholesalerById(Number(req.params.id));
   if (!wholesaler) return res.status(404).json({ message: "Mayorista no encontrado." });
-  res.json({ wholesaler: { ...wholesaler, passwordHash: undefined } });
+  res.json({ wholesaler: toPublic(wholesaler) });
 });
 
 /** Resetea la contraseña (olvidada, o revocar acceso de inmediato) — devuelve la nueva en texto plano para reenviar. */

@@ -224,7 +224,11 @@ router.post("/clients/:profileId/renew", (req, res) => {
   const wholesalerId = wid(req);
   const profileId = Number(req.params.profileId);
   const profile = getProfileById(profileId);
-  if (!profile) return res.status(404).json({ message: "Perfil no encontrado." });
+  // 404 (no 403) a propósito — no confirma ni niega que el perfil exista
+  // si no es de este mayorista, igual que el resto de este archivo.
+  if (!profile || profile.wholesalerId !== wholesalerId) {
+    return res.status(404).json({ message: "Perfil no encontrado." });
+  }
 
   const account = getAccountById(profile.accountId);
   if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
@@ -247,7 +251,9 @@ router.post("/clients/:profileId/renew", (req, res) => {
 
 router.delete("/clients/:profileId", (req, res) => {
   const profile = getProfileById(Number(req.params.profileId));
-  if (!profile) return res.status(404).json({ message: "Perfil no encontrado." });
+  if (!profile || profile.wholesalerId !== wid(req)) {
+    return res.status(404).json({ message: "Perfil no encontrado." });
+  }
   releaseProfile(profile.id);
   res.json({ ok: true });
 });
@@ -255,8 +261,13 @@ router.delete("/clients/:profileId", (req, res) => {
 router.post("/clients/:profileId/renewal-marker", (req, res) => {
   const status = String(req.body?.status ?? "") as RenewalStatus;
   if (!["", "yes", "no"].includes(status)) return res.status(400).json({ message: "Status inválido." });
-  const profile = setProfileRenewal(Number(req.params.profileId), status);
-  if (!profile) return res.status(404).json({ message: "Perfil no encontrado." });
+
+  const existing = getProfileById(Number(req.params.profileId));
+  if (!existing || existing.wholesalerId !== wid(req)) {
+    return res.status(404).json({ message: "Perfil no encontrado." });
+  }
+
+  const profile = setProfileRenewal(existing.id, status);
   res.json({ profile });
 });
 
@@ -279,7 +290,11 @@ router.get("/renewals/expiring", (req, res) => {
 });
 
 router.post("/renewals/:profileId/mark-reminded", (req, res) => {
-  markReminderSent(Number(req.params.profileId));
+  const profile = getProfileById(Number(req.params.profileId));
+  if (!profile || profile.wholesalerId !== wid(req)) {
+    return res.status(404).json({ message: "Perfil no encontrado." });
+  }
+  markReminderSent(profile.id);
   res.json({ ok: true });
 });
 
