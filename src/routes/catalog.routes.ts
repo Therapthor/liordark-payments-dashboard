@@ -42,6 +42,8 @@ function parseProductBody(body: any): CatalogProductInput {
     platform:    String(body?.platform ?? "").trim(),
     title:       String(body?.title ?? "").trim(),
     price:       String(body?.price ?? "0").trim(),
+    wholesalePrice:     String(body?.wholesalePrice ?? "0").trim(),
+    wholesaleFullPrice: String(body?.wholesaleFullPrice ?? "0").trim(),
     hasProfiles: !!body?.hasProfiles,
     description: String(body?.description ?? "").trim(),
     imageUrl:    String(body?.imageUrl ?? "").trim(),

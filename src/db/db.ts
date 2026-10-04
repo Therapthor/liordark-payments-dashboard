@@ -207,4 +207,19 @@ db.exec(`
   );
 `);
 
+// ─────────────────────────────────────────────────────────────
+// MAYORISTA — columnas nuevas en tablas que ya existían en producción
+// (las tablas nuevas — wholesalers, wholesaler_credit_ledger,
+// wholesale_full_account_orders — ya se crean solas desde tables.sql).
+// ─────────────────────────────────────────────────────────────
+ensureColumn("access_profiles", "wholesaler_id", "wholesaler_id INTEGER"); // NULL = stock normal de clientitos
+ensureColumn("access_profiles", "seen_by_wholesaler", "seen_by_wholesaler INTEGER NOT NULL DEFAULT 1");
+db.exec(`CREATE INDEX IF NOT EXISTS idx_access_profiles_wholesaler ON access_profiles(wholesaler_id)`);
+
+ensureColumn("customers", "failed_login_count", "failed_login_count INTEGER NOT NULL DEFAULT 0");
+ensureColumn("customers", "locked_until", "locked_until TEXT");
+
+ensureColumn("catalog_products", "wholesale_price", "wholesale_price TEXT NOT NULL DEFAULT '0'");
+ensureColumn("catalog_products", "wholesale_full_price", "wholesale_full_price TEXT NOT NULL DEFAULT '0'");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

@@ -7,6 +7,9 @@ import {
   findCustomerById,
   isCustomerSuspended,
   normalizeCustomerPhone,
+  customerLockoutStatus,
+  recordCustomerLoginFailure,
+  recordCustomerLoginSuccess,
 } from "../db/customer.repository";
 import {
   checkPassword,
@@ -55,14 +58,24 @@ router.post("/login", async (req, res) => {
   const phone    = String(req.body?.phone ?? "");
   const password = String(req.body?.password ?? "");
 
+  const lock = customerLockoutStatus(phone);
+  if (lock.locked) {
+    return res.status(429).json({
+      message: `Demasiados intentos fallidos. Probá de nuevo en ${Math.ceil(lock.retryAfterSeconds / 60)} min.`,
+      retryAfterSeconds: lock.retryAfterSeconds,
+    });
+  }
+
   const customer = findCustomerByPhone(phone);
   if (!customer || !(await checkPassword(password, customer.passwordHash))) {
+    recordCustomerLoginFailure(phone);
     return res.status(401).json({ message: "Celular o contraseña incorrectos." });
   }
   if (isCustomerSuspended(customer)) {
     return res.status(403).json({ message: "Tu cuenta está suspendida temporalmente. Contáctanos si es un error." });
   }
 
+  recordCustomerLoginSuccess(phone);
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone });
 });

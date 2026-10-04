@@ -57,6 +57,36 @@ a { color: var(--btn); }
 .btn-block { width: 100%; }
 .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 9px; }
 
+/* ─── Acceso Mayorista — dorado, se nota aparte del resto ───────── */
+.btn-gold-exclusive {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 11px;
+  padding: 12px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  margin-top: 10px;
+  color: #3a2a00;
+  background: linear-gradient(120deg, #bf8f1f, #f4e08a, #d4af37, #f4e08a, #bf8f1f);
+  background-size: 300% 100%;
+  box-shadow: 0 0 0 1px rgba(191,143,31,0.4), 0 4px 14px rgba(191,143,31,0.35);
+  animation: goldShimmer 4.5s ease-in-out infinite, goldPulse 2.4s ease-in-out infinite;
+}
+.btn-gold-exclusive:hover { filter: brightness(1.05); }
+.btn-gold-exclusive:active { transform: scale(0.98); }
+
+@keyframes goldShimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes goldPulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(191,143,31,0.4), 0 4px 14px rgba(191,143,31,0.35); }
+  50%      { box-shadow: 0 0 0 1px rgba(191,143,31,0.6), 0 4px 20px rgba(191,143,31,0.6); }
+}
+
 /* ─── Gate de login/registro ─────────────────────────────────── */
 
 .view-auth {
@@ -371,10 +401,21 @@ a { color: var(--btn); }
 .spinner-sm { width: 13px; height: 13px; border-width: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* El topbar (logo + hasta 5 botones de nav) no entra en una sola fila en
+   celulares angostos — sin esto los botones se salían de pantalla o se
+   apretaban hasta ser ilegibles/difíciles de tocar. Se apila en dos filas
+   y el nav se deja envolver (wrap) en vez de desbordar. */
+@media (max-width: 680px) {
+  .topbar { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
+  .topnav { flex-wrap: wrap; justify-content: center; gap: 6px; }
+}
+
 @media (max-width: 480px) {
-  .topbar { padding: 12px 14px; }
-  .nav-btn { font-size: 12px; padding: 7px 10px; }
+  .nav-btn, .nav-support-btn { font-size: 12px; padding: 7px 10px; }
   .brand-name { font-size: 16px; }
+  .content { padding: 20px 14px 48px; }
+  .checkout-amount { font-size: 26px; }
+  .checkout-qr { width: 160px; height: 160px; }
 }
 
 /* ─── Renovaciones (público, sin login) ──────────────────────── */

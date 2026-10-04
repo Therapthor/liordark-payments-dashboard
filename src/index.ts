@@ -22,12 +22,17 @@ import botFlowRoutes from "./routes/bot-flow.routes";
 import customerAuthRoutes from "./routes/customer-auth.routes";
 import storeRoutes from "./routes/store.routes";
 import customersRoutes from "./routes/customers.routes";
+import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
+import wholesalerRoutes from "./routes/wholesaler.routes";
+import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
+import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
 import { archiveExpiredAccounts } from "./db/access-history.repository";
 import { limaTodayISO } from "./services/access.service";
+import { disableInactiveWholesalers } from "./db/wholesaler.repository";
 
 const app = express();
 
@@ -57,6 +62,13 @@ apiRouter.use("/stock", stockRoutes);
 apiRouter.use("/store/auth", customerAuthRoutes);
 apiRouter.use("/store", storeRoutes);
 apiRouter.use("/customers", requireAuth, customersRoutes);
+// ─── Mayorista (mayorista.liordark.com) — login propio, separado tanto
+// del de clientitos como del de admin.
+apiRouter.use("/wholesaler/auth", wholesalerAuthRoutes);
+apiRouter.use("/wholesaler", requireWholesalerSession, wholesalerRoutes);
+// Gestión de mayoristas desde el panel admin (crear cuentas, ajustar
+// saldo, asignar stock, cola de cuentas completas) — requireAuth normal.
+apiRouter.use("/wholesalers", requireAuth, wholesalersAdminRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {
@@ -67,19 +79,23 @@ app.get("/api/health", (_req, res) => {
 // no-cache: sin esto el navegador a veces sirve una versión vieja de un
 // .js/.css cacheada aunque el archivo ya se haya reemplazado en el deploy.
 //
-// Un solo proceso sirve DOS sitios distintos según el dominio con el que
-// entren (mismo servidor, nginx apunta ambos acá): liordark.com es la
-// tienda para clientes (public-store/), cualquier otro host (panel.
+// Un solo proceso sirve TRES sitios distintos según el dominio con el que
+// entren (mismo servidor, nginx apunta los tres acá): liordark.com es la
+// tienda para clientes (public-store/), mayorista.liordark.com es el panel
+// de distribuidores (public-wholesale/), y cualquier otro host (panel.
 // liordark.com, IP directa, localhost) sigue siendo el panel de admin
-// (public/) — no cambia nada de cómo ya se accede a él.
+// (public/) — no cambia nada de cómo ya se accede a los dos primeros.
 const noCacheHeaders = { setHeaders: (res: any) => res.setHeader("Cache-Control", "no-cache") };
-const storeStatic = express.static(path.resolve(process.cwd(), "public-store"), noCacheHeaders);
-const panelStatic = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
+const storeStatic     = express.static(path.resolve(process.cwd(), "public-store"), noCacheHeaders);
+const panelStatic      = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
+const wholesaleStatic  = express.static(path.resolve(process.cwd(), "public-wholesale"), noCacheHeaders);
 
 app.use((req, res, next) => {
   const host = req.hostname;
   if (host === "liordark.com" || host === "www.liordark.com") {
     storeStatic(req, res, next);
+  } else if (host === "mayorista.liordark.com") {
+    wholesaleStatic(req, res, next);
   } else {
     panelStatic(req, res, next);
   }
@@ -98,6 +114,9 @@ const server = app.listen(env.PORT, () => {
   runArchiveExpiredAccounts();
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
 
+  runDisableInactiveWholesalers();
+  setInterval(runDisableInactiveWholesalers, ARCHIVE_INTERVAL_MS);
+
   // Códigos apagado por ahora (el reenvío de Gmail resultó más complicado
   // de lo esperado) — no se arranca el poller ni la limpieza periódica.
 });
@@ -112,6 +131,17 @@ function runArchiveExpiredAccounts(): void {
     if (archived > 0) console.log(`🗄️  ${archived} cuenta(s) vencida(s) archivadas a Historial`);
   } catch (err: any) {
     console.error("⚠️ Error archivando cuentas vencidas:", err?.message);
+  }
+}
+
+// Mayoristas sin comprar/recargar en 1 mes — deshabilitados y saldo
+// borrado (a pedido explícito). Mismo cadencia que el archivado de arriba.
+function runDisableInactiveWholesalers(): void {
+  try {
+    const disabled = disableInactiveWholesalers();
+    if (disabled > 0) console.log(`🗄️  ${disabled} mayorista(s) deshabilitados por inactividad`);
+  } catch (err: any) {
+    console.error("⚠️ Error deshabilitando mayoristas inactivos:", err?.message);
   }
 }
 

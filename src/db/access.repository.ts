@@ -379,7 +379,7 @@ export function listRenewingProfiles(): RenewingProfile[] {
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
-    WHERE p.renewal_status = 'yes' AND p.client_phone != ''
+    WHERE p.renewal_status = 'yes' AND p.client_phone != '' AND p.wholesaler_id IS NULL
     ORDER BY a.expires_at ASC
   `).all() as RenewingProfile[];
 }
@@ -408,6 +408,10 @@ export type SoldProfile = {
  * SIEMPRE que a la cuenta le queden al menos MIN_SELLABLE_DAYS — nunca se
  * vende una cuenta que va a vencer pronto, así el cliente no reclama por
  * no recibir el mes completo. null si no hay stock que cumpla eso.
+ *
+ * `wholesaler_id IS NULL` es a propósito: el stock que el admin ya le
+ * asignó a un mayorista (Accesos > Asignar a mayorista) es SU inventario,
+ * nunca se le puede vender por error a un cliente normal de retail.
  */
 export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string): SoldProfile | null => {
   const plat = platform.trim().toUpperCase();
@@ -420,7 +424,7 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
            a.password AS password, a.expires_at AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE a.platform = ? AND p.client_phone = ''
+    WHERE a.platform = ? AND p.client_phone = '' AND p.wholesaler_id IS NULL
       AND a.expires_at IS NOT NULL AND a.expires_at >= ?
     ORDER BY a.expires_at ASC
     LIMIT 1
@@ -434,6 +438,82 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
 
   return row as SoldProfile;
 });
+
+/**
+ * Igual que sellProfile, pero del inventario YA asignado a ese mayorista
+ * (wholesaler_id = ?) — el mayorista no compra del pool de retail, vende
+ * lo que el admin le asignó de antemano (Accesos > Asignar a mayorista).
+ * Marca seen_by_wholesaler = 0 para el badge "(n)" de Cuentas.
+ */
+export const sellProfileForWholesaler = db.transaction((
+  platform: string, wholesalerId: number, clientPhone: string, orderRef: string
+): SoldProfile | null => {
+  const plat = platform.trim().toUpperCase();
+  const digits = normalizePeruPhone(clientPhone);
+  const floor = minSellableDateISO();
+
+  const row = db.prepare(`
+    SELECT p.id AS profileId, p.profile_name AS profileName,
+           a.id AS accountId, a.platform AS platform, a.email AS email,
+           a.password AS password, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE a.platform = ? AND p.wholesaler_id = ? AND p.client_phone = ''
+      AND a.expires_at IS NOT NULL AND a.expires_at >= ?
+    ORDER BY a.expires_at ASC
+    LIMIT 1
+  `).get(plat, wholesalerId, floor) as any;
+
+  if (!row) return null;
+
+  db.prepare(`
+    UPDATE access_profiles
+    SET client_phone = ?, order_ref = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(digits, orderRef, row.profileId);
+
+  return row as SoldProfile;
+});
+
+/** Cuántos perfiles libres (sin cliente) tiene asignados ese mayorista, por plataforma. */
+export function listWholesalerStockSummary(wholesalerId: number): { platform: string; free: number; total: number }[] {
+  return db.prepare(`
+    SELECT a.platform AS platform,
+           SUM(CASE WHEN p.client_phone = '' THEN 1 ELSE 0 END) AS free,
+           COUNT(*) AS total
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.wholesaler_id = ?
+    GROUP BY a.platform
+    ORDER BY a.platform ASC
+  `).all(wholesalerId) as { platform: string; free: number; total: number }[];
+}
+
+/** Asigna perfiles ya existentes (libres, sin dueño) a un mayorista — bulk, por ids. Admin-only. */
+export function assignProfilesToWholesaler(profileIds: number[], wholesalerId: number): number {
+  if (profileIds.length === 0) return 0;
+  const placeholders = profileIds.map(() => "?").join(",");
+  const result = db.prepare(`
+    UPDATE access_profiles SET wholesaler_id = ?, updated_at = datetime('now')
+    WHERE id IN (${placeholders}) AND client_phone = '' AND wholesaler_id IS NULL
+  `).run(wholesalerId, ...profileIds);
+  return result.changes;
+}
+
+export type WholesalerClientProfile = AccessProfile & { platform: string; expiresAt: string | null; email: string };
+
+/** Sub-clientes de ESTE mayorista (perfiles con wholesaler_id = ? y cliente asignado). */
+export function listWholesalerClients(wholesalerId: number): WholesalerClientProfile[] {
+  return db.prepare(`
+    SELECT p.id, p.account_id AS accountId, p.slot_number AS slotNumber, p.profile_name AS profileName,
+           p.client_phone AS clientPhone, p.renewal_status AS renewalStatus, p.order_ref AS orderRef,
+           p.updated_at AS updatedAt, a.platform AS platform, a.expires_at AS expiresAt, a.email AS email
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.wholesaler_id = ? AND p.client_phone != ''
+    ORDER BY a.expires_at ASC
+  `).all(wholesalerId) as WholesalerClientProfile[];
+}
 
 /** Libera el/los perfiles de ese cliente en esa plataforma (orden cancelada). Devuelve cuántos liberó. */
 export function releaseProfilesByPhone(platform: string, clientPhone: string): number {
@@ -597,11 +677,30 @@ export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
-    WHERE p.client_phone != '' AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
+    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
       ${lowerBound}
       AND p.order_ref NOT LIKE 'combo:%'
     ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
   `).all({ today, limit }) as ExpiringClient[];
+}
+
+/** Igual que listExpiringClients, pero SOLO los sub-clientes de ESTE mayorista — panel mayorista > Recordatorios. */
+export function listExpiringClientsForWholesaler(wholesalerId: number, days: number, opts?: { excludeAlreadyExpired?: boolean }): ExpiringClient[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
+  return db.prepare(`
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
+           COALESCE(c.title, '') AS platformTag, COALESCE(c.wholesale_price, '') AS price,
+           a.email AS email, a.password AS password, a.expires_at AS expiresAt,
+           p.reminder_sent_at AS reminderSentAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
+    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
+      ${lowerBound}
+    ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
+  `).all({ today, limit, wholesalerId }) as ExpiringClient[];
 }
 
 /** Recordatorio manual de vencimiento mandado (panel > Renovaciones) — para no repetirle a la misma persona en la próxima tanda. */

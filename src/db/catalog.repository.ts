@@ -10,10 +10,12 @@ import { db } from "./db";
 // ─────────────────────────────────────────────────────────────
 
 export type CatalogProduct = {
-  id:          number;
-  platform:    string;
-  title:       string;
-  price:       string;
+  id:                number;
+  platform:          string;
+  title:             string;
+  price:             string;
+  wholesalePrice:    string; // precio mayorista — perfil, consume créditos del mayorista
+  wholesaleFullPrice: string; // precio mayorista — cuenta completa a pedido
   hasProfiles: boolean;
   description: string;
   imageUrl:    string;
@@ -27,6 +29,8 @@ export type CatalogProductInput = {
   platform:    string;
   title:       string;
   price:       string;
+  wholesalePrice:     string;
+  wholesaleFullPrice: string;
   hasProfiles: boolean;
   description: string;
   imageUrl:    string;
@@ -39,6 +43,8 @@ function toProduct(row: any): CatalogProduct {
     platform:    row.platform,
     title:       row.title,
     price:       row.price,
+    wholesalePrice:     row.wholesale_price ?? "0",
+    wholesaleFullPrice: row.wholesale_full_price ?? "0",
     hasProfiles: !!row.has_profiles,
     description: row.description,
     imageUrl:    row.image_url,
@@ -74,9 +80,9 @@ export function getCatalogProductByPlatform(platform: string): CatalogProduct | 
 
 export function createCatalogProduct(p: CatalogProductInput): CatalogProduct {
   const result = db.prepare(`
-    INSERT INTO catalog_products (platform, title, price, has_profiles, description, image_url, keywords)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(p.platform, p.title, p.price, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, p.keywords);
+    INSERT INTO catalog_products (platform, title, price, wholesale_price, wholesale_full_price, has_profiles, description, image_url, keywords)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(p.platform, p.title, p.price, p.wholesalePrice, p.wholesaleFullPrice, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, p.keywords);
 
   return toProduct(db.prepare(`SELECT * FROM catalog_products WHERE id = ?`).get(result.lastInsertRowid));
 }
@@ -84,9 +90,10 @@ export function createCatalogProduct(p: CatalogProductInput): CatalogProduct {
 export function updateCatalogProduct(id: number, p: CatalogProductInput): CatalogProduct | null {
   db.prepare(`
     UPDATE catalog_products
-    SET platform = ?, title = ?, price = ?, has_profiles = ?, description = ?, image_url = ?, keywords = ?, updated_at = datetime('now')
+    SET platform = ?, title = ?, price = ?, wholesale_price = ?, wholesale_full_price = ?,
+        has_profiles = ?, description = ?, image_url = ?, keywords = ?, updated_at = datetime('now')
     WHERE id = ?
-  `).run(p.platform, p.title, p.price, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, p.keywords, id);
+  `).run(p.platform, p.title, p.price, p.wholesalePrice, p.wholesaleFullPrice, p.hasProfiles ? 1 : 0, p.description, p.imageUrl, p.keywords, id);
 
   const row = db.prepare(`SELECT * FROM catalog_products WHERE id = ?`).get(id);
   return row ? toProduct(row) : null;

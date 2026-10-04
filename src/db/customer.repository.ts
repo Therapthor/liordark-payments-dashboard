@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
+import { checkLockout, nextLockoutState, type LockoutCheck } from "../services/login-lockout.service";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB — ver tables.sql (customers)
@@ -17,6 +18,7 @@ export type Customer = {
   passwordPlain:   string;
   isGuest:         boolean;
   suspendedUntil:  string | null;
+  lockedUntil:     string | null;
   createdAt:       string;
 };
 
@@ -28,6 +30,7 @@ function toCustomer(row: any): Customer {
     passwordPlain:   row.password_plain,
     isGuest:         !!row.is_guest,
     suspendedUntil:  row.suspended_until,
+    lockedUntil:     row.locked_until,
     createdAt:       row.created_at,
   };
 }
@@ -97,6 +100,27 @@ export function setCustomerPassword(id: number, passwordHash: string, passwordPl
   db.prepare(`UPDATE customers SET password_hash = ?, password_plain = ? WHERE id = ?`)
     .run(passwordHash, passwordPlain, id);
   return findCustomerById(id);
+}
+
+/** Bloqueo por intentos fallidos — ver login-lockout.service.ts para la fórmula. */
+export function customerLockoutStatus(phone: string): LockoutCheck {
+  const customer = findCustomerByPhone(phone);
+  return checkLockout(customer?.lockedUntil);
+}
+
+export function recordCustomerLoginFailure(phone: string): void {
+  const customer = findCustomerByPhone(phone);
+  if (!customer) return;
+  const row = db.prepare(`SELECT failed_login_count AS n FROM customers WHERE id = ?`).get(customer.id) as { n: number };
+  const { failedLoginCount, lockedUntil } = nextLockoutState(row.n);
+  db.prepare(`UPDATE customers SET failed_login_count = ?, locked_until = ? WHERE id = ?`)
+    .run(failedLoginCount, lockedUntil, customer.id);
+}
+
+export function recordCustomerLoginSuccess(phone: string): void {
+  const customer = findCustomerByPhone(phone);
+  if (!customer) return;
+  db.prepare(`UPDATE customers SET failed_login_count = 0, locked_until = NULL WHERE id = ?`).run(customer.id);
 }
 
 export function countAllCustomers(): number {

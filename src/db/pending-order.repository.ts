@@ -8,7 +8,7 @@ import { db } from "./db";
 // eso lo maneja access_accounts/access_profiles.
 // ─────────────────────────────────────────────────────────────
 
-export type OrderType = "Compra" | "Renovación" | "Compra sin stock";
+export type OrderType = "Compra" | "Renovación" | "Compra sin stock" | "Recarga mayorista";
 
 /** Idempotente — si el order_name ya existe, no hace nada y devuelve success igual. */
 export function createPendingOrder(params: {

@@ -283,3 +283,65 @@ CREATE TABLE IF NOT EXISTS customers (
   suspended_until     TEXT,                        -- ISO datetime; NULL o pasado = no suspendida
   created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ═══════════════════════════════════════════════════════════════════
+-- MAYORISTA — distribuidores con cuenta propia (la crea el admin, nunca
+-- se auto-registran), que recargan un saldo de créditos por Yape y lo
+-- gastan comprando perfiles a precio mayorista o pidiendo cuentas
+-- completas a pedido, y gestionan sus propios sub-clientes desde
+-- mayorista.liordark.com. Ver access_profiles.wholesaler_id más abajo
+-- (migración en db.ts) para cómo se reparte el stock.
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS wholesalers (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone               TEXT    NOT NULL UNIQUE,
+  password_hash       TEXT    NOT NULL,
+  password_plain      TEXT    NOT NULL DEFAULT '', -- igual que customers, para reenviar por WhatsApp
+  display_name        TEXT    NOT NULL DEFAULT '',
+  balance_cents       INTEGER NOT NULL DEFAULT 0,  -- lectura rápida; la fuente de verdad es el ledger
+  status              TEXT    NOT NULL DEFAULT 'active', -- 'active' | 'disabled'
+  last_activity_at    TEXT    NOT NULL DEFAULT (datetime('now')), -- última compra/recarga — regla de 1 mes
+  failed_login_count  INTEGER NOT NULL DEFAULT 0,
+  locked_until        TEXT,
+  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Bitácora de movimientos de saldo — append-only, es la fuente de verdad
+-- para auditoría (balance_cents de arriba es solo la lectura rápida).
+-- Toda fila la escribe applyWholesalerCreditChange, nunca a mano.
+CREATE TABLE IF NOT EXISTS wholesaler_credit_ledger (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  wholesaler_id       INTEGER NOT NULL REFERENCES wholesalers(id),
+  type                TEXT    NOT NULL, -- 'topup_yape' | 'topup_manual_admin' | 'debit_manual_admin' |
+                                         -- 'purchase_profile' | 'purchase_full_account' | 'renewal' | 'wipe_inactive'
+  amount_cents        INTEGER NOT NULL, -- positivo = crédito, negativo = débito
+  balance_after_cents INTEGER NOT NULL, -- snapshot después de este movimiento
+  reference           TEXT    NOT NULL DEFAULT '', -- order_name del Yape, id de perfil/pedido, o nota del admin
+  created_by          TEXT    NOT NULL DEFAULT '', -- 'system' o identificador del admin
+  created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_wholesaler_ledger_wholesaler ON wholesaler_credit_ledger(wholesaler_id);
+
+-- Cola de "cuentas completas a pedido" — no sale de stock, el admin la
+-- prepara a mano (hasta 5 horas) y la entrega desde acá.
+CREATE TABLE IF NOT EXISTS wholesale_full_account_orders (
+  id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+  wholesaler_id             INTEGER NOT NULL REFERENCES wholesalers(id),
+  platform                  TEXT    NOT NULL,
+  quantity                  INTEGER NOT NULL DEFAULT 1,
+  unit_price_cents          INTEGER NOT NULL,
+  total_cents               INTEGER NOT NULL,
+  end_client_phone          TEXT    NOT NULL DEFAULT '',
+  status                    TEXT    NOT NULL DEFAULT 'queued', -- 'queued' | 'prepared' | 'delivered' | 'cancelled'
+  due_by                    TEXT    NOT NULL, -- created_at + 5h
+  delivered_account_email   TEXT    NOT NULL DEFAULT '',
+  delivered_account_password TEXT   NOT NULL DEFAULT '',
+  seen_by_wholesaler        INTEGER NOT NULL DEFAULT 0,
+  notes                     TEXT    NOT NULL DEFAULT '',
+  created_at                TEXT    NOT NULL DEFAULT (datetime('now')),
+  prepared_at               TEXT,
+  delivered_at              TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wfao_wholesaler ON wholesale_full_account_orders(wholesaler_id);
+CREATE INDEX IF NOT EXISTS idx_wfao_status     ON wholesale_full_account_orders(status);

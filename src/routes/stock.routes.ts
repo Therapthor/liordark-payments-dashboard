@@ -25,6 +25,8 @@ import { logCanvaOrder } from "../db/canva-order.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { getBotFlowConfig } from "../db/bot-flow.repository";
 import { listCombos } from "../db/combo.repository";
+import { findWholesalerById, touchWholesalerActivity } from "../db/wholesaler.repository";
+import { applyWholesalerCreditChange, creditWasAlreadyApplied } from "../db/wholesaler-credit.repository";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -204,7 +206,7 @@ router.get("/all-client-phones", (_req, res) => {
 
 // ── BITÁCORA DE PEDIDOS (reemplaza PEDIDOS_PENDIENTES de Sheets) ──
 
-const VALID_ORDER_TYPES: OrderType[] = ["Compra", "Renovación", "Compra sin stock"];
+const VALID_ORDER_TYPES: OrderType[] = ["Compra", "Renovación", "Compra sin stock", "Recarga mayorista"];
 
 router.post("/pending-orders", (req, res) => {
   const { orderName, phone, platform, orderType } = req.body ?? {};
@@ -299,6 +301,43 @@ router.get("/payment-methods", (_req, res) => {
 // (Configuración > Flujo). El bot lo refresca cada pocos minutos.
 router.get("/flow-config", (_req, res) => {
   res.json({ config: getBotFlowConfig() });
+});
+
+// ── CRÉDITO MAYORISTA (recarga Yape auto-detectada) ──
+//
+// El bot llama acá cuando una reserva Yape de recarga mayorista hace
+// match — ver handleYapeAutoMatch (payment.handler.ts) en el repo del
+// bot. `reference` es el orderName de esa reserva: se chequea ANTES de
+// acreditar que no exista ya un movimiento con ese mismo (type,
+// reference), para que un reintento de red del bot nunca duplique el
+// crédito (idempotencia).
+router.post("/wholesale-credit", (req, res) => {
+  const wholesalerId  = Number(req.body?.wholesalerId);
+  const creditAmount  = Number(req.body?.creditAmount);
+  const reference     = String(req.body?.reference ?? "");
+
+  if (!wholesalerId || !Number.isFinite(creditAmount) || creditAmount <= 0 || !reference) {
+    res.status(400).json({ message: "Faltan datos (wholesalerId, creditAmount, reference)." });
+    return;
+  }
+  if (!findWholesalerById(wholesalerId)) {
+    res.status(404).json({ message: "Mayorista no encontrado." });
+    return;
+  }
+  if (creditWasAlreadyApplied("topup_yape", reference)) {
+    res.json({ ok: true, alreadyApplied: true });
+    return;
+  }
+
+  const result = applyWholesalerCreditChange(
+    wholesalerId, Math.round(creditAmount * 100), "topup_yape", reference, "system"
+  );
+  if (!result.ok) {
+    res.status(500).json({ message: result.error });
+    return;
+  }
+  touchWholesalerActivity(wholesalerId);
+  res.json({ ok: true, newBalanceCents: result.newBalanceCents });
 });
 
 export default router;
