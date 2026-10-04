@@ -629,6 +629,12 @@
       : "";
   }
 
+  // Recargas mayoristas quedan con platform="WALLET_TOPUP" (sentinel interno)
+  // — el admin nunca debería ver ese texto crudo, acá se muestra bonito.
+  function orderPlatformLabel(o) {
+    return o.isWalletTopup ? "💳 Recarga mayorista" : o.platform;
+  }
+
   function renderPendingOrder(o) {
     const li = document.createElement("li");
     li.className = "feed-item";
@@ -636,7 +642,7 @@
     li.innerHTML = `
       <span class="feed-badge ${cls}"></span>
       <div class="feed-main">
-        <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
+        <div class="feed-name">${escapeHtml(orderPlatformLabel(o))} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
         ${o.clientEmail ? `<div class="feed-time">📧 ${escapeHtml(o.clientEmail)}</div>` : ""}
         ${yapeConfirmedBadge(o)}
