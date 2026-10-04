@@ -42,6 +42,7 @@
           </div>
         </div>
         <button class="tab-btn" data-view="access">Accesos</button>
+        <button class="tab-btn" data-view="wholesalers">Mayoristas</button>
         <button class="tab-btn" data-view="web-customers">Clientes web</button>
         <button class="tab-btn" data-view="config">Configuración</button>
       </nav>
@@ -188,6 +189,59 @@
           </div>
           <div id="access-platform-detail-accounts" class="access-accounts"></div>
         </div>
+
+      </section>
+
+      <!-- ═══════════ VISTA: MAYORISTAS ═══════════ -->
+      <section id="view-wholesalers" class="view" hidden>
+
+        <div class="panel-header standalone">
+          <h2>Mayoristas</h2>
+          <button id="wholesaler-new-btn" class="btn-primary">+ Nuevo mayorista</button>
+        </div>
+
+        <p class="panel-hint">Cuentas con saldo prepagado que compran perfiles y cuentas completas con descuento. Se dan de alta solo desde acá — nunca se autoregistran.</p>
+
+        <div class="panel">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Celular</th>
+                <th>Nombre</th>
+                <th>Saldo</th>
+                <th>Estado</th>
+                <th>Última actividad</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="wholesalers-tbody"></tbody>
+          </table>
+        </div>
+        <p id="wholesalers-empty" class="feed-empty" hidden>Todavía no hay mayoristas dados de alta.</p>
+
+        <div class="panel-header standalone" style="margin-top: 28px;">
+          <h2>📦 Cola de cuentas completas</h2>
+        </div>
+
+        <p class="panel-hint">Pedidos de cuenta completa (no sale de stock) — se prepara a mano y se entrega desde acá, antes de que venza el plazo.</p>
+
+        <div class="panel">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Plataforma</th>
+                <th>Cant.</th>
+                <th>Total</th>
+                <th>Cliente final</th>
+                <th>Estado</th>
+                <th>Vence</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="wholesalers-queue-tbody"></tbody>
+          </table>
+        </div>
+        <p id="wholesalers-queue-empty" class="feed-empty" hidden>No hay pedidos de cuenta completa pendientes.</p>
 
       </section>
 
@@ -406,6 +460,12 @@
       </label>
       <label>Precio (S/)
         <input id="catalog-price" type="number" step="0.01" min="0" required />
+      </label>
+      <label>Precio mayorista (S/) <span class="text-muted">(perfil suelto, descuenta del saldo del mayorista)</span>
+        <input id="catalog-wholesale-price" type="number" step="0.01" min="0" />
+      </label>
+      <label>Precio mayorista — cuenta completa (S/) <span class="text-muted">(a pedido, ver cola en Mayoristas)</span>
+        <input id="catalog-wholesale-full-price" type="number" step="0.01" min="0" />
       </label>
       <label class="catalog-checkbox-label">
         <input id="catalog-has-profiles" type="checkbox" checked />
@@ -792,10 +852,162 @@
     </div>
   </div>
 
+  <!-- ───────────── MODAL: nuevo mayorista ───────────── -->
+  <div id="wholesaler-new-modal" class="modal-backdrop" hidden>
+    <form id="wholesaler-new-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Nuevo mayorista</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-new-modal">✕</button>
+      </div>
+      <label>Celular (WhatsApp)
+        <input id="wholesaler-new-phone" type="text" inputmode="numeric" placeholder="51987654321" required />
+      </label>
+      <label>Nombre
+        <input id="wholesaler-new-name" type="text" maxlength="80" required placeholder="ej. Juan Mayorista" />
+      </label>
+      <p id="wholesaler-new-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="wholesaler-new-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Crear</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: credenciales generadas (alta o reseteo) ───────────── -->
+  <div id="wholesaler-credentials-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="wholesaler-credentials-title">Acceso del mayorista</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-credentials-modal">✕</button>
+      </div>
+      <p class="panel-hint">Guarda o envía esta contraseña ahora — no se puede volver a ver después.</p>
+      <div class="credentials-box">
+        <div>📱 Celular: <b id="wholesaler-credentials-phone"></b></div>
+        <div>🔑 Contraseña: <b id="wholesaler-credentials-password"></b></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal="wholesaler-credentials-modal">Cerrar</button>
+        <button type="button" id="wholesaler-credentials-send-btn" class="btn-primary">📧 Enviar bienvenida por WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: ajustar saldo ───────────── -->
+  <div id="wholesaler-adjust-modal" class="modal-backdrop" hidden>
+    <form id="wholesaler-adjust-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="wholesaler-adjust-title">Ajustar saldo</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-adjust-modal">✕</button>
+      </div>
+      <label>Movimiento
+        <select id="wholesaler-adjust-sign">
+          <option value="1">Agregar (+)</option>
+          <option value="-1">Restar (-)</option>
+        </select>
+      </label>
+      <label>Monto (S/)
+        <input id="wholesaler-adjust-amount" type="number" step="0.01" min="0.01" required />
+      </label>
+      <label>Nota
+        <input id="wholesaler-adjust-note" type="text" maxlength="200" placeholder="ej. recarga por Yape fuera del bot" required />
+      </label>
+      <p id="wholesaler-adjust-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="wholesaler-adjust-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: historial (ledger) de un mayorista ───────────── -->
+  <div id="wholesaler-ledger-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3 id="wholesaler-ledger-title">Historial de saldo</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-ledger-modal">✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Movimiento</th>
+              <th>Monto</th>
+              <th>Saldo después</th>
+              <th>Referencia</th>
+            </tr>
+          </thead>
+          <tbody id="wholesaler-ledger-tbody"></tbody>
+        </table>
+        <p id="wholesaler-ledger-empty" class="feed-empty" hidden>Todavía no hay movimientos.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: preparar cuenta completa de la cola ───────────── -->
+  <div id="wholesaler-prepare-modal" class="modal-backdrop" hidden>
+    <form id="wholesaler-prepare-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Preparar cuenta completa</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-prepare-modal">✕</button>
+      </div>
+      <label>Correo
+        <input id="wholesaler-prepare-email" type="text" required />
+      </label>
+      <label>Contraseña
+        <input id="wholesaler-prepare-password" type="text" required />
+      </label>
+      <p id="wholesaler-prepare-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="wholesaler-prepare-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Marcar preparado</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: cuenta completa entregada — enviar al cliente ───────────── -->
+  <div id="wholesaler-deliver-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Cuenta entregada</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-deliver-modal">✕</button>
+      </div>
+      <div class="credentials-box">
+        <div id="wholesaler-deliver-platform"></div>
+        <div>📧 Correo: <b id="wholesaler-deliver-email"></b></div>
+        <div>🔑 Contraseña: <b id="wholesaler-deliver-password"></b></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal="wholesaler-deliver-modal">Cerrar</button>
+        <button type="button" id="wholesaler-deliver-send-btn" class="btn-primary">📨 Enviar al cliente por WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: asignar perfiles libres a un mayorista (desde Accesos) ───────────── -->
+  <div id="assign-wholesaler-modal" class="modal-backdrop" hidden>
+    <form id="assign-wholesaler-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Asignar a mayorista</h3>
+        <button type="button" class="modal-x" data-close-modal="assign-wholesaler-modal">✕</button>
+      </div>
+      <p id="assign-wholesaler-count" class="panel-hint"></p>
+      <label>Mayorista
+        <select id="assign-wholesaler-select" required></select>
+      </label>
+      <p id="assign-wholesaler-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="assign-wholesaler-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Asignar</button>
+      </div>
+    </form>
+  </div>
+
   <script src="js/access.js"></script>
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>
+  <script src="js/wholesalers.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

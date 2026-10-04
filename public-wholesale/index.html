@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mayorista Manguitope</title>
+<link rel="icon" href="/assets/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ═══════════ GATE DE LOGIN — lo crea solo el admin, sin registro ═══════════ -->
+  <section id="view-auth" class="view-auth">
+    <div class="auth-blob"></div>
+    <div class="auth-wrap">
+      <div class="brand brand-center">
+        <img src="/assets/logo.webp" alt="Manguitope" class="brand-logo">
+        <span class="brand-name">MANGUITOPE</span>
+        <span class="brand-tag">✨ Panel Mayorista</span>
+      </div>
+
+      <div class="card auth-card" id="login-card">
+        <h1>Bienvenido</h1>
+        <p class="muted">Ingresa con el celular y contraseña que te dimos</p>
+        <form id="login-form">
+          <label for="login-phone">Celular</label>
+          <input type="tel" id="login-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
+          <label for="login-password">Contraseña</label>
+          <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password">
+          <p class="form-error" id="login-error" hidden></p>
+          <button type="submit" class="btn-primary btn-block">Ingresar</button>
+        </form>
+        <p class="auth-foot muted small">¿No tienes cuenta mayorista? Escríbenos por soporte para activarla.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ APP (post-login) ═══════════ -->
+  <div id="view-app" hidden>
+    <header class="app-header">
+      <div class="brand">
+        <img src="/assets/logo.webp" alt="" class="brand-logo-sm">
+      </div>
+      <div class="app-header-info">
+        <span class="app-header-hello" id="header-hello">Hola</span>
+        <span class="app-header-balance" id="header-balance">Saldo: S/ 0.00</span>
+      </div>
+      <button class="app-logout-btn" id="app-logout-btn" type="button" title="Salir" aria-label="Salir">⎋</button>
+    </header>
+
+    <div class="app-body">
+      <!-- Sidebar — solo visible desde 768px (ver css, .sidebar) -->
+      <aside class="sidebar">
+        <nav class="sidebar-nav" id="sidebar-nav"></nav>
+      </aside>
+
+      <main class="app-main" id="app-main">
+
+        <!-- ─── CLIENTES ─── -->
+        <section id="page-clientes" class="page">
+          <h2 class="page-title">👥 Clientes</h2>
+          <p class="page-subtitle muted small">Tus sub-clientes con cuenta asignada.</p>
+          <div id="clients-list" class="client-list"></div>
+          <p id="clients-empty" class="empty-state" hidden>Todavía no tienes clientes asignados. Ve a "Comprar" para vender tu primer perfil.</p>
+        </section>
+
+        <!-- ─── COMPRAR ─── -->
+        <section id="page-comprar" class="page" hidden>
+          <h2 class="page-title">🛒 Comprar</h2>
+          <p class="page-subtitle muted small">Precio mayorista ya con descuento — agrega y compra directo.</p>
+
+          <div id="catalog-grid" class="catalog-grid"></div>
+          <p id="catalog-empty" class="empty-state" hidden>Todavía no tienes stock asignado. Escríbenos por soporte para que te asignen plataformas.</p>
+
+          <div class="cart-card" id="cart-card" hidden>
+            <h3>Tu carrito</h3>
+            <div id="cart-list"></div>
+            <div class="cart-total-row">
+              <span class="muted small">Total</span>
+              <span class="cart-total-value" id="cart-total-value">S/ 0.00</span>
+            </div>
+            <button class="btn-primary btn-block" id="cart-buy-btn" type="button" style="margin-top:12px;">Finalizar compra</button>
+          </div>
+
+          <div class="full-order-card">
+            <h3>📦 Pedir cuenta completa</h3>
+            <p class="muted small">Hecha a tu pedido — se entrega en hasta 5 horas.</p>
+            <form class="full-order-form" id="full-order-form">
+              <label for="full-order-platform">Plataforma</label>
+              <select id="full-order-platform" required></select>
+              <label for="full-order-quantity">Cantidad</label>
+              <input type="number" id="full-order-quantity" min="1" value="1" required>
+              <label for="full-order-phone">Celular del cliente</label>
+              <input type="tel" id="full-order-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
+              <p class="form-error" id="full-order-error" hidden></p>
+              <button type="submit" class="btn-primary btn-block" style="margin-top:4px;">Pedir cuenta completa</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ─── CUENTAS ─── -->
+        <section id="page-cuentas" class="page" hidden>
+          <h2 class="page-title">📦 Cuentas</h2>
+          <p class="page-subtitle muted small">Perfiles ya asignados y tus pedidos de cuenta completa.</p>
+
+          <h3 class="section-heading">Perfiles asignados</h3>
+          <div id="cuentas-profiles-list" class="client-list"></div>
+          <p id="cuentas-profiles-empty" class="empty-state" hidden>Todavía no tienes perfiles asignados a clientes.</p>
+
+          <h3 class="section-heading">Cuentas completas pedidas</h3>
+          <div id="cuentas-orders-list" class="client-list"></div>
+          <p id="cuentas-orders-empty" class="empty-state" hidden>No has pedido ninguna cuenta completa todavía.</p>
+        </section>
+
+        <!-- ─── RESUMEN ─── -->
+        <section id="page-resumen" class="page" hidden>
+          <h2 class="page-title">📊 Resumen</h2>
+          <p class="page-subtitle muted small">Un vistazo rápido a tu cartera de clientes.</p>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-card-value" id="stat-active">—</div>
+              <div class="stat-card-label">Activos</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-value" id="stat-expiring">—</div>
+              <div class="stat-card-label">Por vencer</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-card-value" id="stat-total">—</div>
+              <div class="stat-card-label">Total clientes</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── CRÉDITOS ─── -->
+        <section id="page-creditos" class="page" hidden>
+          <h2 class="page-title">💳 Créditos</h2>
+
+          <div class="balance-card">
+            <div class="balance-card-label">Tu saldo</div>
+            <div class="balance-card-value" id="credits-balance-value">S/ 0.00</div>
+          </div>
+          <button class="btn-ghost btn-sm btn-block" id="credits-refresh-btn" type="button" style="margin-bottom:18px;">🔄 Actualizar saldo</button>
+
+          <p class="muted small" style="margin-bottom:10px;">Recargar por Yape</p>
+          <div class="topup-grid">
+            <button class="topup-btn" data-amount="20" type="button">S/ 20<span class="topup-btn-sub">Recargar</span></button>
+            <button class="topup-btn" data-amount="50" type="button">S/ 50<span class="topup-btn-sub">Recargar</span></button>
+            <button class="topup-btn" data-amount="100" type="button">S/ 100<span class="topup-btn-sub">Recargar</span></button>
+            <button class="topup-btn" data-amount="500" type="button">S/ 500<span class="topup-btn-sub">Recargar</span></button>
+          </div>
+
+          <h3 class="section-heading">Historial</h3>
+          <div id="ledger-list" class="ledger-list"></div>
+        </section>
+
+        <!-- ─── RECORDATORIOS ─── -->
+        <section id="page-recordatorios" class="page" hidden>
+          <h2 class="page-title">🔔 Recordatorios</h2>
+          <p class="page-subtitle muted small">Avisa por WhatsApp a tus clientes que vencen hoy, en tandas de 5.</p>
+          <p class="reminders-summary" id="reminders-summary"></p>
+          <button class="btn-primary btn-block" id="reminders-prepare-btn" type="button" style="margin-bottom:18px;">Preparar tanda de 5</button>
+          <div id="reminders-list" class="reminders-list"></div>
+        </section>
+
+        <!-- ─── SOPORTE ─── -->
+        <section id="page-soporte" class="page" hidden>
+          <h2 class="page-title">💬 Soporte</h2>
+          <div class="support-card">
+            <div class="support-icon">🥭</div>
+            <h3>¿Necesitas ayuda?</h3>
+            <p class="muted">Escríbenos directo por WhatsApp y te respondemos al toque.</p>
+            <a class="btn-wa btn-block" id="support-wa-link" href="#" target="_blank" rel="noopener">💬 Chatear por WhatsApp</a>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- ─── Nav inferior (mobile) — se oculta desde 768px ─── -->
+    <nav class="tab-bar" id="tab-bar"></nav>
+  </div>
+
+  <!-- ═══════════ MODAL: RECARGA YAPE ═══════════ -->
+  <div id="checkout-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="checkout-close" type="button" aria-label="Cerrar">✕</button>
+
+      <div id="checkout-loading" class="checkout-state">
+        <span class="spinner"></span>
+        <p>Preparando tu recarga…</p>
+      </div>
+
+      <div id="checkout-ready" class="checkout-state" hidden>
+        <h2>Completa tu pago</h2>
+        <p class="muted">Envía exactamente este monto por Yape:</p>
+        <div class="checkout-amount-row">
+          <span class="checkout-amount" id="checkout-amount">S/ 0.00</span>
+          <button class="yape-copy-btn" id="checkout-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
+        </div>
+        <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
+        <p class="yape-info" id="checkout-instructions"></p>
+        <div class="checkout-waiting">
+          <span>ℹ️</span>
+          <span>El saldo se acredita solo cuando se detecte el pago.</span>
+        </div>
+        <a class="btn-wa btn-block" id="checkout-support-link" href="#" target="_blank" rel="noopener" style="margin-top:14px;">💬 Dudas con el pago</a>
+        <button class="btn-ghost btn-block" id="checkout-done-btn" type="button" style="margin-top:8px;">Listo, ya pagué</button>
+      </div>
+
+      <div id="checkout-error" class="checkout-state" hidden>
+        <p class="form-error" id="checkout-error-text"></p>
+        <button class="btn-ghost btn-block" id="checkout-retry" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODAL: TELÉFONO DEL CLIENTE FINAL (checkout del carrito) ═══════════ -->
+  <div id="cart-checkout-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="cart-checkout-close" type="button" aria-label="Cerrar">✕</button>
+      <h2>¿Para qué cliente es?</h2>
+      <p class="muted small">Escribe el celular del cliente final — ahí le enviamos la cuenta.</p>
+      <form id="cart-checkout-form">
+        <label for="cart-checkout-phone" class="muted small">Celular del cliente</label>
+        <input type="tel" id="cart-checkout-phone" required placeholder="9XXXXXXXX" autocomplete="tel" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+        <p class="form-error" id="cart-checkout-error" hidden></p>
+        <button type="submit" class="btn-primary btn-block" style="margin-top:14px;">Confirmar compra</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODAL: COMPRA EXITOSA ═══════════ -->
+  <div id="purchase-success-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="purchase-success-close-x" type="button" aria-label="Cerrar">✕</button>
+      <div class="success-check">✓</div>
+      <h2 style="text-align:center;">¡Listo!</h2>
+      <p class="muted" style="text-align:center;">Copia los datos o envíalos directo al cliente:</p>
+      <div id="purchase-success-list" class="success-accounts-list"></div>
+      <button class="btn-primary btn-block" id="purchase-success-close" type="button">Cerrar y seguir comprando</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>

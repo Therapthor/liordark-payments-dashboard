@@ -18,6 +18,7 @@ import {
   type RenewalStatus,
 } from "../db/access.repository";
 import { getCatalogProductByPlatform, listCatalogProducts } from "../db/catalog.repository";
+import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount } from "../services/access.service";
 import {
   createFullAccountOrder,
@@ -49,6 +50,13 @@ router.get("/balance", (req, res) => {
 
 router.get("/ledger", (req, res) => {
   res.json({ entries: listLedgerForWholesaler(wid(req)) });
+});
+
+// GET /payment-methods — mismo QR de Yape que ya muestra liordark.com
+// (/api/store/payment-methods) — acá con sesión de mayorista en vez de
+// cliente, mismo origen de datos (payment_methods es una sola lista).
+router.get("/payment-methods", (_req, res) => {
+  res.json({ methods: listPaymentMethods().filter(m => m.active) });
 });
 
 const ALLOWED_TOPUP_AMOUNTS = [20, 50, 100, 500];

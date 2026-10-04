@@ -47,7 +47,10 @@
         </div>
         <div class="catalog-desc">${escapeHtml(p.description) || "<em>Sin descripción todavía</em>"}</div>
       </div>
-      <div class="catalog-price">S/ ${escapeHtml(p.price)}</div>
+      <div class="catalog-price">
+        S/ ${escapeHtml(p.price)}
+        <div class="catalog-price-wholesale text-muted">Mayorista: S/ ${escapeHtml(p.wholesalePrice)} · Completa: S/ ${escapeHtml(p.wholesaleFullPrice)}</div>
+      </div>
       <div class="catalog-actions">
         <button class="icon-btn-sm catalog-toggle-btn" title="${p.active ? "Apagar (deja de venderse)" : "Encender"}">${p.active ? "🟢" : "⚫"}</button>
         <button class="icon-btn-sm catalog-edit-btn" title="Editar">✏️</button>
@@ -74,6 +77,8 @@
     document.getElementById("catalog-platform").value       = product?.platform ?? "";
     document.getElementById("catalog-title").value          = product?.title ?? "";
     document.getElementById("catalog-price").value          = product?.price ?? "";
+    document.getElementById("catalog-wholesale-price").value      = product?.wholesalePrice ?? "";
+    document.getElementById("catalog-wholesale-full-price").value = product?.wholesaleFullPrice ?? "";
     document.getElementById("catalog-has-profiles").checked = product ? product.hasProfiles : true;
     document.getElementById("catalog-description").value    = product?.description ?? "";
     document.getElementById("catalog-image-url").value      = product?.imageUrl ?? "";
@@ -97,6 +102,8 @@
         platform:    document.getElementById("catalog-platform").value.trim(),
         title:       document.getElementById("catalog-title").value.trim(),
         price:       document.getElementById("catalog-price").value,
+        wholesalePrice:     document.getElementById("catalog-wholesale-price").value,
+        wholesaleFullPrice: document.getElementById("catalog-wholesale-full-price").value,
         hasProfiles: document.getElementById("catalog-has-profiles").checked,
         description: document.getElementById("catalog-description").value.trim(),
         imageUrl:    document.getElementById("catalog-image-url").value.trim(),

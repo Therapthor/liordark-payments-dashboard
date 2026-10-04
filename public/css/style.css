@@ -834,7 +834,8 @@ button, input {
   font-size: 12px; color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px;
 }
-.catalog-price { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.catalog-price { font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums; text-align: right; flex-shrink: 0; }
+.catalog-price-wholesale { font-weight: 400; font-size: 11px; white-space: nowrap; }
 .catalog-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .catalog-item-off { opacity: 0.5; }
@@ -877,6 +878,38 @@ button, input {
 .row-highlight-yellow { background: #fff3b0; transition: background 0.3s ease; }
 .access-history-detail { padding: 0 0 14px; font-size: 13px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 4px; }
 .access-history-clients ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* ─────────────────────────────────────────────────────────────
+   MAYORISTAS
+───────────────────────────────────────────────────────────── */
+
+.table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.due-soon { color: var(--warning); font-weight: 600; }
+.due-over { color: var(--critical); font-weight: 600; }
+
+.wholesaler-balance { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.credentials-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.credentials-box b { font-variant-numeric: tabular-nums; }
+
+/* Fila de perfil ya asignada a un mayorista — stock aparte del retail,
+   no se le vende a un clientito ni se mezcla con las filas libres. */
+.profile-row-wholesale { background: rgba(245,166,35,0.08); }
+.profile-wholesale-tag {
+  font-size: 11px; font-weight: 600; color: var(--accent-dim);
+  background: rgba(245,166,35,0.15); border-radius: 6px; padding: 2px 6px;
+}
+.access-select-col { width: 28px; text-align: center; }
 
 /* ─────────────────────────────────────────────────────────────
    RESPONSIVE

@@ -21,6 +21,20 @@
     return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Llama a /api/wholesalers directo (no al prefijo /api/access de arriba) —
+  // solo se usa acá para el desplegable de "Asignar a mayorista".
+  async function apiWholesalers(path, options = {}) {
+    const res = await fetch("/api/wholesalers" + path, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+    if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "Error de red");
+    return data;
+  }
+
   function fmtDateLong(ymd) {
     if (!ymd) return "—";
     const [y, m, d] = ymd.split("-");
@@ -103,6 +117,18 @@
   let editingAccountPlatform   = null;
   let platformCatalog          = [];
   let providerCatalog          = [];
+  let wholesalerCatalog        = [];
+
+  // Solo mayoristas activos — no tiene sentido mandarles stock a uno deshabilitado.
+  async function loadWholesalerCatalog() {
+    try {
+      const { wholesalers } = await apiWholesalers("/");
+      wholesalerCatalog = wholesalers.filter(w => w.status === "active");
+    } catch {
+      wholesalerCatalog = [];
+    }
+    return wholesalerCatalog;
+  }
 
   async function loadCatalog() {
     if (platformCatalog.length) return platformCatalog;
@@ -317,6 +343,7 @@
               ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
               <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
               <button class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte proveedor</button>
+              <button class="btn-secondary btn-sm access-assign-wholesaler" data-account-id="${account.id}" title="Pasar los perfiles libres marcados a un mayorista">🏷 Asignar a mayorista</button>
               ${renderRenewControls(account)}
               ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
               <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
@@ -324,7 +351,7 @@
             </div>
           </div>
           <table class="access-table">
-            <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
+            <thead><tr><th class="access-select-col" title="Marcar perfiles libres para asignar a un mayorista">🏷</th>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -345,24 +372,36 @@
   }
 
   function renderProfileRow(account, p) {
-    const occupied = !!p.clientPhone;
+    const occupied       = !!p.clientPhone;
+    // wholesalerId != null = ya es stock de un mayorista (ver
+    // assignProfilesToWholesaler) — no se vende como retail aunque esté
+    // "libre" de cliente todavía.
+    const wholesaleOwned = p.wholesalerId != null;
+    const selectable     = !occupied && !wholesaleOwned;
     const ctx = JSON.stringify(profileCtx(account, p)).replace(/"/g, "&quot;");
 
-    const actions = occupied ? `
+    let actions;
+    if (occupied) {
+      actions = `
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
         <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Cambiar teléfono">✏️</button>
         <button class="row-action" data-act="release" data-ctx="${ctx}" title="Liberar perfil">🗑</button>
-      ` : `
-        <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Asignar cliente">➕ Asignar</button>
       `;
+    } else if (wholesaleOwned) {
+      actions = `<span class="profile-wholesale-tag">🏪 Stock mayorista</span>`;
+    } else {
+      actions = `<button class="row-action" data-act="edit" data-ctx="${ctx}" title="Asignar cliente">➕ Asignar</button>`;
+    }
 
     const cells = [];
+    cells.push(`<td class="access-select-col">${selectable ? `<input type="checkbox" class="profile-select-cb" data-profile-id="${p.id}" />` : ""}</td>`);
     if (account.hasProfiles) cells.push(`<td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}</td>`);
     cells.push(`<td>${occupied ? escapeHtml(p.clientPhone) : "<span class=\"text-muted\">Libre</span>"}</td>`);
     cells.push(`<td>${occupied ? renderRenewalButton(p) : ""}</td>`);
     cells.push(`<td class="access-row-actions">${actions}</td>`);
 
-    return `<tr data-profile-id="${p.id}">${cells.join("")}</tr>`;
+    const rowClass = wholesaleOwned ? ` class="profile-row-wholesale"` : "";
+    return `<tr data-profile-id="${p.id}"${rowClass}>${cells.join("")}</tr>`;
   }
 
   function wireAccountCardEvents(target) {
@@ -403,6 +442,10 @@
 
     target.querySelectorAll(".access-copy-account").forEach(btn => {
       btn.addEventListener("click", () => copyAccountData(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+    });
+
+    target.querySelectorAll(".access-assign-wholesaler").forEach(btn => {
+      btn.addEventListener("click", () => openAssignWholesalerModal(Number(btn.dataset.accountId)));
     });
 
     target.querySelectorAll(".access-provider-support").forEach(btn => {
@@ -696,6 +739,71 @@
         refreshAccountInPlace(currentProfileForModal.accountId);
       } catch (err) {
         errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODAL — asignar perfiles libres (marcados con la casilla 🏷) a un
+  // mayorista en bloque. Nunca crea stock nuevo, solo reasigna lo que ya
+  // está libre y sin dueño (ver POST /api/wholesalers/:id/assign-profiles).
+  // ─────────────────────────────────────────────────────────────
+
+  let assignWholesalerAccountId  = null;
+  let assignWholesalerProfileIds = [];
+
+  async function openAssignWholesalerModal(accountId) {
+    const container = activeQuery
+      ? document.getElementById("access-search-results")
+      : document.getElementById("access-platform-detail-accounts");
+    const el = container.querySelector(`.access-account[data-account-id="${accountId}"]`);
+    const checked = el ? [...el.querySelectorAll(".profile-select-cb:checked")].map(cb => Number(cb.dataset.profileId)) : [];
+    if (checked.length === 0) {
+      alert("Marca al menos un perfil libre con la casilla 🏷 de la tabla.");
+      return;
+    }
+
+    assignWholesalerAccountId  = accountId;
+    assignWholesalerProfileIds = checked;
+
+    await loadWholesalerCatalog();
+    const select = document.getElementById("assign-wholesaler-select");
+    select.innerHTML = wholesalerCatalog.length
+      ? wholesalerCatalog.map(w => `<option value="${w.id}">${escapeHtml(w.displayName)} (${escapeHtml(w.phone)})</option>`).join("")
+      : `<option value="">No hay mayoristas activos — créalos en Mayoristas</option>`;
+
+    document.getElementById("assign-wholesaler-count").textContent =
+      `${checked.length} perfil(es) libre(s) seleccionado(s).`;
+    document.getElementById("assign-wholesaler-error").hidden = true;
+    document.getElementById("assign-wholesaler-modal").hidden = false;
+  }
+
+  function initAssignWholesalerModal() {
+    document.getElementById("assign-wholesaler-cancel").addEventListener("click", () => {
+      document.getElementById("assign-wholesaler-modal").hidden = true;
+    });
+
+    document.getElementById("assign-wholesaler-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("assign-wholesaler-error");
+      errorEl.hidden = true;
+
+      const wholesalerId = Number(document.getElementById("assign-wholesaler-select").value);
+      if (!wholesalerId) {
+        errorEl.textContent = "Elige un mayorista.";
+        errorEl.hidden = false;
+        return;
+      }
+
+      try {
+        await apiWholesalers("/" + wholesalerId + "/assign-profiles", {
+          method: "POST", body: JSON.stringify({ profileIds: assignWholesalerProfileIds }),
+        });
+        document.getElementById("assign-wholesaler-modal").hidden = true;
+        refreshAccountInPlace(assignWholesalerAccountId);
+      } catch (err) {
+        errorEl.textContent = err.message || "No se pudo asignar.";
         errorEl.hidden = false;
       }
     });
@@ -1251,6 +1359,7 @@
     initBulkModal();
     initEditModal();
     initProfileModal();
+    initAssignWholesalerModal();
     initPasswordModal();
     initRenewNewModal();
     initHistoryModal();

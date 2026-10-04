@@ -15,6 +15,10 @@ export type AccessProfile = {
   clientPhone:   string;
   renewalStatus: RenewalStatus;
   orderRef:      string;
+  // null = stock normal de clientitos; si no, es de este mayorista (ver
+  // assignProfilesToWholesaler) — el panel admin lo necesita para no
+  // dejar vender como retail lo que ya es stock de un mayorista.
+  wholesalerId:  number | null;
   updatedAt:     string;
 };
 
@@ -500,14 +504,19 @@ export function assignProfilesToWholesaler(profileIds: number[], wholesalerId: n
   return result.changes;
 }
 
-export type WholesalerClientProfile = AccessProfile & { platform: string; expiresAt: string | null; email: string };
+export type WholesalerClientProfile = AccessProfile & {
+  platform: string; expiresAt: string | null; email: string; password: string;
+};
 
-/** Sub-clientes de ESTE mayorista (perfiles con wholesaler_id = ? y cliente asignado). */
+/** Sub-clientes de ESTE mayorista (perfiles con wholesaler_id = ? y cliente asignado).
+ *  Incluye password — "Enviar cuenta" desde el panel mayorista necesita
+ *  mandar el acceso completo, no solo el correo. */
 export function listWholesalerClients(wholesalerId: number): WholesalerClientProfile[] {
   return db.prepare(`
     SELECT p.id, p.account_id AS accountId, p.slot_number AS slotNumber, p.profile_name AS profileName,
            p.client_phone AS clientPhone, p.renewal_status AS renewalStatus, p.order_ref AS orderRef,
-           p.updated_at AS updatedAt, a.platform AS platform, a.expires_at AS expiresAt, a.email AS email
+           p.updated_at AS updatedAt, a.platform AS platform, a.expires_at AS expiresAt,
+           a.email AS email, a.password AS password
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id = ? AND p.client_phone != ''
@@ -836,6 +845,7 @@ function toProfile(row: any): AccessProfile {
     clientPhone:   row.client_phone ?? "",
     renewalStatus: (row.renewal_status ?? "") as RenewalStatus,
     orderRef:      row.order_ref ?? "",
+    wholesalerId:  row.wholesaler_id ?? null,
     updatedAt:     row.updated_at,
   };
 }
