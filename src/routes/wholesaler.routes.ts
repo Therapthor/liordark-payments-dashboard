@@ -86,29 +86,30 @@ router.post("/topup", async (req, res) => {
   }
 });
 
-// ── CATÁLOGO (precio mayorista) — TODO producto activo con precio
-// mayorista configurado, no solo lo preasignado: compra primero de su
-// stock dedicado si tiene, y si no, del mismo pool compartido que usa
-// retail (ver sellProfileForWholesaler). freeStock=0 igual se muestra,
-// con el producto deshabilitado para agregar al carrito — así el
-// mayorista ve el catálogo completo apenas el admin le pone precio.
+// ── CATÁLOGO (precio mayorista) — solo lo que tiene precio mayorista Y
+// stock real disponible ahora mismo (propio o del pool compartido con
+// retail). A diferencia de liordark.com (que sí deja "Reservar" sin
+// stock), en el panel mayorista un producto en 0 simplemente no
+// aparece — para que nunca intenten comprar/reservar algo que no hay.
 
 router.get("/catalog", (req, res) => {
   const availability = listWholesalerAvailability(wid(req));
   const products = listCatalogProducts(true).filter(p => Number(p.wholesalePrice) > 0);
 
-  const catalog = products.map(product => {
-    const plat = product.platform.trim().toUpperCase();
-    const stock = availability.find(s => s.platform === plat);
-    return {
-      platform:          plat,
-      title:             product.title || plat,
-      wholesalePrice:    product.wholesalePrice,
-      wholesaleFullPrice: product.wholesaleFullPrice,
-      imageUrl:          product.imageUrl,
-      freeStock:         stock?.free ?? 0,
-    };
-  });
+  const catalog = products
+    .map(product => {
+      const plat = product.platform.trim().toUpperCase();
+      const stock = availability.find(s => s.platform === plat);
+      return {
+        platform:          plat,
+        title:             product.title || plat,
+        wholesalePrice:    product.wholesalePrice,
+        wholesaleFullPrice: product.wholesaleFullPrice,
+        imageUrl:          product.imageUrl,
+        freeStock:         stock?.free ?? 0,
+      };
+    })
+    .filter(p => p.freeStock > 0);
   res.json({ catalog });
 });
 

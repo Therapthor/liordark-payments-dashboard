@@ -808,8 +808,12 @@
       if (!product) return;
       let item = cartItems.find(i => i.platform === platform);
       if (btn.dataset.act === "inc") {
-        if (!item) { item = { platform, qty: 0 }; cartItems.push(item); }
-        if (item.qty < product.freeStock) item.qty++;
+        // Solo se agrega al carrito si de verdad hay stock para sumar —
+        // antes se creaba el item en 0 igual, y quedaba un "×0" fantasma.
+        if ((item?.qty ?? 0) < product.freeStock) {
+          if (!item) { item = { platform, qty: 0 }; cartItems.push(item); }
+          item.qty++;
+        }
       } else if (btn.dataset.act === "dec" && item) {
         item.qty--;
         if (item.qty <= 0) cartItems = cartItems.filter(i => i !== item);
