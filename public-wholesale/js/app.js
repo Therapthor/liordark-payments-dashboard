@@ -196,8 +196,8 @@
   // ─────────────────────────────────────────────────────────────
 
   const PAGES = [
-    { id: "clientes",      label: "Clientes",      icon: "👥" },
     { id: "comprar",       label: "Comprar",       icon: "🛒" },
+    { id: "clientes",      label: "Clientes",      icon: "👥" },
     { id: "cuentas",       label: "Cuentas",       icon: "📦", badge: true },
     { id: "resumen",       label: "Resumen",       icon: "📊" },
     { id: "creditos",      label: "Créditos",      icon: "💳" },
@@ -756,10 +756,13 @@
     const select = document.getElementById("full-order-platform");
     if (!select) return;
     const previous = select.value;
-    select.innerHTML = cachedCatalog.length
-      ? cachedCatalog.map(p => `<option value="${escapeHtml(p.platform)}">${escapeHtml(p.title)} — S/ ${escapeHtml(p.wholesaleFullPrice)}</option>`).join("")
+    // Solo plataformas con precio de cuenta completa configurado (>0) —
+    // sin esto se veían opciones "S/ 0" que el admin nunca llegó a precificar.
+    const options = cachedCatalog.filter(p => Number(p.wholesaleFullPrice) > 0);
+    select.innerHTML = options.length
+      ? options.map(p => `<option value="${escapeHtml(p.platform)}">${escapeHtml(p.title)} — S/ ${escapeHtml(p.wholesaleFullPrice)}</option>`).join("")
       : `<option value="">Sin plataformas disponibles</option>`;
-    if (previous && cachedCatalog.some(p => p.platform === previous)) select.value = previous;
+    if (previous && options.some(p => p.platform === previous)) select.value = previous;
   }
 
   async function loadComprar() {
