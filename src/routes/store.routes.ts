@@ -263,14 +263,17 @@ router.post("/checkout", async (req, res) => {
   }
 
   // Defensa por si algo saltea la validación del navegador (ej. una
-  // pestaña vieja que no recargó el catálogo) — nunca vender sin stock real.
+  // pestaña vieja que no recargó el catálogo) — para combos, nunca vender
+  // sin stock real (serían varias plataformas a la vez, no se maneja
+  // reserva parcial acá). Un perfil SUELTO sin stock SÍ se deja pasar a
+  // propósito — el cliente paga como reserva y la orden queda pendiente
+  // hasta que el bot revalide stock solo (misma cola que ya usa
+  // WhatsApp — ver startAutoRevalidateNoStockJob en el repo del bot).
   const available = availabilityByPlatform();
   let customComboTotalPrice = 0;
 
   if (platform) {
-    if (availableFor(platform, available) <= 0) {
-      return res.status(409).json({ message: "Sin stock disponible ahora mismo para esta plataforma." });
-    }
+    // sin guard de stock — reserva permitida
   } else if (comboId) {
     const combo = listCombos(true).find(c => c.id === comboId);
     if (!combo) {

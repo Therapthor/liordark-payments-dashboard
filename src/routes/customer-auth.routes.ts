@@ -15,7 +15,6 @@ import {
   checkPassword,
   createCustomerSessionToken,
   CUSTOMER_SESSION_COOKIE,
-  generatePassword,
   hashPassword,
   verifyCustomerSessionToken,
 } from "../services/customer-auth.service";
@@ -31,28 +30,6 @@ function setSessionCookie(res: import("express").Response, customerId: number): 
     expires,
   });
 }
-
-router.post("/register", async (req, res) => {
-  const phone    = String(req.body?.phone ?? "");
-  const password = String(req.body?.password ?? "");
-
-  if (normalizeCustomerPhone(phone).length < 9) {
-    return res.status(400).json({ message: "Número de celular inválido." });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres." });
-  }
-  if (findCustomerByPhone(phone)) {
-    return res.status(409).json({ message: "Ya existe una cuenta con ese celular." });
-  }
-
-  const passwordHash = await hashPassword(password);
-  const customer      = createCustomer(phone, passwordHash, password);
-
-  emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: false });
-  setSessionCookie(res, customer.id);
-  res.json({ ok: true, phone: customer.phone });
-});
 
 router.post("/login", async (req, res) => {
   const phone    = String(req.body?.phone ?? "");
@@ -80,29 +57,31 @@ router.post("/login", async (req, res) => {
   res.json({ ok: true, phone: customer.phone });
 });
 
-// POST /guest — "Comprar sin cuenta": el cliente solo escribe su celular,
-// el sistema genera una contraseña y crea la cuenta al toque (login
-// automático), para que pueda comprar sin llenar el formulario de
-// registro. La contraseña generada queda guardada (además del hash, que
-// es lo que se usa para loguear) para que el panel admin la pueda ver y
-// reenviar por WhatsApp si el cliente la pierde.
+// POST /guest — "Comprar sin cuenta": única forma de crear cuenta ahora
+// (ya no hay registro aparte) — el cliente pone su celular y crea su
+// propio PIN de 4 dígitos para poder volver a entrar. Se guarda igual
+// que antes (hash + texto plano) para que el panel admin lo pueda
+// reenviar por WhatsApp si el cliente lo pierde.
 router.post("/guest", async (req, res) => {
   const phone = String(req.body?.phone ?? "");
+  const pin   = String(req.body?.password ?? "");
 
   if (normalizeCustomerPhone(phone).length < 9) {
     return res.status(400).json({ message: "Número de celular inválido." });
+  }
+  if (!/^\d{4}$/.test(pin)) {
+    return res.status(400).json({ message: "El PIN debe ser de 4 dígitos." });
   }
   if (findCustomerByPhone(phone)) {
     return res.status(409).json({ message: "Ya existe una cuenta con ese celular. Iniciá sesión." });
   }
 
-  const generatedPassword = generatePassword();
-  const passwordHash      = await hashPassword(generatedPassword);
-  const customer           = createCustomer(phone, passwordHash, generatedPassword, true);
+  const passwordHash = await hashPassword(pin);
+  const customer      = createCustomer(phone, passwordHash, pin, true);
 
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);
-  res.json({ ok: true, phone: customer.phone, password: generatedPassword });
+  res.json({ ok: true, phone: customer.phone });
 });
 
 router.post("/logout", (_req, res) => {

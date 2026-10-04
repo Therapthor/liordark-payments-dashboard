@@ -22,68 +22,44 @@
         <span class="brand-name">MANGUITOPE</span>
       </div>
 
-      <div class="card auth-card" id="login-card">
-        <h1>Bienvenido de nuevo</h1>
-        <p class="muted">Iniciá sesión para ver el catálogo</p>
-        <form id="login-form">
-          <label for="login-phone">Celular</label>
-          <input type="tel" id="login-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
-          <label for="login-password">Contraseña</label>
-          <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password">
-          <p class="form-error" id="login-error" hidden></p>
-          <button type="submit" class="btn-primary btn-block">Ingresar</button>
-        </form>
+      <div class="card auth-card" id="start-card">
+        <h1>Bienvenido</h1>
+        <p class="muted">Elige una opción para continuar</p>
+        <button class="btn-guest btn-block" id="show-guest-btn" type="button">🛒 Comprar sin cuenta</button>
+        <button class="btn-primary btn-block" id="show-login-btn" type="button" style="margin-top:10px;">🔑 Ingresar</button>
         <div class="divider"><span>o</span></div>
-        <button class="btn-ghost btn-block" id="show-register-btn" type="button">Crear cuenta nueva</button>
-        <button class="btn-guest btn-block" id="show-guest-btn" type="button">Comprar sin cuenta</button>
         <button class="btn-ghost btn-block" id="show-renewals-btn" type="button">¿Tu cuenta está por vencer? Revisala acá</button>
         <a href="https://mayorista.liordark.com" class="btn-gold-exclusive btn-block" id="wholesale-entry-btn">✨ Acceso Mayorista</a>
       </div>
 
-      <div class="card auth-card" id="register-card" hidden>
-        <h1>Crear cuenta</h1>
-        <p class="muted">Con tu número vinculamos las compras que ya hiciste antes</p>
-        <form id="register-form">
-          <label for="register-phone">Celular</label>
-          <input type="tel" id="register-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
-          <label for="register-password">Contraseña</label>
-          <input type="password" id="register-password" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
-          <p class="form-error" id="register-error" hidden></p>
-          <button type="submit" class="btn-primary btn-block">Crear cuenta</button>
+      <div class="card auth-card" id="login-card" hidden>
+        <h1>Bienvenido de nuevo</h1>
+        <p class="muted">Ingresa tu celular y tu PIN</p>
+        <form id="login-form">
+          <label for="login-phone">Celular</label>
+          <input type="tel" id="login-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
+          <label for="login-password">Contraseña o PIN</label>
+          <input type="password" id="login-password" required placeholder="••••" autocomplete="current-password">
+          <p class="form-error" id="login-error" hidden></p>
+          <button type="submit" class="btn-primary btn-block">Ingresar</button>
         </form>
         <div class="divider"><span>o</span></div>
-        <button class="btn-ghost btn-block" id="show-login-btn" type="button">Ya tengo cuenta</button>
+        <button class="btn-ghost btn-block" id="back-to-start-from-login" type="button">← Volver</button>
       </div>
 
       <div class="card auth-card" id="guest-card" hidden>
         <h1>Comprar sin cuenta</h1>
-        <p class="muted">Escribe tu celular y te creamos una cuenta al toque, con contraseña incluida</p>
+        <p class="muted">Escribe tu celular y crea un PIN de 4 dígitos para poder volver a entrar</p>
         <form id="guest-form">
           <label for="guest-phone">Celular</label>
           <input type="tel" id="guest-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
+          <label for="guest-pin">Crea tu PIN (4 dígitos)</label>
+          <input type="password" id="guest-pin" required inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="••••" autocomplete="new-password">
           <p class="form-error" id="guest-error" hidden></p>
           <button type="submit" class="btn-primary btn-block">Crear y continuar</button>
         </form>
         <div class="divider"><span>o</span></div>
-        <button class="btn-ghost btn-block" id="show-login-from-guest-btn" type="button">Ya tengo cuenta</button>
-      </div>
-
-      <div class="card auth-card guest-success-card" id="guest-success-card" hidden>
-        <div class="guest-success-icon">🥭</div>
-        <h1>¡Tu cuenta está lista!</h1>
-        <p class="muted">Guarda estos datos — los vas a necesitar para volver a entrar</p>
-        <div class="guest-creds-box">
-          <div class="guest-creds-row">
-            <span class="guest-creds-label">Celular</span>
-            <span class="guest-creds-value" id="guest-success-phone"></span>
-          </div>
-          <div class="guest-creds-row">
-            <span class="guest-creds-label">Contraseña</span>
-            <span class="guest-creds-value" id="guest-success-password"></span>
-          </div>
-        </div>
-        <p class="muted small">¿La perdiste? Escríbenos por soporte y te la reenviamos.</p>
-        <button class="btn-primary btn-block" id="guest-continue-btn" type="button">Empezar a comprar</button>
+        <button class="btn-ghost btn-block" id="back-to-start-from-guest" type="button">← Volver</button>
       </div>
     </div>
   </section>
@@ -189,6 +165,9 @@
         <input type="email" id="detail-canva-email-input" placeholder="tu@correo.com" autocomplete="email">
         <p class="form-error" id="detail-canva-email-error" hidden></p>
       </div>
+      <p class="muted small detail-reserve-note" id="detail-reserve-note" hidden>
+        ⏳ Ahora mismo no hay stock — tu pago queda como reserva y te entregamos la cuenta automático apenas haya disponible.
+      </p>
       <div class="detail-footer">
         <span class="product-price" id="detail-price"></span>
         <button class="btn-primary" id="detail-buy-btn" type="button">Comprar</button>

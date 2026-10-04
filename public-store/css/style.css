@@ -247,12 +247,21 @@ a { color: var(--btn); }
   font-size: 9.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; letter-spacing: .3px;
 }
 
-/* Sin stock — se mantiene visible (no desaparece del catálogo) pero */
-/* apagada, para que quede claro que no se puede comprar ahora mismo. */
-.product-card-outofstock { opacity: .55; cursor: default; }
-.product-card-outofstock:hover { transform: none; box-shadow: none; }
-.product-price-banner-off { background: var(--muted); }
-.product-price-banner-off .product-price { font-size: 13px; }
+/* Sin stock — se puede pagar igual para reservar (no se bloquea la
+   compra), solo queda marcada distinto para que se note que es una
+   reserva y no una entrega al toque. */
+.product-card-outofstock { opacity: .85; }
+.product-price-banner-reserve {
+  background: var(--accent2);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.product-reserve-tag {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+  background: rgba(255,255,255,.35); border-radius: 999px; padding: 3px 9px;
+}
+.detail-reserve-note {
+  background: var(--chip-bg); border-radius: 10px; padding: 10px 12px; margin: 10px 0 0;
+}
 
 .product-card {
   background: var(--card);

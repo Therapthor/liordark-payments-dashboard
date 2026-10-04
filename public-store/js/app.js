@@ -37,7 +37,7 @@
   function showAuth() {
     document.getElementById("view-auth").hidden = false;
     document.getElementById("view-app").hidden = true;
-    showAuthCard("login-card");
+    showAuthCard("start-card");
   }
 
   function showApp() {
@@ -46,7 +46,7 @@
   }
 
   function hideAllAuthCards() {
-    ["login-card", "register-card", "guest-card", "guest-success-card"].forEach(id => {
+    ["start-card", "login-card", "guest-card"].forEach(id => {
       document.getElementById(id).hidden = true;
     });
   }
@@ -57,10 +57,10 @@
   }
 
   function initAuthToggle() {
-    document.getElementById("show-register-btn").addEventListener("click", () => showAuthCard("register-card"));
     document.getElementById("show-login-btn").addEventListener("click", () => showAuthCard("login-card"));
     document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
-    document.getElementById("show-login-from-guest-btn").addEventListener("click", () => showAuthCard("login-card"));
+    document.getElementById("back-to-start-from-login").addEventListener("click", () => showAuthCard("start-card"));
+    document.getElementById("back-to-start-from-guest").addEventListener("click", () => showAuthCard("start-card"));
     document.getElementById("show-renewals-btn").addEventListener("click", () => showRenewals(false));
   }
 
@@ -85,34 +85,22 @@
       }
     });
 
-    document.getElementById("register-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      setFormError("register-error", "");
-      const phone    = document.getElementById("register-phone").value.trim();
-      const password = document.getElementById("register-password").value;
-      try {
-        await api("/auth/register", { method: "POST", body: { phone, password } });
-        await onAuthenticated();
-      } catch (err) {
-        setFormError("register-error", err.message);
-      }
-    });
-
     document.getElementById("guest-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       setFormError("guest-error", "");
       const phone = document.getElementById("guest-phone").value.trim();
+      const pin   = document.getElementById("guest-pin").value;
+      if (!/^\d{4}$/.test(pin)) {
+        setFormError("guest-error", "El PIN debe ser de 4 dígitos.");
+        return;
+      }
       try {
-        const result = await api("/auth/guest", { method: "POST", body: { phone } });
-        document.getElementById("guest-success-phone").textContent = result.phone;
-        document.getElementById("guest-success-password").textContent = result.password;
-        showAuthCard("guest-success-card");
+        await api("/auth/guest", { method: "POST", body: { phone, password: pin } });
+        await onAuthenticated();
       } catch (err) {
         setFormError("guest-error", err.message);
       }
     });
-
-    document.getElementById("guest-continue-btn").addEventListener("click", onAuthenticated);
 
     document.getElementById("logout-btn").addEventListener("click", async () => {
       try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }
@@ -242,8 +230,10 @@
     const detailAttr = kind === "combo" ? `data-detail-combo="${p.id}"` : `data-detail-platform="${escapeHtml(p.platform)}"`;
     const cardClass  = [exclusive && "product-card-exclusive", outOfStock && "product-card-outofstock"].filter(Boolean).join(" ");
 
+    // Sin stock: igual se puede pagar para reservar — el pedido queda
+    // esperando y se entrega solo apenas haya stock (ver openProductDetail).
     const priceArea = outOfStock
-      ? `<div class="product-price-banner product-price-banner-off"><span class="product-price">Rellenando stock</span></div>`
+      ? `<div class="product-price-banner product-price-banner-reserve"><span class="product-price">S/ ${escapeHtml(p.price)}</span><span class="product-reserve-tag">Reservar</span></div>`
       : `<div class="product-price-banner"><span class="product-price">S/ ${escapeHtml(p.price)}</span></div>`;
 
     return `
@@ -509,16 +499,21 @@
     document.getElementById("detail-title").textContent = title;
     document.getElementById("detail-annual").hidden = !isAnnual(item);
     renderDesc(document.getElementById("detail-desc"), desc);
-    document.getElementById("detail-price").textContent = outOfStock ? "Rellenando stock" : "S/ " + item.price;
+    document.getElementById("detail-price").textContent = "S/ " + item.price;
 
-    document.getElementById("detail-canva-email").hidden = !needsCanvaEmail || outOfStock;
+    document.getElementById("detail-canva-email").hidden = !needsCanvaEmail;
     document.getElementById("detail-canva-email-input").value = "";
     setFormError("detail-canva-email-error", "");
 
+    // Sin stock: se puede pagar igual para reservar — el pedido queda
+    // pendiente y se entrega automático apenas el admin cargue stock
+    // nuevo de esa plataforma (el bot revisa cada pocos minutos).
+    document.getElementById("detail-reserve-note").hidden = !outOfStock;
+
     const buyBtn = document.getElementById("detail-buy-btn");
-    buyBtn.disabled = outOfStock;
-    buyBtn.textContent = outOfStock ? "Rellenando stock" : "Comprar";
-    buyBtn.onclick = outOfStock ? null : () => {
+    buyBtn.disabled = false;
+    buyBtn.textContent = outOfStock ? "Reservar" : "Comprar";
+    buyBtn.onclick = () => {
       let clientEmail;
       if (needsCanvaEmail) {
         clientEmail = document.getElementById("detail-canva-email-input").value.trim();
