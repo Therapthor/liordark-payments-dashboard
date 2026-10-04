@@ -5,7 +5,7 @@ import type { RequestWithWholesaler } from "../services/wholesaler-auth.service"
 import { findWholesalerById, touchWholesalerActivity } from "../db/wholesaler.repository";
 import { listLedgerForWholesaler, applyWholesalerCreditChange } from "../db/wholesaler-credit.repository";
 import {
-  listWholesalerStockSummary,
+  listWholesalerAvailability,
   listWholesalerClients,
   sellProfileForWholesaler,
   getProfileById,
@@ -86,21 +86,27 @@ router.post("/topup", async (req, res) => {
   }
 });
 
-// ── CATÁLOGO (precio mayorista, solo plataformas con stock asignado) ──
+// ── CATÁLOGO (precio mayorista) — TODO producto activo con precio
+// mayorista configurado, no solo lo preasignado: compra primero de su
+// stock dedicado si tiene, y si no, del mismo pool compartido que usa
+// retail (ver sellProfileForWholesaler). freeStock=0 igual se muestra,
+// con el producto deshabilitado para agregar al carrito — así el
+// mayorista ve el catálogo completo apenas el admin le pone precio.
 
 router.get("/catalog", (req, res) => {
-  const stock = listWholesalerStockSummary(wid(req)).filter(s => s.free > 0);
-  const products = listCatalogProducts(true);
+  const availability = listWholesalerAvailability(wid(req));
+  const products = listCatalogProducts(true).filter(p => Number(p.wholesalePrice) > 0);
 
-  const catalog = stock.map(s => {
-    const product = products.find(p => p.platform.trim().toUpperCase() === s.platform);
+  const catalog = products.map(product => {
+    const plat = product.platform.trim().toUpperCase();
+    const stock = availability.find(s => s.platform === plat);
     return {
-      platform:          s.platform,
-      title:             product?.title || s.platform,
-      wholesalePrice:    product?.wholesalePrice ?? "0",
-      wholesaleFullPrice: product?.wholesaleFullPrice ?? "0",
-      imageUrl:          product?.imageUrl ?? "",
-      freeStock:         s.free,
+      platform:          plat,
+      title:             product.title || plat,
+      wholesalePrice:    product.wholesalePrice,
+      wholesaleFullPrice: product.wholesaleFullPrice,
+      imageUrl:          product.imageUrl,
+      freeStock:         stock?.free ?? 0,
     };
   });
   res.json({ catalog });

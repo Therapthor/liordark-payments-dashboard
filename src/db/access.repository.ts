@@ -444,9 +444,14 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
 });
 
 /**
- * Igual que sellProfile, pero del inventario YA asignado a ese mayorista
- * (wholesaler_id = ?) — el mayorista no compra del pool de retail, vende
- * lo que el admin le asignó de antemano (Accesos > Asignar a mayorista).
+ * Vende a un sub-cliente del mayorista — prioriza el inventario YA
+ * asignado a él (wholesaler_id = ?, Accesos > Asignar a mayorista) y, si
+ * no tiene, cae al mismo pool compartido que usa el retail normal
+ * (wholesaler_id IS NULL). El perfil vendido SIEMPRE queda marcado con
+ * wholesaler_id = ese mayorista (aunque haya salido del pool compartido)
+ * para que aparezca correcto en su "Clientes" — como ya tiene client_phone
+ * puesto, sellProfile (retail) ya lo ignora de todas formas, así que esto
+ * no le quita nada a retail, solo deja bien atribuida la venta.
  * Marca seen_by_wholesaler = 0 para el badge "(n)" de Cuentas.
  */
 export const sellProfileForWholesaler = db.transaction((
@@ -462,9 +467,10 @@ export const sellProfileForWholesaler = db.transaction((
            a.password AS password, a.expires_at AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE a.platform = ? AND p.wholesaler_id = ? AND p.client_phone = ''
+    WHERE a.platform = ? AND p.client_phone = ''
+      AND (p.wholesaler_id = ? OR p.wholesaler_id IS NULL)
       AND a.expires_at IS NOT NULL AND a.expires_at >= ?
-    ORDER BY a.expires_at ASC
+    ORDER BY (p.wholesaler_id IS NULL) ASC, a.expires_at ASC
     LIMIT 1
   `).get(plat, wholesalerId, floor) as any;
 
@@ -472,25 +478,30 @@ export const sellProfileForWholesaler = db.transaction((
 
   db.prepare(`
     UPDATE access_profiles
-    SET client_phone = ?, order_ref = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
+    SET client_phone = ?, order_ref = ?, wholesaler_id = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
     WHERE id = ?
-  `).run(digits, orderRef, row.profileId);
+  `).run(digits, orderRef, wholesalerId, row.profileId);
 
   return row as SoldProfile;
 });
 
-/** Cuántos perfiles libres (sin cliente) tiene asignados ese mayorista, por plataforma. */
-export function listWholesalerStockSummary(wholesalerId: number): { platform: string; free: number; total: number }[] {
+/**
+ * Cuánto stock puede comprar este mayorista por plataforma: lo que ya
+ * tiene asignado de antemano + lo disponible del pool compartido de
+ * retail (mismo piso de MIN_SELLABLE_DAYS que sellProfile) — es lo mismo
+ * que vería sellProfileForWholesaler si vendiera ahora mismo.
+ */
+export function listWholesalerAvailability(wholesalerId: number): { platform: string; free: number }[] {
+  const floor = minSellableDateISO();
   return db.prepare(`
     SELECT a.platform AS platform,
-           SUM(CASE WHEN p.client_phone = '' THEN 1 ELSE 0 END) AS free,
-           COUNT(*) AS total
+           SUM(CASE WHEN p.client_phone = '' AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS free
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.wholesaler_id = ?
+    WHERE p.wholesaler_id = @wholesalerId OR p.wholesaler_id IS NULL
     GROUP BY a.platform
     ORDER BY a.platform ASC
-  `).all(wholesalerId) as { platform: string; free: number; total: number }[];
+  `).all({ wholesalerId, floor }) as { platform: string; free: number }[];
 }
 
 /** Asigna perfiles ya existentes (libres, sin dueño) a un mayorista — bulk, por ids. Admin-only. */
