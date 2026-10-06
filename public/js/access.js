@@ -522,7 +522,6 @@
   }
 
   async function releaseProfile(profileId, accountId) {
-    if (!confirm("¿Liberar este perfil? Se borrará el cliente asignado.")) return;
     await api("/profiles/" + profileId + "/release", { method: "POST" });
     refreshAccountInPlace(accountId);
   }
@@ -1038,7 +1037,6 @@
         const next = RENEWAL_NEXT[renewalBtn.dataset.status || ""];
         await api("/profiles/" + renewalBtn.dataset.profileId + "/renewal", { method: "POST", body: JSON.stringify({ status: next }) });
       } else if (releaseBtn) {
-        if (!confirm("¿Liberar este perfil? Se borrará el cliente asignado y el espacio queda disponible para otro.")) return;
         await api("/profiles/" + releaseBtn.dataset.profileId + "/release", { method: "POST" });
       } else {
         return;
