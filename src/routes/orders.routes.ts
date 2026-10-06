@@ -44,6 +44,27 @@ router.get("/approved", (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// POST /api/orders/sweep
+//
+// Barrido manual del botón 🧹 en "Pedidos pendientes" — proxy directo
+// a POST /api/dashboard/orders/sweep del bot (borra ahí, no acá).
+// ─────────────────────────────────────────────────────────────
+
+router.post("/sweep", async (_req, res) => {
+  try {
+    const response = await axios.post(
+      env.BOT_BASE_URL + "/api/dashboard/orders/sweep",
+      {},
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
+    );
+    res.status(response.status).json(response.data);
+  } catch (err: any) {
+    const status = err?.response?.status ?? 502;
+    res.status(status).json(err?.response?.data ?? { success: false, message: "No se pudo conectar con el bot." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
 // POST /api/orders/:orderName/<accion>
 //
 // Proxy directo al endpoint equivalente del bot — la lógica de

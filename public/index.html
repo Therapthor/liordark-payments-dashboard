@@ -123,7 +123,10 @@
           <div class="panel">
             <div class="panel-header">
               <h2>Pedidos pendientes</h2>
-              <span class="badge orders-count-badge" id="orders-pending-count">0</span>
+              <div class="panel-header-actions">
+                <span class="badge orders-count-badge" id="orders-pending-count">0</span>
+                <button id="orders-sweep-btn" class="btn-secondary btn-sm" type="button" title="Borra rechazados y pedidos ya confirmados que quedaron pegados — nunca toca comprobantes, pendientes de aprobar ni sin stock">🧹 Barrido</button>
+              </div>
             </div>
             <div class="feed-search">
               <input id="pending-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
