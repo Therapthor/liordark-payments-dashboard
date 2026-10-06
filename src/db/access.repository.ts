@@ -793,7 +793,14 @@ export function searchAccountsByEmail(term: string): AccessAccountWithProfiles[]
   return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
 }
 
-/** Perfiles (con su cuenta) cuyo teléfono de cliente coincide. */
+/**
+ * Perfiles (con su cuenta) cuyo teléfono de cliente coincide. Compara por
+ * los últimos 9 dígitos de AMBOS lados (como last9(), arriba) — no una
+ * comparación directa — porque el prefijo "51" varía según por dónde
+ * entró el dato: buscar "977 430 941" no encontraba a un cliente guardado
+ * como "51977430941" (el LIKE plano exigía que el teléfono guardado
+ * contuviera el término TAL CUAL se tipeó, sin ignorar el prefijo).
+ */
 export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
   const digits = term.replace(/\D/g, "");
   if (!digits) return [];
@@ -805,9 +812,9 @@ export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
            a.renewal_pending_at AS renewal_pending_at
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone LIKE ?
+    WHERE substr(p.client_phone, -9) LIKE '%' || substr(?, -9) || '%'
     ORDER BY a.expires_at ASC
-  `).all("%" + digits + "%") as any[];
+  `).all(digits) as any[];
 
   return rows.map(row => ({
     ...toProfile(row),

@@ -126,18 +126,53 @@
     });
   }
 
-  async function load() {
+  // Se guarda el último fetch para filtrar por celular sin golpear al
+  // servidor en cada tecla — mismo patrón que "Pedidos pendientes".
+  let cachedCustomers = [];
+  let searchDigits = "";
+
+  function renderList() {
     const list  = document.getElementById("web-customers-list");
     const empty = document.getElementById("web-customers-empty");
+    const filtered = searchDigits
+      ? cachedCustomers.filter(c => c.phone.replace(/\D/g, "").includes(searchDigits))
+      : cachedCustomers;
+
+    list.innerHTML = "";
+    if (filtered.length === 0) {
+      empty.hidden = false;
+      empty.textContent = searchDigits
+        ? "Sin resultados para ese número."
+        : "Todavía no se registró ningún cliente en liordark.com.";
+    } else {
+      empty.hidden = true;
+      filtered.forEach(c => list.appendChild(renderRow(c)));
+    }
+  }
+
+  function initSearch() {
+    const input    = document.getElementById("web-customers-search");
+    const clearBtn = document.getElementById("web-customers-search-clear");
+
+    input.addEventListener("input", () => {
+      searchDigits = input.value.replace(/\D/g, "");
+      clearBtn.hidden = !searchDigits;
+      renderList();
+    });
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      searchDigits = "";
+      clearBtn.hidden = true;
+      renderList();
+    });
+  }
+
+  async function load() {
+    const list = document.getElementById("web-customers-list");
     try {
       const { customers } = await api("/");
-      list.innerHTML = "";
-      if (!customers || customers.length === 0) {
-        empty.hidden = false;
-      } else {
-        empty.hidden = true;
-        customers.forEach(c => list.appendChild(renderRow(c)));
-      }
+      cachedCustomers = customers || [];
+      renderList();
     } catch (err) {
       list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
     }
@@ -195,6 +230,7 @@
   }
 
   initRowActions(document.getElementById("web-customers-list"));
+  initSearch();
 
   window.LiordarkWebCustomers = { load };
 })();
