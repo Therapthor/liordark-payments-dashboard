@@ -782,11 +782,10 @@
 
     const sweepBtn = document.getElementById("orders-sweep-btn");
     sweepBtn.addEventListener("click", async () => {
-      if (!confirm("¿Barrer pendientes? Se borran los rechazados y los ya confirmados que quedaron pegados. Comprobantes, pendientes de aprobar y sin stock NO se tocan.")) return;
       sweepBtn.disabled = true;
       try {
         const result = await api("/orders/sweep", { method: "POST" });
-        alert(result.removed > 0 ? `🧹 ${result.removed} pedido(s) eliminado(s).` : "Nada que barrer — no había rechazados ni confirmados pegados.");
+        alert(result.removed > 0 ? `🧹 ${result.removed} pedido(s) eliminado(s).` : "Nada que barrer.");
         loadPendingOrders();
       } catch (err) {
         alert(err.message || "No se pudo hacer el barrido.");
