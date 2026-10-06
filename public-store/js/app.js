@@ -61,7 +61,6 @@
     document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
     document.getElementById("back-to-start-from-login").addEventListener("click", () => showAuthCard("start-card"));
     document.getElementById("back-to-start-from-guest").addEventListener("click", () => showAuthCard("start-card"));
-    document.getElementById("show-renewals-btn").addEventListener("click", () => showRenewals(false));
   }
 
   function setFormError(id, message) {
@@ -599,114 +598,17 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RENOVACIONES — público, SIN login: el celular ya es la identidad que
-  // se usa en todo el negocio (WhatsApp, panel), así que alcanza con
-  // ponerlo para ver qué cuentas tiene y cuándo vencen. Nunca se muestra
-  // contraseña, solo correo (para reconocer la cuenta).
+  // RENOVACIONES — ahora solo desde Mis cuentas, por sesión (ya no hay
+  // lookup público por celular). El botón de "Renovar" en cada cuenta
+  // activa solo aparece con 1 día o menos para vencer (ver
+  // successAccountHtml / initDashboardRenewals, arriba).
   // ─────────────────────────────────────────────────────────────
-
-  let renewalsCameFromApp = false;
-  let cachedRenewalAccounts = [];
-  let renewalPhoneDigits = "";
-
-  function hideAllRenewalCards() {
-    ["renewal-lookup-card", "renewal-results-card"].forEach(id => {
-      document.getElementById(id).hidden = true;
-    });
-  }
-
-  function showRenewalCard(id) {
-    hideAllRenewalCards();
-    document.getElementById(id).hidden = false;
-  }
-
-  function showRenewals(fromApp) {
-    renewalsCameFromApp = !!fromApp;
-    document.getElementById("view-auth").hidden = true;
-    document.getElementById("view-app").hidden = true;
-    document.getElementById("view-renewals").hidden = false;
-
-    // Ya logueado — no tiene sentido volver a pedirle el celular, ya lo
-    // sabemos de su sesión. Directo a sus cuentas.
-    if (fromApp && currentPhone) {
-      loadRenewalAccounts(currentPhone);
-      return;
-    }
-
-    document.getElementById("renewal-lookup-form").reset();
-    setFormError("renewal-lookup-error", "");
-    showRenewalCard("renewal-lookup-card");
-  }
-
-  function backFromRenewals() {
-    document.getElementById("view-renewals").hidden = true;
-    if (renewalsCameFromApp) showApp(); else showAuth();
-  }
 
   function renewalStatusText(daysLeft) {
     if (daysLeft === null || daysLeft === undefined) return "";
     if (daysLeft < 0)  return `Venció hace ${Math.abs(daysLeft)} día(s)`;
     if (daysLeft === 0) return "Vence hoy";
     return `Vence en ${daysLeft} día(s)`;
-  }
-
-  function renewalAccountCardHtml(a, idx) {
-    const dueSoon = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 5;
-    const needsCanvaEmail = isCanvaPlatform(a.platform);
-    return `
-      <div class="renewal-account-card${dueSoon ? " renewal-account-card-due" : ""}">
-        <div class="renewal-account-head">
-          <span class="renewal-account-platform">${escapeHtml(a.platformTag || a.platform)}</span>
-          <span class="renewal-account-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
-        </div>
-        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
-        ${needsCanvaEmail ? `
-          <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar Canva">
-          <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
-        ` : ""}
-        <div class="renewal-account-footer">
-          <span class="renewal-account-price">${a.price ? "S/ " + escapeHtml(a.price) : ""}</span>
-          <button class="btn-primary btn-sm renewal-renew-btn" data-idx="${idx}" type="button">Renovar</button>
-        </div>
-      </div>
-    `;
-  }
-
-  async function loadRenewalAccounts(phone) {
-    try {
-      const { accounts } = await api("/renewals?phone=" + encodeURIComponent(phone));
-      cachedRenewalAccounts = accounts || [];
-      renewalPhoneDigits = phone.replace(/\D/g, "");
-
-      const list  = document.getElementById("renewal-accounts-list");
-      const empty = document.getElementById("renewal-accounts-empty");
-      if (cachedRenewalAccounts.length === 0) {
-        list.innerHTML = "";
-        empty.textContent = "No encontramos cuentas con ese celular. Si crees que es un error, escríbenos por soporte.";
-        empty.hidden = false;
-      } else {
-        empty.hidden = true;
-        list.innerHTML = cachedRenewalAccounts.map(renewalAccountCardHtml).join("");
-      }
-      showRenewalCard("renewal-results-card");
-    } catch (err) {
-      // Logueado: no hay a dónde mostrar el error salvo el propio resultado.
-      if (renewalsCameFromApp) {
-        document.getElementById("renewal-accounts-empty").hidden = false;
-        document.getElementById("renewal-accounts-empty").textContent = err.message;
-        document.getElementById("renewal-accounts-list").innerHTML = "";
-        showRenewalCard("renewal-results-card");
-      } else {
-        setFormError("renewal-lookup-error", err.message);
-      }
-    }
-  }
-
-  async function submitRenewalLookup(e) {
-    e.preventDefault();
-    setFormError("renewal-lookup-error", "");
-    const phone = document.getElementById("renewal-phone-input").value.trim();
-    await loadRenewalAccounts(phone);
   }
 
   async function startRenewalCheckout(platform, clientEmail) {
@@ -717,7 +619,7 @@
     try {
       const order = await api("/renewals/checkout", {
         method: "POST",
-        body: { phone: renewalPhoneDigits, platform, clientEmail },
+        body: { phone: currentPhone, platform, clientEmail },
       });
       await ensureYapeInfo();
 
@@ -742,35 +644,6 @@
       document.getElementById("checkout-error-text").textContent = err.message;
       showCheckoutState("error");
     }
-  }
-
-  function initRenewalsView() {
-    document.getElementById("topbar-renewals-btn").addEventListener("click", () => showRenewals(true));
-    document.getElementById("renewals-back-btn").addEventListener("click", backFromRenewals);
-    document.getElementById("renewals-back-btn-2").addEventListener("click", backFromRenewals);
-    document.getElementById("renewal-lookup-form").addEventListener("submit", submitRenewalLookup);
-    document.getElementById("renewal-accounts-list").addEventListener("click", (e) => {
-      const btn = e.target.closest(".renewal-renew-btn");
-      if (!btn) return;
-      const idx = Number(btn.dataset.idx);
-      const acc = cachedRenewalAccounts[idx];
-      if (!acc) return;
-
-      let clientEmail;
-      if (isCanvaPlatform(acc.platform)) {
-        const input   = document.querySelector(`.renewal-canva-email-input[data-idx="${idx}"]`);
-        const errorEl = document.querySelector(`.renewal-canva-email-error[data-idx="${idx}"]`);
-        clientEmail = input.value.trim();
-        if (!isValidEmail(clientEmail)) {
-          errorEl.textContent = "Escribe un correo válido para activar Canva.";
-          errorEl.hidden = false;
-          return;
-        }
-        errorEl.hidden = true;
-      }
-
-      startRenewalCheckout(acc.platform, clientEmail);
-    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -875,6 +748,10 @@
   }
 
   function successAccountHtml(a, idx) {
+    // Renovar solo aparece acá cuando falta 1 día o menos (o ya venció pero
+    // sigue activa) — antes no tiene sentido ofrecerlo.
+    const canRenew = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 1;
+    const needsCanvaEmail = canRenew && isCanvaPlatform(a.platform);
     return `
       <div class="success-account-card">
         <div class="success-account-head">
@@ -884,7 +761,42 @@
         <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
         <div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>
         ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
+        ${canRenew ? `
+          <div class="success-account-renew-box">
+            <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
+            ${needsCanvaEmail ? `
+              <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar Canva">
+              <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
+            ` : ""}
+            <button class="btn-primary btn-sm success-renew-btn" data-idx="${idx}" type="button">Renovar</button>
+          </div>
+        ` : ""}
       </div>`;
+  }
+
+  function initDashboardRenewals() {
+    document.getElementById("dashboard-active-list").addEventListener("click", (e) => {
+      const btn = e.target.closest(".success-renew-btn");
+      if (!btn) return;
+      const idx = Number(btn.dataset.idx);
+      const acc = cachedDashboard[idx];
+      if (!acc) return;
+
+      let clientEmail;
+      if (isCanvaPlatform(acc.platform)) {
+        const input   = document.querySelector(`.renewal-canva-email-input[data-idx="${idx}"]`);
+        const errorEl = document.querySelector(`.renewal-canva-email-error[data-idx="${idx}"]`);
+        clientEmail = input.value.trim();
+        if (!isValidEmail(clientEmail)) {
+          errorEl.textContent = "Escribe un correo válido para activar Canva.";
+          errorEl.hidden = false;
+          return;
+        }
+        errorEl.hidden = true;
+      }
+
+      startRenewalCheckout(acc.platform, clientEmail);
+    });
   }
 
   function accountCopyText(a) {
@@ -1012,7 +924,7 @@
     initCatalogClicks();
     initCheckoutModal();
     initProductDetailModal();
-    initRenewalsView();
+    initDashboardRenewals();
     initComboBuilder();
     initCodesView();
 

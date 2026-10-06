@@ -15,7 +15,8 @@
 
   <!-- ═══════════ GATE DE LOGIN/REGISTRO — nada se ve sin esto ═══════════ -->
   <section id="view-auth" class="view-auth">
-    <div class="auth-blob"></div>
+    <div class="auth-blob auth-blob-1"></div>
+    <div class="auth-blob auth-blob-2"></div>
     <div class="auth-wrap">
       <div class="brand brand-center">
         <img src="/assets/logo.webp" alt="Manguitope" class="brand-logo">
@@ -28,7 +29,6 @@
         <button class="btn-guest btn-block" id="show-guest-btn" type="button">🛒 Comprar sin cuenta</button>
         <button class="btn-primary btn-block" id="show-login-btn" type="button" style="margin-top:10px;">🔑 Ingresar</button>
         <div class="divider"><span>o</span></div>
-        <button class="btn-ghost btn-block" id="show-renewals-btn" type="button">¿Tu cuenta está por vencer? Revisala acá</button>
         <a href="https://mayorista.liordark.com" class="btn-gold-exclusive btn-block" id="wholesale-entry-btn">✨ Acceso Mayorista</a>
       </div>
 
@@ -75,9 +75,10 @@
         <button class="nav-btn active" data-view="catalog">Catálogo</button>
         <button class="nav-btn" data-view="dashboard">Mis cuentas</button>
         <a class="nav-support-btn" id="topbar-support-link" href="#" target="_blank" rel="noopener">💬 Soporte</a>
-        <button class="nav-btn nav-btn-ghost" id="topbar-renewals-btn" type="button">Renovaciones</button>
         <button class="nav-btn" data-view="codes" id="topbar-codes-btn" hidden>🔑 Códigos</button>
-        <button class="nav-btn nav-btn-ghost" id="logout-btn" type="button">Salir</button>
+        <button class="nav-btn-logout" id="logout-btn" type="button" title="Salir" aria-label="Salir">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
       </nav>
     </header>
 
@@ -116,39 +117,6 @@
       </section>
     </main>
   </div>
-
-  <!-- ═══════════ RENOVACIONES — público, sin login (solo celular) ═══════════ -->
-  <section id="view-renewals" class="view-auth" hidden>
-    <div class="auth-blob"></div>
-    <div class="auth-wrap">
-      <div class="brand brand-center">
-        <img src="/assets/logo.webp" alt="Manguitope" class="brand-logo">
-        <span class="brand-name">MANGUITOPE</span>
-      </div>
-
-      <div class="card auth-card" id="renewal-lookup-card">
-        <h1>Renovaciones</h1>
-        <p class="muted">Pon tu celular y te mostramos qué cuentas tienes y cuándo vencen</p>
-        <form id="renewal-lookup-form">
-          <label for="renewal-phone-input">Celular</label>
-          <input type="tel" id="renewal-phone-input" required placeholder="9XXXXXXXX" autocomplete="tel">
-          <p class="form-error" id="renewal-lookup-error" hidden></p>
-          <button type="submit" class="btn-primary btn-block">Buscar</button>
-        </form>
-        <div class="divider"><span>o</span></div>
-        <button class="btn-ghost btn-block" id="renewals-back-btn" type="button">← Volver</button>
-      </div>
-
-      <div class="card auth-card" id="renewal-results-card" hidden>
-        <h1>Tus cuentas</h1>
-        <p class="muted small">Solo se muestra el correo — nunca la contraseña.</p>
-        <div id="renewal-accounts-list" class="renewal-accounts-list"></div>
-        <p class="muted" id="renewal-accounts-empty" hidden>No encontramos cuentas con ese celular. Si crees que es un error, escríbenos por soporte.</p>
-        <div class="divider"><span>o</span></div>
-        <button class="btn-ghost btn-block" id="renewals-back-btn-2" type="button">← Volver</button>
-      </div>
-    </div>
-  </section>
 
   <!-- ═══════════ MODAL DE DETALLE DE PRODUCTO ═══════════ -->
   <div id="product-detail-modal" class="modal-backdrop" hidden>

@@ -100,11 +100,24 @@ a { color: var(--btn); }
 }
 .auth-blob {
   position: absolute;
-  top: -120px; right: -120px;
   width: 360px; height: 360px;
   border-radius: 50%;
   background: var(--accent2);
   opacity: .16;
+}
+.auth-blob-1 { top: -120px; right: -120px; animation: blobFloat1 14s ease-in-out infinite; }
+.auth-blob-2 {
+  bottom: -140px; left: -140px; width: 300px; height: 300px;
+  background: var(--accent); opacity: .12;
+  animation: blobFloat2 18s ease-in-out infinite;
+}
+@keyframes blobFloat1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-30px, 30px) scale(1.08); }
+}
+@keyframes blobFloat2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(25px, -25px) scale(1.1); }
 }
 .auth-wrap {
   position: relative;
@@ -188,6 +201,12 @@ a { color: var(--btn); }
 .nav-btn:hover { background: var(--chip-bg); color: var(--text); }
 .nav-btn.active { background: var(--accent); color: #fff; }
 .nav-btn-ghost { color: var(--muted); }
+.nav-btn-logout {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px;
+  border: none; background: transparent; color: var(--danger); cursor: pointer;
+}
+.nav-btn-logout:hover { background: rgba(209,55,61,.1); }
 .nav-support-btn {
   display: inline-flex; align-items: center;
   background: #25D366; color: #fff; text-decoration: none;
@@ -401,6 +420,8 @@ a { color: var(--btn); }
 .success-account-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; }
 .success-account-row { font-size: 13px; color: var(--text); word-break: break-all; }
+.success-account-renew-box { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 6px; }
+.success-account-renew-status { font-size: 12px; font-weight: 600; color: var(--btn); }
 
 .spinner {
   width: 16px; height: 16px; border-radius: 50%;
