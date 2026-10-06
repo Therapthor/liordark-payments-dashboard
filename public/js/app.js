@@ -784,12 +784,10 @@
     sweepBtn.addEventListener("click", async () => {
       sweepBtn.disabled = true;
       try {
-        const result = await api("/orders/sweep", { method: "POST" });
-        alert(result.removed > 0 ? `🧹 ${result.removed} pedido(s) eliminado(s).` : "Nada que barrer.");
+        await api("/orders/sweep", { method: "POST" });
         loadPendingOrders();
-      } catch (err) {
-        alert(err.message || "No se pudo hacer el barrido.");
-      } finally {
+      } catch { /* silencioso — la lista sigue mostrando lo último que había */ }
+      finally {
         sweepBtn.disabled = false;
       }
     });
