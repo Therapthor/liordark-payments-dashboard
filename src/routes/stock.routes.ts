@@ -245,11 +245,17 @@ router.post("/renewals/:orderName/confirm", (req, res) => {
   res.json({ success: true, found });
 });
 
-// ── CANVA — registro de la aprobación + alta en Accesos con vencimiento
-// a 365 días, para tener control total de las cuentas anuales (antes solo
-// quedaba en una bitácora aparte que no se veía en Accesos). ──
+// ── ACTIVACIÓN MANUAL (CANVA, GEMINI AI PRO, ...) — registro de la
+// aprobación + alta en Accesos con el vencimiento del plan, para tener
+// control total de estas cuentas (antes solo quedaba en una bitácora
+// aparte que no se veía en Accesos). El endpoint sigue llamándose
+// "canva-orders" por compatibilidad con el bot, pero ya es genérico
+// para cualquier plataforma de activación manual. ──
 
-const CANVA_PLAN_DAYS = 365;
+// CANVA se vende anual; el resto (ej. GEMINI AI PRO) se vende mensual.
+function manualActivationPlanDays(platform: string): number {
+  return /canva/i.test(platform) ? 365 : 30;
+}
 
 router.post("/canva-orders", (req, res) => {
   const { orderName, phone, clientEmail, platform } = req.body ?? {};
@@ -257,15 +263,16 @@ router.post("/canva-orders", (req, res) => {
     res.status(400).json({ message: "Faltan orderName o phone." });
     return;
   }
-  const email = typeof clientEmail === "string" ? clientEmail : "";
-  logCanvaOrder({ orderName, phone, clientEmail: email });
+  const email       = typeof clientEmail === "string" ? clientEmail : "";
+  const platformTag = typeof platform === "string" && platform.trim() ? platform : "CANVA ANUAL";
+  logCanvaOrder({ orderName, phone, clientEmail: email, platform: platformTag });
 
   if (email) {
     createAccountsBulk({
-      platform:    typeof platform === "string" && platform.trim() ? platform : "CANVA ANUAL",
+      platform:    platformTag,
       provider:    "",
       hasProfiles: false,
-      expiresAt:   addDaysISO(limaTodayISO(), CANVA_PLAN_DAYS),
+      expiresAt:   addDaysISO(limaTodayISO(), manualActivationPlanDays(platformTag)),
       pairs:       [{ email, password: "" }],
     });
   }

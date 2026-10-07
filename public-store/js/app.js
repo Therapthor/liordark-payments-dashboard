@@ -152,6 +152,18 @@
     return haystack.includes("anual");
   }
 
+  // Plataformas de activación manual (CANVA, GEMINI AI PRO) — se activan
+  // a mano con el correo del cliente, nunca con stock de perfiles. Van
+  // siempre en la sección "Exclusivos" aunque no sean anuales (ej. Gemini
+  // es mensual) — por eso esta sección ya no se basa solo en isAnnual.
+  function isManualActivationPlatform(platform) {
+    return /canva|gemini/i.test(platform || "");
+  }
+
+  function isExclusive(item, kind) {
+    return isAnnual(item) || (kind === "platform" && isManualActivationPlatform(item.platform));
+  }
+
   function productDesc(p, kind) {
     return kind === "combo"
       ? p.items.map(i => i.quantity > 1 ? `${i.platform} x${i.quantity}` : i.platform).join("\n")
@@ -271,15 +283,15 @@
       if (sortedProducts.filter(p => !isOutOfStock(p, "platform")).length >= MIN_CUSTOM_COMBO_ITEMS) {
         html += buildComboPromptHtml();
       }
-      const annualProducts    = sortedProducts.filter(p => isAnnual(p));
-      const nonAnnualProducts = sortedProducts.filter(p => !isAnnual(p));
-      if (annualProducts.length > 0) {
-        html += `<div class="section-chip section-chip-exclusive">✨ Anuales — Exclusivos ✨</div>`;
-        html += `<div class="product-grid product-grid-exclusive">${annualProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
+      const exclusiveProducts = sortedProducts.filter(p => isExclusive(p, "platform"));
+      const regularProducts   = sortedProducts.filter(p => !isExclusive(p, "platform"));
+      if (exclusiveProducts.length > 0) {
+        html += `<div class="section-chip section-chip-exclusive">✨ Exclusivos ✨</div>`;
+        html += `<div class="product-grid product-grid-exclusive">${exclusiveProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
       }
-      if (nonAnnualProducts.length > 0) {
+      if (regularProducts.length > 0) {
         html += `<div class="section-chip">Perfiles</div>`;
-        html += `<div class="product-grid">${nonAnnualProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
+        html += `<div class="product-grid">${regularProducts.map(p => productCardHtml(p, "platform")).join("")}</div>`;
       }
       container.innerHTML = html;
 
@@ -472,13 +484,6 @@
   // descripción y el botón de comprar aparecen acá, al hacer click.
   // ─────────────────────────────────────────────────────────────
 
-  // CANVA es la única plataforma que se activa a mano en Canva.com con el
-  // correo del cliente — no tiene nada que ver con su cuenta/login acá,
-  // es un dato de ESA orden nada más (como una contraseña de streaming).
-  function isCanvaPlatform(platform) {
-    return /canva/i.test(platform || "");
-  }
-
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
@@ -491,7 +496,7 @@
 
     const title = kind === "combo" ? item.name : item.title;
     const desc  = productDesc(item, kind);
-    const needsCanvaEmail = kind === "platform" && isCanvaPlatform(item.platform);
+    const needsCanvaEmail = kind === "platform" && isManualActivationPlatform(item.platform);
     const outOfStock = isOutOfStock(item, kind);
 
     document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
@@ -517,7 +522,7 @@
       if (needsCanvaEmail) {
         clientEmail = document.getElementById("detail-canva-email-input").value.trim();
         if (!isValidEmail(clientEmail)) {
-          setFormError("detail-canva-email-error", "Escribe un correo válido para activar Canva.");
+          setFormError("detail-canva-email-error", "Escribe un correo válido para activar " + item.platform + ".");
           return;
         }
       }
@@ -751,7 +756,7 @@
     // Renovar solo aparece acá cuando falta 1 día o menos (o ya venció pero
     // sigue activa) — antes no tiene sentido ofrecerlo.
     const canRenew = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 1;
-    const needsCanvaEmail = canRenew && isCanvaPlatform(a.platform);
+    const needsCanvaEmail = canRenew && isManualActivationPlatform(a.platform);
     return `
       <div class="success-account-card">
         <div class="success-account-head">
@@ -765,7 +770,7 @@
           <div class="success-account-renew-box">
             <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
             ${needsCanvaEmail ? `
-              <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar Canva">
+              <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar ${escapeHtml(a.platform)}">
               <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
             ` : ""}
             <button class="btn-primary btn-sm success-renew-btn" data-idx="${idx}" type="button">Renovar</button>
@@ -783,12 +788,12 @@
       if (!acc) return;
 
       let clientEmail;
-      if (isCanvaPlatform(acc.platform)) {
+      if (isManualActivationPlatform(acc.platform)) {
         const input   = document.querySelector(`.renewal-canva-email-input[data-idx="${idx}"]`);
         const errorEl = document.querySelector(`.renewal-canva-email-error[data-idx="${idx}"]`);
         clientEmail = input.value.trim();
         if (!isValidEmail(clientEmail)) {
-          errorEl.textContent = "Escribe un correo válido para activar Canva.";
+          errorEl.textContent = "Escribe un correo válido para activar " + acc.platform + ".";
           errorEl.hidden = false;
           return;
         }

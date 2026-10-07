@@ -35,17 +35,19 @@ function availabilityByPlatform(): Map<string, number> {
   return map;
 }
 
-// CANVA no tiene perfiles pre-cargados (se activa a mano por correo tras
-// cada pedido), así que su sellableCount real es siempre 0 — sin este
-// caso especial la web lo mostraría como "sin stock" permanentemente.
-function isUnlimitedPlatform(platform: string): boolean {
-  return /canva/i.test(platform);
+// CANVA y GEMINI AI PRO no tienen perfiles pre-cargados — se activan a
+// mano con el correo del cliente tras cada pedido. Mismo chequeo para
+// dos cosas: su sellableCount real es siempre 0 (sin este caso especial
+// la web las mostraría como "sin stock" permanentemente), y el checkout
+// exige el correo (sin eso el pedido no tiene forma de completarse).
+function isManualActivationPlatform(platform: string): boolean {
+  return /canva|gemini/i.test(platform);
 }
 
 // 999 en vez de Infinity: esto viaja como JSON y JSON.stringify(Infinity)
 // serializa a null, lo que volvería a mostrarlo como "sin stock".
 function availableFor(platform: string, stock: Map<string, number>): number {
-  if (isUnlimitedPlatform(platform)) return 999;
+  if (isManualActivationPlatform(platform)) return 999;
   return stock.get(platform.trim().toUpperCase()) ?? 0;
 }
 
@@ -105,10 +107,10 @@ router.post("/renewals/checkout", async (req, res) => {
     return res.status(400).json({ message: "Falta 'phone' o 'platform'." });
   }
 
-  // CANVA se activa a mano en Canva.com con el correo del cliente — igual
-  // que en una compra nueva, sin eso el pedido llega sin forma de completarse.
-  if (/canva/i.test(platform) && !clientEmail) {
-    return res.status(400).json({ message: "Falta el correo para activar Canva." });
+  // CANVA y GEMINI AI PRO se activan a mano con el correo del cliente —
+  // igual que en una compra nueva, sin eso el pedido llega sin forma de completarse.
+  if (isManualActivationPlatform(platform) && !clientEmail) {
+    return res.status(400).json({ message: "Falta el correo para activar " + platform + "." });
   }
 
   // Nunca renovar algo que ese celular no tiene — evita que cualquiera
@@ -256,10 +258,10 @@ router.post("/checkout", async (req, res) => {
     return res.status(400).json({ message: "Falta 'platform', 'comboId' o 'customComboPlatforms'." });
   }
 
-  // CANVA se activa a mano en Canva.com con el correo del cliente — sin
-  // eso el pedido llega sin forma de completarse.
-  if (platform && /canva/i.test(platform) && !clientEmail) {
-    return res.status(400).json({ message: "Falta el correo para activar Canva." });
+  // CANVA y GEMINI AI PRO se activan a mano con el correo del cliente —
+  // sin eso el pedido llega sin forma de completarse.
+  if (platform && isManualActivationPlatform(platform) && !clientEmail) {
+    return res.status(400).json({ message: "Falta el correo para activar " + platform + "." });
   }
 
   // Defensa por si algo saltea la validación del navegador (ej. una
