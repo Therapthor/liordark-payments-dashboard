@@ -8,10 +8,12 @@ import {
   listWholesalerAvailability,
   listWholesalerClients,
   sellProfileForWholesaler,
+  createManualActivationForWholesaler,
   getProfileById,
   getAccountById,
   releaseProfile,
   releaseProfilesByOrderRef,
+  deleteAccount,
   setProfileRenewal,
   markReminderSent,
   listExpiringClientsForWholesaler,
@@ -19,7 +21,18 @@ import {
 } from "../db/access.repository";
 import { getCatalogProductByPlatform, listCatalogProducts } from "../db/catalog.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
-import { renewAccount } from "../services/access.service";
+import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
+
+// CANVA y GEMINI AI PRO se activan a mano con el correo del cliente — no
+// tienen stock de perfiles, así que el catálogo mayorista las muestra
+// siempre "disponibles" y la compra pide el correo en vez de sacar de un
+// pool. CANVA se vende anual, el resto (ej. GEMINI AI PRO) mensual.
+function isManualActivationPlatform(platform: string): boolean {
+  return /canva|gemini/i.test(platform);
+}
+function manualActivationPlanDays(platform: string): number {
+  return /canva/i.test(platform) ? 365 : 30;
+}
 import {
   createFullAccountOrder,
   listFullAccountOrdersForWholesaler,
@@ -99,6 +112,7 @@ router.get("/catalog", (req, res) => {
   const catalog = products
     .map(product => {
       const plat = product.platform.trim().toUpperCase();
+      const manual = isManualActivationPlatform(plat);
       const stock = availability.find(s => s.platform === plat);
       return {
         platform:          plat,
@@ -106,7 +120,9 @@ router.get("/catalog", (req, res) => {
         wholesalePrice:    product.wholesalePrice,
         wholesaleFullPrice: product.wholesaleFullPrice,
         imageUrl:          product.imageUrl,
-        freeStock:         stock?.free ?? 0,
+        // CANVA/GEMINI no tienen perfiles pre-cargados — nunca "sin stock".
+        freeStock:         manual ? 999 : (stock?.free ?? 0),
+        requiresEmail:     manual,
       };
     })
     .filter(p => p.freeStock > 0);
@@ -123,9 +139,26 @@ router.post("/purchase", (req, res) => {
   const rawPlatforms: unknown[] = Array.isArray(req.body?.platforms) ? req.body.platforms : [];
   const platforms = rawPlatforms.map(p => String(p).trim().toUpperCase()).filter(Boolean);
   const clientPhone = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
+  const rawEmails: Record<string, unknown> = req.body?.emails && typeof req.body.emails === "object" ? req.body.emails : {};
 
   if (platforms.length === 0) return res.status(400).json({ message: "El carrito está vacío." });
   if (clientPhone.length < 9) return res.status(400).json({ message: "Celular del cliente inválido." });
+
+  // CANVA/GEMINI piden el correo del cliente final para activarlas a
+  // mano — una unidad por plataforma a la vez (cada una es un correo
+  // distinto), para no complicar el carrito con varios correos por ítem.
+  const emailByPlatform: Record<string, string> = {};
+  for (const platform of platforms) {
+    if (!isManualActivationPlatform(platform)) continue;
+    if (platforms.filter(p => p === platform).length > 1) {
+      return res.status(400).json({ message: `Compra "${platform}" de una en una — cada una necesita su propio correo.` });
+    }
+    const email = String(rawEmails[platform] ?? "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: `Falta un correo válido para activar "${platform}".` });
+    }
+    emailByPlatform[platform] = email;
+  }
 
   let totalCents = 0;
   for (const platform of platforms) {
@@ -144,8 +177,19 @@ router.post("/purchase", (req, res) => {
   }
 
   const sold: { platform: string; email: string; password: string }[] = [];
+  const createdManualAccountIds: number[] = [];
   const failedPlatforms: string[] = [];
   for (const platform of platforms) {
+    if (isManualActivationPlatform(platform)) {
+      const expiresAt = addDaysISO(limaTodayISO(), manualActivationPlanDays(platform));
+      const created = createManualActivationForWholesaler({
+        platform, email: emailByPlatform[platform], expiresAt,
+        wholesalerId, clientPhone, orderRef,
+      });
+      createdManualAccountIds.push(created.accountId);
+      sold.push({ platform, email: created.email, password: "" });
+      continue;
+    }
     const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef);
     if (result) {
       const account = getAccountById(result.accountId);
@@ -157,9 +201,12 @@ router.post("/purchase", (req, res) => {
 
   if (failedPlatforms.length > 0) {
     // Sin stock real para alguna plataforma (se agotó justo ahora) —
-    // se revierte TODO: libera lo que sí se vendió (mismo orderRef) y
+    // se revierte TODO: libera lo que sí se vendió (mismo orderRef),
+    // borra las de activación manual recién creadas (no tiene sentido
+    // dejar un correo ya invitado dando vueltas como "stock libre"), y
     // devuelve el crédito, para no dejar una compra parcial cobrada a medias.
     releaseProfilesByOrderRef(orderRef);
+    createdManualAccountIds.forEach(id => deleteAccount(id));
     applyWholesalerCreditChange(wholesalerId, totalCents, "purchase_profile", orderRef + ":revert", "system");
     return res.status(409).json({
       message: `Sin stock disponible para: ${failedPlatforms.join(", ")}. No se cobró nada.`,

@@ -35,6 +35,10 @@
     }[c]));
   }
 
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
   function setFormError(id, message) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -383,7 +387,11 @@
   }
 
   function handleSendClientAccount(client) {
-    const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${client.platform}*:\n\nCorreo: ${client.email || "—"}\nContraseña: ${client.password || "—"}\n\nCualquier duda me escribes por acá. 🙌`;
+    // CANVA/GEMINI no tienen contraseña (se activan a mano con el correo).
+    const credLine = client.password
+      ? `Correo: ${client.email || "—"}\nContraseña: ${client.password}`
+      : `Correo (pendiente de activar): ${client.email || "—"}`;
+    const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${client.platform}*:\n\n${credLine}\n\nCualquier duda me escribes por acá. 🙌`;
     window.open(waLink(client.clientPhone, msg), "_blank");
   }
 
@@ -518,7 +526,10 @@
     document.getElementById("cuentas-profiles-list").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-act='send']");
       if (!btn) return;
-      const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${btn.dataset.platform}*:\n\nCorreo: ${btn.dataset.email || "—"}\nContraseña: ${btn.dataset.password || "—"}\n\nCualquier duda me escribes por acá. 🙌`;
+      const credLine = btn.dataset.password
+        ? `Correo: ${btn.dataset.email || "—"}\nContraseña: ${btn.dataset.password}`
+        : `Correo (pendiente de activar): ${btn.dataset.email || "—"}`;
+      const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${btn.dataset.platform}*:\n\n${credLine}\n\nCualquier duda me escribes por acá. 🙌`;
       window.open(waLink(btn.dataset.phone, msg), "_blank");
     });
 
@@ -691,11 +702,15 @@
   function catalogCardHtml(p) {
     const qty = cartQtyFor(p.platform);
     const img = mediaHtml(p.imageUrl, (p.platform || "").slice(0, 3).toUpperCase());
+    // CANVA/GEMINI se activan a mano con el correo del cliente — una
+    // unidad a la vez (cada una es un correo distinto), nunca "disponibles".
+    const maxQty = p.requiresEmail ? 1 : p.freeStock;
+    const stockText = p.requiresEmail ? "Activación por correo" : `${p.freeStock} disponible${p.freeStock === 1 ? "" : "s"}`;
     const stepper = qty > 0
       ? `<div class="catalog-qty-stepper">
            <button class="qty-btn" data-act="dec" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Quitar uno">−</button>
            <span class="qty-value">${qty}</span>
-           <button class="qty-btn" data-act="inc" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Agregar uno" ${qty >= p.freeStock ? "disabled" : ""}>+</button>
+           <button class="qty-btn" data-act="inc" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Agregar uno" ${qty >= maxQty ? "disabled" : ""}>+</button>
          </div>`
       : `<button class="catalog-add-btn" data-act="inc" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Agregar al carrito">+</button>`;
     return `
@@ -704,7 +719,7 @@
         <div class="catalog-card-body">
           <div class="catalog-card-title">${escapeHtml(p.title)}</div>
           <div class="catalog-card-price">S/ ${escapeHtml(p.wholesalePrice)}</div>
-          <div class="catalog-card-stock">${p.freeStock} disponible${p.freeStock === 1 ? "" : "s"}</div>
+          <div class="catalog-card-stock">${stockText}</div>
         </div>
         ${stepper}
       </div>`;
@@ -778,13 +793,16 @@
   }
 
   function purchaseAccountCardHtml(a, idx) {
+    // CANVA/GEMINI no generan contraseña — se activan a mano con el
+    // correo, así que ese renglón no aplica (y el mensaje de WhatsApp
+    // tampoco debe ofrecer una contraseña vacía).
     return `
       <div class="success-account-card">
         <div class="success-account-head">
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
         </div>
         <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
-        <div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>
+        ${a.password ? `<div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>` : `<div class="muted small">Se activa a mano en ese correo — te avisamos cuando esté lista.</div>`}
         <div class="success-account-actions">
           <button class="btn-wa btn-xs" data-act="send" data-idx="${idx}" type="button">📧 Enviar</button>
           <button class="btn-ghost btn-xs" data-act="copy" data-idx="${idx}" type="button">📋 Copiar</button>
@@ -807,10 +825,11 @@
       const product = catalogItem(platform);
       if (!product) return;
       let item = cartItems.find(i => i.platform === platform);
+      const maxQty = product.requiresEmail ? 1 : product.freeStock;
       if (btn.dataset.act === "inc") {
         // Solo se agrega al carrito si de verdad hay stock para sumar —
         // antes se creaba el item en 0 igual, y quedaba un "×0" fantasma.
-        if ((item?.qty ?? 0) < product.freeStock) {
+        if ((item?.qty ?? 0) < maxQty) {
           if (!item) { item = { platform, qty: 0 }; cartItems.push(item); }
           item.qty++;
         }
@@ -825,6 +844,19 @@
       if (cartItems.length === 0) return;
       document.getElementById("cart-checkout-phone").value = "";
       setFormError("cart-checkout-error", "");
+
+      // CANVA/GEMINI piden el correo del cliente final — un input por
+      // cada una que esté en el carrito (siempre qty=1 para estas).
+      const emailItems = cartItems.filter(i => catalogItem(i.platform)?.requiresEmail);
+      document.getElementById("cart-checkout-emails").innerHTML = emailItems.map(i => {
+        const title = catalogItem(i.platform)?.title || i.platform;
+        return `
+          <label class="muted small" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}</label>
+          <input type="email" class="cart-checkout-email-input" id="cart-email-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
+            placeholder="cliente@correo.com" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+        `;
+      }).join("");
+
       document.getElementById("cart-checkout-modal").hidden = false;
     });
 
@@ -839,13 +871,23 @@
       const clientPhone = rawPhone.replace(/\D/g, "");
       if (clientPhone.length < 9) { setFormError("cart-checkout-error", "Celular del cliente inválido."); return; }
 
+      const emails = {};
+      for (const input of document.querySelectorAll(".cart-checkout-email-input")) {
+        const email = input.value.trim();
+        if (!isValidEmail(email)) {
+          setFormError("cart-checkout-error", "Escribe un correo válido para cada plataforma de activación manual.");
+          return;
+        }
+        emails[input.dataset.platform] = email;
+      }
+
       const platforms = [];
       cartItems.forEach(i => { for (let n = 0; n < i.qty; n++) platforms.push(i.platform); });
 
       const submitBtn = e.target.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       try {
-        const result = await api("/purchase", { method: "POST", body: { platforms, clientPhone } });
+        const result = await api("/purchase", { method: "POST", body: { platforms, clientPhone, emails } });
         document.getElementById("cart-checkout-modal").hidden = true;
         cartItems = [];
         showPurchaseSuccess(result.accounts, clientPhone);
@@ -865,11 +907,13 @@
       const account = lastPurchaseAccounts[Number(btn.dataset.idx)];
       if (!account) return;
       if (btn.dataset.act === "send") {
-        const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${account.platform}*:\n\nCorreo: ${account.email}\nContraseña: ${account.password}\n\n¡Gracias por tu compra! 🙌`;
+        const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
+        const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${account.platform}*:\n\n${credLine}\n\n¡Gracias por tu compra! 🙌`;
         window.open(waLink(lastPurchaseClientPhone, msg), "_blank");
       } else if (btn.dataset.act === "copy") {
         try {
-          await navigator.clipboard.writeText(`${account.platform}\nCorreo: ${account.email}\nContraseña: ${account.password}`);
+          const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
+          await navigator.clipboard.writeText(`${account.platform}\n${credLine}`);
           const original = btn.textContent;
           btn.textContent = "✅ Copiado";
           setTimeout(() => { btn.textContent = original; }, 1500);

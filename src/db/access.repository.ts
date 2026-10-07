@@ -486,6 +486,34 @@ export const sellProfileForWholesaler = db.transaction((
 });
 
 /**
+ * Alta de una plataforma de activación manual (CANVA, GEMINI AI PRO)
+ * comprada por un mayorista — no sale de ningún pool de stock (no hay
+ * perfiles pre-cargados para estas), se crea la cuenta directo con el
+ * correo del cliente final y queda atribuida a ese mayorista/cliente,
+ * igual que sellProfileForWholesaler. El admin la ve en Accesos con el
+ * correo ya puesto, lista para activar a mano.
+ */
+export const createManualActivationForWholesaler = db.transaction((params: {
+  platform: string; email: string; expiresAt: string;
+  wholesalerId: number; clientPhone: string; orderRef: string;
+}): { accountId: number; email: string } => {
+  const [account] = createAccountsBulk({
+    platform:    params.platform,
+    provider:    "",
+    hasProfiles: false,
+    expiresAt:   params.expiresAt,
+    pairs:       [{ email: params.email, password: "" }],
+  });
+  const digits = normalizePeruPhone(params.clientPhone);
+  db.prepare(`
+    UPDATE access_profiles
+    SET client_phone = ?, order_ref = ?, wholesaler_id = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(digits, params.orderRef, params.wholesalerId, account.profiles[0].id);
+  return { accountId: account.id, email: params.email };
+});
+
+/**
  * Cuánto stock puede comprar este mayorista por plataforma: lo que ya
  * tiene asignado de antemano + lo disponible del pool compartido de
  * retail (mismo piso de MIN_SELLABLE_DAYS que sellProfile) — es lo mismo
