@@ -159,6 +159,21 @@ CREATE TABLE IF NOT EXISTS renewals_log (
 );
 CREATE INDEX IF NOT EXISTS idx_renewals_order_name ON renewals_log(order_name);
 
+-- Registro de renovaciones YA HECHAS desde Accesos (botón "Renovar" de
+-- una cuenta) — una fila por cada cliente ocupando esa cuenta en el
+-- momento de renovarla. Para el resumen exportable "Renovados — registro".
+CREATE TABLE IF NOT EXISTS renewal_history_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id      INTEGER NOT NULL,
+  platform        TEXT    NOT NULL,
+  platform_tag    TEXT    NOT NULL DEFAULT '',
+  client_phone    TEXT    NOT NULL,
+  profile_name    TEXT    NOT NULL DEFAULT '',
+  new_expires_at  TEXT,
+  renewed_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_renewal_history_renewed_at ON renewal_history_log(renewed_at);
+
 -- Bitácora de activación manual (CANVA, GEMINI AI PRO, ...) — reemplaza
 -- el registro que se hacía en la hoja 'CANVA ANUAL'. Estas plataformas no
 -- usan el modelo de stock (access_accounts): el admin activa el plan a

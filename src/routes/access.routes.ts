@@ -26,6 +26,7 @@ import { renewAccount, accountStatus, daysLeft } from "../services/access.servic
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
+import { listRenewalHistory } from "../db/renewal-history.repository";
 import {
   setAccountCodesEnabled,
   listCodesEnabledAccounts,
@@ -325,6 +326,13 @@ router.post("/profiles/:id/renewal", (req, res) => {
 // cualquier cuenta, en un solo lugar (en vez de revisar cuenta por cuenta).
 router.get("/profiles/renewing", (_req, res) => {
   res.json({ profiles: listRenewingProfiles() });
+});
+
+// GET /renewal-history — registro permanente de renovaciones ya hechas
+// (quién estaba en la cuenta al apretar "Renovar"), para el resumen
+// exportable "Renovados — registro".
+router.get("/renewal-history", (_req, res) => {
+  res.json({ entries: listRenewalHistory() });
 });
 
 // ── BUSCADOR ──

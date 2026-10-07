@@ -5,6 +5,8 @@ import {
   setRenewalPending,
   type AccessAccountWithProfiles,
 } from "../db/access.repository";
+import { getCatalogProductByPlatform } from "../db/catalog.repository";
+import { logRenewalHistory } from "../db/renewal-history.repository";
 
 const RENEW_DAYS = 30;
 
@@ -66,7 +68,20 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
     ? account.expiresAt
     : limaTodayISO();
 
-  setAccountExpiry(id, addDaysISO(base, RENEW_DAYS));
+  const newExpiresAt = addDaysISO(base, RENEW_DAYS);
+  setAccountExpiry(id, newExpiresAt);
+
+  // Registro permanente — quién estaba ocupando la cuenta en el momento
+  // de renovarla, para el resumen exportable "Renovados — registro".
+  const platformTag = getCatalogProductByPlatform(account.platform)?.title || "";
+  logRenewalHistory(
+    account.profiles
+      .filter(p => p.clientPhone)
+      .map(p => ({
+        accountId: id, platform: account.platform, platformTag,
+        clientPhone: p.clientPhone, profileName: p.profileName, newExpiresAt,
+      }))
+  );
 
   // Ciclo nuevo, marca en blanco de nuevo — evita arrastrar un "renueva"
   // o "no renueva" que ya no aplica al período que recién empieza.

@@ -162,6 +162,7 @@
           </div>
           <button id="access-history-btn" class="btn-secondary">🗄 Historial</button>
           <button id="access-renewing-btn" class="btn-secondary">🔁 Renovados</button>
+          <button id="access-renewal-history-btn" class="btn-secondary">📋 Registro</button>
           <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
           <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
         </div>
@@ -826,8 +827,29 @@
         <button type="button" class="modal-x" data-close-modal="access-renewing-modal">✕</button>
       </div>
       <p class="panel-hint">De todas las cuentas, en un solo lugar — para no tener que revisar una por una.</p>
+      <div class="modal-export-actions">
+        <button type="button" class="btn-secondary btn-sm" id="access-renewing-export-txt">⬇️ Guardar .txt</button>
+        <button type="button" class="btn-secondary btn-sm" id="access-renewing-export-pdf">🖨️ Guardar PDF</button>
+      </div>
       <div id="access-renewing-body" class="modal-scroll-body"></div>
       <p id="access-renewing-empty" class="feed-empty" hidden>Nadie marcado "Renueva" todavía.</p>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: registro de renovados (ya hechas) ───────────── -->
+  <div id="access-renewal-history-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>Renovados — registro</h3>
+        <button type="button" class="modal-x" data-close-modal="access-renewal-history-modal">✕</button>
+      </div>
+      <p class="panel-hint">Clientes que ya renovaron, con qué servicio y cuándo — queda guardado para siempre, aunque la cuenta vuelva a vencer.</p>
+      <div class="modal-export-actions">
+        <button type="button" class="btn-secondary btn-sm" id="access-renewal-history-export-txt">⬇️ Guardar .txt</button>
+        <button type="button" class="btn-secondary btn-sm" id="access-renewal-history-export-pdf">🖨️ Guardar PDF</button>
+      </div>
+      <div id="access-renewal-history-body" class="modal-scroll-body"></div>
+      <p id="access-renewal-history-empty" class="feed-empty" hidden>Todavía no se renovó ninguna cuenta.</p>
     </div>
   </div>
 

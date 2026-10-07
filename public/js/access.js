@@ -1200,6 +1200,145 @@
       const p = cachedRenewingProfiles[Number(btn.dataset.idx)];
       if (p) viewRenewingAccount(p);
     });
+    document.getElementById("access-renewing-export-txt").addEventListener("click", exportRenewingTxt);
+    document.getElementById("access-renewing-export-pdf").addEventListener("click", exportRenewingPdf);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // EXPORTAR — resúmenes en .txt o PDF. El PDF no usa ninguna librería:
+  // abre una pestaña imprimible y dispara el diálogo de impresión del
+  // navegador, donde "Guardar como PDF" es una opción nativa.
+  // ─────────────────────────────────────────────────────────────
+
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function openPrintableSummary(title, tableHtml) {
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("El navegador bloqueó la ventana — habilita los popups para generar el PDF.");
+      return;
+    }
+    win.document.write(`
+      <!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+      <style>
+        body { font-family: -apple-system, Arial, sans-serif; padding: 24px; color: #222; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .muted { color: #777; font-size: 12px; margin-bottom: 18px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #ddd; }
+        th { color: #777; font-weight: 600; text-transform: uppercase; font-size: 11px; }
+      </style></head><body>
+        <h1>${title}</h1>
+        <p class="muted">Generado el ${new Date().toLocaleString("es-PE")}</p>
+        <table>${tableHtml}</table>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  }
+
+  function fmtDateTime(sqliteTs) {
+    try {
+      const iso = /[Zz]|[+-]\d\d:?\d\d$/.test(sqliteTs) ? sqliteTs : sqliteTs.replace(" ", "T") + "Z";
+      return new Date(iso).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" });
+    } catch {
+      return sqliteTs;
+    }
+  }
+
+  function exportRenewingTxt() {
+    const lines = [
+      "RESUMEN — Clientes marcados para renovar",
+      "Generado: " + new Date().toLocaleString("es-PE"),
+      "Total: " + cachedRenewingProfiles.length,
+      "",
+      ...cachedRenewingProfiles.map(p =>
+        `${p.platformTag || p.platform} · ${p.clientPhone} · Vence: ${fmtDateLong(p.expiresAt)}`
+      ),
+    ];
+    downloadTextFile("clientes-a-renovar.txt", lines.join("\n"));
+  }
+
+  function exportRenewingPdf() {
+    const rows = cachedRenewingProfiles.map(p => `
+      <tr><td>${escapeHtml(p.platformTag || p.platform)}</td><td>${escapeHtml(p.clientPhone)}</td><td>${escapeHtml(fmtDateLong(p.expiresAt))}</td></tr>
+    `).join("");
+    openPrintableSummary("Clientes marcados para renovar",
+      `<thead><tr><th>Plataforma</th><th>Celular</th><th>Vence</th></tr></thead><tbody>${rows}</tbody>`);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // REGISTRO DE RENOVADOS — historial permanente de renovaciones ya
+  // hechas (distinto de "marcado para renovar", que se borra apenas se
+  // renueva de verdad). Para llevar un control de quién renovó qué.
+  // ─────────────────────────────────────────────────────────────
+
+  let cachedRenewalHistory = [];
+
+  function renderRenewalHistoryItem(e) {
+    return `
+      <div class="access-history-item access-renewing-item">
+        <span class="access-history-platform">${escapeHtml(e.platformTag || e.platform)}</span>
+        <span class="text-muted">${escapeHtml(e.clientPhone)}</span>
+        <span class="text-muted">Renovado: ${fmtDateTime(e.renewedAt)}</span>
+      </div>
+    `;
+  }
+
+  async function loadRenewalHistory() {
+    const body  = document.getElementById("access-renewal-history-body");
+    const empty = document.getElementById("access-renewal-history-empty");
+    try {
+      const { entries } = await api("/renewal-history");
+      cachedRenewalHistory = entries;
+      body.innerHTML = entries.map(renderRenewalHistoryItem).join("");
+      empty.hidden = entries.length > 0;
+    } catch (err) {
+      body.innerHTML = "";
+      empty.hidden = false;
+      empty.textContent = "⚠️ No se pudo cargar: " + (err?.message || "error desconocido");
+    }
+  }
+
+  function exportRenewalHistoryTxt() {
+    const lines = [
+      "REGISTRO — Clientes que ya renovaron",
+      "Generado: " + new Date().toLocaleString("es-PE"),
+      "Total: " + cachedRenewalHistory.length,
+      "",
+      ...cachedRenewalHistory.map(e =>
+        `${e.platformTag || e.platform} · ${e.clientPhone} · Renovado: ${fmtDateTime(e.renewedAt)}`
+      ),
+    ];
+    downloadTextFile("renovados-registro.txt", lines.join("\n"));
+  }
+
+  function exportRenewalHistoryPdf() {
+    const rows = cachedRenewalHistory.map(e => `
+      <tr><td>${escapeHtml(e.platformTag || e.platform)}</td><td>${escapeHtml(e.clientPhone)}</td><td>${escapeHtml(fmtDateTime(e.renewedAt))}</td></tr>
+    `).join("");
+    openPrintableSummary("Clientes que ya renovaron",
+      `<thead><tr><th>Plataforma</th><th>Celular</th><th>Renovado</th></tr></thead><tbody>${rows}</tbody>`);
+  }
+
+  function initRenewalHistoryModal() {
+    document.getElementById("access-renewal-history-btn").addEventListener("click", () => {
+      document.getElementById("access-renewal-history-modal").hidden = false;
+      loadRenewalHistory();
+    });
+    document.getElementById("access-renewal-history-export-txt").addEventListener("click", exportRenewalHistoryTxt);
+    document.getElementById("access-renewal-history-export-pdf").addEventListener("click", exportRenewalHistoryPdf);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1362,6 +1501,7 @@
     initRenewNewModal();
     initHistoryModal();
     initRenewingModal();
+    initRenewalHistoryModal();
     initSearch();
     initClientSummarySend();
     initClientSummaryActions();

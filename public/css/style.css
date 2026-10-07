@@ -557,6 +557,8 @@ button, input {
 }
 .modal-head h3 { margin: 0; }
 
+.modal-export-actions { display: flex; gap: 8px; margin: 10px 0 4px; }
+
 .modal-x {
   background: transparent;
   border: none;
