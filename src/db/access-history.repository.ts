@@ -75,13 +75,17 @@ export type ArchivedAccountView = {
 export function listArchivedAccountsByPhone(clientPhone: string): ArchivedAccountView[] {
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return [];
+  const last9 = digits.slice(-9);
 
+  // El pre-filtro LIKE usa solo los últimos 9 dígitos (no "digits" completo)
+  // — si no, buscar con el "51" delante nunca encontraba a un cliente
+  // guardado SIN el prefijo (el patrón quedaba más largo que el valor).
   const rows = db.prepare(`
     SELECT platform, email, expires_at, profiles_json
     FROM access_accounts_history
-    WHERE profiles_json LIKE ?
+    WHERE profiles_json LIKE '%' || ? || '%'
     ORDER BY archived_at DESC LIMIT 500
-  `).all(`%${digits}%`) as any[];
+  `).all(last9) as any[];
 
   const result: ArchivedAccountView[] = [];
   for (const row of rows) {
@@ -91,7 +95,7 @@ export function listArchivedAccountsByPhone(clientPhone: string): ArchivedAccoun
       // Comparación por los últimos 9 dígitos — el mismo celular puede
       // haber quedado guardado con o sin el prefijo "51" según por dónde
       // entró el dato (ver listAccountsByClientPhone, mismo caso).
-      if (p.clientPhone.replace(/\D/g, "").slice(-9) === digits.slice(-9)) {
+      if (p.clientPhone.replace(/\D/g, "").slice(-9) === last9) {
         result.push({ platform: row.platform, email: row.email, expiresAt: row.expires_at ?? null, profileName: p.profileName });
       }
     }
@@ -99,9 +103,35 @@ export function listArchivedAccountsByPhone(clientPhone: string): ArchivedAccoun
   return result;
 }
 
-/** Busca por correo, plataforma, o teléfono de cliente (dentro del snapshot de perfiles). */
+/**
+ * Busca por correo, plataforma, o teléfono de cliente (dentro del
+ * snapshot de perfiles). Si el término parece celular, compara por los
+ * últimos 9 dígitos (mismo criterio que listArchivedAccountsByPhone) en
+ * vez de un LIKE literal — un LIKE plano solo encontraba el número si se
+ * tipeaba EXACTO como quedó guardado (con o sin "51", sin espacios);
+ * buscando "51 930 541 619" no encontraba a un cliente guardado como
+ * "51930541619" o "930541619".
+ */
 export function searchArchivedAccounts(term: string): ArchivedAccount[] {
-  const like = `%${term}%`;
+  const trimmed = term.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  const looksLikePhone = /^\+?[\d\s-]{6,}$/.test(trimmed) && digits.length >= 6;
+
+  if (looksLikePhone) {
+    const last9 = digits.slice(-9);
+    const rows = db.prepare(`
+      SELECT * FROM access_accounts_history
+      WHERE profiles_json LIKE '%' || ? || '%'
+      ORDER BY archived_at DESC LIMIT 500
+    `).all(last9) as any[];
+
+    return rows
+      .map(toArchived)
+      .filter(acc => acc.profiles.some(p => p.clientPhone.replace(/\D/g, "").slice(-9) === last9))
+      .slice(0, 200);
+  }
+
+  const like = `%${trimmed}%`;
   return (db.prepare(`
     SELECT * FROM access_accounts_history
     WHERE email LIKE ? OR platform LIKE ? OR profiles_json LIKE ?
