@@ -22,6 +22,8 @@ import {
 import { getCatalogProductByPlatform, listCatalogProducts } from "../db/catalog.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
+import { insertApprovedOrder } from "../db/orders.repository";
+import { emitDashboardEvent } from "../utils/live-events.util";
 
 // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM se activan a mano — no tienen
 // stock de perfiles, así que el catálogo mayorista las muestra siempre
@@ -234,6 +236,20 @@ router.post("/purchase", (req, res) => {
   }
 
   touchWholesalerActivity(wholesalerId);
+
+  // Espejo a "Aprobados recientes" del panel — antes una compra mayorista
+  // no dejaba ningún rastro ahí (solo las recargas de saldo lo hacían).
+  const wholesaler = findWholesalerById(wholesalerId);
+  const approvedText =
+    "✅ <b>Compra mayorista confirmada</b>\n\n" +
+    "🏪 " + (wholesaler?.displayName || "Mayorista #" + wholesalerId) + " (" + (wholesaler?.phone ?? "") + ")\n" +
+    "🎯 " + platforms.join(", ") + "\n" +
+    "👤 Cliente final: " + clientPhone + "\n" +
+    "💰 S/ " + (totalCents / 100).toFixed(2);
+  const createdAt = new Date().toISOString();
+  insertApprovedOrder(approvedText, createdAt);
+  emitDashboardEvent({ type: "order_approved", message: approvedText, createdAt });
+
   res.json({ ok: true, accounts: sold, totalCents });
 });
 

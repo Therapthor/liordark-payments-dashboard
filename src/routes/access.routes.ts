@@ -17,6 +17,8 @@ import {
   setRenewalPending,
   sellProfile,
   listRenewingProfiles,
+  listPendingActivations,
+  markActivationDone,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
   type RenewalStatus,
@@ -333,6 +335,20 @@ router.get("/profiles/renewing", (_req, res) => {
 // exportable "Renovados — registro".
 router.get("/renewal-history", (_req, res) => {
   res.json({ entries: listRenewalHistory() });
+});
+
+// ── ACTIVACIÓN MANUAL PENDIENTE (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM)
+// — se crea la cuenta sola en Accesos, pero alguien todavía tiene que ir
+// a la plataforma real a invitar el correo / loguearse y activar el plan.
+// Se muestra en "Pedidos pendientes" hasta que el admin la marca hecha. ──
+
+router.get("/activation-pending", (_req, res) => {
+  res.json({ pending: listPendingActivations() });
+});
+
+router.post("/activation-pending/:id/done", (req, res) => {
+  markActivationDone(Number(req.params.id));
+  res.json({ ok: true });
 });
 
 // ── BUSCADOR ──

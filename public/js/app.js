@@ -530,12 +530,20 @@
   // la pantalla con todas las plataformas que sí tienen)
   // ─────────────────────────────────────────────────────────────
 
+  // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM no tienen perfiles pre-cargados
+  // a propósito (se activan a mano por pedido) — su sellableCount es
+  // siempre 0, pero eso no significa que falte stock real, así que nunca
+  // deben salir en este aviso.
+  function isManualActivationPlatform(platform) {
+    return /canva|gemini|youtube/i.test(platform || "");
+  }
+
   async function loadStockAlert() {
     const list = document.getElementById("stock-alert-list");
     const ok   = document.getElementById("stock-alert-ok");
     try {
       const { platforms } = await api("/access/platforms");
-      const withoutStock = platforms.filter(p => p.sellableCount === 0);
+      const withoutStock = platforms.filter(p => p.sellableCount === 0 && !isManualActivationPlatform(p.platform));
 
       if (withoutStock.length === 0) {
         list.innerHTML = "";
@@ -683,23 +691,48 @@
     return li;
   }
 
+  // Activación manual pendiente (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM) —
+  // la cuenta ya existe en Accesos, pero alguien tiene que ir a la
+  // plataforma real a activarla a mano. Se mezcla con los pedidos del bot
+  // en la misma lista, con su propia etiqueta verde y un solo botón.
+  function renderActivationPendingItem(a) {
+    const li = document.createElement("li");
+    li.className = "feed-item";
+    const phones = (a.clientPhones || []).join(", ");
+    li.innerHTML = `
+      <span class="feed-badge activation-pending-badge"></span>
+      <div class="feed-main">
+        <div class="feed-name">${escapeHtml(a.platform)}${phones ? " · " + escapeHtml(phones) : ""}</div>
+        <div class="feed-time">${fmtTime(a.createdAt)} · <span class="activation-pending-label">🟢 Pendiente de activación</span></div>
+        <div class="feed-time">📧 ${escapeHtml(a.email)}</div>
+        ${a.password ? `<div class="feed-time">🔑 ${escapeHtml(a.password)}</div>` : ""}
+      </div>
+      <div class="pending-order-actions">
+        <button class="row-action activation-done-btn" data-account="${a.accountId}" title="Ya la activé en la plataforma">✅ Activada</button>
+      </div>
+    `;
+    return li;
+  }
+
   // Se guarda el último fetch para poder filtrar por celular sin
   // tener que golpear al bot de nuevo en cada tecla.
   let cachedPendingOrders = [];
+  let cachedPendingActivations = [];
   let pendingSearchDigits = "";
 
-  function renderPendingList(orders) {
+  function renderPendingList(orders, activations) {
     const list  = document.getElementById("orders-pending-list");
     const empty = document.getElementById("orders-pending-empty");
     const count = document.getElementById("orders-pending-count");
-    count.textContent = orders.length;
+    count.textContent = orders.length + activations.length;
     list.innerHTML = "";
-    if (orders.length === 0) {
+    if (orders.length === 0 && activations.length === 0) {
       empty.hidden = false;
       empty.textContent = pendingSearchDigits ? "Sin resultados para ese número." : "No hay pedidos pendientes 🎉";
       return;
     }
     empty.hidden = true;
+    for (const a of activations) list.appendChild(renderActivationPendingItem(a));
     for (const o of orders) list.appendChild(renderPendingOrder(o));
   }
 
@@ -716,8 +749,12 @@
 
   async function loadPendingOrders() {
     try {
-      const { orders } = await api("/orders/pending");
+      const [{ orders }, activationResult] = await Promise.all([
+        api("/orders/pending"),
+        api("/access/activation-pending").catch(() => ({ pending: [] })),
+      ]);
       cachedPendingOrders = orders.filter(o => !o.isRenewal);
+      cachedPendingActivations = activationResult.pending || [];
       applyPendingSearch();
       renderRenewalList(orders.filter(o => o.isRenewal));
     } catch {
@@ -726,10 +763,13 @@
   }
 
   function applyPendingSearch() {
-    const filtered = pendingSearchDigits
+    const orders = pendingSearchDigits
       ? cachedPendingOrders.filter(o => o.phone.replace(/\D/g, "").includes(pendingSearchDigits))
       : cachedPendingOrders;
-    renderPendingList(filtered);
+    const activations = pendingSearchDigits
+      ? cachedPendingActivations.filter(a => (a.clientPhones || []).some(p => p.replace(/\D/g, "").includes(pendingSearchDigits)))
+      : cachedPendingActivations;
+    renderPendingList(orders, activations);
   }
 
   function initPendingSearch() {
@@ -754,6 +794,20 @@
   // Se usa para "Pedidos pendientes" y "Renovaciones pendientes" por igual.
   function wireOrderActions(containerId) {
     document.getElementById(containerId).addEventListener("click", async (e) => {
+      const doneBtn = e.target.closest(".activation-done-btn");
+      if (doneBtn) {
+        doneBtn.disabled = true;
+        doneBtn.innerHTML = '<span class="btn-spinner"></span>';
+        try {
+          await api("/access/activation-pending/" + doneBtn.dataset.account + "/done", { method: "POST" });
+        } catch (err) {
+          alert(err.message || "No se pudo marcar como activada.");
+        } finally {
+          loadPendingOrders();
+        }
+        return;
+      }
+
       const btn = e.target.closest(".order-action-btn");
       if (!btn) return;
 

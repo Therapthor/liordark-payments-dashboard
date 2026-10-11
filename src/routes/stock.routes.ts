@@ -13,6 +13,7 @@ import {
   getAccountById,
   createManualActivationForClient,
   updateAccount,
+  markActivationPending,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft, limaTodayISO, addDaysISO } from "../services/access.service";
 import {
@@ -277,6 +278,7 @@ router.post("/canva-orders", (req, res) => {
     if (existing) {
       updateAccount(existing.id, password ? { email, password } : { email });
       renewAccount(existing.id);
+      markActivationPending(existing.id);
     } else {
       createManualActivationForClient({
         platform:    platformTag,

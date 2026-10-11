@@ -510,6 +510,7 @@ export const createManualActivationForWholesaler = db.transaction((params: {
     SET client_phone = ?, order_ref = ?, wholesaler_id = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
     WHERE id = ?
   `).run(digits, params.orderRef, params.wholesalerId, account.profiles[0].id);
+  markActivationPending(account.id);
   return { accountId: account.id, email: params.email };
 });
 
@@ -539,8 +540,57 @@ export const createManualActivationForClient = db.transaction((params: {
     SET client_phone = ?, order_ref = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(digits, params.orderRef, account.profiles[0].id);
+  markActivationPending(account.id);
   return { accountId: account.id, email: params.email };
 });
+
+// ─────────────────────────────────────────────────────────────
+// ACTIVACIÓN MANUAL PENDIENTE — queda marcada hasta que el admin confirme
+// que ya hizo la activación real en la plataforma (Canva/Gemini/YouTube).
+// Se muestra aparte en "Pedidos pendientes" (ver /access/activation-pending).
+// ─────────────────────────────────────────────────────────────
+
+export function markActivationPending(accountId: number): void {
+  db.prepare(`UPDATE access_accounts SET activation_pending = 1, updated_at = datetime('now') WHERE id = ?`).run(accountId);
+}
+
+export function markActivationDone(accountId: number): void {
+  db.prepare(`UPDATE access_accounts SET activation_pending = 0, updated_at = datetime('now') WHERE id = ?`).run(accountId);
+}
+
+export type PendingActivation = {
+  accountId:   number;
+  platform:    string;
+  email:       string;
+  password:    string;
+  clientPhones: string[];
+  expiresAt:   string | null;
+  createdAt:   string;
+};
+
+export function listPendingActivations(): PendingActivation[] {
+  const accounts = db.prepare(`
+    SELECT id, platform, email, password, expires_at, created_at
+    FROM access_accounts
+    WHERE activation_pending = 1
+    ORDER BY created_at ASC
+  `).all() as any[];
+
+  return accounts.map(a => {
+    const phones = (db.prepare(`
+      SELECT DISTINCT client_phone FROM access_profiles WHERE account_id = ? AND client_phone != ''
+    `).all(a.id) as any[]).map(r => r.client_phone);
+    return {
+      accountId:    a.id,
+      platform:     a.platform,
+      email:        a.email,
+      password:     a.password,
+      clientPhones: phones,
+      expiresAt:    a.expires_at,
+      createdAt:    a.created_at,
+    };
+  });
+}
 
 /**
  * Cuánto stock puede comprar este mayorista por plataforma: lo que ya

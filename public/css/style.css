@@ -346,6 +346,18 @@ button, input {
 .feed-badge.matched { background: var(--good); }
 .feed-badge.pending { background: var(--warning); }
 .feed-badge.expired { background: var(--critical); }
+.feed-badge.activation-pending-badge { background: var(--good); }
+
+.activation-pending-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--good);
+  background: rgba(22, 163, 74, 0.12);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
 
 .feed-status.matched { color: var(--good); }
 .feed-status.pending { color: var(--warning); }

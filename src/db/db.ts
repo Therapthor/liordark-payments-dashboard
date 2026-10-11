@@ -190,6 +190,13 @@ ensureColumn("customers", "password_plain", "password_plain TEXT NOT NULL DEFAUL
 // ─────────────────────────────────────────────────────────────
 ensureColumn("access_accounts", "codes_enabled", "codes_enabled INTEGER NOT NULL DEFAULT 0");
 
+// Activación manual (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM) — queda en 1
+// al crear/renovar la cuenta, hasta que el admin confirme que ya hizo la
+// activación real en la plataforma (invitar el correo, loguearse, etc.).
+// Antes esto no quedaba registrado en ningún lado — "Pedidos pendientes"
+// no mostraba nada y era fácil olvidar activarla.
+ensureColumn("access_accounts", "activation_pending", "activation_pending INTEGER NOT NULL DEFAULT 0");
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS account_codes (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
