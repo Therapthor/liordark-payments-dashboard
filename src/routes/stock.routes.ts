@@ -11,7 +11,8 @@ import {
   listAllClientPhones,
   getProfileById,
   getAccountById,
-  createAccountsBulk,
+  createManualActivationForClient,
+  updateAccount,
 } from "../db/access.repository";
 import { renewAccount, accountStatus, daysLeft, limaTodayISO, addDaysISO } from "../services/access.service";
 import {
@@ -245,36 +246,46 @@ router.post("/renewals/:orderName/confirm", (req, res) => {
   res.json({ success: true, found });
 });
 
-// ── ACTIVACIÓN MANUAL (CANVA, GEMINI AI PRO, ...) — registro de la
-// aprobación + alta en Accesos con el vencimiento del plan, para tener
-// control total de estas cuentas (antes solo quedaba en una bitácora
-// aparte que no se veía en Accesos). El endpoint sigue llamándose
-// "canva-orders" por compatibilidad con el bot, pero ya es genérico
-// para cualquier plataforma de activación manual. ──
+// ── ACTIVACIÓN MANUAL (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM, ...) —
+// registro de la aprobación + alta en Accesos con el vencimiento del
+// plan, para tener control total de estas cuentas (antes solo quedaba
+// en una bitácora aparte que no se veía en Accesos). El endpoint sigue
+// llamándose "canva-orders" por compatibilidad con el bot, pero ya es
+// genérico para cualquier plataforma de activación manual. ──
 
-// CANVA se vende anual; el resto (ej. GEMINI AI PRO) se vende mensual.
+// CANVA se vende anual; el resto (ej. GEMINI AI PRO, YOUTUBE PREMIUM) mensual.
 function manualActivationPlanDays(platform: string): number {
   return /canva/i.test(platform) ? 365 : 30;
 }
 
 router.post("/canva-orders", (req, res) => {
-  const { orderName, phone, clientEmail, platform } = req.body ?? {};
+  const { orderName, phone, clientEmail, clientPassword, platform } = req.body ?? {};
   if (!orderName?.trim() || !phone?.trim()) {
     res.status(400).json({ message: "Faltan orderName o phone." });
     return;
   }
   const email       = typeof clientEmail === "string" ? clientEmail : "";
+  const password    = typeof clientPassword === "string" ? clientPassword : "";
   const platformTag = typeof platform === "string" && platform.trim() ? platform : "CANVA ANUAL";
   logCanvaOrder({ orderName, phone, clientEmail: email, platform: platformTag });
 
   if (email) {
-    createAccountsBulk({
-      platform:    platformTag,
-      provider:    "",
-      hasProfiles: false,
-      expiresAt:   addDaysISO(limaTodayISO(), manualActivationPlanDays(platformTag)),
-      pairs:       [{ email, password: "" }],
-    });
+    // Si el cliente ya tiene una cuenta de esta plataforma (renovación), se
+    // extiende la misma en vez de crear otra — crear una cuenta nueva cada
+    // vez dejaría duplicados dando vueltas en Accesos y en "Mis cuentas".
+    const existing = findAccountByClientPhone(platformTag, phone);
+    if (existing) {
+      updateAccount(existing.id, password ? { email, password } : { email });
+      renewAccount(existing.id);
+    } else {
+      createManualActivationForClient({
+        platform:    platformTag,
+        email, password,
+        expiresAt:   addDaysISO(limaTodayISO(), manualActivationPlanDays(platformTag)),
+        clientPhone: phone,
+        orderRef:    orderName,
+      });
+    }
   }
 
   res.status(201).json({ success: true });

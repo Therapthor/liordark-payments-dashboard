@@ -35,13 +35,18 @@ function availabilityByPlatform(): Map<string, number> {
   return map;
 }
 
-// CANVA y GEMINI AI PRO no tienen perfiles pre-cargados — se activan a
-// mano con el correo del cliente tras cada pedido. Mismo chequeo para
-// dos cosas: su sellableCount real es siempre 0 (sin este caso especial
-// la web las mostraría como "sin stock" permanentemente), y el checkout
-// exige el correo (sin eso el pedido no tiene forma de completarse).
+// CANVA, GEMINI AI PRO y YOUTUBE PREMIUM no tienen perfiles pre-cargados
+// — se activan a mano tras cada pedido (YOUTUBE sobre la cuenta propia
+// del cliente, con su correo y contraseña). Mismo chequeo para dos
+// cosas: su sellableCount real es siempre 0 (sin este caso especial la
+// web las mostraría como "sin stock" permanentemente), y el checkout
+// exige el correo (y, para YOUTUBE, también la contraseña) — sin eso el
+// pedido no tiene forma de completarse.
 function isManualActivationPlatform(platform: string): boolean {
-  return /canva|gemini/i.test(platform);
+  return /canva|gemini|youtube/i.test(platform);
+}
+function requiresPasswordPlatform(platform: string): boolean {
+  return /youtube/i.test(platform);
 }
 
 // 999 en vez de Infinity: esto viaja como JSON y JSON.stringify(Infinity)
@@ -99,18 +104,23 @@ router.post("/renewals/checkout", async (req, res) => {
   // si no, un cliente que tipeó su celular sin el prefijo terminaría con
   // una orden/perfil sin el prefijo, y WhatsApp nunca le llegaría el
   // mensaje de confirmación (la API de Meta exige el número completo).
-  const phone       = normalizePeruPhone(String(req.body?.phone ?? ""));
-  const platform    = req.body?.platform ? String(req.body.platform).trim() : undefined;
-  const clientEmail = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const phone          = normalizePeruPhone(String(req.body?.phone ?? ""));
+  const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
+  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
   if (phone.length < 9 || !platform) {
     return res.status(400).json({ message: "Falta 'phone' o 'platform'." });
   }
 
-  // CANVA y GEMINI AI PRO se activan a mano con el correo del cliente —
-  // igual que en una compra nueva, sin eso el pedido llega sin forma de completarse.
+  // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM se activan a mano con el correo
+  // del cliente (YOUTUBE además con su contraseña) — igual que en una
+  // compra nueva, sin eso el pedido llega sin forma de completarse.
   if (isManualActivationPlatform(platform) && !clientEmail) {
     return res.status(400).json({ message: "Falta el correo para activar " + platform + "." });
+  }
+  if (requiresPasswordPlatform(platform) && !clientPassword) {
+    return res.status(400).json({ message: "Falta la contraseña para activar " + platform + "." });
   }
 
   // Nunca renovar algo que ese celular no tiene — evita que cualquiera
@@ -123,7 +133,7 @@ router.post("/renewals/checkout", async (req, res) => {
   try {
     const response = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
-      { phone, platform, clientEmail, isRenewal: true },
+      { phone, platform, clientEmail, clientPassword, isRenewal: true },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     res.json({ orderName: response.data.orderName, amount: response.data.amount });
@@ -241,9 +251,10 @@ router.post("/checkout", async (req, res) => {
     return res.status(401).json({ message: "Sesión inválida." });
   }
 
-  const platform    = req.body?.platform ? String(req.body.platform).trim() : undefined;
-  const comboId     = req.body?.comboId ? Number(req.body.comboId) : undefined;
-  const clientEmail = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
+  const comboId        = req.body?.comboId ? Number(req.body.comboId) : undefined;
+  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
   // Combo armado por el cliente ("¿Quieres armar tu combo? ¡Hazlo!") —
   // lista de plataformas elegidas, sin id de catálogo. Se valida y se
@@ -258,10 +269,14 @@ router.post("/checkout", async (req, res) => {
     return res.status(400).json({ message: "Falta 'platform', 'comboId' o 'customComboPlatforms'." });
   }
 
-  // CANVA y GEMINI AI PRO se activan a mano con el correo del cliente —
-  // sin eso el pedido llega sin forma de completarse.
+  // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM se activan a mano con el correo
+  // del cliente (YOUTUBE además con su contraseña) — sin eso el pedido
+  // llega sin forma de completarse.
   if (platform && isManualActivationPlatform(platform) && !clientEmail) {
     return res.status(400).json({ message: "Falta el correo para activar " + platform + "." });
+  }
+  if (platform && requiresPasswordPlatform(platform) && !clientPassword) {
+    return res.status(400).json({ message: "Falta la contraseña para activar " + platform + "." });
   }
 
   // Defensa por si algo saltea la validación del navegador (ej. una
@@ -313,7 +328,7 @@ router.post("/checkout", async (req, res) => {
       env.BOT_BASE_URL + "/api/web-orders",
       {
         phone: normalizePeruPhone(customer.phone),
-        platform, comboId, clientEmail,
+        platform, comboId, clientEmail, clientPassword,
         customCombo: customComboPlatforms
           ? {
               platforms:  customComboPlatforms,

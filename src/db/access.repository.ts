@@ -494,7 +494,7 @@ export const sellProfileForWholesaler = db.transaction((
  * correo ya puesto, lista para activar a mano.
  */
 export const createManualActivationForWholesaler = db.transaction((params: {
-  platform: string; email: string; expiresAt: string;
+  platform: string; email: string; password?: string; expiresAt: string;
   wholesalerId: number; clientPhone: string; orderRef: string;
 }): { accountId: number; email: string } => {
   const [account] = createAccountsBulk({
@@ -502,7 +502,7 @@ export const createManualActivationForWholesaler = db.transaction((params: {
     provider:    "",
     hasProfiles: false,
     expiresAt:   params.expiresAt,
-    pairs:       [{ email: params.email, password: "" }],
+    pairs:       [{ email: params.email, password: params.password ?? "" }],
   });
   const digits = normalizePeruPhone(params.clientPhone);
   db.prepare(`
@@ -510,6 +510,35 @@ export const createManualActivationForWholesaler = db.transaction((params: {
     SET client_phone = ?, order_ref = ?, wholesaler_id = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
     WHERE id = ?
   `).run(digits, params.orderRef, params.wholesalerId, account.profiles[0].id);
+  return { accountId: account.id, email: params.email };
+});
+
+/**
+ * Misma idea que createManualActivationForWholesaler pero para un cliente
+ * RETAIL (liordark.com/WhatsApp) — sin wholesaler_id. Antes de esto, el
+ * endpoint /canva-orders creaba la cuenta sin dueño (sin client_phone), así
+ * que CANVA/GEMINI comprados por un cliente normal nunca aparecían en su
+ * "Mis cuentas" ni se podían renovar desde ahí — se detectó al agregar
+ * YOUTUBE PREMIUM (que sí necesita mostrarse ahí) y se corrige acá para
+ * las tres plataformas de activación manual por igual.
+ */
+export const createManualActivationForClient = db.transaction((params: {
+  platform: string; email: string; password?: string; expiresAt: string;
+  clientPhone: string; orderRef: string;
+}): { accountId: number; email: string } => {
+  const [account] = createAccountsBulk({
+    platform:    params.platform,
+    provider:    "",
+    hasProfiles: false,
+    expiresAt:   params.expiresAt,
+    pairs:       [{ email: params.email, password: params.password ?? "" }],
+  });
+  const digits = normalizePeruPhone(params.clientPhone);
+  db.prepare(`
+    UPDATE access_profiles
+    SET client_phone = ?, order_ref = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(digits, params.orderRef, account.profiles[0].id);
   return { accountId: account.id, email: params.email };
 });
 

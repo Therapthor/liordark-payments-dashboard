@@ -645,6 +645,7 @@
         <div class="feed-name">${escapeHtml(orderPlatformLabel(o))} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
         ${o.clientEmail ? `<div class="feed-time">📧 ${escapeHtml(o.clientEmail)}</div>` : ""}
+        ${o.clientPassword ? `<div class="feed-time">🔑 ${escapeHtml(o.clientPassword)}</div>` : ""}
         ${yapeConfirmedBadge(o)}
       </div>
       <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>
@@ -668,6 +669,7 @@
         <div class="feed-name">${escapeHtml(o.platform)} · ${escapeHtml(o.phone)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)} · <span class="feed-status ${cls}">${escapeHtml(ORDER_STATUS_LABEL[o.status] || o.status)}</span></div>
         ${o.clientEmail ? `<div class="feed-time">📧 ${escapeHtml(o.clientEmail)}</div>` : ""}
+        ${o.clientPassword ? `<div class="feed-time">🔑 ${escapeHtml(o.clientPassword)}</div>` : ""}
         ${yapeConfirmedBadge(o)}
       </div>
       <div class="feed-amount">${moneyValueHtml("S/ " + o.price)}</div>

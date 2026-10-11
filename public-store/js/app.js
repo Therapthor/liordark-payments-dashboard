@@ -152,12 +152,19 @@
     return haystack.includes("anual");
   }
 
-  // Plataformas de activación manual (CANVA, GEMINI AI PRO) — se activan
-  // a mano con el correo del cliente, nunca con stock de perfiles. Van
+  // Plataformas de activación manual (CANVA, GEMINI AI PRO, YOUTUBE
+  // PREMIUM) — se activan a mano, nunca con stock de perfiles. Van
   // siempre en la sección "Exclusivos" aunque no sean anuales (ej. Gemini
   // es mensual) — por eso esta sección ya no se basa solo en isAnnual.
   function isManualActivationPlatform(platform) {
-    return /canva|gemini/i.test(platform || "");
+    return /canva|gemini|youtube/i.test(platform || "");
+  }
+
+  // YOUTUBE PREMIUM se activa sobre la cuenta propia del cliente — a
+  // diferencia de Canva/Gemini (solo correo, invitación), necesita
+  // también la contraseña para poder entrar y activar el plan.
+  function requiresPasswordPlatform(platform) {
+    return /youtube/i.test(platform || "");
   }
 
   function isExclusive(item, kind) {
@@ -497,6 +504,7 @@
     const title = kind === "combo" ? item.name : item.title;
     const desc  = productDesc(item, kind);
     const needsCanvaEmail = kind === "platform" && isManualActivationPlatform(item.platform);
+    const needsPassword   = kind === "platform" && requiresPasswordPlatform(item.platform);
     const outOfStock = isOutOfStock(item, kind);
 
     document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
@@ -509,6 +517,10 @@
     document.getElementById("detail-canva-email-input").value = "";
     setFormError("detail-canva-email-error", "");
 
+    document.getElementById("detail-canva-password").hidden = !needsPassword;
+    document.getElementById("detail-canva-password-input").value = "";
+    setFormError("detail-canva-password-error", "");
+
     // Sin stock: se puede pagar igual para reservar — el pedido queda
     // pendiente y se entrega automático apenas el admin cargue stock
     // nuevo de esa plataforma (el bot revisa cada pocos minutos).
@@ -519,6 +531,7 @@
     buyBtn.textContent = outOfStock ? "Reservar" : "Comprar";
     buyBtn.onclick = () => {
       let clientEmail;
+      let clientPassword;
       if (needsCanvaEmail) {
         clientEmail = document.getElementById("detail-canva-email-input").value.trim();
         if (!isValidEmail(clientEmail)) {
@@ -526,8 +539,15 @@
           return;
         }
       }
+      if (needsPassword) {
+        clientPassword = document.getElementById("detail-canva-password-input").value;
+        if (!clientPassword.trim()) {
+          setFormError("detail-canva-password-error", "Escribe la contraseña de esa cuenta.");
+          return;
+        }
+      }
       closeProductDetail();
-      startCheckout({ kind, id, clientEmail });
+      startCheckout({ kind, id, clientEmail, clientPassword });
     };
 
     document.getElementById("product-detail-modal").hidden = false;
@@ -616,7 +636,7 @@
     return `Vence en ${daysLeft} día(s)`;
   }
 
-  async function startRenewalCheckout(platform, clientEmail) {
+  async function startRenewalCheckout(platform, clientEmail, clientPassword) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -624,7 +644,7 @@
     try {
       const order = await api("/renewals/checkout", {
         method: "POST",
-        body: { phone: currentPhone, platform, clientEmail },
+        body: { phone: currentPhone, platform, clientEmail, clientPassword },
       });
       await ensureYapeInfo();
 
@@ -683,7 +703,7 @@
     }
   }
 
-  async function startCheckout({ kind, id, clientEmail }) {
+  async function startCheckout({ kind, id, clientEmail, clientPassword }) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -696,7 +716,7 @@
 
     try {
       const beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
-      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail };
+      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword };
       const order = await api("/checkout", { method: "POST", body });
 
       await ensureYapeInfo();
@@ -757,6 +777,7 @@
     // sigue activa) — antes no tiene sentido ofrecerlo.
     const canRenew = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 1;
     const needsCanvaEmail = canRenew && isManualActivationPlatform(a.platform);
+    const needsRenewPassword = canRenew && requiresPasswordPlatform(a.platform);
     return `
       <div class="success-account-card">
         <div class="success-account-head">
@@ -773,6 +794,10 @@
               <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar ${escapeHtml(a.platform)}">
               <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
             ` : ""}
+            ${needsRenewPassword ? `
+              <input type="password" class="renewal-canva-password-input" data-idx="${idx}" placeholder="Contraseña de esa cuenta">
+              <p class="form-error renewal-canva-password-error" data-idx="${idx}" hidden></p>
+            ` : ""}
             <button class="btn-primary btn-sm success-renew-btn" data-idx="${idx}" type="button">Renovar</button>
           </div>
         ` : ""}
@@ -788,6 +813,7 @@
       if (!acc) return;
 
       let clientEmail;
+      let clientPassword;
       if (isManualActivationPlatform(acc.platform)) {
         const input   = document.querySelector(`.renewal-canva-email-input[data-idx="${idx}"]`);
         const errorEl = document.querySelector(`.renewal-canva-email-error[data-idx="${idx}"]`);
@@ -799,8 +825,19 @@
         }
         errorEl.hidden = true;
       }
+      if (requiresPasswordPlatform(acc.platform)) {
+        const input   = document.querySelector(`.renewal-canva-password-input[data-idx="${idx}"]`);
+        const errorEl = document.querySelector(`.renewal-canva-password-error[data-idx="${idx}"]`);
+        clientPassword = input.value;
+        if (!clientPassword.trim()) {
+          errorEl.textContent = "Escribe la contraseña de esa cuenta.";
+          errorEl.hidden = false;
+          return;
+        }
+        errorEl.hidden = true;
+      }
 
-      startRenewalCheckout(acc.platform, clientEmail);
+      startRenewalCheckout(acc.platform, clientEmail, clientPassword);
     });
   }
 

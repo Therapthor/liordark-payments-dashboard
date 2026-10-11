@@ -23,12 +23,16 @@ import { getCatalogProductByPlatform, listCatalogProducts } from "../db/catalog.
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
 
-// CANVA y GEMINI AI PRO se activan a mano con el correo del cliente — no
-// tienen stock de perfiles, así que el catálogo mayorista las muestra
-// siempre "disponibles" y la compra pide el correo en vez de sacar de un
-// pool. CANVA se vende anual, el resto (ej. GEMINI AI PRO) mensual.
+// CANVA, GEMINI AI PRO y YOUTUBE PREMIUM se activan a mano — no tienen
+// stock de perfiles, así que el catálogo mayorista las muestra siempre
+// "disponibles" y la compra pide correo (y, para YOUTUBE, también
+// contraseña: la activación es sobre la cuenta propia del cliente) en
+// vez de sacar de un pool. CANVA se vende anual, el resto mensual.
 function isManualActivationPlatform(platform: string): boolean {
-  return /canva|gemini/i.test(platform);
+  return /canva|gemini|youtube/i.test(platform);
+}
+function requiresPasswordPlatform(platform: string): boolean {
+  return /youtube/i.test(platform);
 }
 function manualActivationPlanDays(platform: string): number {
   return /canva/i.test(platform) ? 365 : 30;
@@ -120,9 +124,10 @@ router.get("/catalog", (req, res) => {
         wholesalePrice:    product.wholesalePrice,
         wholesaleFullPrice: product.wholesaleFullPrice,
         imageUrl:          product.imageUrl,
-        // CANVA/GEMINI no tienen perfiles pre-cargados — nunca "sin stock".
+        // CANVA/GEMINI/YOUTUBE no tienen perfiles pre-cargados — nunca "sin stock".
         freeStock:         manual ? 999 : (stock?.free ?? 0),
         requiresEmail:     manual,
+        requiresPassword:  requiresPasswordPlatform(plat),
       };
     })
     .filter(p => p.freeStock > 0);
@@ -140,24 +145,35 @@ router.post("/purchase", (req, res) => {
   const platforms = rawPlatforms.map(p => String(p).trim().toUpperCase()).filter(Boolean);
   const clientPhone = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
   const rawEmails: Record<string, unknown> = req.body?.emails && typeof req.body.emails === "object" ? req.body.emails : {};
+  const rawPasswords: Record<string, unknown> = req.body?.passwords && typeof req.body.passwords === "object" ? req.body.passwords : {};
 
   if (platforms.length === 0) return res.status(400).json({ message: "El carrito está vacío." });
   if (clientPhone.length < 9) return res.status(400).json({ message: "Celular del cliente inválido." });
 
-  // CANVA/GEMINI piden el correo del cliente final para activarlas a
-  // mano — una unidad por plataforma a la vez (cada una es un correo
-  // distinto), para no complicar el carrito con varios correos por ítem.
+  // CANVA/GEMINI/YOUTUBE piden el correo del cliente final para activarlas a
+  // mano (YOUTUBE además la contraseña, se activa sobre la cuenta propia) —
+  // una unidad por plataforma a la vez (cada una es una activación
+  // distinta), para no complicar el carrito con varias credenciales por ítem.
   const emailByPlatform: Record<string, string> = {};
+  const passwordByPlatform: Record<string, string> = {};
   for (const platform of platforms) {
     if (!isManualActivationPlatform(platform)) continue;
     if (platforms.filter(p => p === platform).length > 1) {
-      return res.status(400).json({ message: `Compra "${platform}" de una en una — cada una necesita su propio correo.` });
+      return res.status(400).json({ message: `Compra "${platform}" de una en una — cada una necesita su propia activación.` });
     }
     const email = String(rawEmails[platform] ?? "").trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: `Falta un correo válido para activar "${platform}".` });
     }
     emailByPlatform[platform] = email;
+
+    if (requiresPasswordPlatform(platform)) {
+      const password = String(rawPasswords[platform] ?? "").trim();
+      if (!password) {
+        return res.status(400).json({ message: `Falta la contraseña para activar "${platform}".` });
+      }
+      passwordByPlatform[platform] = password;
+    }
   }
 
   let totalCents = 0;
@@ -183,7 +199,7 @@ router.post("/purchase", (req, res) => {
     if (isManualActivationPlatform(platform)) {
       const expiresAt = addDaysISO(limaTodayISO(), manualActivationPlanDays(platform));
       const created = createManualActivationForWholesaler({
-        platform, email: emailByPlatform[platform], expiresAt,
+        platform, email: emailByPlatform[platform], password: passwordByPlatform[platform], expiresAt,
         wholesalerId, clientPhone, orderRef,
       });
       createdManualAccountIds.push(created.accountId);

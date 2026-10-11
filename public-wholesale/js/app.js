@@ -845,15 +845,23 @@
       document.getElementById("cart-checkout-phone").value = "";
       setFormError("cart-checkout-error", "");
 
-      // CANVA/GEMINI piden el correo del cliente final — un input por
-      // cada una que esté en el carrito (siempre qty=1 para estas).
+      // CANVA/GEMINI/YOUTUBE piden el correo del cliente final — un input
+      // por cada una que esté en el carrito (siempre qty=1 para estas).
+      // YOUTUBE además pide la contraseña (se activa sobre la cuenta
+      // propia del cliente, no una invitación).
       const emailItems = cartItems.filter(i => catalogItem(i.platform)?.requiresEmail);
       document.getElementById("cart-checkout-emails").innerHTML = emailItems.map(i => {
         const title = catalogItem(i.platform)?.title || i.platform;
+        const needsPassword = !!catalogItem(i.platform)?.requiresPassword;
         return `
           <label class="muted small" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}</label>
           <input type="email" class="cart-checkout-email-input" id="cart-email-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
             placeholder="cliente@correo.com" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+          ${needsPassword ? `
+            <label class="muted small" for="cart-password-${escapeHtml(i.platform)}">Contraseña de esa cuenta</label>
+            <input type="password" class="cart-checkout-password-input" id="cart-password-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
+              placeholder="Contraseña" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+          ` : ""}
         `;
       }).join("");
 
@@ -881,13 +889,23 @@
         emails[input.dataset.platform] = email;
       }
 
+      const passwords = {};
+      for (const input of document.querySelectorAll(".cart-checkout-password-input")) {
+        const password = input.value;
+        if (!password.trim()) {
+          setFormError("cart-checkout-error", "Escribe la contraseña de la cuenta a activar.");
+          return;
+        }
+        passwords[input.dataset.platform] = password;
+      }
+
       const platforms = [];
       cartItems.forEach(i => { for (let n = 0; n < i.qty; n++) platforms.push(i.platform); });
 
       const submitBtn = e.target.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       try {
-        const result = await api("/purchase", { method: "POST", body: { platforms, clientPhone, emails } });
+        const result = await api("/purchase", { method: "POST", body: { platforms, clientPhone, emails, passwords } });
         document.getElementById("cart-checkout-modal").hidden = true;
         cartItems = [];
         showPurchaseSuccess(result.accounts, clientPhone);
