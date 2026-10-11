@@ -167,6 +167,12 @@
     return /youtube/i.test(platform || "");
   }
 
+  // YOUTUBE PREMIUM no es renovable — cada ciclo es una compra nueva, así
+  // que en "Mis cuentas" no se ofrece "Renovar", se avisa con una etiqueta.
+  function isNonRenewablePlatform(platform) {
+    return /youtube/i.test(platform || "");
+  }
+
   function isExclusive(item, kind) {
     return isAnnual(item) || (kind === "platform" && isManualActivationPlatform(item.platform));
   }
@@ -776,8 +782,9 @@
     // Renovar solo aparece acá cuando falta 1 día o menos (o ya venció pero
     // sigue activa) — antes no tiene sentido ofrecerlo.
     const canRenew = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 1;
-    const needsCanvaEmail = canRenew && isManualActivationPlatform(a.platform);
-    const needsRenewPassword = canRenew && requiresPasswordPlatform(a.platform);
+    const nonRenewable = isNonRenewablePlatform(a.platform);
+    const needsCanvaEmail = canRenew && !nonRenewable && isManualActivationPlatform(a.platform);
+    const needsRenewPassword = canRenew && !nonRenewable && requiresPasswordPlatform(a.platform);
     return `
       <div class="success-account-card">
         <div class="success-account-head">
@@ -787,7 +794,13 @@
         <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
         <div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>
         ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
-        ${canRenew ? `
+        ${canRenew && nonRenewable ? `
+          <div class="success-account-renew-box">
+            <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
+            <span class="badge-no-renewable">🚫 No Renovable</span>
+          </div>
+        ` : ""}
+        ${canRenew && !nonRenewable ? `
           <div class="success-account-renew-box">
             <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
             ${needsCanvaEmail ? `

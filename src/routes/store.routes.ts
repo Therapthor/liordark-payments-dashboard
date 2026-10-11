@@ -49,6 +49,12 @@ function requiresPasswordPlatform(platform: string): boolean {
   return /youtube/i.test(platform);
 }
 
+// YOUTUBE PREMIUM no es renovable — cada ciclo es una compra nueva (correo
+// y contraseña otra vez), nunca una extensión de la cuenta anterior.
+function isNonRenewablePlatform(platform: string): boolean {
+  return /youtube/i.test(platform);
+}
+
 // 999 en vez de Infinity: esto viaja como JSON y JSON.stringify(Infinity)
 // serializa a null, lo que volvería a mostrarlo como "sin stock".
 function availableFor(platform: string, stock: Map<string, number>): number {
@@ -111,6 +117,10 @@ router.post("/renewals/checkout", async (req, res) => {
 
   if (phone.length < 9 || !platform) {
     return res.status(400).json({ message: "Falta 'phone' o 'platform'." });
+  }
+
+  if (isNonRenewablePlatform(platform)) {
+    return res.status(400).json({ message: platform + " no es renovable — se compra nuevamente." });
   }
 
   // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM se activan a mano con el correo

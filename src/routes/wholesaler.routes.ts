@@ -37,6 +37,10 @@ function requiresPasswordPlatform(platform: string): boolean {
 function manualActivationPlanDays(platform: string): number {
   return /canva/i.test(platform) ? 365 : 30;
 }
+// YOUTUBE PREMIUM no es renovable — cada ciclo es una compra nueva.
+function isNonRenewablePlatform(platform: string): boolean {
+  return /youtube/i.test(platform);
+}
 import {
   createFullAccountOrder,
   listFullAccountOrdersForWholesaler,
@@ -302,6 +306,10 @@ router.post("/clients/:profileId/renew", (req, res) => {
 
   const account = getAccountById(profile.accountId);
   if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
+
+  if (isNonRenewablePlatform(account.platform)) {
+    return res.status(400).json({ message: account.platform + " no es renovable — se compra nuevamente." });
+  }
 
   const product = getCatalogProductByPlatform(account.platform);
   const price = Number(product?.wholesalePrice ?? 0);
