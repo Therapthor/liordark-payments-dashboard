@@ -798,12 +798,12 @@ export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired
   const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
-           COALESCE(c.title, '') AS platformTag, COALESCE(c.price, '') AS price,
+           COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
+           COALESCE((SELECT c.price FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS price,
            a.email AS email, a.password AS password, a.expires_at AS expiresAt,
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
     WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
       ${lowerBound}
       AND p.order_ref NOT LIKE 'combo:%'
@@ -818,12 +818,12 @@ export function listExpiringClientsForWholesaler(wholesalerId: number, days: num
   const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
-           COALESCE(c.title, '') AS platformTag, COALESCE(c.wholesale_price, '') AS price,
+           COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
+           COALESCE((SELECT c.wholesale_price FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS price,
            a.email AS email, a.password AS password, a.expires_at AS expiresAt,
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
     WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
       ${lowerBound}
     ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
