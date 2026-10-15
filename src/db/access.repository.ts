@@ -835,6 +835,20 @@ export function markReminderSent(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
+export type RemindedClient = { profileId: number; clientPhone: string; platform: string; email: string; remindedAt: string };
+
+/** Quiénes recibieron recordatorio en una fecha dada (YYYY-MM-DD, hora Lima) — detalle al hacer click en una corrida. */
+export function listProfilesRemindedOn(dateISO: string): RemindedClient[] {
+  return db.prepare(`
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
+           a.email AS email, p.reminder_sent_at AS remindedAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE date(p.reminder_sent_at) = @dateISO
+    ORDER BY p.reminder_sent_at ASC
+  `).all({ dateISO }) as RemindedClient[];
+}
+
 /**
  * Todos los teléfonos de clientes que hayamos tenido alguna vez —
  * perfiles activos (access_profiles) + perfiles archivados cuando su
@@ -867,7 +881,7 @@ export function listAllClientPhones(): string[] {
   return [...phones];
 }
 
-function limaTodayISOLocal(): string {
+export function limaTodayISOLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
 }
 
