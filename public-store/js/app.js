@@ -564,7 +564,12 @@
   }
 
   function closeProductDetail() {
-    document.getElementById("product-detail-modal").hidden = true;
+    const modal = document.getElementById("product-detail-modal");
+    modal.classList.add("closing");
+    setTimeout(() => {
+      modal.hidden = true;
+      modal.classList.remove("closing");
+    }, 180);
   }
 
   function initProductDetailModal() {
