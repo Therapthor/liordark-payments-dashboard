@@ -260,13 +260,35 @@
       ? `<div class="product-price-banner product-price-banner-reserve"><span class="product-price">S/ ${escapeHtml(p.price)}</span><span class="product-reserve-tag">Reservar</span></div>`
       : `<div class="product-price-banner"><span class="product-price">S/ ${escapeHtml(p.price)}</span></div>`;
 
+    // Exclusivos: tarjeta "ticket" — precio en sello de esquina sobre la
+    // foto real, perforación tipo boleto y botón Comprar propio. El click
+    // en la imagen y en el botón abren el mismo modal de siempre (el click
+    // burbujea hasta el listener delegado en #catalog-sections).
+    if (exclusive) {
+      const reserveTag = outOfStock ? '<span class="exclusive-reserve-tag">Reservar</span>' : "";
+      return `
+        <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
+          <div class="product-img-wrap">
+            ${productImgHtml(p, kind)}
+            <div class="exclusive-ribbon-wrap"><span class="exclusive-ribbon">S/ ${escapeHtml(p.price)}</span></div>
+          </div>
+          <div class="exclusive-divider"><span class="exclusive-notch exclusive-notch-left"></span><span class="exclusive-notch exclusive-notch-right"></span></div>
+          <div class="product-body product-body-exclusive">
+            <span class="product-title">${escapeHtml(title)}</span>
+            <span class="badge-exclusive">★ EXCLUSIVO</span>
+            ${reserveTag}
+            <button type="button" class="btn-comprar-exclusive">${outOfStock ? "Reservar" : "Comprar"}</button>
+          </div>
+        </div>`;
+    }
+
     return `
       <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
         <div class="product-img-wrap">${productImgHtml(p, kind)}</div>
         <div class="product-body">
           <div class="product-title-row">
             <span class="product-title">${escapeHtml(title)}</span>
-            ${exclusive ? '<span class="badge-exclusive">★ EXCLUSIVO</span>' : (annual ? '<span class="badge-annual">ANUAL</span>' : "")}
+            ${annual ? '<span class="badge-annual">ANUAL</span>' : ""}
           </div>
         </div>
         ${priceArea}
