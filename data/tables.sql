@@ -174,6 +174,20 @@ CREATE TABLE IF NOT EXISTS renewal_history_log (
 );
 CREATE INDEX IF NOT EXISTS idx_renewal_history_renewed_at ON renewal_history_log(renewed_at);
 
+-- Corridas de recordatorios de vencimiento (panel > Renovaciones) — una
+-- fila por día (hora Lima). Reemplaza el historial que antes venía del
+-- bot de Meta (dado de baja) — ahora registra las tandas manuales que
+-- arma el admin acá mismo. pending = no se mandó nada todavía hoy,
+-- incomplete = se mandaron tandas pero quedan pendientes, complete =
+-- ya no queda nadie pendiente de recordatorio.
+CREATE TABLE IF NOT EXISTS reminder_runs (
+  run_date     TEXT PRIMARY KEY, -- YYYY-MM-DD (hora Lima)
+  sent_count   INTEGER NOT NULL DEFAULT 0,
+  status       TEXT    NOT NULL DEFAULT 'pending',
+  last_sent_at TEXT,
+  completed_at TEXT
+);
+
 -- Bitácora de activación manual (CANVA, GEMINI AI PRO, ...) — reemplaza
 -- el registro que se hacía en la hoja 'CANVA ANUAL'. Estas plataformas no
 -- usan el modelo de stock (access_accounts): el admin activa el plan a

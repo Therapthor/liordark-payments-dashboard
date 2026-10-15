@@ -331,7 +331,7 @@
              cada 3-5 horas, para no repetir el patrón que causó el
              bloqueo (sin nombres de marca, sin automatizar el envío). -->
         <div class="panel-header standalone">
-          <h2>Recordatorios de vencimiento</h2>
+          <h2>Recordatorios de vencimiento <span id="reminders-run-status-badge" class="badge" hidden></span></h2>
           <button id="reminders-prepare-btn" class="btn-primary">Preparar tanda de 5</button>
         </div>
 
@@ -365,18 +365,16 @@
         <div class="panel-header standalone" id="renewals-run-history-header">
           <h2>Corridas anteriores (resumen por día)</h2>
         </div>
-        <p class="panel-hint">Click en una fila para ver los números de esa fecha.</p>
+        <p class="panel-hint">Click en una fila para ver a quién se le mandó recordatorio ese día.</p>
 
-        <!-- Click en una fila abre el detalle (números de esa fecha) en
-             el modal de historial. -->
+        <!-- Click en una fila abre el detalle (quiénes fueron recordados
+             esa fecha) en el modal de historial. -->
         <div class="panel" id="renewals-run-history-panel">
           <table class="history-table">
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Total</th>
                 <th>Enviados</th>
-                <th>Fallidos</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -870,7 +868,7 @@
               <th>Fecha / hora</th>
               <th>Teléfono</th>
               <th>Plataforma</th>
-              <th>Días al aviso</th>
+              <th>Correo</th>
               <th>Estado</th>
             </tr>
           </thead>
@@ -1011,25 +1009,6 @@
         <button type="button" id="wholesaler-deliver-send-btn" class="btn-primary">📨 Enviar al cliente por WhatsApp</button>
       </div>
     </div>
-  </div>
-
-  <!-- ───────────── MODAL: asignar perfiles libres a un mayorista (desde Accesos) ───────────── -->
-  <div id="assign-wholesaler-modal" class="modal-backdrop" hidden>
-    <form id="assign-wholesaler-form" class="modal-card">
-      <div class="modal-head">
-        <h3>Asignar a mayorista</h3>
-        <button type="button" class="modal-x" data-close-modal="assign-wholesaler-modal">✕</button>
-      </div>
-      <p id="assign-wholesaler-count" class="panel-hint"></p>
-      <label>Mayorista
-        <select id="assign-wholesaler-select" required></select>
-      </label>
-      <p id="assign-wholesaler-error" class="login-error" hidden></p>
-      <div class="modal-actions">
-        <button type="button" id="assign-wholesaler-cancel" class="btn-secondary">Cancelar</button>
-        <button type="submit" class="btn-primary">Asignar</button>
-      </div>
-    </form>
   </div>
 
   <script src="js/access.js"></script>

@@ -265,6 +265,7 @@
     if (view === "history") { loadHistory(); loadChart(); }
     if (view === "renewals") {
       loadReminders();
+      loadReminderRuns();
       loadRenewalNotifications();
       if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
     }
@@ -1162,6 +1163,26 @@
     renderRemindersSummary();
   }
 
+  const RUN_STATUS_LABEL = { pending: "⏳ Pendiente", incomplete: "🟡 Incompleta", complete: "✅ Completa" };
+
+  function renderRunStatusBadge(status) {
+    const el = document.getElementById("reminders-run-status-badge");
+    el.className = "badge " + ({ pending: "badge-run-pending", incomplete: "badge-run-incomplete", complete: "badge-run-complete" }[status] || "badge-run-pending");
+    el.textContent = RUN_STATUS_LABEL[status] || status;
+    el.hidden = false;
+  }
+
+  async function loadReminderRuns() {
+    try {
+      const { runs } = await api("/renewals/runs?limit=14");
+      renderRenewalRunHistory(runs || []);
+      const today = runs && runs[0];
+      if (today) renderRunStatusBadge(today.status);
+    } catch {
+      // se deja lo último mostrado
+    }
+  }
+
   async function prepareReminderBatch(btn) {
     const pending = cachedExpiringClients.filter(c => !c.reminderSentAt && isValidReminderPhone(c.clientPhone));
     if (pending.length === 0) {
@@ -1200,34 +1221,29 @@
     }
 
     renderRemindersSummary();
+    loadReminderRuns();
   }
 
   function initReminders() {
     document.getElementById("reminders-prepare-btn").addEventListener("click", (e) => prepareReminderBatch(e.currentTarget));
   }
 
-  let cachedRenewalNotifs      = [];
   let currentDayEntries        = [];
   let renewalNotifSearchDigits = "";
 
   async function loadRenewalNotifications() {
     try {
-      const { entries, todaySent, todayFailed, runHistory } = await api("/renewals/notifications?limit=300");
-      cachedRenewalNotifs = entries;
+      const { todaySent, todayFailed } = await api("/renewals/notifications?limit=300");
       document.getElementById("renewals-notif-today-sent").textContent   = todaySent;
       document.getElementById("renewals-notif-today-failed").textContent = todayFailed;
-      renderRenewalRunHistory(runHistory || []);
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
     }
   }
 
-  const RUN_STATUS_LABEL = { COMPLETED: "Completado", FAILED: "Interrumpido", RUNNING: "En curso" };
-
-  // Resumen por día — clickear una fila abre el detalle (los números de
-  // esa fecha) en el modal de historial.
+  // Resumen por día — clickear una fila abre el detalle (a quién se le
+  // mandó recordatorio esa fecha) en el modal de historial.
   function renderRenewalRunHistory(runs) {
-    const header = document.getElementById("renewals-run-history-header");
     const panel  = document.getElementById("renewals-run-history-panel");
     const empty  = document.getElementById("renewals-run-history-empty");
     const tbody  = document.getElementById("renewals-run-history-tbody");
@@ -1240,12 +1256,10 @@
     panel.hidden = false;
     empty.hidden = true;
     tbody.innerHTML = runs.map(r => `
-      <tr data-date-key="${limaDateKey(r.startedAt)}">
-        <td>${fmtDateTime(r.startedAt)}</td>
-        <td>${r.total}</td>
-        <td>${r.sent}</td>
-        <td>${r.failed > 0 ? `<b style="color:var(--critical)">${r.failed}</b>` : "0"}</td>
-        <td>${escapeHtml(RUN_STATUS_LABEL[r.status] || r.status)}</td>
+      <tr data-date-key="${r.runDate}">
+        <td>${fmtDateLong(r.runDate)}</td>
+        <td>${r.sentCount}</td>
+        <td><span class="badge ${{ pending: "badge-run-pending", incomplete: "badge-run-incomplete", complete: "badge-run-complete" }[r.status] || "badge-run-pending"}">${escapeHtml(RUN_STATUS_LABEL[r.status] || r.status)}</span></td>
       </tr>
     `).join("");
 
@@ -1254,10 +1268,14 @@
     });
   }
 
-  // Abre el modal de historial con solo los avisos de la fecha elegida
-  // (comparando en hora Lima, igual que se agrupó la fila clickeada).
-  function openRenewalNotifDay(dateKey) {
-    currentDayEntries = cachedRenewalNotifs.filter(n => limaDateKey(n.createdAt) === dateKey);
+  // Abre el modal de historial con quiénes fueron recordados esa fecha.
+  async function openRenewalNotifDay(dateKey) {
+    try {
+      const { clients } = await api("/renewals/runs/" + dateKey + "/detail");
+      currentDayEntries = clients || [];
+    } catch {
+      currentDayEntries = [];
+    }
 
     const input = document.getElementById("renewals-notif-search");
     const clearBtn = document.getElementById("renewals-notif-search-clear");
@@ -1273,16 +1291,9 @@
 
   function applyRenewalNotifSearch() {
     const filtered = renewalNotifSearchDigits
-      ? currentDayEntries.filter(n => n.phone.replace(/\D/g, "").includes(renewalNotifSearchDigits))
+      ? currentDayEntries.filter(n => n.clientPhone.replace(/\D/g, "").includes(renewalNotifSearchDigits))
       : currentDayEntries;
     renderRenewalNotifTable(filtered);
-  }
-
-  function renewalNotifDaysLabel(days) {
-    if (days == null) return "—";
-    if (days < 0) return Math.abs(days) + "d vencido";
-    if (days === 0) return "Vence hoy";
-    return days + "d restantes";
   }
 
   function renderRenewalNotifTable(entries) {
@@ -1299,15 +1310,12 @@
 
     for (const n of entries) {
       const tr = document.createElement("tr");
-      const statusHtml = n.status === "sent"
-        ? `<span class="badge sent">✅ Enviado</span>`
-        : `<span class="badge failed" title="${escapeHtml(n.error || "")}">❌ Falló</span>`;
       tr.innerHTML = `
-        <td>${fmtDateTime(n.createdAt)}</td>
-        <td>${escapeHtml(n.phone)}</td>
+        <td>${fmtDateTime(n.remindedAt)}</td>
+        <td>${escapeHtml(n.clientPhone)}</td>
         <td>${escapeHtml(n.platform)}</td>
-        <td>${renewalNotifDaysLabel(n.daysLeft)}</td>
-        <td>${statusHtml}</td>
+        <td>${escapeHtml(n.email)}</td>
+        <td><span class="badge sent">✅ Enviado</span></td>
       `;
       tbody.appendChild(tr);
     }
