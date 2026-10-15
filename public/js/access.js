@@ -155,8 +155,9 @@
   // ─────────────────────────────────────────────────────────────
 
   let activePlatformDetail   = null; // plataforma cuyo detalle está abierto (o null)
-  let activePlatformAccounts = [];   // últimas cuentas cargadas para esa plataforma, para poder reordenar sin pedir de nuevo
+  let activePlatformAccounts  = [];   // últimas cuentas cargadas para esa plataforma, para poder reordenar sin pedir de nuevo
   let platformSortDir        = "asc"; // "asc" = vencen primero, "desc" = más nuevas primero
+  let openPlatformAccountIds = new Set(); // qué cuentas están abiertas — independiente del orden en que se dibujen
   let cachedPlatformSummaries = [];
 
   async function load() {
@@ -215,6 +216,7 @@
     target.innerHTML = `<p class="feed-empty">Cargando…</p>`;
     const { accounts } = await api("/platforms/" + encodeURIComponent(platform) + "/accounts");
     activePlatformAccounts = accounts;
+    openPlatformAccountIds = new Set(accounts.map(a => String(a.id))); // abiertas por defecto, como antes
     renderPlatformAccounts();
   }
 
@@ -237,12 +239,21 @@
     btn.textContent = platformSortDir === "asc" ? "↓ Vencen primero" : "↑ Más nuevas primero";
   }
 
+  // Qué tarjetas quedan abiertas/cerradas es independiente del orden —
+  // se guarda en openPlatformAccountIds (no se infiere del DOM) para que
+  // reordenar no las vuelva a abrir ni las cierre solas.
   function renderPlatformAccounts() {
     const target = document.getElementById("access-platform-detail-accounts");
-    const openIds = new Set([...target.querySelectorAll(".access-account[open]")].map(d => d.dataset.accountId));
     target.innerHTML = sortedPlatformAccounts()
-      .map(a => renderAccountCard(a, { open: openIds.size ? openIds.has(String(a.id)) : true }))
+      .map(a => renderAccountCard(a, { open: openPlatformAccountIds.has(String(a.id)) }))
       .join("");
+    target.querySelectorAll(".access-account").forEach(details => {
+      details.addEventListener("toggle", () => {
+        const id = details.dataset.accountId;
+        if (details.open) openPlatformAccountIds.add(id);
+        else openPlatformAccountIds.delete(id);
+      });
+    });
     wireAccountCardEvents(target);
   }
 
@@ -260,7 +271,11 @@
     const target = document.getElementById("access-platform-detail-accounts");
     const items  = target.querySelectorAll(".access-account");
     const anyOpen = Array.from(items).some(d => d.open);
-    items.forEach(d => { d.open = !anyOpen; });
+    items.forEach(d => {
+      d.open = !anyOpen;
+      if (d.open) openPlatformAccountIds.add(d.dataset.accountId);
+      else openPlatformAccountIds.delete(d.dataset.accountId);
+    });
     document.getElementById("access-platform-compact-toggle").textContent =
       anyOpen ? "⬜ Expandir todo" : "🗜 Compactar todo";
   }
