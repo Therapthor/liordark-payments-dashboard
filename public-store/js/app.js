@@ -246,6 +246,10 @@
     return kind === "combo" ? p.inStock === false : (p.available ?? 0) <= 0;
   }
 
+  // Precio como píldora flotante bajo el nombre, sin botón propio: toda
+  // la card es clicable (role=button) y abre el mismo modal de detalle,
+  // que ya trae su botón Comprar/Reservar listo. Lo único que diferencia
+  // Exclusivos de Perfiles es la etiqueta flotando sobre la foto.
   function productCardHtml(p, kind, opts) {
     const annual     = isAnnual(p);
     const exclusive  = !!(opts && opts.exclusive);
@@ -253,45 +257,23 @@
     const title      = kind === "combo" ? p.name : p.title;
     const detailAttr = kind === "combo" ? `data-detail-combo="${p.id}"` : `data-detail-platform="${escapeHtml(p.platform)}"`;
     const cardClass  = [exclusive && "product-card-exclusive", outOfStock && "product-card-outofstock"].filter(Boolean).join(" ");
-
-    // Sin stock: igual se puede pagar para reservar — el pedido queda
-    // esperando y se entrega solo apenas haya stock (ver openProductDetail).
-    const priceArea = outOfStock
-      ? `<div class="product-price-banner product-price-banner-reserve"><span class="product-price">S/ ${escapeHtml(p.price)}</span><span class="product-reserve-tag">Reservar</span></div>`
-      : `<div class="product-price-banner"><span class="product-price">S/ ${escapeHtml(p.price)}</span></div>`;
-
-    // Exclusivos: tarjeta "ticket" — precio en sello de esquina sobre la
-    // foto real, perforación tipo boleto y botón Comprar propio. El click
-    // en la imagen y en el botón abren el mismo modal de siempre (el click
-    // burbujea hasta el listener delegado en #catalog-sections).
-    if (exclusive) {
-      const reserveTag = outOfStock ? '<span class="exclusive-reserve-tag">Reservar</span>' : "";
-      return `
-        <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
-          <div class="product-img-wrap">
-            ${productImgHtml(p, kind)}
-            <div class="exclusive-ribbon-wrap"><span class="exclusive-ribbon">S/ ${escapeHtml(p.price)}</span></div>
-          </div>
-          <div class="exclusive-divider"><span class="exclusive-notch exclusive-notch-left"></span><span class="exclusive-notch exclusive-notch-right"></span></div>
-          <div class="product-body product-body-exclusive">
-            <span class="product-title">${escapeHtml(title)}</span>
-            <span class="badge-exclusive">★ EXCLUSIVO</span>
-            ${reserveTag}
-            <button type="button" class="btn-comprar-exclusive">${outOfStock ? "Reservar" : "Comprar"}</button>
-          </div>
-        </div>`;
-    }
+    const overlayBadge = exclusive
+      ? '<span class="product-badge-overlay badge-exclusive">★ EXCLUSIVO</span>'
+      : (annual ? '<span class="product-badge-overlay badge-annual">ANUAL</span>' : "");
 
     return `
       <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
-        <div class="product-img-wrap">${productImgHtml(p, kind)}</div>
-        <div class="product-body">
-          <div class="product-title-row">
-            <span class="product-title">${escapeHtml(title)}</span>
-            ${annual ? '<span class="badge-annual">ANUAL</span>' : ""}
+        <div class="product-img-wrap">
+          ${productImgHtml(p, kind)}
+          ${overlayBadge}
+        </div>
+        <div class="product-body product-body-pill">
+          <span class="product-title">${escapeHtml(title)}</span>
+          ${outOfStock ? '<span class="product-reserve-tag-sm">Reservar</span>' : ""}
+          <div class="product-price-pill${outOfStock ? " product-price-pill-reserve" : ""}">
+            <span class="product-price-pill-currency">S/</span><span class="product-price-pill-amount">${escapeHtml(p.price)}</span>
           </div>
         </div>
-        ${priceArea}
       </div>`;
   }
 
