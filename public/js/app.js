@@ -1092,9 +1092,10 @@
 
   const REMINDERS_BATCH_SIZE   = 5;
   const REMINDERS_COOLDOWN_MS  = 3000;
-  // Solo lo que vence HOY — cada día entra solo lo que le toca vencer ese
-  // día, sin acumular nada del resto de la semana.
-  const REMINDERS_WINDOW_DAYS  = 0;
+  // Lo que vence hoy O mañana — con 1 día de anticipación para que el
+  // cliente alcance a renovar antes de quedarse sin servicio (antes era
+  // 0 = solo el mismo día que vencía, ya tarde para muchos clientes).
+  const REMINDERS_WINDOW_DAYS  = 1;
   let cachedExpiringClients    = [];
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
