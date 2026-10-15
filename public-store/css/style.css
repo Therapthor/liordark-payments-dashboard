@@ -361,6 +361,52 @@ a { color: var(--btn); }
 .detail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .detail-list li { font-size: 13.5px; color: var(--text); }
 
+/* ─── Modal de detalle — vidrio claro con fondo bokeh y fichas tipo
+   bento (el resto de modales del sitio, checkout/combo, no cambian). */
+#product-detail-modal {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(255,178,90,.55), transparent 50%),
+    radial-gradient(circle at 85% 20%, rgba(255,210,140,.5), transparent 45%),
+    radial-gradient(circle at 30% 85%, rgba(255,150,70,.4), transparent 50%),
+    rgba(255,246,234,.94);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+#product-detail-modal .modal-card {
+  background: rgba(255,255,255,.6);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.85);
+  box-shadow: 0 30px 60px -24px rgba(227,93,0,.35);
+  border-radius: 22px;
+}
+#product-detail-modal .detail-img-wrap { box-shadow: 0 10px 24px -14px rgba(227,93,0,.5); }
+#product-detail-modal .detail-list {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 9px;
+}
+#product-detail-modal .detail-list li {
+  background: rgba(255,255,255,.65); border: 1px solid rgba(255,255,255,.9);
+  border-radius: 13px; padding: 12px 14px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+#product-detail-modal .detail-list li:first-child { grid-column: 1 / -1; }
+#product-detail-modal .detail-list li::before {
+  content: "✓"; flex: none; width: 18px; height: 18px; border-radius: 6px;
+  background: rgba(227,93,0,.14); color: var(--btn); font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+#product-detail-modal .detail-reserve-note { background: rgba(255,255,255,.6); }
+#product-detail-modal .detail-footer {
+  background: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.9);
+  border-radius: 16px; padding: 14px 16px;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+#product-detail-modal .detail-footer .product-price { font-size: 23px; color: var(--btn); }
+#product-detail-modal #detail-buy-btn {
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  box-shadow: 0 10px 20px -10px rgba(227,93,0,.55);
+}
+
 /* ─── Soporte dentro del checkout ─────────────────────────────── */
 
 .yape-info {
