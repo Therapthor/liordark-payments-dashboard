@@ -491,9 +491,9 @@ a { color: var(--btn); }
 #checkout-modal .modal-card { overflow: hidden; }
 #checkout-modal:has(#checkout-ready:not([hidden])) .modal-close { color: rgba(255,255,255,.75); }
 .checkout-ready-header {
-  margin: -28px -24px 0; padding: 26px 24px 18px;
+  margin: -28px -24px 0; padding: 32px 24px 28px;
   background: #141413; border-radius: 20px 20px 0 0;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .checkout-ready-header h2 { color: rgba(255,255,255,.65); font-size: 13px; font-weight: 600; margin: 0; }
 .checkout-ready-header .muted { color: rgba(255,255,255,.5); font-size: 11.5px; margin: 0; }
