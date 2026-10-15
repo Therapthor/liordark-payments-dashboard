@@ -245,17 +245,14 @@ a { color: var(--btn); }
   padding: 9px 20px;
 }
 
+/* Mismo tamaño de tarjeta en todo el catálogo (Exclusivos y Perfiles)
+   — centrado y sin estirarse a lo ancho aunque haya pocos productos
+   en la fila, para que todas las secciones se vean parejas. */
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
-}
-
-/* Anuales — centrada, no estirada a lo ancho, para que se sienta */
-/* como una vitrina aparte y no una columna más del grid normal.  */
-.product-grid-exclusive {
   grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
   justify-content: center;
+  gap: 14px;
 }
 .product-card-exclusive {
   border: 1px solid #f0c86a;
@@ -493,18 +490,24 @@ a { color: var(--btn); }
   background: rgba(255,255,255,.55);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
-#checkout-modal .modal-card { overflow: hidden; }
+/* padding en 0 y repartido en cada sección (header/body) en vez del
+   viejo truco de márgenes negativos — ese dejaba un filo blanco
+   asimétrico en las esquinas porque el radio de la cabecera y el de
+   la tarjeta no terminaban de coincidir en el pixel exacto. */
+#checkout-modal .modal-card { overflow: hidden; padding: 0; }
+#checkout-modal #checkout-loading,
+#checkout-modal #checkout-error { padding: 28px 24px; }
 #checkout-modal:has(#checkout-ready:not([hidden])) .modal-close { background: rgba(255,255,255,.18); color: #fff; }
 #checkout-modal:has(#checkout-ready:not([hidden])) .modal-close:hover { background: rgba(255,255,255,.28); }
 .checkout-ready-header {
-  margin: -28px -24px 0; padding: 32px 24px 28px;
+  padding: 32px 24px 28px;
   background: #141413; border-radius: 20px 20px 0 0;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
 .checkout-ready-header h2 { color: rgba(255,255,255,.65); font-size: 13px; font-weight: 600; margin: 0; }
 .checkout-ready-header .muted { color: rgba(255,255,255,.5); font-size: 11.5px; margin: 0; }
 .checkout-ready-header .checkout-amount { color: #FFB13D; font-size: 36px; }
-.checkout-ready-body { padding: 20px 0 2px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.checkout-ready-body { padding: 20px 24px 28px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .checkout-ready-body .checkout-waiting { color: var(--btn); font-weight: 600; }
 
 .success-check {
@@ -543,7 +546,7 @@ a { color: var(--btn); }
 #checkout-modal:has(#checkout-success:not([hidden])) .modal-close { background: rgba(255,255,255,.22); color: #fff; }
 #checkout-modal:has(#checkout-success:not([hidden])) .modal-close:hover { background: rgba(255,255,255,.32); }
 .checkout-success-header {
-  margin: -28px -24px 0; padding: 24px 24px 20px;
+  padding: 24px 24px 20px;
   background: linear-gradient(120deg, var(--ok), #0a7f4e);
   border-radius: 20px 20px 0 0;
   display: flex; flex-direction: column; align-items: center; gap: 5px;
@@ -552,7 +555,7 @@ a { color: var(--btn); }
 .checkout-success-header .success-check::after { border-color: rgba(255,255,255,.55); }
 .checkout-success-header h2 { color: #fff; font-size: 19px; margin: 0; }
 .checkout-success-header .muted { color: rgba(255,255,255,.85); font-size: 11.5px; text-align: center; margin: 0; }
-.checkout-success-body { width: 100%; padding-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.checkout-success-body { width: 100%; padding: 18px 24px 28px; display: flex; flex-direction: column; align-items: center; gap: 12px; box-sizing: border-box; }
 #checkout-goto-dashboard { background: linear-gradient(135deg, var(--accent2), var(--accent)); }
 
 #checkout-success-accounts .success-account-card {
