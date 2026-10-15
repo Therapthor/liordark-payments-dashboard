@@ -1120,12 +1120,11 @@
     const accountName = (client.platformTag || client.platform || "").trim();
     const price = formatReminderPrice(client.price);
 
-    const accountLine = accountName ? " de *" + accountName + "*" : "";
-    const priceLine    = price ? " Son *S/ " + price + "*." : "";
+    const accountLabel = accountName ? "*" + accountName + "*" : "cuenta";
+    const priceLine     = price ? " (S/" + price + ")" : "";
 
-    return "Hola! 👋 Te escribo porque tu cuenta" + accountLine + " está por vencer pronto." + priceLine + "\n\n" +
-      "Para renovarla puedes entrar a liordark.com, o respondeme por acá y lo coordinamos.\n\n" +
-      "¡Gracias por tu confianza! 🙌";
+    return "¡Hola! 👋 Tu " + accountLabel + " vence pronto" + priceLine + ".\n\n" +
+      "Renueva en liordark.com o respóndeme y lo vemos al toque. ¡Gracias por tu confianza! 🙌";
   }
 
   // Un celular real (con código de país 51) tiene 11 dígitos — algo mucho
