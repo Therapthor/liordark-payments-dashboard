@@ -6,9 +6,9 @@ import { recordReminderSent, setReminderRunStatus, listReminderRuns } from "../d
 
 const router = Router();
 
-// Ventana de la tanda manual de recordatorios — hoy y mañana (1 día de
-// anticipación, para que el cliente alcance a renovar antes de quedarse
-// sin servicio). Mismo valor que REMINDERS_WINDOW_DAYS en public/js/app.js.
+// Ventana de la tanda manual de recordatorios — exactamente 1 día de
+// anticipación (vence mañana), ni más ni menos. Mismo valor que
+// REMINDERS_WINDOW_DAYS en public/js/app.js.
 const REMINDERS_WINDOW_DAYS = 1;
 
 // ─────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ const REMINDERS_WINDOW_DAYS = 1;
 
 router.get("/expiring", (req, res) => {
   const days = Number(req.query.days ?? REMINDERS_WINDOW_DAYS);
-  const clients = listExpiringClients(Number.isFinite(days) ? days : REMINDERS_WINDOW_DAYS, { excludeAlreadyExpired: true });
+  const clients = listExpiringClients(Number.isFinite(days) ? days : REMINDERS_WINDOW_DAYS, { exact: true });
   res.json({ clients });
 });
 
@@ -36,7 +36,7 @@ router.post("/:profileId/mark-reminded", (req, res) => {
   // nadie pendiente (completa) o todavía falta gente (incompleta).
   const runDate = limaTodayISOLocal();
   recordReminderSent(runDate);
-  const remaining = listExpiringClients(REMINDERS_WINDOW_DAYS, { excludeAlreadyExpired: true }).length;
+  const remaining = listExpiringClients(REMINDERS_WINDOW_DAYS, { exact: true }).length;
   setReminderRunStatus(runDate, remaining === 0 ? "complete" : "incomplete");
 
   res.json({ ok: true });

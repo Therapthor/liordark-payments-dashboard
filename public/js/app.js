@@ -1093,9 +1093,8 @@
 
   const REMINDERS_BATCH_SIZE   = 5;
   const REMINDERS_COOLDOWN_MS  = 3000;
-  // Lo que vence hoy O mañana — con 1 día de anticipación para que el
-  // cliente alcance a renovar antes de quedarse sin servicio (antes era
-  // 0 = solo el mismo día que vencía, ya tarde para muchos clientes).
+  // Exactamente 1 día de anticipación (vence mañana) — ni el mismo día
+  // (ya tarde para muchos clientes) ni un rango más amplio.
   const REMINDERS_WINDOW_DAYS  = 1;
   let cachedExpiringClients    = [];
 
@@ -1126,6 +1125,20 @@
     return "¡Hola! Tu " + accountLabel + " está por vencer" + priceLine + " 🎬 Renuévala en 🌐 liordark.com o escríbeme por aquí 💬 y te ayudo al toque. ¡Gracias por seguir con nosotros! 🙌";
   }
 
+  // Cuando un cliente tiene más de una cuenta por vencer, se manda todo
+  // junto en un solo mensaje — nunca por partes.
+  function reminderMessageForGroup(group) {
+    if (group.accounts.length === 1) return reminderMessage(group.accounts[0]);
+
+    const lines = group.accounts.map(c => {
+      const name  = (c.platformTag || c.platform || "cuenta").trim();
+      const price = formatReminderPrice(c.price);
+      return "• *" + name + "*" + (price ? " (S/" + price + ")" : "");
+    }).join("\n");
+
+    return "¡Hola! Estas cuentas están por vencer 🎬\n" + lines + "\nRenuévalas en 🌐 liordark.com o escríbeme por aquí 💬 y te ayudo al toque con todas. ¡Gracias por seguir con nosotros! 🙌";
+  }
+
   // Un celular real (con código de país 51) tiene 11 dígitos — algo mucho
   // más largo es dato corrupto (visto en producción: un client_phone de
   // 16 dígitos). Se descarta acá para no gastar una tanda en un link que
@@ -1135,18 +1148,34 @@
     return digits.length >= 9 && digits.length <= 12;
   }
 
+  // Un cliente con 2+ cuentas por vencer se manda como un solo grupo — un
+  // solo mensaje, una sola ventana de WhatsApp, un solo lugar en la tanda.
+  function groupExpiringByClient(clients) {
+    const map = new Map();
+    for (const c of clients) {
+      if (!map.has(c.clientPhone)) map.set(c.clientPhone, []);
+      map.get(c.clientPhone).push(c);
+    }
+    return [...map.entries()].map(([clientPhone, accounts]) => ({
+      clientPhone,
+      accounts,
+      pending: accounts.some(a => !a.reminderSentAt),
+    }));
+  }
+
   function renderRemindersSummary() {
-    const valid   = cachedExpiringClients.filter(c => isValidReminderPhone(c.clientPhone));
-    const pending = valid.filter(c => !c.reminderSentAt);
-    const sent    = valid.length - pending.length;
-    const batchesLeft = Math.ceil(pending.length / REMINDERS_BATCH_SIZE);
+    const valid         = cachedExpiringClients.filter(c => isValidReminderPhone(c.clientPhone));
+    const groups        = groupExpiringByClient(valid);
+    const pendingGroups = groups.filter(g => g.pending);
+    const sentGroups    = groups.length - pendingGroups.length;
+    const batchesLeft   = Math.ceil(pendingGroups.length / REMINDERS_BATCH_SIZE);
 
     const el = document.getElementById("reminders-summary");
-    if (valid.length === 0) {
+    if (groups.length === 0) {
       el.textContent = "No hay clientes por vencer en los próximos días.";
       return;
     }
-    el.textContent = `${pending.length} pendientes de recordatorio · ${batchesLeft} tanda${batchesLeft === 1 ? "" : "s"} de ${REMINDERS_BATCH_SIZE} por mandar · ${sent} ya recordados`;
+    el.textContent = `${pendingGroups.length} pendientes de recordatorio · ${batchesLeft} tanda${batchesLeft === 1 ? "" : "s"} de ${REMINDERS_BATCH_SIZE} por mandar · ${sentGroups} ya recordados`;
   }
 
   async function loadReminders() {
@@ -1182,18 +1211,20 @@
   }
 
   async function prepareReminderBatch(btn) {
-    const pending = cachedExpiringClients.filter(c => !c.reminderSentAt && isValidReminderPhone(c.clientPhone));
-    if (pending.length === 0) {
+    const valid  = cachedExpiringClients.filter(c => isValidReminderPhone(c.clientPhone));
+    const groups = groupExpiringByClient(valid).filter(g => g.pending);
+    if (groups.length === 0) {
       alert("No quedan clientes pendientes de recordatorio en los próximos días.");
       return;
     }
 
-    const batch = pending.slice(0, REMINDERS_BATCH_SIZE);
+    const batch = groups.slice(0, REMINDERS_BATCH_SIZE);
 
     // Mismo truco que el envío masivo de Accesos: las ventanas se abren
     // TODAS durante el clic real (si no, el navegador las bloquea como
     // pop-up no solicitado) y recién después se les asigna el link real,
-    // una por una con una pequeña pausa entre cada una.
+    // una por una con una pequeña pausa entre cada una. Un cliente con
+    // varias cuentas es UNA sola ventana con el mensaje combinado.
     const windows = batch.map(() => window.open("", "_blank"));
     const somethingBlocked = windows.some(w => !w);
 
@@ -1201,12 +1232,15 @@
     btn.disabled = true;
 
     for (let i = 0; i < batch.length; i++) {
-      const link = remindersWaLink(batch[i].clientPhone, reminderMessage(batch[i]));
+      const group = batch[i];
+      const link  = remindersWaLink(group.clientPhone, reminderMessageForGroup(group));
       if (windows[i]) windows[i].location = link;
-      try {
-        await api(`/renewals/${batch[i].profileId}/mark-reminded`, { method: "POST" });
-        batch[i].reminderSentAt = new Date().toISOString(); // optimista, evita re-pedir todo al servidor
-      } catch { /* no crítico */ }
+      for (const account of group.accounts) {
+        try {
+          await api(`/renewals/${account.profileId}/mark-reminded`, { method: "POST" });
+          account.reminderSentAt = new Date().toISOString(); // optimista, evita re-pedir todo al servidor
+        } catch { /* no crítico */ }
+      }
       btn.textContent = `Preparando ${i + 1}/${batch.length}…`;
       if (i < batch.length - 1) await sleep(REMINDERS_COOLDOWN_MS);
     }

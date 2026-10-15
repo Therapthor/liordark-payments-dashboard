@@ -791,11 +791,16 @@ export type ExpiringClient = {
  * tanda — cada día que pasa la ventana avanza sola y van entrando los que
  * de verdad vencen pronto. No aplica a /api/stock/expiring (el bot sigue
  * viendo también los ya vencidos, para el aviso automático de WhatsApp).
+ *
+ * `exact` — en vez de "vence en `days` días o antes", solo "vence
+ * exactamente en `days` días" (1 día de anticipación, ni más ni menos).
  */
-export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired?: boolean }): ExpiringClient[] {
+export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired?: boolean; exact?: boolean }): ExpiringClient[] {
   const today = limaTodayISOLocal();
   const limit = addDaysISOLocal(today, days);
-  const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
+  const dateFilter = opts?.exact
+    ? "AND a.expires_at = @limit"
+    : `AND a.expires_at <= @limit ${opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : ""}`;
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
@@ -804,18 +809,20 @@ export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
-      ${lowerBound}
+    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at IS NOT NULL
+      ${dateFilter}
       AND p.order_ref NOT LIKE 'combo:%'
     ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
   `).all({ today, limit }) as ExpiringClient[];
 }
 
 /** Igual que listExpiringClients, pero SOLO los sub-clientes de ESTE mayorista — panel mayorista > Recordatorios. */
-export function listExpiringClientsForWholesaler(wholesalerId: number, days: number, opts?: { excludeAlreadyExpired?: boolean }): ExpiringClient[] {
+export function listExpiringClientsForWholesaler(wholesalerId: number, days: number, opts?: { excludeAlreadyExpired?: boolean; exact?: boolean }): ExpiringClient[] {
   const today = limaTodayISOLocal();
   const limit = addDaysISOLocal(today, days);
-  const lowerBound = opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : "";
+  const dateFilter = opts?.exact
+    ? "AND a.expires_at = @limit"
+    : `AND a.expires_at <= @limit ${opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : ""}`;
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
@@ -824,8 +831,8 @@ export function listExpiringClientsForWholesaler(wholesalerId: number, days: num
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId AND a.expires_at IS NOT NULL AND a.expires_at <= @limit
-      ${lowerBound}
+    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId AND a.expires_at IS NOT NULL
+      ${dateFilter}
     ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
   `).all({ today, limit, wholesalerId }) as ExpiringClient[];
 }
