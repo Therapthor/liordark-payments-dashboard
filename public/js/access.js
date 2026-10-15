@@ -154,7 +154,9 @@
   // CARGA Y RENDER — plataformas / cuentas / perfiles
   // ─────────────────────────────────────────────────────────────
 
-  let activePlatformDetail = null; // plataforma cuyo detalle está abierto (o null)
+  let activePlatformDetail   = null; // plataforma cuyo detalle está abierto (o null)
+  let activePlatformAccounts = [];   // últimas cuentas cargadas para esa plataforma, para poder reordenar sin pedir de nuevo
+  let platformSortDir        = "asc"; // "asc" = vencen primero, "desc" = más nuevas primero
   let cachedPlatformSummaries = [];
 
   async function load() {
@@ -202,16 +204,52 @@
   // compactar todo de nuevo y ver más de un vistazo.
   async function openPlatformDetail(platform) {
     activePlatformDetail = platform;
+    platformSortDir = "asc";
     document.getElementById("access-platforms").hidden = true;
     document.getElementById("access-platform-detail").hidden = false;
     document.getElementById("access-platform-detail-title").textContent = platform;
     document.getElementById("access-platform-compact-toggle").textContent = "🗜 Compactar todo";
+    updateSortToggleLabel();
 
     const target = document.getElementById("access-platform-detail-accounts");
     target.innerHTML = `<p class="feed-empty">Cargando…</p>`;
     const { accounts } = await api("/platforms/" + encodeURIComponent(platform) + "/accounts");
-    target.innerHTML = accounts.map(a => renderAccountCard(a, { open: true })).join("");
+    activePlatformAccounts = accounts;
+    renderPlatformAccounts();
+  }
+
+  // Vencen primero (asc) = las que hay que atender ya; más nuevas primero
+  // (desc) = las que se acaban de agregar (suelen ser las que vencen más
+  // lejos, por eso sirve el mismo orden invertido para las dos vistas).
+  function sortedPlatformAccounts() {
+    const sign = platformSortDir === "asc" ? 1 : -1;
+    return [...activePlatformAccounts].sort((a, b) => {
+      if (!a.expiresAt && !b.expiresAt) return 0;
+      if (!a.expiresAt) return 1;
+      if (!b.expiresAt) return -1;
+      return sign * a.expiresAt.localeCompare(b.expiresAt);
+    });
+  }
+
+  function updateSortToggleLabel() {
+    const btn = document.getElementById("access-platform-sort-toggle");
+    if (!btn) return;
+    btn.textContent = platformSortDir === "asc" ? "↓ Vencen primero" : "↑ Más nuevas primero";
+  }
+
+  function renderPlatformAccounts() {
+    const target = document.getElementById("access-platform-detail-accounts");
+    const openIds = new Set([...target.querySelectorAll(".access-account[open]")].map(d => d.dataset.accountId));
+    target.innerHTML = sortedPlatformAccounts()
+      .map(a => renderAccountCard(a, { open: openIds.size ? openIds.has(String(a.id)) : true }))
+      .join("");
     wireAccountCardEvents(target);
+  }
+
+  function togglePlatformSort() {
+    platformSortDir = platformSortDir === "asc" ? "desc" : "asc";
+    updateSortToggleLabel();
+    renderPlatformAccounts();
   }
 
   function closePlatformDetail() {
@@ -1456,6 +1494,7 @@
     initComboOrderModal();
     document.getElementById("access-platform-back").addEventListener("click", closePlatformDetail);
     document.getElementById("access-platform-compact-toggle").addEventListener("click", togglePlatformCompact);
+    document.getElementById("access-platform-sort-toggle").addEventListener("click", togglePlatformSort);
   }
 
   window.LiordarkAccess = { init, load, loadProviderRenewals, openComboOrderModal };
