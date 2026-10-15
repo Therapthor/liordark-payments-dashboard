@@ -529,6 +529,39 @@ a { color: var(--btn); }
 .success-account-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; }
 .success-account-row { font-size: 13px; color: var(--text); word-break: break-all; }
+
+/* ─── Pantalla de entrega ("¡Listo!") — cabecera verde con el check y
+   los datos como recibo (filas con línea punteada), en vez de la
+   tarjeta plana. "Mis cuentas" sigue usando la misma successAccountHtml
+   pero sin este estilo, así que todo acá va escopeado a esta pantalla. */
+.checkout-success-header {
+  margin: -28px -24px 0; padding: 24px 24px 20px;
+  background: linear-gradient(120deg, var(--ok), #0a7f4e);
+  border-radius: 20px 20px 0 0;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.checkout-success-header .success-check { background: rgba(255,255,255,.22); }
+.checkout-success-header .success-check::after { border-color: rgba(255,255,255,.55); }
+.checkout-success-header h2 { color: #fff; font-size: 19px; margin: 0; }
+.checkout-success-header .muted { color: rgba(255,255,255,.85); font-size: 11.5px; text-align: center; margin: 0; }
+.checkout-success-body { width: 100%; padding-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#checkout-goto-dashboard { background: linear-gradient(135deg, var(--accent2), var(--accent)); }
+
+#checkout-success-accounts .success-account-card {
+  background: transparent; border-radius: 0; padding: 0 0 12px;
+  border-bottom: 1px dashed var(--border);
+}
+#checkout-success-accounts .success-account-card:last-child { border-bottom: none; padding-bottom: 0; }
+#checkout-success-accounts .success-account-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 6px 0; border-bottom: 1px dashed var(--border); word-break: normal;
+}
+#checkout-success-accounts .success-account-row:last-of-type { border-bottom: none; }
+#checkout-success-accounts .success-account-value { font-weight: 700; color: var(--text); text-align: right; word-break: break-all; }
+#checkout-success-accounts .success-copy-btn {
+  background: rgba(14,169,104,.12); color: var(--ok); border: none;
+  font-weight: 700; font-size: 10.5px; padding: 6px 12px; border-radius: 999px;
+}
 .success-account-renew-box { margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 6px; }
 .success-account-renew-status { font-size: 12px; font-weight: 600; color: var(--btn); }
 .badge-no-renewable {
