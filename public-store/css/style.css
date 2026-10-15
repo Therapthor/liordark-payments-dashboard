@@ -479,6 +479,28 @@ a { color: var(--btn); }
 .checkout-amount { font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700; color: var(--accent); }
 .checkout-qr { width: 190px; height: 190px; object-fit: contain; border: 1px solid var(--border); border-radius: 14px; padding: 8px; margin: 4px 0; }
 .checkout-waiting { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 13px; }
+
+/* ─── Checkout "Completa tu pago" — cabecera oscura con el monto en
+   grande, cuerpo claro con el QR y los datos (resto de estados del
+   checkout — carga/éxito/error — quedan igual). Fondo del backdrop
+   también pasa a blanco/desenfocado en vez del dim oscuro genérico. */
+#checkout-modal {
+  background: rgba(255,255,255,.55);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+#checkout-modal .modal-card { overflow: hidden; }
+#checkout-modal:has(#checkout-ready:not([hidden])) .modal-close { color: rgba(255,255,255,.75); }
+.checkout-ready-header {
+  margin: -28px -24px 0; padding: 26px 24px 18px;
+  background: #141413; border-radius: 20px 20px 0 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.checkout-ready-header h2 { color: rgba(255,255,255,.65); font-size: 13px; font-weight: 600; margin: 0; }
+.checkout-ready-header .muted { color: rgba(255,255,255,.5); font-size: 11.5px; margin: 0; }
+.checkout-ready-header .checkout-amount { color: #FFB13D; font-size: 36px; }
+.checkout-ready-body { padding: 20px 0 2px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.checkout-ready-body .checkout-waiting { color: var(--btn); font-weight: 600; }
+
 .success-check {
   width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: #fff;
   font-size: 28px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px;

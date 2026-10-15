@@ -159,21 +159,25 @@
       </div>
 
       <div id="checkout-ready" class="checkout-state" hidden>
-        <h2>Completa tu pago</h2>
-        <p class="muted">Envía exactamente este monto por Yape:</p>
-        <div class="checkout-amount-row">
-          <span class="checkout-amount" id="checkout-amount">S/ 0.00</span>
-          <button class="yape-copy-btn yape-copy-btn-amount" id="checkout-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
+        <div class="checkout-ready-header">
+          <h2>Completa tu pago</h2>
+          <p class="muted">Envía exactamente este monto por Yape:</p>
+          <div class="checkout-amount-row">
+            <span class="checkout-amount" id="checkout-amount">S/ 0.00</span>
+            <button class="yape-copy-btn yape-copy-btn-amount" id="checkout-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
+          </div>
         </div>
-        <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
-        <div class="yape-info" id="checkout-instructions"></div>
-        <div class="checkout-waiting">
-          <span class="spinner spinner-sm"></span>
-          <span id="checkout-waiting-text">Esperando tu pago…</span>
-        </div>
-        <div class="checkout-support-row">
-          <a class="checkout-wrong-amount" id="checkout-wrong-amount-link" href="#" target="_blank" rel="noopener">¿Enviaste un monto erróneo? Contáctanos</a>
-          <a class="checkout-wa-btn" id="checkout-support-link" href="#" target="_blank" rel="noopener" title="Soporte por WhatsApp" aria-label="Soporte por WhatsApp">WhatsApp soporte</a>
+        <div class="checkout-ready-body">
+          <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
+          <div class="yape-info" id="checkout-instructions"></div>
+          <div class="checkout-waiting">
+            <span class="spinner spinner-sm"></span>
+            <span id="checkout-waiting-text">Esperando tu pago…</span>
+          </div>
+          <div class="checkout-support-row">
+            <a class="checkout-wrong-amount" id="checkout-wrong-amount-link" href="#" target="_blank" rel="noopener">¿Enviaste un monto erróneo? Contáctanos</a>
+            <a class="checkout-wa-btn" id="checkout-support-link" href="#" target="_blank" rel="noopener" title="Soporte por WhatsApp" aria-label="Soporte por WhatsApp">WhatsApp soporte</a>
+          </div>
         </div>
       </div>
 
