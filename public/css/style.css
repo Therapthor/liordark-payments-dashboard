@@ -524,6 +524,9 @@ button, input {
 .badge.none   { background: rgba(154,154,154,0.15); color: var(--text-muted); }
 .badge.sent   { background: rgba(22,163,74,0.15); color: var(--good); }
 .badge.failed { background: rgba(217,54,54,0.15); color: var(--critical); cursor: help; }
+.badge-run-pending    { background: rgba(154,154,154,0.15); color: var(--text-muted); }
+.badge-run-incomplete { background: rgba(180,120,10,0.15);  color: var(--warning); }
+.badge-run-complete   { background: rgba(22,163,74,0.15);   color: var(--good); }
 
 .row-delete-btn {
   background: transparent;
@@ -720,6 +723,7 @@ button, input {
 }
 .access-account-summary::-webkit-details-marker { display: none; }
 .access-account-summary-email { font-size: 14px; font-weight: 600; }
+.access-account-summary-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .access-account[open] .access-account-summary { border-bottom: 1px solid var(--border); }
 .access-occupancy { font-weight: 600; }
 
@@ -923,8 +927,6 @@ button, input {
   font-size: 11px; font-weight: 600; color: var(--accent-dim);
   background: rgba(245,166,35,0.15); border-radius: 6px; padding: 2px 6px;
 }
-.access-select-col { width: 28px; text-align: center; }
-
 /* ─────────────────────────────────────────────────────────────
    RESPONSIVE
 ───────────────────────────────────────────────────────────── */
