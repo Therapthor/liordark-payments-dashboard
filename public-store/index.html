@@ -182,11 +182,15 @@
       </div>
 
       <div id="checkout-success" class="checkout-state" hidden>
-        <div class="success-check">✓</div>
-        <h2>¡Listo!</h2>
-        <p class="muted">Copia los datos ahora — guárdalos, por si los necesitas después:</p>
-        <div id="checkout-success-accounts" class="checkout-success-accounts"></div>
-        <button class="btn-primary btn-block" id="checkout-goto-dashboard" type="button">Listo, seguir comprando</button>
+        <div class="checkout-success-header">
+          <div class="success-check">✓</div>
+          <h2>¡Listo!</h2>
+          <p class="muted">Copia tus datos — guárdalos, por si los necesitas después</p>
+        </div>
+        <div class="checkout-success-body">
+          <div id="checkout-success-accounts" class="checkout-success-accounts"></div>
+          <button class="btn-primary btn-block" id="checkout-goto-dashboard" type="button">Listo, seguir comprando</button>
+        </div>
       </div>
 
       <div id="checkout-error" class="checkout-state" hidden>

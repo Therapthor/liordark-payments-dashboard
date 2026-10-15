@@ -800,9 +800,9 @@
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
           <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar todo</button>
         </div>
-        <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
-        <div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>
-        ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
+        <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
+        <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
+        ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
         ${canRenew && nonRenewable ? `
           <div class="success-account-renew-box">
             <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
