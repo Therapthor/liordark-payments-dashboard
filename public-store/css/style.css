@@ -610,7 +610,14 @@ a { color: var(--btn); }
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 4px 14px; color: #fff;
 }
-.success-account-head .success-copy-btn { padding: 5px 10px; font-size: 11.5px; }
+/* Píldora translúcida igual que .success-account-expiry-pill, no el chip
+   blanco sólido de .btn-secondary — ese se veía pesado/tosco flotando
+   sobre la franja de color, sin importar cuánto se achicara el padding. */
+.success-account-head .success-copy-btn {
+  background: rgba(255,255,255,.22); border: none; color: #fff;
+  padding: 4px 9px; font-size: 11px; font-weight: 700; border-radius: 999px;
+}
+.success-account-head .success-copy-btn:hover { background: rgba(255,255,255,.32); }
 .success-account-head.ok     { background: linear-gradient(120deg, var(--accent), var(--accent2)); }
 .success-account-head.urgent { background: linear-gradient(120deg, #e24b3d, #ff8a3d); }
 .success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; }
