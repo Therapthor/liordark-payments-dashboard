@@ -566,19 +566,36 @@ a { color: var(--btn); }
 
 .checkout-success-accounts { width: 100%; display: flex; flex-direction: column; gap: 10px; margin: 6px 0 4px; }
 .success-account-card {
-  background: var(--chip-bg); border-radius: 14px; padding: 14px 16px;
-  text-align: left; display: flex; flex-direction: column; gap: 4px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden; text-align: left;
 }
 /* Al tocar una notificación, "Mis cuentas" resalta la tarjeta exacta unos
-   segundos para que el cliente la identifique de un vistazo. */
+   segundos para que el cliente la identifique de un vistazo — un anillo
+   alrededor (no un cambio de fondo) para no tapar el color del header. */
 .success-account-card-highlight { animation: accountHighlightFlash 2.4s ease; }
 @keyframes accountHighlightFlash {
-  0%, 65%  { background: #ffe9a8; box-shadow: 0 0 0 3px #f0c040; }
-  100%     { background: var(--chip-bg); box-shadow: 0 0 0 0 transparent; }
+  0%, 65%  { box-shadow: 0 0 0 4px #f0c040; }
+  100%     { box-shadow: 0 0 0 0 transparent; }
 }
-.success-account-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
-.success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; }
-.success-account-expiry { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+/* Franja de color del header — naranja normal, o rojo/naranja "urgente"
+   cuando la cuenta ya se puede renovar (ver canRenew en successAccountHtml),
+   para que el estado se note sin tener que leer el texto. */
+.success-account-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; color: #fff;
+}
+.success-account-head.ok     { background: linear-gradient(120deg, var(--accent), var(--accent2)); }
+.success-account-head.urgent { background: linear-gradient(120deg, #e24b3d, #ff8a3d); }
+.success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; }
+.success-account-expiry-pill {
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  background: rgba(255,255,255,.28); padding: 3px 8px; border-radius: 999px;
+}
+.success-account-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
+/* Ya se ve como píldora en el header — esta línea de texto plano solo se
+   reactiva en el recibo de compra (#checkout-success-accounts), que no
+   usa el header de color. */
+.success-account-expiry { display: none; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .success-account-row { font-size: 13px; color: var(--text); word-break: break-all; }
 
 /* ─── Pantalla de entrega ("¡Listo!") — cabecera verde con el check y
@@ -600,10 +617,16 @@ a { color: var(--btn); }
 #checkout-goto-dashboard { background: linear-gradient(135deg, var(--accent2), var(--accent)); }
 
 #checkout-success-accounts .success-account-card {
-  background: transparent; border-radius: 0; padding: 0 0 12px;
-  border-bottom: 1px dashed var(--border);
+  background: transparent; border: none; border-radius: 0; overflow: visible;
+  padding: 0 0 12px; border-bottom: 1px dashed var(--border);
 }
 #checkout-success-accounts .success-account-card:last-child { border-bottom: none; padding-bottom: 0; }
+/* El recibo de compra no usa el header de color — se queda con el look
+   plano de siempre (plataforma + copiar, vencimiento como texto abajo). */
+#checkout-success-accounts .success-account-head { background: none; padding: 0; color: var(--text); margin-bottom: 2px; }
+#checkout-success-accounts .success-account-expiry-pill { display: none; }
+#checkout-success-accounts .success-account-body { padding: 0; }
+#checkout-success-accounts .success-account-expiry { display: block; }
 #checkout-success-accounts .success-account-row {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   padding: 6px 0; border-bottom: 1px dashed var(--border); word-break: normal;

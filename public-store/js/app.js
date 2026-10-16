@@ -911,34 +911,41 @@
     const expiryLabel = a.daysLeft !== null && a.daysLeft !== undefined
       ? renewalStatusText(a.daysLeft)
       : (a.expiresAt ? "Vence: " + a.expiresAt : "");
+    // Franja del header en color — naranja normal, o rojo/naranja "urgente"
+    // cuando ya se puede renovar (mismo umbral que canRenew), para que el
+    // estado se note de un vistazo sin tener que leer el texto.
+    const headClass = canRenew ? "urgent" : "ok";
     return `
       <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
-        <div class="success-account-head">
+        <div class="success-account-head ${headClass}">
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
+          ${expiryLabel ? `<span class="success-account-expiry-pill">${escapeHtml(expiryLabel)}</span>` : ""}
           <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar todo</button>
         </div>
-        ${expiryLabel ? `<div class="success-account-expiry">${escapeHtml(expiryLabel)}</div>` : ""}
-        <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
-        <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
-        ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
-        ${canRenew && nonRenewable ? `
-          <div class="success-account-renew-box">
-            <span class="badge-no-renewable">🚫 No Renovable</span>
-          </div>
-        ` : ""}
-        ${canRenew && !nonRenewable ? `
-          <div class="success-account-renew-box">
-            ${needsCanvaEmail ? `
-              <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar ${escapeHtml(a.platform)}">
-              <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
-            ` : ""}
-            ${needsRenewPassword ? `
-              <input type="password" class="renewal-canva-password-input" data-idx="${idx}" placeholder="Contraseña de esa cuenta">
-              <p class="form-error renewal-canva-password-error" data-idx="${idx}" hidden></p>
-            ` : ""}
-            <button class="btn-primary btn-sm success-renew-btn" data-idx="${idx}" type="button">Renovar</button>
-          </div>
-        ` : ""}
+        <div class="success-account-body">
+          ${expiryLabel ? `<div class="success-account-expiry">${escapeHtml(expiryLabel)}</div>` : ""}
+          <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
+          <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
+          ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
+          ${canRenew && nonRenewable ? `
+            <div class="success-account-renew-box">
+              <span class="badge-no-renewable">🚫 No Renovable</span>
+            </div>
+          ` : ""}
+          ${canRenew && !nonRenewable ? `
+            <div class="success-account-renew-box">
+              ${needsCanvaEmail ? `
+                <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar ${escapeHtml(a.platform)}">
+                <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
+              ` : ""}
+              ${needsRenewPassword ? `
+                <input type="password" class="renewal-canva-password-input" data-idx="${idx}" placeholder="Contraseña de esa cuenta">
+                <p class="form-error renewal-canva-password-error" data-idx="${idx}" hidden></p>
+              ` : ""}
+              <button class="btn-primary btn-sm success-renew-btn" data-idx="${idx}" type="button">Renovar</button>
+            </div>
+          ` : ""}
+        </div>
       </div>`;
   }
 
