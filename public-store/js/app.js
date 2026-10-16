@@ -942,7 +942,10 @@
         <div class="success-account-head ${headClass}">
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
           ${expiryLabel ? `<span class="success-account-expiry-pill">${escapeHtml(expiryLabel)}</span>` : ""}
-          <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar</button>
+          <div class="success-account-actions">
+            <button class="success-support-btn" type="button"><span class="success-support-dot"></span>Soporte</button>
+            <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar</button>
+          </div>
         </div>
         <div class="success-account-body">
           ${expiryLabel ? `<div class="success-account-expiry">${escapeHtml(expiryLabel)}</div>` : ""}
