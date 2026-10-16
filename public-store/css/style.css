@@ -598,7 +598,7 @@ a { color: var(--btn); }
    para que el estado se note sin tener que leer el texto. */
 .success-account-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 10px 14px; color: #fff;
+  padding: 6px 14px; color: #fff;
 }
 .success-account-head.ok     { background: linear-gradient(120deg, var(--accent), var(--accent2)); }
 .success-account-head.urgent { background: linear-gradient(120deg, #e24b3d, #ff8a3d); }
