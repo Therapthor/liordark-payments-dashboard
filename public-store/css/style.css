@@ -36,7 +36,7 @@ a { color: var(--btn); }
 
 /* ─── Botones ─────────────────────────────────────────────── */
 
-.btn-primary, .btn-ghost, .btn-guest {
+.btn-primary, .btn-ghost, .btn-guest, .btn-secondary {
   border-radius: 11px;
   padding: 12px 18px;
   font-weight: 700;
@@ -52,6 +52,16 @@ a { color: var(--btn); }
 .btn-primary:disabled { opacity: .6; cursor: default; filter: none; }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
 .btn-ghost:hover { background: rgba(0,0,0,0.03); }
+/* Chip blanco discreto — para un botón secundario sobre fondos de color
+   (ej. "Copiar todo" en el header de Mis cuentas) sin el look recio del
+   botón nativo del navegador que tenía antes (nunca se había definido
+   esta clase acá, solo en el panel admin). */
+.btn-secondary {
+  background: var(--card); color: var(--text); border-color: var(--border);
+  font-family: 'Manrope', sans-serif;
+}
+.btn-secondary:hover { background: var(--chip-bg); }
+.btn-secondary:active { transform: scale(0.98); }
 .btn-guest { background: var(--ok); color: #fff; margin-top: 10px; }
 .btn-guest:hover { filter: brightness(1.08); }
 .btn-block { width: 100%; }
