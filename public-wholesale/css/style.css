@@ -411,6 +411,10 @@ button:disabled { cursor: default; }
 
 /* ─── Recordatorios ───────────────────────────────────────────── */
 
+.reminders-tip {
+  font-size: 12px; color: var(--gold-dark); background: var(--chip-bg);
+  border-radius: 10px; padding: 8px 12px; margin: -4px 0 14px; display: inline-block;
+}
 .reminders-summary { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
 .reminders-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .reminder-row {
