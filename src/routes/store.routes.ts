@@ -18,6 +18,11 @@ import {
   getLatestCodeForAccount,
   MAX_CODE_REQUESTS_PER_ACCOUNT,
 } from "../db/codes.repository";
+import {
+  listCustomerNotifications,
+  countUnreadCustomerNotifications,
+  markAllCustomerNotificationsRead,
+} from "../db/customer-notifications.repository";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
 // quita esta restricción cuando se dé por probado.
@@ -250,6 +255,34 @@ router.get("/dashboard", (req, res) => {
   const expiredAccounts = listArchivedAccountsByPhone(customer.phone);
 
   res.json({ accounts, expiredAccounts });
+});
+
+// GET /api/store/notifications — campanita del topbar: solo avisos de
+// cuenta nueva o renovada, para ESTE cliente logueado.
+router.get("/notifications", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) {
+    return res.status(401).json({ message: "Sesión inválida." });
+  }
+
+  res.json({
+    notifications: listCustomerNotifications(customer.phone),
+    unreadCount:   countUnreadCustomerNotifications(customer.phone),
+  });
+});
+
+// POST /api/store/notifications/read — marca todas las notificaciones
+// como leídas (se llama al abrir la campanita).
+router.post("/notifications/read", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) {
+    return res.status(401).json({ message: "Sesión inválida." });
+  }
+
+  markAllCustomerNotificationsRead(customer.phone);
+  res.json({ ok: true });
 });
 
 // POST /api/store/checkout — { platform } o { comboId } → reserva el

@@ -7,6 +7,7 @@ import {
 } from "../db/access.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
 import { logRenewalHistory } from "../db/renewal-history.repository";
+import { createCustomerNotifications } from "../db/customer-notifications.repository";
 
 const RENEW_DAYS = 30;
 
@@ -86,6 +87,12 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
   // Ciclo nuevo, marca en blanco de nuevo — evita arrastrar un "renueva"
   // o "no renueva" que ya no aplica al período que recién empieza.
   resetRenewalMarkers(id);
+
+  createCustomerNotifications(
+    account.profiles
+      .filter(p => p.clientPhone)
+      .map(p => ({ clientPhone: p.clientPhone, type: "renewed" as const, platform: account.platform }))
+  );
 
   // Confirma cualquier renovación pendiente de pago que hubiera quedado
   // (ej. el cliente terminó pagando por el bot en vez de por acá).

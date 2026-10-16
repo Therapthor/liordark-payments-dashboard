@@ -103,6 +103,7 @@
 
     document.getElementById("logout-btn").addEventListener("click", async () => {
       try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }
+      stopNotifPolling();
       showAuth();
     });
   }
@@ -117,7 +118,86 @@
       // Códigos — apagado por ahora (el reenvío de Gmail resultó más
       // complicado de lo esperado); el botón queda oculto para todos.
     } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
+    startNotifPolling();
     await loadCatalog();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // NOTIFICACIONES — campanita del topbar. Solo dos eventos: cuenta
+  // nueva asignada o cuenta renovada (ver customer-notifications.repository
+  // en el backend). Polling simple, mismo patrón que el resto de la app.
+  // ─────────────────────────────────────────────────────────────
+
+  const NOTIF_POLL_MS = 20000;
+  let notifPollTimer = null;
+
+  // created_at sale de SQLite como "YYYY-MM-DD HH:MM:SS" en UTC, sin
+  // zona — hay que marcarlo como tal para que no se interprete como hora
+  // local del navegador.
+  function timeAgo(sqliteDateUTC) {
+    const ms = Date.now() - new Date(sqliteDateUTC.replace(" ", "T") + "Z").getTime();
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "ahora";
+    if (min < 60) return min + " min";
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return hr + " h";
+    return Math.floor(hr / 24) + " d";
+  }
+
+  function renderNotifications(list) {
+    const el = document.getElementById("notif-list");
+    if (!list || list.length === 0) {
+      el.innerHTML = '<div class="notif-empty">No tienes notificaciones todavía.</div>';
+      return;
+    }
+    el.innerHTML = list.map(n => `
+      <div class="notif-item${n.readAt ? "" : " notif-item-unread"}">
+        <div class="notif-item-msg">${escapeHtml(n.message)}</div>
+        <div class="notif-item-time">${timeAgo(n.createdAt)}</div>
+      </div>
+    `).join("");
+  }
+
+  async function loadNotifications() {
+    try {
+      const { notifications, unreadCount } = await api("/notifications");
+      renderNotifications(notifications);
+      document.getElementById("notif-dot").hidden = !unreadCount;
+    } catch { /* no crítico */ }
+  }
+
+  async function openNotifPanel() {
+    document.getElementById("notif-panel").hidden = false;
+    await loadNotifications();
+    try {
+      await api("/notifications/read", { method: "POST" });
+      document.getElementById("notif-dot").hidden = true;
+    } catch { /* no crítico */ }
+  }
+
+  function closeNotifPanel() {
+    document.getElementById("notif-panel").hidden = true;
+  }
+
+  function initNotifications() {
+    document.getElementById("notif-bell-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.getElementById("notif-panel").hidden ? openNotifPanel() : closeNotifPanel();
+    });
+    document.addEventListener("click", (e) => {
+      const wrap = document.querySelector(".notif-wrap");
+      if (wrap && !wrap.contains(e.target)) closeNotifPanel();
+    });
+  }
+
+  function startNotifPolling() {
+    loadNotifications();
+    stopNotifPolling();
+    notifPollTimer = setInterval(loadNotifications, NOTIF_POLL_MS);
+  }
+
+  function stopNotifPolling() {
+    if (notifPollTimer) { clearInterval(notifPollTimer); notifPollTimer = null; }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -985,6 +1065,7 @@
     initAuthToggle();
     initAuthForms();
     initNav();
+    initNotifications();
     initCatalogClicks();
     initCheckoutModal();
     initProductDetailModal();
