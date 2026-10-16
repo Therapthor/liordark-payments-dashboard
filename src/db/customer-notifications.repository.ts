@@ -86,3 +86,8 @@ export function markAllCustomerNotificationsRead(phone: string): void {
     WHERE substr(client_phone, -9) = ? AND read_at IS NULL
   `).run(last9(phone));
 }
+
+/** Tachito de la campanita — borra todo el historial de este cliente. */
+export function deleteAllCustomerNotifications(phone: string): void {
+  db.prepare(`DELETE FROM customer_notifications WHERE substr(client_phone, -9) = ?`).run(last9(phone));
+}
