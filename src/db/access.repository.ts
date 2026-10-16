@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
+import { createCustomerNotification, createCustomerNotifications } from "./customer-notifications.repository";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -282,6 +283,10 @@ export function createAccountFromRenewal(oldAccountId: number, params: {
     return id;
   })();
 
+  createCustomerNotifications(
+    renewing.map(c => ({ clientPhone: c.clientPhone, type: "renewed" as const, platform: oldAccount.platform }))
+  );
+
   return { oldAccount: getAccountById(oldAccountId)!, newAccount: getAccountById(newAccountId)! };
 }
 
@@ -439,6 +444,8 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
   db.prepare(`
     UPDATE access_profiles SET client_phone = ?, order_ref = ?, updated_at = datetime('now') WHERE id = ?
   `).run(digits, orderRef, row.profileId);
+
+  createCustomerNotification(digits, "new_account", row.platform);
 
   return row as SoldProfile;
 });
