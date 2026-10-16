@@ -22,6 +22,7 @@ import {
   listCustomerNotifications,
   countUnreadCustomerNotifications,
   markAllCustomerNotificationsRead,
+  deleteAllCustomerNotifications,
 } from "../db/customer-notifications.repository";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
@@ -282,6 +283,18 @@ router.post("/notifications/read", (req, res) => {
   }
 
   markAllCustomerNotificationsRead(customer.phone);
+  res.json({ ok: true });
+});
+
+// POST /api/store/notifications/clear — tachito: borra todo el historial.
+router.post("/notifications/clear", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) {
+    return res.status(401).json({ message: "Sesión inválida." });
+  }
+
+  deleteAllCustomerNotifications(customer.phone);
   res.json({ ok: true });
 });
 

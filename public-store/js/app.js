@@ -224,6 +224,15 @@
       pendingHighlight = { platform: item.dataset.platform, email: item.dataset.email };
       switchPage("dashboard");
     });
+    document.getElementById("notif-clear-btn").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("¿Borrar todas las notificaciones?")) return;
+      try {
+        await api("/notifications/clear", { method: "POST" });
+        renderNotifications([]);
+        document.getElementById("notif-dot").hidden = true;
+      } catch { /* no crítico */ }
+    });
   }
 
   function startNotifPolling() {
