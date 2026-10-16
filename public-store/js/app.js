@@ -173,11 +173,18 @@
       || cards.find(c => c.dataset.platform === platform);
     if (!card) return;
 
+    const others = cards.filter(c => c !== card);
+
     card.scrollIntoView({ behavior: "smooth", block: "center" });
     card.classList.remove("success-account-card-highlight");
+    others.forEach(c => c.classList.remove("success-account-card-dimmed"));
     void card.offsetWidth; // reinicia la animación si ya se había resaltado antes
     card.classList.add("success-account-card-highlight");
-    setTimeout(() => card.classList.remove("success-account-card-highlight"), 2400);
+    others.forEach(c => c.classList.add("success-account-card-dimmed"));
+    setTimeout(() => {
+      card.classList.remove("success-account-card-highlight");
+      others.forEach(c => c.classList.remove("success-account-card-dimmed"));
+    }, 2400);
   }
 
   async function loadNotifications() {
