@@ -245,7 +245,7 @@
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
     document.getElementById("page-codes").hidden = view !== "codes";
-    if (view === "dashboard") { initDashboardRequestLink(); loadDashboardAccounts(); }
+    if (view === "dashboard") loadDashboardAccounts();
     if (view === "codes") loadCodesAccounts();
   }
 
@@ -699,10 +699,17 @@
 
   let cachedDashboard = [];
 
-  function initDashboardRequestLink() {
-    const link = document.getElementById("dashboard-request-link");
-    const msg = `Hola! Ya compré antes (celular ${currentPhone}) y quiero ver mi historial de cuentas. ¿Me ayudan?`;
-    link.href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(msg);
+  // Colapsadas por defecto (hidden ya viene puesto en el HTML) — el cliente
+  // casi nunca necesita ver sus cuentas vencidas, así que no ocupan espacio
+  // hasta que las pida con el ojito.
+  function initDashboardExpiredToggle() {
+    const btn  = document.getElementById("dashboard-expired-toggle");
+    const list = document.getElementById("dashboard-expired-list");
+    btn.addEventListener("click", () => {
+      list.hidden = !list.hidden;
+      btn.textContent = list.hidden ? "👁" : "🙈";
+      btn.title = list.hidden ? "Mostrar vencidas" : "Ocultar vencidas";
+    });
   }
 
   function expiredAccountCardHtml(a) {
@@ -1113,6 +1120,7 @@
     initCheckoutModal();
     initProductDetailModal();
     initDashboardRenewals();
+    initDashboardExpiredToggle();
     initComboBuilder();
     initCodesView();
 
