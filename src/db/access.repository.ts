@@ -284,7 +284,10 @@ export function createAccountFromRenewal(oldAccountId: number, params: {
   })();
 
   createCustomerNotifications(
-    renewing.map(c => ({ clientPhone: c.clientPhone, type: "renewed" as const, platform: oldAccount.platform }))
+    renewing.map(c => ({
+      clientPhone: c.clientPhone, type: "renewed" as const,
+      platform: oldAccount.platform, accountEmail: params.email.trim(),
+    }))
   );
 
   return { oldAccount: getAccountById(oldAccountId)!, newAccount: getAccountById(newAccountId)! };
@@ -445,7 +448,7 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
     UPDATE access_profiles SET client_phone = ?, order_ref = ?, updated_at = datetime('now') WHERE id = ?
   `).run(digits, orderRef, row.profileId);
 
-  createCustomerNotification(digits, "new_account", row.platform);
+  createCustomerNotification(digits, "new_account", row.platform, row.email);
 
   return row as SoldProfile;
 });
