@@ -486,6 +486,10 @@ a { color: var(--btn); }
 
 /* ─── Mis cuentas ─────────────────────────────────────────────── */
 
+/* Columna angosta y centrada — a todo el ancho de .content (980px) las
+   filas de correo/contraseña quedaban demasiado largas y perdían lectura. */
+#page-dashboard { max-width: 600px; margin: 0 auto; }
+
 .dashboard-subtitle-row { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; }
 .dashboard-subtitle-row:first-of-type { margin-top: 0; }
 .dashboard-subtitle-row .dashboard-subtitle { margin: 0; }
