@@ -234,4 +234,9 @@ ensureColumn("customers", "locked_until", "locked_until TEXT");
 ensureColumn("catalog_products", "wholesale_price", "wholesale_price TEXT NOT NULL DEFAULT '0'");
 ensureColumn("catalog_products", "wholesale_full_price", "wholesale_full_price TEXT NOT NULL DEFAULT '0'");
 
+// Correo de la cuenta que originó la notificación — para que, al tocarla
+// en liordark.com, se pueda resaltar la tarjeta exacta en "Mis cuentas"
+// (mismo criterio platform+email que ya usa accountKey() en el front).
+ensureColumn("customer_notifications", "account_email", "account_email TEXT NOT NULL DEFAULT ''");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

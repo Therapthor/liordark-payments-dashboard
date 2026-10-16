@@ -151,11 +151,33 @@
       return;
     }
     el.innerHTML = list.map(n => `
-      <div class="notif-item${n.readAt ? "" : " notif-item-unread"}">
+      <div class="notif-item${n.readAt ? "" : " notif-item-unread"}" data-platform="${escapeHtml(n.platform)}" data-email="${escapeHtml(n.accountEmail || "")}">
         <div class="notif-item-msg">${escapeHtml(n.message)}</div>
         <div class="notif-item-time">${timeAgo(n.createdAt)}</div>
       </div>
     `).join("");
+  }
+
+  // Al tocar una notificación — lleva a "Mis cuentas" y resalta la
+  // tarjeta exacta unos segundos (mismo criterio platform+email que ya
+  // usa accountKey() para identificar cuentas sin id).
+  let pendingHighlight = null;
+
+  function applyPendingHighlight() {
+    if (!pendingHighlight) return;
+    const { platform, email } = pendingHighlight;
+    pendingHighlight = null;
+
+    const cards = [...document.querySelectorAll("#dashboard-active-list .success-account-card")];
+    const card = cards.find(c => c.dataset.platform === platform && c.dataset.email === email)
+      || cards.find(c => c.dataset.platform === platform);
+    if (!card) return;
+
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.remove("success-account-card-highlight");
+    void card.offsetWidth; // reinicia la animación si ya se había resaltado antes
+    card.classList.add("success-account-card-highlight");
+    setTimeout(() => card.classList.remove("success-account-card-highlight"), 2400);
   }
 
   async function loadNotifications() {
@@ -187,6 +209,13 @@
     document.addEventListener("click", (e) => {
       const wrap = document.querySelector(".notif-wrap");
       if (wrap && !wrap.contains(e.target)) closeNotifPanel();
+    });
+    document.getElementById("notif-list").addEventListener("click", (e) => {
+      const item = e.target.closest(".notif-item");
+      if (!item || !item.dataset.platform) return;
+      closeNotifPanel();
+      pendingHighlight = { platform: item.dataset.platform, email: item.dataset.email };
+      switchPage("dashboard");
     });
   }
 
@@ -714,6 +743,8 @@
       } else {
         expiredSection.hidden = true;
       }
+
+      applyPendingHighlight();
     } catch { /* se deja lo último mostrado — el link de WhatsApp sigue de respaldo */ }
   }
 
@@ -875,7 +906,7 @@
     const needsCanvaEmail = canRenew && !nonRenewable && isManualActivationPlatform(a.platform);
     const needsRenewPassword = canRenew && !nonRenewable && requiresPasswordPlatform(a.platform);
     return `
-      <div class="success-account-card">
+      <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head">
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
           <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar todo</button>

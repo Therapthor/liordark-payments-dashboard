@@ -320,13 +320,14 @@ CREATE TABLE IF NOT EXISTS customers (
 -- cuenta renovada (renewAccount / createAccountFromRenewal). read_at NULL
 -- = no leída todavía.
 CREATE TABLE IF NOT EXISTS customer_notifications (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  client_phone TEXT    NOT NULL,
-  type         TEXT    NOT NULL, -- 'new_account' | 'renewed'
-  platform     TEXT    NOT NULL,
-  message      TEXT    NOT NULL,
-  read_at      TEXT,
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_phone  TEXT    NOT NULL,
+  type          TEXT    NOT NULL, -- 'new_account' | 'renewed'
+  platform      TEXT    NOT NULL,
+  account_email TEXT    NOT NULL DEFAULT '', -- para resaltar la tarjeta exacta en "Mis cuentas"
+  message       TEXT    NOT NULL,
+  read_at       TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_customer_notifications_phone ON customer_notifications(client_phone);
 

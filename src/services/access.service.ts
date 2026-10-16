@@ -91,7 +91,10 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
   createCustomerNotifications(
     account.profiles
       .filter(p => p.clientPhone)
-      .map(p => ({ clientPhone: p.clientPhone, type: "renewed" as const, platform: account.platform }))
+      .map(p => ({
+        clientPhone: p.clientPhone, type: "renewed" as const,
+        platform: account.platform, accountEmail: account.email,
+      }))
   );
 
   // Confirma cualquier renovación pendiente de pago que hubiera quedado

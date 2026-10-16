@@ -15,6 +15,7 @@ export type CustomerNotification = {
   id:          number;
   type:        CustomerNotificationType;
   platform:    string;
+  accountEmail: string;
   message:     string;
   readAt:      string | null;
   createdAt:   string;
@@ -36,23 +37,23 @@ function buildMessage(type: CustomerNotificationType, platform: string): string 
 }
 
 export function createCustomerNotification(
-  clientPhone: string, type: CustomerNotificationType, platform: string
+  clientPhone: string, type: CustomerNotificationType, platform: string, accountEmail = ""
 ): void {
   const digits = normalizePeruPhone(clientPhone);
   if (!digits || !platform) return;
   db.prepare(`
-    INSERT INTO customer_notifications (client_phone, type, platform, message)
-    VALUES (?, ?, ?, ?)
-  `).run(digits, type, platform, buildMessage(type, platform));
+    INSERT INTO customer_notifications (client_phone, type, platform, account_email, message)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(digits, type, platform, accountEmail, buildMessage(type, platform));
 }
 
 /** Varios clientes de una (ej. todos los que comparten una cuenta recién renovada). */
 export function createCustomerNotifications(entries: {
-  clientPhone: string; type: CustomerNotificationType; platform: string;
+  clientPhone: string; type: CustomerNotificationType; platform: string; accountEmail?: string;
 }[]): void {
   if (entries.length === 0) return;
   const run = db.transaction((rows: typeof entries) => {
-    for (const r of rows) createCustomerNotification(r.clientPhone, r.type, r.platform);
+    for (const r of rows) createCustomerNotification(r.clientPhone, r.type, r.platform, r.accountEmail || "");
   });
   run(entries);
 }
@@ -62,12 +63,13 @@ export function listCustomerNotifications(phone: string, limit = 20): CustomerNo
     SELECT * FROM customer_notifications WHERE substr(client_phone, -9) = ?
     ORDER BY created_at DESC LIMIT ?
   `).all(last9(phone), limit) as any[]).map(row => ({
-    id:        row.id,
-    type:      row.type,
-    platform:  row.platform,
-    message:   row.message,
-    readAt:    row.read_at,
-    createdAt: row.created_at,
+    id:           row.id,
+    type:         row.type,
+    platform:     row.platform,
+    accountEmail: row.account_email || "",
+    message:      row.message,
+    readAt:       row.read_at,
+    createdAt:    row.created_at,
   }));
 }
 
