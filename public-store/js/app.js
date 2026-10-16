@@ -226,7 +226,6 @@
     });
     document.getElementById("notif-clear-btn").addEventListener("click", async (e) => {
       e.stopPropagation();
-      if (!confirm("¿Borrar todas las notificaciones?")) return;
       try {
         await api("/notifications/clear", { method: "POST" });
         renderNotifications([]);
