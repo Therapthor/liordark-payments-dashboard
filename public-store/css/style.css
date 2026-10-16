@@ -590,6 +590,9 @@ a { color: var(--btn); }
 @keyframes accountHighlightAnts {
   to { background-position: 16px 0, -16px 100%, 0 16px, 100% -16px; }
 }
+/* El resto de las tarjetas se atenúa mientras dura el marco punteado, para
+   que la resaltada salte más a la vista — misma duración (2.4s) desde JS. */
+.success-account-card-dimmed { opacity: .45; transition: opacity .3s ease; }
 /* Franja de color del header — naranja normal, o rojo/naranja "urgente"
    cuando la cuenta ya se puede renovar (ver canRenew en successAccountHtml),
    para que el estado se note sin tener que leer el texto. */
