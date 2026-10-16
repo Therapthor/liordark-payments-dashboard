@@ -156,7 +156,7 @@
 
   let activePlatformDetail   = null; // plataforma cuyo detalle está abierto (o null)
   let activePlatformAccounts  = [];   // últimas cuentas cargadas para esa plataforma, para poder reordenar sin pedir de nuevo
-  let platformSortDir        = "asc"; // "asc" = vencen primero, "desc" = más nuevas primero
+  let platformSortDir        = "desc"; // "asc" = vencen primero, "desc" = más nuevas primero — se resetea a "desc" en openPlatformDetail()
   let openPlatformAccountIds = new Set(); // qué cuentas están abiertas — independiente del orden en que se dibujen
   let cachedPlatformSummaries = [];
 
@@ -205,7 +205,7 @@
   // compactar todo de nuevo y ver más de un vistazo.
   async function openPlatformDetail(platform) {
     activePlatformDetail = platform;
-    platformSortDir = "asc";
+    platformSortDir = "desc";
     document.getElementById("access-platforms").hidden = true;
     document.getElementById("access-platform-detail").hidden = false;
     document.getElementById("access-platform-detail-title").textContent = platform;
@@ -1437,10 +1437,21 @@
 
   let cachedProviderRenewals = [];
 
+  // Mismo umbral que accountStatus() del backend (WARNING_THRESHOLD_DAYS=3)
+  // — para que el color acá signifique lo mismo que en el resto del panel.
+  function providerRenewalDaysInfo(nextDate) {
+    if (!nextDate) return { cls: "", text: "" };
+    const days = Math.round((new Date(nextDate + "T00:00:00Z") - new Date(todayISO() + "T00:00:00Z")) / 86_400_000);
+    if (days < 0) return { cls: "expired", text: Math.abs(days) + "d vencido" };
+    if (days <= 3) return { cls: "pending", text: days === 0 ? "Vence hoy" : days + "d restantes" };
+    return { cls: "matched", text: days + "d restantes" };
+  }
+
   function renderProviderRenewal(a) {
     const li = document.createElement("li");
     li.className = "catalog-item";
     li.dataset.id = a.id;
+    const daysInfo = providerRenewalDaysInfo(a.providerRenewalNextDate);
     li.innerHTML = `
       <div class="catalog-thumb catalog-thumb-empty">🔁</div>
       <div class="catalog-main">
@@ -1448,6 +1459,7 @@
         <div class="catalog-desc">
           💰 ${escapeHtml(a.providerRenewalCost)} ${escapeHtml(a.providerRenewalCurrency)} ·
           📅 Próxima renovación: ${a.providerRenewalNextDate ? fmtDateLong(a.providerRenewalNextDate) : "—"}
+          ${daysInfo.text ? ` · <span class="feed-status ${daysInfo.cls}">${escapeHtml(daysInfo.text)}</span>` : ""}
         </div>
       </div>
       <div class="catalog-actions">
