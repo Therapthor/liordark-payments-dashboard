@@ -108,14 +108,11 @@
         </div>
 
         <div id="dashboard-expired-section" hidden>
-          <h3 class="dashboard-subtitle">Vencidas</h3>
-          <div id="dashboard-expired-list" class="renewal-accounts-list"></div>
-        </div>
-
-        <div class="dashboard-request-card">
-          <div class="dashboard-request-icon">🥭</div>
-          <p class="muted">¿No ves algo que compraste antes? Te lo mandamos directo por WhatsApp.</p>
-          <a class="btn-primary btn-block" id="dashboard-request-link" href="#" target="_blank" rel="noopener">Solicitar historial por WhatsApp</a>
+          <div class="dashboard-subtitle-row">
+            <h3 class="dashboard-subtitle">Vencidas</h3>
+            <button class="icon-btn-sm" id="dashboard-expired-toggle" type="button" title="Mostrar vencidas">👁</button>
+          </div>
+          <div id="dashboard-expired-list" class="renewal-accounts-list" hidden></div>
         </div>
       </section>
 

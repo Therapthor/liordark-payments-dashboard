@@ -476,15 +476,13 @@ a { color: var(--btn); }
 
 /* ─── Mis cuentas ─────────────────────────────────────────────── */
 
-.dashboard-request-card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 20px;
-  padding: 32px 24px; margin-top: 18px; max-width: 380px;
-  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px;
-}
-.dashboard-request-icon {
-  font-size: 32px; width: 64px; height: 64px; margin-bottom: 4px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--chip-bg); border-radius: 50%;
+.dashboard-subtitle-row { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; }
+.dashboard-subtitle-row:first-of-type { margin-top: 0; }
+.dashboard-subtitle-row .dashboard-subtitle { margin: 0; }
+.icon-btn-sm {
+  border: none; background: var(--chip-bg); color: var(--text);
+  width: 26px; height: 26px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
 /* ─── Modal de checkout ───────────────────────────────────────── */
@@ -566,16 +564,31 @@ a { color: var(--btn); }
 
 .checkout-success-accounts { width: 100%; display: flex; flex-direction: column; gap: 10px; margin: 6px 0 4px; }
 .success-account-card {
+  position: relative;
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   overflow: hidden; text-align: left;
 }
 /* Al tocar una notificación, "Mis cuentas" resalta la tarjeta exacta unos
-   segundos para que el cliente la identifique de un vistazo — un anillo
-   alrededor (no un cambio de fondo) para no tapar el color del header. */
-.success-account-card-highlight { animation: accountHighlightFlash 2.4s ease; }
-@keyframes accountHighlightFlash {
-  0%, 65%  { box-shadow: 0 0 0 4px #f0c040; }
-  100%     { box-shadow: 0 0 0 0 transparent; }
+   segundos para que el cliente la identifique de un vistazo — un marco
+   punteado "marchando" alrededor (tipo marquee de selección), para que se
+   note incluso sobre el header de color. Las 4 franjas en background-image
+   son el truco clásico de "marching ants" en CSS puro, sin JS ni SVG —
+   inset:0 (no afuera) para que no lo recorte el overflow:hidden de arriba. */
+.success-account-card-highlight::after {
+  content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  border-radius: 14px; overflow: hidden;
+  background-image:
+    repeating-linear-gradient(90deg, #e35d00 0 8px, transparent 8px 16px),
+    repeating-linear-gradient(90deg, #e35d00 0 8px, transparent 8px 16px),
+    repeating-linear-gradient(0deg,  #e35d00 0 8px, transparent 8px 16px),
+    repeating-linear-gradient(0deg,  #e35d00 0 8px, transparent 8px 16px);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 16px 3px, 16px 3px, 3px 16px, 3px 16px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: accountHighlightAnts .6s linear infinite;
+}
+@keyframes accountHighlightAnts {
+  to { background-position: 16px 0, -16px 100%, 0 16px, 100% -16px; }
 }
 /* Franja de color del header — naranja normal, o rojo/naranja "urgente"
    cuando la cuenta ya se puede renovar (ver canRenew en successAccountHtml),
