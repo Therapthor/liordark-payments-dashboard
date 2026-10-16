@@ -252,6 +252,7 @@
     document.getElementById("view-history").hidden       = view !== "history";
     document.getElementById("view-renewals").hidden      = view !== "renewals";
     document.getElementById("view-config").hidden        = view !== "config";
+    document.getElementById("view-support").hidden       = view !== "support";
 
     const isPagos = view === "history" || view === "renewals";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
@@ -581,7 +582,10 @@
 
       if (evt.type === "payment" && !searchActive) {
         prependFeedItem(evt.payment);
-        playChime();
+        // Sin sonido si todavía no se confirmó (ahí es cuando el pedido
+        // cae a "Pedidos pendientes"/"Renovaciones pendientes" — mucha
+        // gente solo le da a comprar para ver el proceso y no paga).
+        if (evt.payment.status === "matched") playChime();
       }
 
       if (evt.type === "status_update") {

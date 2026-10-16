@@ -239,4 +239,9 @@ ensureColumn("catalog_products", "wholesale_full_price", "wholesale_full_price T
 // (mismo criterio platform+email que ya usa accountKey() en el front).
 ensureColumn("customer_notifications", "account_email", "account_email TEXT NOT NULL DEFAULT ''");
 
+// Para no repetirle al mayorista la campanita de "cliente por vencer" cada
+// vez que hace polling — se marca una vez avisado y se limpia solo al
+// renovar la cuenta (ver resetRenewalMarkers).
+ensureColumn("access_profiles", "expiry_notified_at", "expiry_notified_at TEXT");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

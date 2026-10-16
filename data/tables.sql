@@ -392,3 +392,20 @@ CREATE TABLE IF NOT EXISTS wholesale_full_account_orders (
 );
 CREATE INDEX IF NOT EXISTS idx_wfao_wholesaler ON wholesale_full_account_orders(wholesaler_id);
 CREATE INDEX IF NOT EXISTS idx_wfao_status     ON wholesale_full_account_orders(status);
+
+-- Notificaciones para el mayorista en mayorista.liordark.com (campanita del
+-- header) — mismo criterio que customer_notifications: compra añadida a su
+-- registro (sellProfileForWholesaler / activación manual), cuenta completa
+-- ya entregada (markFullAccountDelivered), o un sub-cliente suyo por vencer
+-- (generado al pedir /notifications, ver access_profiles.expiry_notified_at).
+CREATE TABLE IF NOT EXISTS wholesaler_notifications (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  wholesaler_id INTEGER NOT NULL REFERENCES wholesalers(id),
+  type          TEXT    NOT NULL, -- 'purchase_added' | 'full_account_ready' | 'client_expiring'
+  platform      TEXT    NOT NULL,
+  account_email TEXT    NOT NULL DEFAULT '',
+  message       TEXT    NOT NULL,
+  read_at       TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_wholesaler_notifications_wid ON wholesaler_notifications(wholesaler_id);

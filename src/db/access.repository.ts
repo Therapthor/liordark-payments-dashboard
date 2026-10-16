@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { createCustomerNotification, createCustomerNotifications } from "./customer-notifications.repository";
+import { createWholesalerNotification } from "./wholesaler-notifications.repository";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -370,7 +371,9 @@ export function setProfileRenewal(id: number, status: RenewalStatus): AccessProf
 /** Limpia los marcadores de renovación de una cuenta — se llama al renovarla,
  *  para que cada ciclo empiece con la marca en blanco de nuevo. */
 export function resetRenewalMarkers(accountId: number): void {
-  db.prepare(`UPDATE access_profiles SET renewal_status = '' WHERE account_id = ?`).run(accountId);
+  db.prepare(`
+    UPDATE access_profiles SET renewal_status = '', expiry_notified_at = NULL WHERE account_id = ?
+  `).run(accountId);
 }
 
 export type RenewingProfile = {
@@ -492,6 +495,8 @@ export const sellProfileForWholesaler = db.transaction((
     WHERE id = ?
   `).run(digits, orderRef, wholesalerId, row.profileId);
 
+  createWholesalerNotification(wholesalerId, "purchase_added", row.platform, row.email);
+
   return row as SoldProfile;
 });
 
@@ -521,6 +526,7 @@ export const createManualActivationForWholesaler = db.transaction((params: {
     WHERE id = ?
   `).run(digits, params.orderRef, params.wholesalerId, account.profiles[0].id);
   markActivationPending(account.id);
+  createWholesalerNotification(params.wholesalerId, "purchase_added", params.platform, params.email);
   return { accountId: account.id, email: params.email };
 });
 
@@ -850,6 +856,28 @@ export function listExpiringClientsForWholesaler(wholesalerId: number, days: num
 /** Recordatorio manual de vencimiento mandado (panel > Renovaciones) — para no repetirle a la misma persona en la próxima tanda. */
 export function markReminderSent(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
+}
+
+/** Sub-clientes de este mayorista que vencen EXACTO en `days` días y todavía
+ *  no generaron la campanita de "cliente por vencer" en mayorista.liordark.com
+ *  (se limpia solo al renovar la cuenta — ver resetRenewalMarkers). */
+export function listUnnotifiedExpiringClientsForWholesaler(
+  wholesalerId: number, days: number
+): { profileId: number; platform: string; email: string }[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  return db.prepare(`
+    SELECT p.id AS profileId, a.platform AS platform, a.email AS email
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId
+      AND a.expires_at = @limit AND p.expiry_notified_at IS NULL
+  `).all({ wholesalerId, limit }) as { profileId: number; platform: string; email: string }[];
+}
+
+/** Marca que ya se le avisó por la campanita del panel mayorista — evita repetir en el próximo polling. */
+export function markExpiryNotified(profileId: number): void {
+  db.prepare(`UPDATE access_profiles SET expiry_notified_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
 export type RemindedClient = { profileId: number; clientPhone: string; platform: string; email: string; remindedAt: string };

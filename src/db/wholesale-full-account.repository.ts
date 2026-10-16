@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { createWholesalerNotification } from "./wholesaler-notifications.repository";
 
 // ─────────────────────────────────────────────────────────────
 // CUENTAS COMPLETAS A PEDIDO — ver tables.sql (wholesale_full_account_orders).
@@ -102,7 +103,11 @@ export function markFullAccountDelivered(id: number): FullAccountOrder | null {
     SET status = 'delivered', delivered_at = datetime('now'), seen_by_wholesaler = 0
     WHERE id = ? AND status = 'prepared'
   `).run(id);
-  return getFullAccountOrderById(id);
+  const order = getFullAccountOrderById(id);
+  if (order) {
+    createWholesalerNotification(order.wholesalerId, "full_account_ready", order.platform, order.deliveredAccountEmail);
+  }
+  return order;
 }
 
 export function markFullAccountSeenByWholesaler(wholesalerId: number): void {

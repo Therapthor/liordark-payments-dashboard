@@ -431,6 +431,31 @@
     cachedQueue        = queue;
     renderWholesalersList();
     renderQueueList();
+    updateQueueBadge();
+  }
+
+  // Número rojo en la pestaña "Mayoristas" — cuántas cuentas completas
+  // pidieron y todavía no se preparan. Se revisa aparte de loadAll()
+  // (más liviano, solo trae la cola) para que el admin lo vea sin tener
+  // que entrar a la pestaña.
+  function updateQueueBadge() {
+    const badge = document.getElementById("wholesalers-pending-badge");
+    if (!badge) return;
+    const pending = cachedQueue.filter(o => o.status === "queued").length;
+    badge.textContent = pending;
+    badge.hidden = pending === 0;
+  }
+
+  const QUEUE_BADGE_POLL_MS = 20_000;
+
+  async function pollQueueBadge() {
+    try {
+      const { queue } = await api("/full-account-queue");
+      cachedQueue = queue;
+      updateQueueBadge();
+      const view = document.getElementById("view-wholesalers");
+      if (view && !view.hidden) renderQueueList();
+    } catch { /* red momentánea — se reintenta en el próximo tick */ }
   }
 
   let initialized = false;
@@ -444,6 +469,9 @@
     initPrepareModal();
     initDeliverModal();
     initQueueActions();
+
+    pollQueueBadge();
+    setInterval(pollQueueBadge, QUEUE_BADGE_POLL_MS);
   }
 
   window.LiordarkWholesalers = { init, load: loadAll };
