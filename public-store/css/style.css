@@ -578,6 +578,7 @@ a { color: var(--btn); }
 }
 .success-account-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
 .success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; }
+.success-account-expiry { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .success-account-row { font-size: 13px; color: var(--text); word-break: break-all; }
 
 /* ─── Pantalla de entrega ("¡Listo!") — cabecera verde con el check y

@@ -905,24 +905,29 @@
     const nonRenewable = isNonRenewablePlatform(a.platform);
     const needsCanvaEmail = canRenew && !nonRenewable && isManualActivationPlatform(a.platform);
     const needsRenewPassword = canRenew && !nonRenewable && requiresPasswordPlatform(a.platform);
+    // Siempre visible — antes solo se mostraba el vencimiento cuando faltaba
+    // 1 día o menos (dentro del cuadro de Renovar), así que una cuenta recién
+    // comprada no mostraba en ningún lado cuánto tiempo le quedaba.
+    const expiryLabel = a.daysLeft !== null && a.daysLeft !== undefined
+      ? renewalStatusText(a.daysLeft)
+      : (a.expiresAt ? "Vence: " + a.expiresAt : "");
     return `
       <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head">
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
           <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar todo</button>
         </div>
+        ${expiryLabel ? `<div class="success-account-expiry">${escapeHtml(expiryLabel)}</div>` : ""}
         <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
         <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
         ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
         ${canRenew && nonRenewable ? `
           <div class="success-account-renew-box">
-            <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
             <span class="badge-no-renewable">🚫 No Renovable</span>
           </div>
         ` : ""}
         ${canRenew && !nonRenewable ? `
           <div class="success-account-renew-box">
-            <span class="success-account-renew-status">${escapeHtml(renewalStatusText(a.daysLeft))}</span>
             ${needsCanvaEmail ? `
               <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar ${escapeHtml(a.platform)}">
               <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>

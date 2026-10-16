@@ -17,8 +17,16 @@ import {
   setProfileRenewal,
   markReminderSent,
   listExpiringClientsForWholesaler,
+  listUnnotifiedExpiringClientsForWholesaler,
+  markExpiryNotified,
   type RenewalStatus,
 } from "../db/access.repository";
+import {
+  createWholesalerNotification,
+  listWholesalerNotifications,
+  countUnreadWholesalerNotifications,
+  markAllWholesalerNotificationsRead,
+} from "../db/wholesaler-notifications.repository";
 import { getCatalogProductByPlatform, listCatalogProducts } from "../db/catalog.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
@@ -389,6 +397,37 @@ router.post("/renewals/:profileId/mark-reminded", (req, res) => {
     return res.status(404).json({ message: "Perfil no encontrado." });
   }
   markReminderSent(profile.id);
+  res.json({ ok: true });
+});
+
+// ── NOTIFICACIONES (campanita del header) ──
+
+const EXPIRY_NOTIFY_DAYS = 1;
+
+// A diferencia de compra añadida/cuenta lista (eventos puntuales, se
+// escriben en el momento desde access.repository/wholesale-full-account.
+// repository), "cliente por vencer" no tiene un evento propio — se genera
+// acá mismo, de forma perezosa, cada vez que el mayorista pide sus
+// notificaciones (mismo polling de 20s del front).
+function generateExpiryNotifications(wholesalerId: number): void {
+  const expiring = listUnnotifiedExpiringClientsForWholesaler(wholesalerId, EXPIRY_NOTIFY_DAYS);
+  for (const c of expiring) {
+    createWholesalerNotification(wholesalerId, "client_expiring", c.platform, c.email);
+    markExpiryNotified(c.profileId);
+  }
+}
+
+router.get("/notifications", (req, res) => {
+  const wholesalerId = wid(req);
+  generateExpiryNotifications(wholesalerId);
+  res.json({
+    notifications: listWholesalerNotifications(wholesalerId),
+    unreadCount:   countUnreadWholesalerNotifications(wholesalerId),
+  });
+});
+
+router.post("/notifications/read", (req, res) => {
+  markAllWholesalerNotificationsRead(wid(req));
   res.json({ ok: true });
 });
 
