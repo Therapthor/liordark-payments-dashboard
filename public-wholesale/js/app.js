@@ -202,7 +202,7 @@
   // campanita de liordark.com (polling cada 20s + marcar leído al abrir).
   // ─────────────────────────────────────────────────────────────
 
-  const NOTIF_POLL_MS = 20_000;
+  const NOTIF_POLL_MS = 10_000;
   let notifPollTimer = null;
 
   function timeAgo(sqliteDateUTC) {
