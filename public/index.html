@@ -45,7 +45,7 @@
         <button class="tab-btn" data-view="wholesalers">Mayoristas <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
         <button class="tab-btn" data-view="web-customers">Clientes web</button>
         <button class="tab-btn" data-view="config">Configuración</button>
-        <button class="tab-btn" data-view="support">Soportes</button>
+        <button class="tab-btn" data-view="support">Soportes <span class="tab-badge-alert" id="support-pending-badge" hidden>0</span></button>
       </nav>
 
       <div class="topbar-actions">
@@ -455,10 +455,48 @@
         <div class="panel-header standalone">
           <h2>Soportes</h2>
         </div>
-        <div class="panel support-placeholder">
-          <p class="text-muted">Próximamente — esta sección todavía no está lista.</p>
+
+        <div class="support-summary">
+          <div class="panel support-summary-tile">
+            <div class="stat-label">🔴 Pendientes</div>
+            <div class="stat-value support-stat-pending" id="support-pending-count">0</div>
+          </div>
+          <div class="panel support-summary-tile">
+            <div class="stat-label">🟢 Atendidos</div>
+            <div class="stat-value support-stat-done" id="support-attended-count">0</div>
+          </div>
         </div>
+
+        <table class="access-table" id="support-table">
+          <thead>
+            <tr><th>Celular</th><th>Cuenta</th><th>Problema</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody id="support-table-body"></tbody>
+        </table>
+        <p class="feed-empty" id="support-empty" hidden>No hay reportes de soporte todavía.</p>
       </section>
+
+      <!-- ═══════════ MODAL: ATENDER SOPORTE ═══════════ -->
+      <div class="modal-backdrop modal-backdrop-blur" id="support-attend-modal" hidden>
+        <div class="modal-card support-attend-card">
+          <button class="modal-x" id="support-attend-close" type="button" title="Cerrar">✕</button>
+          <div class="support-attend-head">
+            <b id="support-attend-platform"></b>
+            <span class="support-attend-phone-pill" id="support-attend-phone" title="Tocar para copiar"></span>
+          </div>
+          <p class="support-attend-problem" id="support-attend-problem"></p>
+          <div class="creds-box">
+            <span><b>Correo:</b> <span id="support-attend-email"></span></span>
+            <span><b>Contraseña:</b> <span id="support-attend-password"></span></span>
+          </div>
+          <button class="btn-secondary support-attend-copy" id="support-attend-copy" type="button">📋 Copiar cuenta</button>
+          <div class="support-attend-provider-box" id="support-attend-provider-box">
+            <span><b>Proveedor:</b> <span id="support-attend-provider"></span></span>
+            <button class="btn-secondary support-attend-provider-btn" id="support-attend-provider-btn" type="button">📨 Solicitar soporte</button>
+          </div>
+          <button class="btn-primary support-attend-done" id="support-attend-done" type="button">✅ Marcar atendido</button>
+        </div>
+      </div>
 
     </main>
   </div>
@@ -1028,6 +1066,7 @@
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>
   <script src="js/wholesalers.js"></script>
+  <script src="js/support.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

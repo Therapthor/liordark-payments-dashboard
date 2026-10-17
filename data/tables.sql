@@ -331,6 +331,24 @@ CREATE TABLE IF NOT EXISTS customer_notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_customer_notifications_phone ON customer_notifications(client_phone);
 
+-- Reportes de soporte del cliente (botón "Soporte" en Mis cuentas de
+-- liordark.com, panel admin > Soportes). account_email/password quedan
+-- como foto del momento del reporte — si la cuenta se reemplaza después,
+-- el reporte sigue mostrando con qué credenciales tenía el problema.
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_phone     TEXT    NOT NULL,
+  platform         TEXT    NOT NULL,
+  account_email    TEXT    NOT NULL DEFAULT '',
+  account_password TEXT    NOT NULL DEFAULT '',
+  provider         TEXT    NOT NULL DEFAULT '',
+  problem          TEXT    NOT NULL DEFAULT '',
+  status           TEXT    NOT NULL DEFAULT 'pending', -- 'pending' | 'attended'
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  attended_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+
 -- ═══════════════════════════════════════════════════════════════════
 -- MAYORISTA — distribuidores con cuenta propia (la crea el admin, nunca
 -- se auto-registran), que recargan un saldo de créditos por Yape y lo
