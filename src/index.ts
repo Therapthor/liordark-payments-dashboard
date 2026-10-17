@@ -25,6 +25,7 @@ import customersRoutes from "./routes/customers.routes";
 import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
 import wholesalerRoutes from "./routes/wholesaler.routes";
 import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
+import supportRoutes from "./routes/support.routes";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
@@ -69,6 +70,7 @@ apiRouter.use("/wholesaler", requireWholesalerSession, wholesalerRoutes);
 // Gestión de mayoristas desde el panel admin (crear cuentas, ajustar
 // saldo, asignar stock, cola de cuentas completas) — requireAuth normal.
 apiRouter.use("/wholesalers", requireAuth, wholesalersAdminRoutes);
+apiRouter.use("/support", requireAuth, supportRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {
