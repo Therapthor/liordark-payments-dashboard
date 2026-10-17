@@ -254,4 +254,10 @@ ensureColumn("support_tickets", "resolution_message", "resolution_message TEXT N
 // su fecha original sin importar si la cuenta nueva está llena o es fresca.
 ensureColumn("access_profiles", "expires_override", "expires_override TEXT");
 
+// NULL = reporte de un cliente de liordark.com; si no, lo reportó ESE
+// mayorista a nombre de uno de sus propios clientes (ver wholesaler.routes.ts).
+ensureColumn("support_tickets", "wholesaler_id", "wholesaler_id INTEGER");
+
+console.log("🗄️  SQLite inicializado:", DB_PATH);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

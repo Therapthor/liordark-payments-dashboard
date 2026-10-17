@@ -780,6 +780,8 @@ button, input {
 .support-status-seen    { background: rgba(180,120,10,0.15); color: var(--warning); }
 .support-status-done    { background: rgba(22,163,74,0.15); color: var(--good); }
 
+.support-origin-tag { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
 /* ── Modal "Atender" ── */
 .support-attend-card { position: relative; max-width: 360px; gap: 0; }
 .modal-x {

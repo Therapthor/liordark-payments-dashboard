@@ -2,6 +2,7 @@ import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { createCustomerNotification, createCustomerNotifications } from "./customer-notifications.repository";
 import { createWholesalerNotification } from "./wholesaler-notifications.repository";
+import { createManualOverride, deleteManualOverride, findManualOverride, listManualOverridesForClient } from "./manual-overrides.repository";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -749,18 +750,28 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return [];
 
-  // COALESCE: si Soporte le reemplazó la cuenta, expires_override congela
-  // la fecha que ya tenía (ver expires_override en db.ts) por encima de la
-  // fecha real de la cuenta nueva — hasta que ésta se renueve de verdad.
-  return (db.prepare(`
+  // COALESCE: si Soporte le reemplazó la cuenta con una del pool,
+  // expires_override congela la fecha que ya tenía (ver expires_override
+  // en db.ts) por encima de la fecha real de la cuenta nueva — hasta que
+  // ésta se renueve de verdad.
+  const real = db.prepare(`
     SELECT a.platform AS platform, a.email AS email, a.password AS password,
            a.link AS link, p.profile_name AS profileName,
            COALESCE(p.expires_override, a.expires_at) AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) = ?
-    ORDER BY expiresAt ASC
-  `).all(last9(digits)) as CustomerAccount[]);
+  `).all(last9(digits)) as CustomerAccount[];
+
+  // Reemplazos manuales de Soporte (garantía sin cuenta real en Accesos —
+  // ver manual-overrides.repository.ts) — se ven igual que cualquier otra
+  // cuenta en "Mis cuentas".
+  const overrides: CustomerAccount[] = listManualOverridesForClient(digits).map(o => ({
+    platform: o.platform, email: o.email, password: o.password,
+    link: "", profileName: o.profileName, expiresAt: o.expiresAt,
+  }));
+
+  return [...real, ...overrides].sort((a, b) => (a.expiresAt || "9999-99-99").localeCompare(b.expiresAt || "9999-99-99"));
 }
 
 export type AccountForSupport = {
@@ -769,7 +780,8 @@ export type AccountForSupport = {
 
 /** Para el botón "Soporte" (liordark.com) — valida que la cuenta sea
  *  realmente de este cliente y de paso trae el proveedor, para el
- *  "Solicitar soporte al proveedor" del panel admin. */
+ *  "Solicitar soporte al proveedor" del panel admin. También reconoce una
+ *  garantía manual de Soporte (sin cuenta real en Accesos). */
 export function getActiveAccountForClient(clientPhone: string, platform: string, email: string): AccountForSupport | null {
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return null;
@@ -781,7 +793,34 @@ export function getActiveAccountForClient(clientPhone: string, platform: string,
     WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ?
     LIMIT 1
   `).get(last9(digits), platform.trim().toUpperCase(), email.trim()) as any;
-  return row || null;
+  if (row) return row;
+
+  const override = findManualOverride(clientPhone, platform, email, null);
+  if (!override) return null;
+  return { platform: override.platform, email: override.email, password: override.password, provider: override.provider, expiresAt: override.expiresAt };
+}
+
+/** Igual que getActiveAccountForClient, pero para un cliente de un
+ *  mayorista puntual (ver wholesaler.routes.ts) — sólo reconoce cuentas
+ *  y garantías que pertenecen a ESE mayorista. */
+export function getActiveAccountForWholesalerClient(
+  wholesalerId: number, clientPhone: string, platform: string, email: string
+): AccountForSupport | null {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return null;
+  const row = db.prepare(`
+    SELECT a.platform AS platform, a.email AS email, a.password AS password,
+           a.provider AS provider, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ? AND p.wholesaler_id = ?
+    LIMIT 1
+  `).get(last9(digits), platform.trim().toUpperCase(), email.trim(), wholesalerId) as any;
+  if (row) return row;
+
+  const override = findManualOverride(clientPhone, platform, email, wholesalerId);
+  if (!override) return null;
+  return { platform: override.platform, email: override.email, password: override.password, provider: override.provider, expiresAt: override.expiresAt };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -794,23 +833,41 @@ export function getActiveAccountForClient(clientPhone: string, platform: string,
 // cliente se libere de ahí (ver releaseProfile).
 // ─────────────────────────────────────────────────────────────
 
-export type ReplaceSourceProfile = {
-  profileId: number; accountId: number; platform: string; preservedExpiresAt: string | null;
-};
+// Fuente del reemplazo: o bien un perfil REAL (de Accesos) o un reemplazo
+// manual anterior (ver manual-overrides.repository.ts) — un cliente puede
+// reportar un problema dos veces seguidas y la segunda vez su "cuenta
+// anterior" ya es ella misma una garantía manual, no una cuenta de pool.
+type ReplaceSource =
+  | { kind: "profile";  profileId: number;  preservedExpiresAt: string | null }
+  | { kind: "override"; overrideId: number; preservedExpiresAt: string | null };
 
-/** Perfil actual del cliente en esa cuenta — de ahí sale la fecha a conservar. */
-export function getReplaceSourceProfile(clientPhone: string, platform: string, email: string): ReplaceSourceProfile | null {
+/** wholesalerId: null busca la cuenta/garantía de un cliente retail; un id
+ *  busca la de ESE mayorista — nunca se cruzan entre sí aunque coincida
+ *  plataforma+correo. */
+function findReplaceSource(clientPhone: string, platform: string, email: string, wholesalerId: number | null): ReplaceSource | null {
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return null;
-  const row = db.prepare(`
-    SELECT p.id AS profileId, a.id AS accountId, a.platform AS platform,
-           COALESCE(p.expires_override, a.expires_at) AS preservedExpiresAt
+  const plat = platform.trim().toUpperCase();
+  const mail = email.trim();
+
+  const profileRow = db.prepare(`
+    SELECT p.id AS profileId, COALESCE(p.expires_override, a.expires_at) AS preservedExpiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ?
+    WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ? AND p.wholesaler_id IS ?
     LIMIT 1
-  `).get(last9(digits), platform.trim().toUpperCase(), email.trim()) as any;
-  return row || null;
+  `).get(last9(digits), plat, mail, wholesalerId) as { profileId: number; preservedExpiresAt: string | null } | undefined;
+  if (profileRow) return { kind: "profile", profileId: profileRow.profileId, preservedExpiresAt: profileRow.preservedExpiresAt };
+
+  const override = findManualOverride(clientPhone, plat, mail, wholesalerId);
+  if (override) return { kind: "override", overrideId: override.id, preservedExpiresAt: override.expiresAt };
+
+  return null;
+}
+
+function releaseReplaceSource(source: ReplaceSource): void {
+  if (source.kind === "profile") releaseProfile(source.profileId);
+  else deleteManualOverride(source.overrideId);
 }
 
 function findFreeProfileId(accountId: number): number | null {
@@ -821,52 +878,54 @@ function findFreeProfileId(accountId: number): number | null {
 }
 
 /** Reemplazo de pool: mueve al cliente a un perfil libre de `targetAccountId`
- *  (llena o fresca, da igual) conservando su fecha anterior. */
+ *  (llena o fresca, da igual), conservando su fecha anterior. Si es un
+ *  cliente de mayorista, el perfil destino queda marcado como suyo (mismo
+ *  criterio que una venta normal — ver sellProfileForWholesaler). */
 export const replaceClientAccount = db.transaction((params: {
-  clientPhone: string; platform: string; email: string; targetAccountId: number;
+  clientPhone: string; platform: string; email: string; targetAccountId: number; wholesalerId: number | null;
 }): { accountId: number; email: string } => {
-  const source = getReplaceSourceProfile(params.clientPhone, params.platform, params.email);
+  const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
   if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
 
   const freeProfileId = findFreeProfileId(params.targetAccountId);
   if (!freeProfileId) throw new Error("La cuenta elegida no tiene perfiles libres.");
 
-  releaseProfile(source.profileId);
+  releaseReplaceSource(source);
   assignProfileClient(freeProfileId, params.clientPhone);
-  db.prepare(`UPDATE access_profiles SET expires_override = ? WHERE id = ?`)
-    .run(source.preservedExpiresAt, freeProfileId);
+  db.prepare(`
+    UPDATE access_profiles
+    SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?
+    WHERE id = ?
+  `).run(source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, freeProfileId);
 
   const account = db.prepare(`SELECT email FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { email: string };
   return { accountId: params.targetAccountId, email: account.email };
 });
 
-/** Reemplazo manual: crea una cuenta nueva con los datos que tipeó el admin
- *  (no sale del pool) y muda ahí al cliente, conservando igual su fecha. */
+/** Reemplazo manual: NO crea nada en Accesos — es solo una garantía para
+ *  este cliente puntual (ver manual-overrides.repository.ts), visible en
+ *  "Mis cuentas" / "Clientes" hasta que venza, conservando su fecha
+ *  anterior. No ocupa stock, no la ve nadie más. */
 export const replaceClientAccountManual = db.transaction((params: {
-  clientPhone: string; platform: string; email: string;
+  clientPhone: string; platform: string; email: string; wholesalerId: number | null;
   newEmail: string; newPassword: string; newProfileName: string; newProvider: string;
-}): { accountId: number; email: string } => {
-  const source = getReplaceSourceProfile(params.clientPhone, params.platform, params.email);
+}): { email: string } => {
+  const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
   if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
 
-  const [account] = createAccountsBulk({
-    platform:    params.platform,
-    provider:    params.newProvider,
-    hasProfiles: !!params.newProfileName.trim(),
-    expiresAt:   source.preservedExpiresAt,
-    pairs:       [{ email: params.newEmail, password: params.newPassword }],
+  releaseReplaceSource(source);
+  createManualOverride({
+    clientPhone:  params.clientPhone,
+    wholesalerId: params.wholesalerId,
+    platform:     params.platform,
+    email:        params.newEmail,
+    password:     params.newPassword,
+    profileName:  params.newProfileName,
+    provider:     params.newProvider,
+    expiresAt:    source.preservedExpiresAt,
   });
-  const newProfile = account.profiles[0];
-  if (params.newProfileName.trim()) {
-    db.prepare(`UPDATE access_profiles SET profile_name = ? WHERE id = ?`).run(params.newProfileName.trim(), newProfile.id);
-  }
 
-  releaseProfile(source.profileId);
-  assignProfileClient(newProfile.id, params.clientPhone);
-  db.prepare(`UPDATE access_profiles SET expires_override = ? WHERE id = ?`)
-    .run(source.preservedExpiresAt, newProfile.id);
-
-  return { accountId: account.id, email: account.email };
+  return { email: params.newEmail };
 });
 
 export type RenewalAccountView = {

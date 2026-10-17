@@ -93,7 +93,7 @@
     empty.hidden = true;
     tbody.innerHTML = tickets.map(t => `
       <tr data-id="${t.id}">
-        <td>${escapeHtml(fmtPhone(t.clientPhone))}</td>
+        <td>${escapeHtml(fmtPhone(t.clientPhone))}${t.wholesalerName ? `<div class="support-origin-tag">🏪 ${escapeHtml(t.wholesalerName)}</div>` : ""}</td>
         <td>${escapeHtml(t.platformTag)}</td>
         <td>${escapeHtml(t.problem)}</td>
         <td><span class="badge ${STATUS_CLASS[t.status]}">${STATUS_LABEL[t.status]}</span></td>
@@ -134,7 +134,8 @@
   function openAttendModal(ticket) {
     attendTarget = ticket;
     document.getElementById("support-attend-platform").textContent = ticket.platformTag;
-    document.getElementById("support-attend-phone").textContent = fmtPhone(ticket.clientPhone);
+    document.getElementById("support-attend-phone").textContent =
+      fmtPhone(ticket.clientPhone) + (ticket.wholesalerName ? ` · 🏪 ${ticket.wholesalerName}` : "");
     document.getElementById("support-attend-problem").textContent = ticket.problem || "(sin detalle)";
     document.getElementById("support-attend-email").textContent = ticket.accountEmail;
     document.getElementById("support-attend-password").textContent = ticket.accountPassword;
