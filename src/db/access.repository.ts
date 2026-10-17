@@ -755,6 +755,27 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
   `).all(last9(digits)) as CustomerAccount[]);
 }
 
+export type AccountForSupport = {
+  platform: string; email: string; password: string; provider: string; expiresAt: string | null;
+};
+
+/** Para el botón "Soporte" (liordark.com) — valida que la cuenta sea
+ *  realmente de este cliente y de paso trae el proveedor, para el
+ *  "Solicitar soporte al proveedor" del panel admin. */
+export function getActiveAccountForClient(clientPhone: string, platform: string, email: string): AccountForSupport | null {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return null;
+  const row = db.prepare(`
+    SELECT a.platform AS platform, a.email AS email, a.password AS password,
+           a.provider AS provider, a.expires_at AS expiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ?
+    LIMIT 1
+  `).get(last9(digits), platform.trim().toUpperCase(), email.trim()) as any;
+  return row || null;
+}
+
 export type RenewalAccountView = {
   platform:    string;
   platformTag: string;

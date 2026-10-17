@@ -777,6 +777,7 @@ button, input {
 .support-stat-done    { color: var(--good); }
 
 .support-status-pending { background: rgba(217,54,54,0.15); color: var(--critical); }
+.support-status-seen    { background: rgba(180,120,10,0.15); color: var(--warning); }
 .support-status-done    { background: rgba(22,163,74,0.15); color: var(--good); }
 
 /* ── Modal "Atender" ── */

@@ -3,6 +3,7 @@ import {
   listSupportTickets,
   countPendingSupportTickets,
   countAttendedSupportTickets,
+  markSupportTicketSeen,
   markSupportTicketAttended,
 } from "../db/support-tickets.repository";
 
@@ -18,6 +19,12 @@ router.get("/tickets", (_req, res) => {
     pendingCount:  countPendingSupportTickets(),
     attendedCount: countAttendedSupportTickets(),
   });
+});
+
+// El admin abrió el modal "Atender" — avisa al cliente que ya lo vieron.
+router.post("/tickets/:id/seen", (req, res) => {
+  const ticket = markSupportTicketSeen(Number(req.params.id));
+  res.json({ ticket });
 });
 
 router.post("/tickets/:id/attend", (req, res) => {
