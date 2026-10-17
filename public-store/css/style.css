@@ -543,6 +543,25 @@ a { color: var(--btn); }
   background: rgba(255,255,255,.55);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
+
+/* Mismo criterio de fondo difuminado que el checkout. */
+#support-modal {
+  background: rgba(255,255,255,.55);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+#support-modal .mini-account {
+  background: var(--chip-bg); border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; margin: 10px 0 14px;
+}
+#support-modal .mini-account b { font-family: 'Space Grotesk', sans-serif; }
+#support-modal .sup-input {
+  width: 100%; border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px;
+  font-family: 'Manrope', sans-serif; font-size: 13.5px; resize: vertical; box-sizing: border-box;
+}
+#support-modal .form-error { margin: 8px 0 0; }
+#support-modal .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+#support-modal .btn-row .btn-ghost { flex: 1; }
+#support-modal .btn-row .btn-primary { flex: 2; }
 /* padding en 0 y repartido en cada sección (header/body) en vez del
    viejo truco de márgenes negativos — ese dejaba un filo blanco
    asimétrico en las esquinas porque el radio de la cabecera y el de
@@ -650,6 +669,11 @@ a { color: var(--btn); }
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: .45; transform: scale(1.5); }
 }
+/* Con reporte activo, "Soporte" se vuelve esta etiqueta de estado — mismo
+   tamaño que Copiar (hereda el estilo de .success-support-btn), pero sin
+   el puntito ni hover, ya no es un botón, es solo información. */
+.success-support-btn.success-support-status { cursor: default; }
+.success-support-btn.success-support-status:hover { background: rgba(255,255,255,.22); }
 .success-account-head.ok     { background: linear-gradient(120deg, var(--accent), var(--accent2)); }
 .success-account-head.urgent { background: linear-gradient(120deg, #e24b3d, #ff8a3d); }
 .success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; }

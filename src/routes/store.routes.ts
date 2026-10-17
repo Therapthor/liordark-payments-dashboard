@@ -6,7 +6,7 @@ import { findCustomerById } from "../db/customer.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
-import { listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone } from "../db/access.repository";
+import { listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone, getActiveAccountForClient } from "../db/access.repository";
 import { listArchivedAccountsByPhone } from "../db/access-history.repository";
 import { daysLeft } from "../services/access.service";
 import { normalizePeruPhone } from "../utils/phone.util";
@@ -24,12 +24,20 @@ import {
   markAllCustomerNotificationsRead,
   deleteAllCustomerNotifications,
 } from "../db/customer-notifications.repository";
+import { createSupportTicket, listSupportTicketsForClient } from "../db/support-tickets.repository";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
 // quita esta restricción cuando se dé por probado.
 const CODES_TEST_PHONE = "977430941";
 function isCodesTestUser(phone: string): boolean {
   return phone.replace(/\D/g, "").slice(-9) === CODES_TEST_PHONE;
+}
+
+// Botón "Soporte" (Mis cuentas) — mismo celular de prueba que Códigos,
+// a pedido explícito. Se quita esta restricción cuando se dé por probado.
+const SUPPORT_TEST_PHONE = "977430941";
+function isSupportTestUser(phone: string): boolean {
+  return phone.replace(/\D/g, "").slice(-9) === SUPPORT_TEST_PHONE;
 }
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -400,6 +408,50 @@ router.post("/checkout", async (req, res) => {
     const message = err?.response?.data?.message || "No se pudo crear la orden. Intenta de nuevo.";
     res.status(err?.response?.status || 502).json({ message });
   }
+});
+
+// GET /api/store/support/tickets — reportes de ESTE cliente, para que
+// cada tarjeta de "Mis cuentas" sepa si tiene uno activo y en qué estado.
+router.get("/support/tickets", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+
+  res.json({ tickets: listSupportTicketsForClient(customer.phone) });
+});
+
+// POST /api/store/support/tickets — el botón "Soporte" de una cuenta.
+// De prueba: solo SUPPORT_TEST_PHONE puede crear reportes de verdad; para
+// cualquier otro no pasa nada (ver gate también del lado del front).
+router.post("/support/tickets", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+  if (!isSupportTestUser(customer.phone)) {
+    return res.status(403).json({ message: "Soporte todavía no está disponible para tu cuenta." });
+  }
+
+  const platform     = String(req.body?.platform ?? "").trim();
+  const accountEmail = String(req.body?.accountEmail ?? "").trim();
+  const problem       = String(req.body?.problem ?? "").trim();
+  if (!platform || !accountEmail) return res.status(400).json({ message: "Falta la cuenta." });
+  if (!problem) return res.status(400).json({ message: "Cuéntanos qué está pasando." });
+
+  // Nunca confía en lo que mande el cliente para correo/contraseña/proveedor
+  // — se vuelve a buscar la cuenta activa real, así no se puede reportar
+  // (ni copiar credenciales de) una cuenta que no es suya.
+  const account = getActiveAccountForClient(customer.phone, platform, accountEmail);
+  if (!account) return res.status(404).json({ message: "Esa cuenta no está activa en tu perfil." });
+
+  const ticket = createSupportTicket({
+    clientPhone:     customer.phone,
+    platform:        account.platform,
+    accountEmail:    account.email,
+    accountPassword: account.password,
+    provider:        account.provider,
+    problem,
+  });
+  res.status(201).json({ ticket });
 });
 
 export default router;

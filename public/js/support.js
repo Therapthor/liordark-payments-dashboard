@@ -52,8 +52,8 @@
   // TABLA + RESUMEN
   // ─────────────────────────────────────────────────────────────
 
-  const STATUS_LABEL = { pending: "Pendiente", attended: "Atendido" };
-  const STATUS_CLASS = { pending: "support-status-pending", attended: "support-status-done" };
+  const STATUS_LABEL = { pending: "Pendiente", seen: "En revisión", attended: "Atendido" };
+  const STATUS_CLASS = { pending: "support-status-pending", seen: "support-status-seen", attended: "support-status-done" };
 
   let cachedTickets = [];
 
@@ -85,7 +85,7 @@
         <td>${escapeHtml(t.platformTag)}</td>
         <td>${escapeHtml(t.problem)}</td>
         <td><span class="badge ${STATUS_CLASS[t.status]}">${STATUS_LABEL[t.status]}</span></td>
-        <td>${t.status === "pending" ? `<button class="btn-primary btn-sm support-attend-btn" data-id="${t.id}" type="button">Atender</button>` : ""}</td>
+        <td>${t.status !== "attended" ? `<button class="btn-primary btn-sm support-attend-btn" data-id="${t.id}" type="button">Atender</button>` : ""}</td>
       </tr>
     `).join("");
   }
@@ -130,6 +130,17 @@
     }
 
     document.getElementById("support-attend-modal").hidden = false;
+
+    // Abrir el modal ya cuenta como "lo vieron" — avisa al cliente que
+    // su reporte pasó a revisión. Nunca lo marca atendido solo.
+    if (ticket.status === "pending") {
+      api("/tickets/" + ticket.id + "/seen", { method: "POST" })
+        .then(() => {
+          ticket.status = "seen";
+          renderTable(cachedTickets);
+        })
+        .catch(() => { /* no crítico */ });
+    }
   }
 
   function closeAttendModal() {

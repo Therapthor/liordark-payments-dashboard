@@ -714,6 +714,98 @@
 
   let cachedDashboard = [];
 
+  // ─────────────────────────────────────────────────────────────
+  // SOPORTE (botón en cada cuenta activa) — de prueba, solo para este
+  // celular. Para cualquier otro cliente el botón no hace nada al
+  // presionarlo (el backend también lo bloquea, esto es solo para no
+  // ni abrir el modal). Se quita esta restricción cuando se dé por
+  // probado — ver SUPPORT_TEST_PHONE en store.routes.ts.
+  // ─────────────────────────────────────────────────────────────
+
+  const SUPPORT_TEST_PHONE = "977430941";
+  function isSupportTestUser() {
+    return currentPhone.replace(/\D/g, "").slice(-9) === SUPPORT_TEST_PHONE;
+  }
+
+  function accountSupportKey(platform, email) {
+    return platform.trim().toUpperCase() + "|" + email.trim().toLowerCase();
+  }
+
+  // "PLATAFORMA|correo" -> reporte más nuevo sin atender de esa cuenta.
+  let supportTicketsByAccount = {};
+
+  async function loadSupportTickets() {
+    if (!isSupportTestUser()) { supportTicketsByAccount = {}; return; }
+    try {
+      const { tickets } = await api("/support/tickets");
+      const map = {};
+      for (const t of tickets) {
+        if (t.status === "attended") continue; // resuelto -> el botón vuelve a estar disponible
+        const key = accountSupportKey(t.platform, t.accountEmail);
+        if (!map[key]) map[key] = t; // ya viene ordenado del más nuevo al más viejo
+      }
+      supportTicketsByAccount = map;
+    } catch { supportTicketsByAccount = {}; }
+  }
+
+  let supportModalTarget = null; // { platform, email }
+
+  function openSupportModal(platform, email) {
+    supportModalTarget = { platform, email };
+    document.getElementById("support-modal-account").innerHTML =
+      `<b>${escapeHtml(platform)}</b> · ${escapeHtml(email)}`;
+    document.getElementById("support-modal-text").value = "";
+    document.getElementById("support-modal-error").hidden = true;
+    document.getElementById("support-modal").hidden = false;
+  }
+
+  function closeSupportModal() {
+    document.getElementById("support-modal").hidden = true;
+    supportModalTarget = null;
+  }
+
+  async function sendSupportReport() {
+    const problem = document.getElementById("support-modal-text").value.trim();
+    const errorEl = document.getElementById("support-modal-error");
+    if (!problem) {
+      errorEl.textContent = "Cuéntanos qué está pasando.";
+      errorEl.hidden = false;
+      return;
+    }
+    const btn = document.getElementById("support-modal-send");
+    btn.disabled = true;
+    try {
+      await api("/support/tickets", {
+        method: "POST",
+        body: { platform: supportModalTarget.platform, accountEmail: supportModalTarget.email, problem },
+      });
+      closeSupportModal();
+      await loadSupportTickets();
+      await loadDashboardAccounts();
+    } catch (err) {
+      errorEl.textContent = err.message || "No se pudo enviar el reporte.";
+      errorEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function initSupportModal() {
+    document.getElementById("support-modal-close").addEventListener("click", closeSupportModal);
+    document.getElementById("support-modal-cancel").addEventListener("click", closeSupportModal);
+    document.getElementById("support-modal").addEventListener("click", (e) => {
+      if (e.target.id === "support-modal") closeSupportModal();
+    });
+    document.getElementById("support-modal-send").addEventListener("click", sendSupportReport);
+
+    document.getElementById("dashboard-active-list").addEventListener("click", (e) => {
+      const btn = e.target.closest(".success-support-btn");
+      if (!btn || btn.classList.contains("success-support-status")) return;
+      if (!isSupportTestUser()) return; // nada para el resto de clientes, a propósito
+      openSupportModal(btn.dataset.platform, btn.dataset.email);
+    });
+  }
+
   // Colapsadas por defecto (hidden ya viene puesto en el HTML) — el cliente
   // casi nunca necesita ver sus cuentas vencidas, así que no ocupan espacio
   // hasta que las pida con el ojito.
@@ -747,7 +839,7 @@
     const expiredList = document.getElementById("dashboard-expired-list");
 
     try {
-      const { accounts, expiredAccounts } = await api("/dashboard");
+      const [{ accounts, expiredAccounts }] = await Promise.all([api("/dashboard"), loadSupportTickets()]);
       cachedDashboard = accounts || [];
 
       if (cachedDashboard.length === 0) {
@@ -937,13 +1029,20 @@
     // cuando ya se puede renovar (mismo umbral que canRenew), para que el
     // estado se note de un vistazo sin tener que leer el texto.
     const headClass = canRenew ? "urgent" : "ok";
+    // Con un reporte activo (no atendido todavía), "Soporte" deja de ser
+    // botón y pasa a mostrar en qué va — mismo tamaño/estilo que Copiar,
+    // solo cambia el texto (ver success-support-status en el CSS).
+    const activeTicket = supportTicketsByAccount[accountSupportKey(a.platform, a.email)];
+    const supportHtml = activeTicket
+      ? `<span class="success-support-btn success-support-status">${activeTicket.status === "seen" ? "🟡 Revisando" : "📨 Enviado"}</span>`
+      : `<button class="success-support-btn" type="button" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}"><span class="success-support-dot"></span>Soporte</button>`;
     return `
       <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head ${headClass}">
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
           ${expiryLabel ? `<span class="success-account-expiry-pill">${escapeHtml(expiryLabel)}</span>` : ""}
           <div class="success-account-actions">
-            <button class="success-support-btn" type="button"><span class="success-support-dot"></span>Soporte</button>
+            ${supportHtml}
             <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar</button>
           </div>
         </div>
@@ -1139,6 +1238,7 @@
     initProductDetailModal();
     initDashboardRenewals();
     initDashboardExpiredToggle();
+    initSupportModal();
     initComboBuilder();
     initCodesView();
 
