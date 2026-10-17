@@ -353,7 +353,9 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
   attended_at      TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_tickets(wholesaler_id);
+-- (el índice sobre wholesaler_id se crea en db.ts, después de la
+-- migración que agrega la columna — acá rompería en una base ya existente
+-- donde support_tickets no la tenía todavía.)
 
 -- Reemplazo manual de Soporte (liordark.com o mayorista) — una garantía
 -- puntual para el cliente hasta que venza, SIN pasar por el inventario de
