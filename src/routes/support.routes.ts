@@ -8,6 +8,7 @@ import {
   markSupportTicketAttended,
 } from "../db/support-tickets.repository";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
+import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 import { replaceClientAccount, replaceClientAccountManual } from "../db/access.repository";
 
 // ─────────────────────────────────────────────────────────────
@@ -34,7 +35,12 @@ router.post("/tickets/:id/attend", (req, res) => {
   const resolutionMessage = String(req.body?.resolutionMessage || "");
   const ticket = markSupportTicketAttended(Number(req.params.id), resolutionMessage);
   if (!ticket) return res.status(404).json({ message: "Reporte no encontrado o ya estaba atendido." });
-  createCustomerNotification(ticket.clientPhone, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage);
+  // Al mayorista si lo reportó él (a nombre de un cliente suyo), al cliente si es de liordark.com.
+  if (ticket.wholesalerId) {
+    createWholesalerNotification(ticket.wholesalerId, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage);
+  } else {
+    createCustomerNotification(ticket.clientPhone, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage);
+  }
   res.json({ ticket });
 });
 
@@ -51,7 +57,8 @@ router.post("/tickets/:id/replace", (req, res) => {
   if (!targetAccountId) return res.status(400).json({ message: "Falta elegir la cuenta destino." });
   try {
     const result = replaceClientAccount({
-      clientPhone: ticket.clientPhone, platform: ticket.platform, email: ticket.accountEmail, targetAccountId,
+      clientPhone: ticket.clientPhone, platform: ticket.platform, email: ticket.accountEmail,
+      targetAccountId, wholesalerId: ticket.wholesalerId,
     });
     res.json(result);
   } catch (err: any) {
@@ -68,6 +75,7 @@ router.post("/tickets/:id/replace-manual", (req, res) => {
   try {
     const result = replaceClientAccountManual({
       clientPhone: ticket.clientPhone, platform: ticket.platform, email: ticket.accountEmail,
+      wholesalerId: ticket.wholesalerId,
       newEmail, newPassword,
       newProfileName: String(req.body?.newProfileName || "").trim(),
       newProvider:    String(req.body?.newProvider || "").trim(),

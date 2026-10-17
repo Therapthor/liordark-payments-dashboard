@@ -3,14 +3,16 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 
 // ─────────────────────────────────────────────────────────────
 // NOTIFICACIONES DEL MAYORISTA (campanita en mayorista.liordark.com) —
-// mismo criterio que customer-notifications.repository.ts, tres eventos:
-// se le añadió una compra a su registro (sellProfileForWholesaler /
+// mismo criterio que customer-notifications.repository.ts: se le añadió
+// una compra a su registro (sellProfileForWholesaler /
 // createManualActivationForWholesaler), una cuenta completa a pedido ya
-// se le entregó (markFullAccountDelivered), o un sub-cliente suyo vence
-// en 1 día (generado al pedir GET /notifications, ver wholesaler.routes.ts).
+// se le entregó (markFullAccountDelivered), un sub-cliente suyo vence en
+// 1 día (generado al pedir GET /notifications, ver wholesaler.routes.ts),
+// o un reporte de soporte que presentó a nombre de un cliente ya fue
+// atendido (ver support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved";
 
 export type WholesalerNotification = {
   id:           number;
@@ -30,17 +32,20 @@ function buildMessage(type: WholesalerNotificationType, platform: string): strin
   const name = platformTitle(platform);
   if (type === "purchase_added")      return `🛒 Se agregó tu compra de ${name} a tu registro.`;
   if (type === "full_account_ready")  return `🎉 Tu cuenta completa de ${name} ya está lista.`;
+  if (type === "support_resolved")    return `🛟 Tu reporte de soporte sobre ${name} fue atendido.`;
   return `⏰ Un cliente tuyo de ${name} vence mañana.`;
 }
 
+/** customMessage: para "support_resolved", el texto que escribió el admin
+ *  al atender — reemplaza el mensaje automático. */
 export function createWholesalerNotification(
-  wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = ""
+  wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = "", customMessage = ""
 ): void {
   if (!wholesalerId || !platform) return;
   db.prepare(`
     INSERT INTO wholesaler_notifications (wholesaler_id, type, platform, account_email, message)
     VALUES (?, ?, ?, ?, ?)
-  `).run(wholesalerId, type, platform, accountEmail, buildMessage(type, platform));
+  `).run(wholesalerId, type, platform, accountEmail, customMessage.trim() || buildMessage(type, platform));
 }
 
 export function listWholesalerNotifications(wholesalerId: number, limit = 20): WholesalerNotification[] {

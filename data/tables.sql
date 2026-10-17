@@ -333,22 +333,48 @@ CREATE TABLE IF NOT EXISTS customer_notifications (
 CREATE INDEX IF NOT EXISTS idx_customer_notifications_phone ON customer_notifications(client_phone);
 
 -- Reportes de soporte del cliente (botón "Soporte" en Mis cuentas de
--- liordark.com, panel admin > Soportes). account_email/password quedan
--- como foto del momento del reporte — si la cuenta se reemplaza después,
--- el reporte sigue mostrando con qué credenciales tenía el problema.
+-- liordark.com, o del mayorista en Clientes — panel admin > Soportes los
+-- junta a todos). account_email/password quedan como foto del momento del
+-- reporte — si la cuenta se reemplaza después, el reporte sigue mostrando
+-- con qué credenciales tenía el problema. wholesaler_id: NULL = lo reportó
+-- un cliente de liordark.com; si no, lo reportó ESE mayorista a nombre de
+-- client_phone (uno de sus propios clientes).
 CREATE TABLE IF NOT EXISTS support_tickets (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   client_phone     TEXT    NOT NULL,
+  wholesaler_id    INTEGER,
   platform         TEXT    NOT NULL,
   account_email    TEXT    NOT NULL DEFAULT '',
   account_password TEXT    NOT NULL DEFAULT '',
   provider         TEXT    NOT NULL DEFAULT '',
   problem          TEXT    NOT NULL DEFAULT '',
   status           TEXT    NOT NULL DEFAULT 'pending', -- 'pending' | 'seen' | 'attended'
-  resolution_message TEXT  NOT NULL DEFAULT '', -- mensaje del admin al atender, para la notificación del cliente
+  resolution_message TEXT  NOT NULL DEFAULT '', -- mensaje del admin al atender, para la notificación del cliente/mayorista
   created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
   attended_at      TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_tickets(wholesaler_id);
+
+-- Reemplazo manual de Soporte (liordark.com o mayorista) — una garantía
+-- puntual para el cliente hasta que venza, SIN pasar por el inventario de
+-- Accesos (no es cuenta real del pool, no aparece en Accesos). Exclusivo
+-- del flujo de Soporte — ver manual-overrides.repository.ts y
+-- access.repository.ts (replaceClientAccountManual). wholesaler_id: NULL
+-- = cliente retail de liordark.com; si no, cliente de ESE mayorista.
+CREATE TABLE IF NOT EXISTS manual_account_overrides (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_phone  TEXT    NOT NULL,
+  wholesaler_id INTEGER,
+  platform      TEXT    NOT NULL,
+  email         TEXT    NOT NULL DEFAULT '',
+  password      TEXT    NOT NULL DEFAULT '',
+  profile_name  TEXT    NOT NULL DEFAULT '',
+  provider      TEXT    NOT NULL DEFAULT '',
+  expires_at    TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_manual_overrides_phone ON manual_account_overrides(client_phone);
+CREATE INDEX IF NOT EXISTS idx_manual_overrides_wholesaler ON manual_account_overrides(wholesaler_id);
 CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
 
 -- ═══════════════════════════════════════════════════════════════════

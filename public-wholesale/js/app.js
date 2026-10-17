@@ -386,14 +386,40 @@
 
   let cachedClients = [];
 
+  // "51987654321|NETFLIX|correo@x.com" -> reporte más nuevo sin atender de ese cliente.
+  function clientSupportKey(phone, platform, email) {
+    return String(phone || "").replace(/\D/g, "").slice(-9) + "|" + String(platform || "").trim().toUpperCase() + "|" + String(email || "").trim().toLowerCase();
+  }
+
+  let supportTicketsByClient = {};
+
+  async function loadSupportTickets() {
+    try {
+      const { tickets } = await api("/support/tickets");
+      const map = {};
+      for (const t of tickets) {
+        if (t.status === "attended") continue; // resuelto -> el botón vuelve a estar disponible
+        const key = clientSupportKey(t.clientPhone, t.platform, t.accountEmail);
+        if (!map[key]) map[key] = t; // ya viene ordenado del más nuevo al más viejo
+      }
+      supportTicketsByClient = map;
+    } catch { supportTicketsByClient = {}; }
+  }
+
   async function loadClients() {
     const listEl  = document.getElementById("clients-list");
     const emptyEl = document.getElementById("clients-empty");
     listEl.innerHTML = `<p class="muted small">Cargando…</p>`;
     emptyEl.hidden = true;
     try {
-      const [, { clients }] = await Promise.all([fetchCatalog(), api("/clients")]);
-      cachedClients = clients || [];
+      const [, { clients, manualOverrides }] = await Promise.all([fetchCatalog(), api("/clients"), loadSupportTickets()]);
+      // Reemplazos manuales de Soporte (garantía sin cuenta real en Accesos)
+      // — id negativo para no chocar nunca con un id real de perfil.
+      const overrides = (manualOverrides || []).map(o => ({
+        id: -o.id, isOverride: true, profileName: o.profileName, clientPhone: o.clientPhone,
+        renewalStatus: "", platform: o.platform, expiresAt: o.expiresAt, email: o.email, password: o.password,
+      }));
+      cachedClients = [...(clients || []), ...overrides];
       renderClients();
     } catch (err) {
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -405,6 +431,32 @@
     const cls    = expiryClass(days);
     const label  = expiryLabel(c.expiresAt, days);
     const status = c.renewalStatus || "";
+
+    const supportKey    = clientSupportKey(c.clientPhone, c.platform, c.email || "");
+    const activeTicket  = supportTicketsByClient[supportKey];
+    const supportBtnHtml = !c.email ? "" : activeTicket
+      ? `<span class="client-support-status">${activeTicket.status === "seen" ? "🟡 Revisando" : "📨 Enviado"}</span>`
+      : `<button class="btn-ghost btn-sm" data-act="support" data-profile-id="${c.id}" type="button">🛟 Soporte</button>`;
+
+    if (c.isOverride) {
+      return `
+        <div class="client-card" data-profile-id="${c.id}">
+          <div class="client-card-head">
+            <div>
+              <div class="client-platform">${escapeHtml(c.platform)}</div>
+              <div class="client-phone">${escapeHtml(c.clientPhone)}</div>
+            </div>
+          </div>
+          <span class="client-override-badge">🛟 Garantía de soporte</span>
+          <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
+          ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
+          <div class="client-card-actions">
+            <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
+            ${supportBtnHtml}
+          </div>
+        </div>`;
+    }
+
     return `
       <div class="client-card" data-profile-id="${c.id}">
         <div class="client-card-head">
@@ -420,6 +472,7 @@
           <button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button">💰 Renovar</button>
           <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
           <button class="btn-danger btn-sm" data-act="delete" data-profile-id="${c.id}" type="button">🗑 Eliminar</button>
+          ${supportBtnHtml}
         </div>
       </div>`;
   }
@@ -483,6 +536,67 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // SOPORTE — el mayorista reporta, a nombre de un cliente suyo, un
+  // problema con su cuenta. Sin gate de celular de prueba (a diferencia
+  // de liordark.com) — acá ya es una cuenta de confianza.
+  // ─────────────────────────────────────────────────────────────
+
+  let supportModalTarget = null; // { clientPhone, platform, email }
+
+  function openSupportModal(client) {
+    supportModalTarget = { clientPhone: client.clientPhone, platform: client.platform, email: client.email };
+    document.getElementById("support-modal-account").innerHTML =
+      `<b>${escapeHtml(client.platform)}</b> · ${escapeHtml(client.email || "")}<br>Cliente: ${escapeHtml(client.clientPhone)}`;
+    document.getElementById("support-modal-text").value = "";
+    document.getElementById("support-modal-error").hidden = true;
+    document.getElementById("support-modal").hidden = false;
+  }
+
+  function closeSupportModal() {
+    document.getElementById("support-modal").hidden = true;
+    supportModalTarget = null;
+  }
+
+  async function sendSupportReport() {
+    const problem = document.getElementById("support-modal-text").value.trim();
+    const errorEl = document.getElementById("support-modal-error");
+    if (!problem) {
+      errorEl.textContent = "Cuéntanos qué está pasando.";
+      errorEl.hidden = false;
+      return;
+    }
+    const btn = document.getElementById("support-modal-send");
+    btn.disabled = true;
+    try {
+      await api("/support/tickets", {
+        method: "POST",
+        body: {
+          clientPhone: supportModalTarget.clientPhone,
+          platform:    supportModalTarget.platform,
+          accountEmail: supportModalTarget.email,
+          problem,
+        },
+      });
+      closeSupportModal();
+      await loadClients();
+    } catch (err) {
+      errorEl.textContent = err.message || "No se pudo enviar el reporte.";
+      errorEl.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function initSupportModal() {
+    document.getElementById("support-modal-close").addEventListener("click", closeSupportModal);
+    document.getElementById("support-modal-cancel").addEventListener("click", closeSupportModal);
+    document.getElementById("support-modal").addEventListener("click", (e) => {
+      if (e.target.id === "support-modal") closeSupportModal();
+    });
+    document.getElementById("support-modal-send").addEventListener("click", sendSupportReport);
+  }
+
   function initClientsPage() {
     document.getElementById("clients-list").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-act]");
@@ -494,6 +608,7 @@
       else if (act === "renew") handleRenew(client);
       else if (act === "send") handleSendClientAccount(client);
       else if (act === "delete") handleDeleteClient(client);
+      else if (act === "support") openSupportModal(client);
     });
   }
 
@@ -1195,6 +1310,7 @@
     initComprarPage();
     initRemindersPage();
     initSoportePage();
+    initSupportModal();
     initNotifications();
 
     try {

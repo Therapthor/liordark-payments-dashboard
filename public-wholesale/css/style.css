@@ -316,6 +316,33 @@ button:disabled { cursor: default; }
 .client-card-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .client-card-actions .btn-sm { flex: 1 0 auto; }
 
+.client-support-status {
+  font-size: 12.5px; font-weight: 700; color: var(--muted);
+  background: var(--chip-bg); border-radius: 999px; padding: 6px 12px;
+  display: inline-flex; align-items: center; cursor: default;
+}
+.client-override-badge {
+  font-size: 11.5px; font-weight: 700; color: var(--gold-dark);
+  background: var(--chip-bg); border-radius: 999px; padding: 4px 10px;
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+}
+
+/* ── Modal "Reportar soporte" (Clientes) ── */
+#support-modal { background: rgba(255,255,255,.55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+#support-modal .mini-account {
+  background: var(--chip-bg); border-radius: 10px; padding: 10px 12px;
+  font-size: 12.5px; margin: 10px 0 14px;
+}
+#support-modal .mini-account b { font-family: 'Space Grotesk', sans-serif; }
+#support-modal .sup-input {
+  width: 100%; border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px;
+  font-family: inherit; font-size: 13.5px; resize: vertical; box-sizing: border-box;
+}
+#support-modal .form-error { margin: 8px 0 0; }
+#support-modal .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+#support-modal .btn-row .btn-ghost { flex: 1; }
+#support-modal .btn-row .btn-primary { flex: 2; }
+
 .empty-state {
   text-align: center; color: var(--muted); padding: 32px 16px;
   background: var(--chip-bg); border-radius: 16px; font-size: 13.5px;
