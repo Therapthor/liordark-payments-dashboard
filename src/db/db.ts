@@ -257,7 +257,6 @@ ensureColumn("access_profiles", "expires_override", "expires_override TEXT");
 // NULL = reporte de un cliente de liordark.com; si no, lo reportó ESE
 // mayorista a nombre de uno de sus propios clientes (ver wholesaler.routes.ts).
 ensureColumn("support_tickets", "wholesaler_id", "wholesaler_id INTEGER");
-
-console.log("🗄️  SQLite inicializado:", DB_PATH);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_tickets(wholesaler_id)`);
 
 console.log("🗄️  SQLite inicializado:", DB_PATH);
