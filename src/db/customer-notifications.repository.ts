@@ -3,13 +3,14 @@ import { normalizePeruPhone } from "../utils/phone.util";
 import { getCatalogProductByPlatform } from "./catalog.repository";
 
 // ─────────────────────────────────────────────────────────────
-// NOTIFICACIONES DEL CLIENTE (campanita en liordark.com) — solo dos
-// eventos: le asignaron una cuenta nueva, o le renovaron una que ya
-// tenía. Se escriben desde sellProfile/createAccountFromRenewal (acá
-// mismo, access.repository.ts) y desde renewAccount (access.service.ts).
+// NOTIFICACIONES DEL CLIENTE (campanita en liordark.com) — cuenta nueva
+// asignada, cuenta renovada, o reporte de soporte atendido. Se escriben
+// desde sellProfile/createAccountFromRenewal (acá mismo, access.repository.ts),
+// desde renewAccount (access.service.ts) y desde markSupportTicketAttended
+// (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type CustomerNotificationType = "new_account" | "renewed";
+export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved";
 
 export type CustomerNotification = {
   id:          number;
@@ -31,20 +32,22 @@ function platformTitle(platform: string): string {
 
 function buildMessage(type: CustomerNotificationType, platform: string): string {
   const name = platformTitle(platform);
-  return type === "new_account"
-    ? `🎉 Tu cuenta de ${name} ya está lista. ¡Disfrútala!`
-    : `✅ Tu cuenta de ${name} fue renovada con éxito.`;
+  if (type === "new_account") return `🎉 Tu cuenta de ${name} ya está lista. ¡Disfrútala!`;
+  if (type === "renewed")     return `✅ Tu cuenta de ${name} fue renovada con éxito.`;
+  return `🛟 Tu reporte de soporte sobre ${name} fue atendido.`;
 }
 
+/** customMessage: para "support_resolved", el texto que escribió el admin
+ *  al atender — reemplaza el mensaje automático. */
 export function createCustomerNotification(
-  clientPhone: string, type: CustomerNotificationType, platform: string, accountEmail = ""
+  clientPhone: string, type: CustomerNotificationType, platform: string, accountEmail = "", customMessage = ""
 ): void {
   const digits = normalizePeruPhone(clientPhone);
   if (!digits || !platform) return;
   db.prepare(`
     INSERT INTO customer_notifications (client_phone, type, platform, account_email, message)
     VALUES (?, ?, ?, ?, ?)
-  `).run(digits, type, platform, accountEmail, buildMessage(type, platform));
+  `).run(digits, type, platform, accountEmail, customMessage.trim() || buildMessage(type, platform));
 }
 
 /** Varios clientes de una (ej. todos los que comparten una cuenta recién renovada). */

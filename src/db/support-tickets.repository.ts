@@ -24,6 +24,7 @@ export type SupportTicket = {
   provider:        string;
   problem:         string;
   status:          SupportTicketStatus;
+  resolutionMessage: string;
   createdAt:       string;
   attendedAt:      string | null;
 };
@@ -39,6 +40,7 @@ function toTicket(row: any): SupportTicket {
     provider:        row.provider,
     problem:         row.problem,
     status:          row.status,
+    resolutionMessage: row.resolution_message || "",
     createdAt:       row.created_at,
     attendedAt:      row.attended_at,
   };
@@ -56,6 +58,11 @@ export function createSupportTicket(params: {
     params.accountEmail, params.accountPassword, params.provider, params.problem
   );
   return toTicket(db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(info.lastInsertRowid));
+}
+
+export function getSupportTicketById(id: number): SupportTicket | null {
+  const row = db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(id);
+  return row ? toTicket(row) : null;
 }
 
 /** Pendientes y vistos primero, más nuevos arriba dentro de cada grupo. */
@@ -96,11 +103,11 @@ export function markSupportTicketSeen(id: number): SupportTicket | null {
   return row ? toTicket(row) : null;
 }
 
-export function markSupportTicketAttended(id: number): SupportTicket | null {
+export function markSupportTicketAttended(id: number, resolutionMessage = ""): SupportTicket | null {
   db.prepare(`
-    UPDATE support_tickets SET status = 'attended', attended_at = datetime('now')
+    UPDATE support_tickets SET status = 'attended', attended_at = datetime('now'), resolution_message = ?
     WHERE id = ? AND status IN ('pending', 'seen')
-  `).run(id);
+  `).run(resolutionMessage.trim(), id);
   const row = db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(id);
   return row ? toTicket(row) : null;
 }

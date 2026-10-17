@@ -494,7 +494,42 @@
             <span><b>Proveedor:</b> <span id="support-attend-provider"></span></span>
             <button class="btn-secondary support-attend-provider-btn" id="support-attend-provider-btn" type="button">📨 Solicitar soporte</button>
           </div>
-          <button class="btn-primary support-attend-done" id="support-attend-done" type="button">✅ Marcar atendido</button>
+          <textarea class="support-attend-message" id="support-attend-message" rows="2" placeholder="Mensaje para el cliente (opcional) — lo verá al abrir la notificación"></textarea>
+          <div class="support-attend-actions">
+            <button class="btn-secondary support-attend-replace" id="support-attend-replace-btn" type="button">🔁 Reemplazar</button>
+            <button class="btn-primary support-attend-done" id="support-attend-done" type="button">✅ Marcar atendido</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ MODAL: REEMPLAZAR CUENTA (solo Soporte) ═══════════ -->
+      <div class="modal-backdrop modal-backdrop-blur" id="support-replace-modal" hidden>
+        <div class="modal-card support-replace-card">
+          <button class="modal-x" id="support-replace-close" type="button" title="Cerrar">✕</button>
+          <h3 class="support-replace-title">Reemplazar cuenta</h3>
+          <p class="support-replace-note">El cliente mantiene su fecha de vencimiento actual, elijas la cuenta que elijas.</p>
+
+          <div class="support-replace-tabs">
+            <button class="support-replace-tab active" data-tab="pool" type="button">Del inventario</button>
+            <button class="support-replace-tab" data-tab="manual" type="button">Manual</button>
+          </div>
+
+          <div class="support-replace-pane" id="support-replace-pane-pool">
+            <select id="support-replace-account-select">
+              <option value="">Cargando cuentas...</option>
+            </select>
+            <button class="btn-primary support-replace-confirm" id="support-replace-pool-confirm" type="button">Reemplazar con esta cuenta</button>
+          </div>
+
+          <div class="support-replace-pane" id="support-replace-pane-manual" hidden>
+            <input id="support-replace-manual-email" placeholder="Correo de la cuenta nueva" />
+            <input id="support-replace-manual-password" placeholder="Contraseña" />
+            <input id="support-replace-manual-profile" placeholder="Perfil (opcional)" />
+            <input id="support-replace-manual-provider" placeholder="Proveedor (opcional)" />
+            <button class="btn-primary support-replace-confirm" id="support-replace-manual-confirm" type="button">Crear y reemplazar</button>
+          </div>
+
+          <p class="support-replace-error" id="support-replace-error" hidden></p>
         </div>
       </div>
 

@@ -244,4 +244,14 @@ ensureColumn("customer_notifications", "account_email", "account_email TEXT NOT 
 // renovar la cuenta (ver resetRenewalMarkers).
 ensureColumn("access_profiles", "expiry_notified_at", "expiry_notified_at TEXT");
 
+// Mensaje que el admin le deja al cliente al marcar un reporte de soporte
+// como atendido — se ve en la notificación de la campanita al hacer clic.
+ensureColumn("support_tickets", "resolution_message", "resolution_message TEXT NOT NULL DEFAULT ''");
+
+// Fecha de vencimiento "congelada" de un cliente cuando Soporte le
+// reemplaza la cuenta — prevalece sobre access_accounts.expires_at para
+// ESE cliente hasta que se limpia (ver resetRenewalMarkers). Así conserva
+// su fecha original sin importar si la cuenta nueva está llena o es fresca.
+ensureColumn("access_profiles", "expires_override", "expires_override TEXT");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);
