@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS access_profiles (
   client_phone  TEXT    NOT NULL DEFAULT '',  -- vacío = perfil libre
   renewal_status TEXT   NOT NULL DEFAULT '',  -- '' = sin marcar, 'yes' = renueva, 'no' = no renueva
   order_ref     TEXT    NOT NULL DEFAULT '',  -- código de orden del bot que compró este perfil (rastreo)
+  expires_override TEXT,                      -- fecha "congelada" al reemplazar por Soporte (ver db.ts)
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(account_id, slot_number)
 );
@@ -343,7 +344,8 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   account_password TEXT    NOT NULL DEFAULT '',
   provider         TEXT    NOT NULL DEFAULT '',
   problem          TEXT    NOT NULL DEFAULT '',
-  status           TEXT    NOT NULL DEFAULT 'pending', -- 'pending' | 'attended'
+  status           TEXT    NOT NULL DEFAULT 'pending', -- 'pending' | 'seen' | 'attended'
+  resolution_message TEXT  NOT NULL DEFAULT '', -- mensaje del admin al atender, para la notificación del cliente
   created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
   attended_at      TEXT
 );

@@ -352,8 +352,10 @@ export function assignProfileClient(id: number, clientPhone: string): AccessProf
 }
 
 export function releaseProfile(id: number): AccessProfile | null {
+  // expires_override también se limpia: si no, un cliente nuevo que caiga
+  // en este mismo slot heredaría la fecha congelada del cliente anterior.
   const result = db.prepare(`
-    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now') WHERE id = ?
+    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', expires_override = NULL, updated_at = datetime('now') WHERE id = ?
   `).run(id);
   if (result.changes === 0) return null;
   return getProfileById(id);
@@ -369,10 +371,12 @@ export function setProfileRenewal(id: number, status: RenewalStatus): AccessProf
 }
 
 /** Limpia los marcadores de renovación de una cuenta — se llama al renovarla,
- *  para que cada ciclo empiece con la marca en blanco de nuevo. */
+ *  para que cada ciclo empiece con la marca en blanco de nuevo. También
+ *  limpia expires_override: si Soporte le había congelado la fecha a algún
+ *  cliente de esta cuenta, una renovación normal la reemplaza por la real. */
 export function resetRenewalMarkers(accountId: number): void {
   db.prepare(`
-    UPDATE access_profiles SET renewal_status = '', expiry_notified_at = NULL WHERE account_id = ?
+    UPDATE access_profiles SET renewal_status = '', expiry_notified_at = NULL, expires_override = NULL WHERE account_id = ?
   `).run(accountId);
 }
 
@@ -745,13 +749,17 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return [];
 
+  // COALESCE: si Soporte le reemplazó la cuenta, expires_override congela
+  // la fecha que ya tenía (ver expires_override en db.ts) por encima de la
+  // fecha real de la cuenta nueva — hasta que ésta se renueve de verdad.
   return (db.prepare(`
     SELECT a.platform AS platform, a.email AS email, a.password AS password,
-           a.link AS link, p.profile_name AS profileName, a.expires_at AS expiresAt
+           a.link AS link, p.profile_name AS profileName,
+           COALESCE(p.expires_override, a.expires_at) AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) = ?
-    ORDER BY a.expires_at ASC
+    ORDER BY expiresAt ASC
   `).all(last9(digits)) as CustomerAccount[]);
 }
 
@@ -775,6 +783,91 @@ export function getActiveAccountForClient(clientPhone: string, platform: string,
   `).get(last9(digits), platform.trim().toUpperCase(), email.trim()) as any;
   return row || null;
 }
+
+// ─────────────────────────────────────────────────────────────
+// REEMPLAZAR CUENTA (exclusivo de Soporte) — el cliente mantiene SIEMPRE
+// la fecha de vencimiento de su cuenta anterior, sin importar si la cuenta
+// destino ya tiene otros clientes o está recién creada. Se logra con
+// access_profiles.expires_override, que prevalece sobre access_accounts.
+// expires_at para ese cliente puntual (ver listAccountsByClientPhone) hasta
+// que la cuenta destino se renueve de verdad (ver resetRenewalMarkers) o el
+// cliente se libere de ahí (ver releaseProfile).
+// ─────────────────────────────────────────────────────────────
+
+export type ReplaceSourceProfile = {
+  profileId: number; accountId: number; platform: string; preservedExpiresAt: string | null;
+};
+
+/** Perfil actual del cliente en esa cuenta — de ahí sale la fecha a conservar. */
+export function getReplaceSourceProfile(clientPhone: string, platform: string, email: string): ReplaceSourceProfile | null {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (!digits) return null;
+  const row = db.prepare(`
+    SELECT p.id AS profileId, a.id AS accountId, a.platform AS platform,
+           COALESCE(p.expires_override, a.expires_at) AS preservedExpiresAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ?
+    LIMIT 1
+  `).get(last9(digits), platform.trim().toUpperCase(), email.trim()) as any;
+  return row || null;
+}
+
+function findFreeProfileId(accountId: number): number | null {
+  const row = db.prepare(`
+    SELECT id FROM access_profiles WHERE account_id = ? AND client_phone = '' ORDER BY slot_number ASC LIMIT 1
+  `).get(accountId) as { id: number } | undefined;
+  return row ? row.id : null;
+}
+
+/** Reemplazo de pool: mueve al cliente a un perfil libre de `targetAccountId`
+ *  (llena o fresca, da igual) conservando su fecha anterior. */
+export const replaceClientAccount = db.transaction((params: {
+  clientPhone: string; platform: string; email: string; targetAccountId: number;
+}): { accountId: number; email: string } => {
+  const source = getReplaceSourceProfile(params.clientPhone, params.platform, params.email);
+  if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
+
+  const freeProfileId = findFreeProfileId(params.targetAccountId);
+  if (!freeProfileId) throw new Error("La cuenta elegida no tiene perfiles libres.");
+
+  releaseProfile(source.profileId);
+  assignProfileClient(freeProfileId, params.clientPhone);
+  db.prepare(`UPDATE access_profiles SET expires_override = ? WHERE id = ?`)
+    .run(source.preservedExpiresAt, freeProfileId);
+
+  const account = db.prepare(`SELECT email FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { email: string };
+  return { accountId: params.targetAccountId, email: account.email };
+});
+
+/** Reemplazo manual: crea una cuenta nueva con los datos que tipeó el admin
+ *  (no sale del pool) y muda ahí al cliente, conservando igual su fecha. */
+export const replaceClientAccountManual = db.transaction((params: {
+  clientPhone: string; platform: string; email: string;
+  newEmail: string; newPassword: string; newProfileName: string; newProvider: string;
+}): { accountId: number; email: string } => {
+  const source = getReplaceSourceProfile(params.clientPhone, params.platform, params.email);
+  if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
+
+  const [account] = createAccountsBulk({
+    platform:    params.platform,
+    provider:    params.newProvider,
+    hasProfiles: !!params.newProfileName.trim(),
+    expiresAt:   source.preservedExpiresAt,
+    pairs:       [{ email: params.newEmail, password: params.newPassword }],
+  });
+  const newProfile = account.profiles[0];
+  if (params.newProfileName.trim()) {
+    db.prepare(`UPDATE access_profiles SET profile_name = ? WHERE id = ?`).run(params.newProfileName.trim(), newProfile.id);
+  }
+
+  releaseProfile(source.profileId);
+  assignProfileClient(newProfile.id, params.clientPhone);
+  db.prepare(`UPDATE access_profiles SET expires_override = ? WHERE id = ?`)
+    .run(source.preservedExpiresAt, newProfile.id);
+
+  return { accountId: account.id, email: account.email };
+});
 
 export type RenewalAccountView = {
   platform:    string;
