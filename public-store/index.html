@@ -217,26 +217,21 @@
       <h2 style="margin:0 0 4px;">¿Qué necesitas?</h2>
       <div class="mini-account" id="support-options-account"></div>
 
-      <div id="support-options-menu" class="support-options-list">
-        <button class="support-option-btn" id="support-option-4digits" type="button">
-          <span class="support-option-icon">🔢</span>
-          <span><span class="support-option-title">Código de 4 dígitos</span><span class="support-option-sub">Cómo conseguirlo</span></span>
-        </button>
-        <button class="support-option-btn" id="support-option-6digits" type="button">
-          <span class="support-option-icon">🔢</span>
-          <span><span class="support-option-title">Código de 6 dígitos</span><span class="support-option-sub">Cómo conseguirlo</span></span>
-        </button>
-        <button class="support-option-btn" id="support-option-hogar" type="button">
-          <span class="support-option-icon">🏠</span>
-          <span><span class="support-option-title">Código hogar</span><span class="support-option-sub">Abre el enlace para pedirlo</span></span>
-        </button>
-        <button class="support-option-btn" id="support-option-otro" type="button">
-          <span class="support-option-icon">💬</span>
-          <span><span class="support-option-title">Otro</span><span class="support-option-sub">Soporte humano</span></span>
-        </button>
+      <div class="support-tabs-bar">
+        <button class="support-tab-btn active" data-tab="auto" type="button">Autoservicio</button>
+        <button class="support-tab-btn" data-tab="human" type="button">Soporte humano</button>
+      </div>
+
+      <div id="support-tab-auto" class="support-options-list"></div>
+
+      <div id="support-tab-human" class="support-tab-human" hidden>
+        <span class="support-tab-human-icon">💬</span>
+        <p>¿Ninguna opción resolvió tu problema? Cuéntanos qué pasa y te ayudamos directo por WhatsApp.</p>
+        <button class="btn-primary btn-block" id="support-options-otro-btn" type="button">Reportar un problema</button>
       </div>
 
       <div id="support-options-help" class="support-options-help" hidden>
+        <img id="support-options-help-img" alt="" hidden>
         <p id="support-options-help-text"></p>
         <div class="btn-row">
           <button class="btn-ghost" id="support-options-back" type="button">← Volver</button>
