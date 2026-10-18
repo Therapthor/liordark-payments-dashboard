@@ -450,6 +450,7 @@
           <span class="client-override-badge">🛟 Garantía de soporte</span>
           <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
           ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
+          ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
           <div class="client-card-actions">
             <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
             ${supportBtnHtml}
@@ -468,6 +469,7 @@
         </div>
         <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
         ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
+        ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
         <div class="client-card-actions">
           <button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button">💰 Renovar</button>
           <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
@@ -521,7 +523,8 @@
     const credLine = client.password
       ? `Correo: ${client.email || "—"}\nContraseña: ${client.password}`
       : `Correo (pendiente de activar): ${client.email || "—"}`;
-    const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${client.platform}*:\n\n${credLine}\n\nCualquier duda me escribes por acá. 🙌`;
+    const profileLine = client.profileName ? `\nPerfil: ${client.profileName}` : "";
+    const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${client.platform}*:\n\n${credLine}${profileLine}\n\nCualquier duda me escribes por acá. 🙌`;
     window.open(waLink(client.clientPhone, msg), "_blank");
   }
 
@@ -995,6 +998,7 @@
         </div>
         <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
         ${a.password ? `<div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>` : `<div class="muted small">Se activa a mano en ese correo — te avisamos cuando esté lista.</div>`}
+        ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
         <div class="success-account-actions">
           <button class="btn-wa btn-xs" data-act="send" data-idx="${idx}" type="button">📧 Enviar</button>
           <button class="btn-ghost btn-xs" data-act="copy" data-idx="${idx}" type="button">📋 Copiar</button>
@@ -1118,12 +1122,14 @@
       if (!account) return;
       if (btn.dataset.act === "send") {
         const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
-        const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${account.platform}*:\n\n${credLine}\n\n¡Gracias por tu compra! 🙌`;
+        const profileLine = account.profileName ? `\nPerfil: ${account.profileName}` : "";
+        const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${account.platform}*:\n\n${credLine}${profileLine}\n\n¡Gracias por tu compra! 🙌`;
         window.open(waLink(lastPurchaseClientPhone, msg), "_blank");
       } else if (btn.dataset.act === "copy") {
         try {
           const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
-          await navigator.clipboard.writeText(`${account.platform}\n${credLine}`);
+          const profileLine = account.profileName ? `\nPerfil: ${account.profileName}` : "";
+          await navigator.clipboard.writeText(`${account.platform}\n${credLine}${profileLine}`);
           const original = btn.textContent;
           btn.textContent = "✅ Copiado";
           setTimeout(() => { btn.textContent = original; }, 1500);

@@ -212,7 +212,7 @@ router.post("/purchase", (req, res) => {
     return res.status(402).json({ message: deduction.error });
   }
 
-  const sold: { platform: string; email: string; password: string }[] = [];
+  const sold: { platform: string; email: string; password: string; profileName: string }[] = [];
   const createdManualAccountIds: number[] = [];
   const failedPlatforms: string[] = [];
   for (const platform of platforms) {
@@ -223,13 +223,16 @@ router.post("/purchase", (req, res) => {
         wholesalerId, clientPhone, orderRef,
       });
       createdManualAccountIds.push(created.accountId);
-      sold.push({ platform, email: created.email, password: "" });
+      sold.push({ platform, email: created.email, password: "", profileName: "" });
       continue;
     }
     const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef);
     if (result) {
       const account = getAccountById(result.accountId);
-      sold.push({ platform, email: account?.email ?? "", password: account?.password ?? "" });
+      // result.profileName: el perfil/PIN que le tocó dentro de la cuenta
+      // compartida (Crunchyroll, Netflix, etc.) — sin esto el mayorista ve
+      // el correo/contraseña de todos pero no sabe cuál casilla es la suya.
+      sold.push({ platform, email: account?.email ?? "", password: account?.password ?? "", profileName: result.profileName || "" });
     } else {
       failedPlatforms.push(platform);
     }
