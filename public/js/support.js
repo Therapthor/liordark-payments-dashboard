@@ -148,7 +148,13 @@
       providerBox.hidden = true;
     }
 
-    document.getElementById("support-attend-message").value = ticket.resolutionMessage || "";
+    const messageInput = document.getElementById("support-attend-message");
+    messageInput.value = ticket.resolutionMessage || "";
+    // El mensaje real que recibe el cliente lleva primero un encabezado fijo
+    // ("fue reemplazada" / "Soporte realizado") — esto solo se agrega después.
+    messageInput.placeholder = ticket.replacedAt
+      ? "Mensaje opcional — se agrega después de avisarle que su cuenta fue reemplazada"
+      : "Mensaje opcional — se agrega después de avisarle que el soporte fue realizado";
     document.getElementById("support-attend-modal").hidden = false;
 
     // Abrir el modal ya cuenta como "lo vieron" — avisa al cliente que

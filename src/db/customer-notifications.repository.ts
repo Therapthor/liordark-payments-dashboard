@@ -33,21 +33,35 @@ function platformTitle(platform: string): string {
 function buildMessage(type: CustomerNotificationType, platform: string): string {
   const name = platformTitle(platform);
   if (type === "new_account") return `🎉 Tu cuenta de ${name} ya está lista. ¡Disfrútala!`;
-  if (type === "renewed")     return `✅ Tu cuenta de ${name} fue renovada con éxito.`;
-  return `🛟 Tu reporte de soporte sobre ${name} fue atendido.`;
+  return `✅ Tu cuenta de ${name} fue renovada con éxito.`; // "renewed"
 }
 
-/** customMessage: para "support_resolved", el texto que escribió el admin
- *  al atender — reemplaza el mensaje automático. */
+/** Encabezado fijo de "support_resolved" — avisa primero si hubo
+ *  reemplazo de cuenta o fue soporte sin reemplazo, antes del mensaje
+ *  que el admin haya dejado. */
+function buildSupportResolvedHeadline(platform: string, replaced: boolean): string {
+  const name = platformTitle(platform);
+  return replaced
+    ? `🔁 Tu cuenta de ${name} fue reemplazada.`
+    : `🛟 Soporte realizado en tu cuenta de ${name}.`;
+}
+
+/** customMessage: el texto que escribió el admin al atender — en
+ *  "support_resolved" va DESPUÉS del encabezado fijo (reemplazo o no),
+ *  nunca lo reemplaza. replaced: si Soporte usó "Reemplazar" antes de
+ *  atender este reporte (ver support.routes.ts). */
 export function createCustomerNotification(
-  clientPhone: string, type: CustomerNotificationType, platform: string, accountEmail = "", customMessage = ""
+  clientPhone: string, type: CustomerNotificationType, platform: string, accountEmail = "", customMessage = "", replaced = false
 ): void {
   const digits = normalizePeruPhone(clientPhone);
   if (!digits || !platform) return;
+  const message = type === "support_resolved"
+    ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
+    : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO customer_notifications (client_phone, type, platform, account_email, message)
     VALUES (?, ?, ?, ?, ?)
-  `).run(digits, type, platform, accountEmail, customMessage.trim() || buildMessage(type, platform));
+  `).run(digits, type, platform, accountEmail, message);
 }
 
 /** Varios clientes de una (ej. todos los que comparten una cuenta recién renovada). */

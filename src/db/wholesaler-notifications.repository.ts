@@ -32,20 +32,34 @@ function buildMessage(type: WholesalerNotificationType, platform: string): strin
   const name = platformTitle(platform);
   if (type === "purchase_added")      return `🛒 Se agregó tu compra de ${name} a tu registro.`;
   if (type === "full_account_ready")  return `🎉 Tu cuenta completa de ${name} ya está lista.`;
-  if (type === "support_resolved")    return `🛟 Tu reporte de soporte sobre ${name} fue atendido.`;
-  return `⏰ Un cliente tuyo de ${name} vence mañana.`;
+  return `⏰ Un cliente tuyo de ${name} vence mañana.`; // "client_expiring"
 }
 
-/** customMessage: para "support_resolved", el texto que escribió el admin
- *  al atender — reemplaza el mensaje automático. */
+/** Encabezado fijo de "support_resolved" — avisa primero si hubo
+ *  reemplazo de cuenta o fue soporte sin reemplazo, antes del mensaje
+ *  que el admin haya dejado. */
+function buildSupportResolvedHeadline(platform: string, replaced: boolean): string {
+  const name = platformTitle(platform);
+  return replaced
+    ? `🔁 La cuenta de ${name} de tu cliente fue reemplazada.`
+    : `🛟 Soporte realizado en la cuenta de ${name} de tu cliente.`;
+}
+
+/** customMessage: el texto que escribió el admin al atender — en
+ *  "support_resolved" va DESPUÉS del encabezado fijo (reemplazo o no),
+ *  nunca lo reemplaza. replaced: si Soporte usó "Reemplazar" antes de
+ *  atender este reporte (ver support.routes.ts). */
 export function createWholesalerNotification(
-  wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = "", customMessage = ""
+  wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = "", customMessage = "", replaced = false
 ): void {
   if (!wholesalerId || !platform) return;
+  const message = type === "support_resolved"
+    ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
+    : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO wholesaler_notifications (wholesaler_id, type, platform, account_email, message)
     VALUES (?, ?, ?, ?, ?)
-  `).run(wholesalerId, type, platform, accountEmail, customMessage.trim() || buildMessage(type, platform));
+  `).run(wholesalerId, type, platform, accountEmail, message);
 }
 
 export function listWholesalerNotifications(wholesalerId: number, limit = 20): WholesalerNotification[] {
