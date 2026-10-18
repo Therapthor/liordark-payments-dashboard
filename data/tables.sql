@@ -350,6 +350,7 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   problem          TEXT    NOT NULL DEFAULT '',
   status           TEXT    NOT NULL DEFAULT 'pending', -- 'pending' | 'seen' | 'attended'
   resolution_message TEXT  NOT NULL DEFAULT '', -- mensaje del admin al atender, para la notificación del cliente/mayorista
+  replaced_at      TEXT, -- se marca al usar "Reemplazar" (pool o manual) — cambia el mensaje por defecto
   created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
   attended_at      TEXT
 );

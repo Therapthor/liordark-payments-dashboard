@@ -259,4 +259,9 @@ ensureColumn("access_profiles", "expires_override", "expires_override TEXT");
 ensureColumn("support_tickets", "wholesaler_id", "wholesaler_id INTEGER");
 db.exec(`CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_tickets(wholesaler_id)`);
 
+// Se marca cuando el admin usa "Reemplazar" (pool o manual) sobre este
+// reporte — al "Marcar atendido" cambia el mensaje por defecto de la
+// notificación (avisa primero que se reemplazó la cuenta).
+ensureColumn("support_tickets", "replaced_at", "replaced_at TEXT");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

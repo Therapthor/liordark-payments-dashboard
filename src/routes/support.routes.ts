@@ -6,6 +6,7 @@ import {
   countAttendedSupportTickets,
   markSupportTicketSeen,
   markSupportTicketAttended,
+  markSupportTicketReplaced,
 } from "../db/support-tickets.repository";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -36,10 +37,12 @@ router.post("/tickets/:id/attend", (req, res) => {
   const ticket = markSupportTicketAttended(Number(req.params.id), resolutionMessage);
   if (!ticket) return res.status(404).json({ message: "Reporte no encontrado o ya estaba atendido." });
   // Al mayorista si lo reportó él (a nombre de un cliente suyo), al cliente si es de liordark.com.
+  // replaced: si antes de atender se usó "Reemplazar" sobre este reporte — cambia el encabezado del mensaje.
+  const replaced = !!ticket.replacedAt;
   if (ticket.wholesalerId) {
-    createWholesalerNotification(ticket.wholesalerId, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage);
+    createWholesalerNotification(ticket.wholesalerId, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage, replaced);
   } else {
-    createCustomerNotification(ticket.clientPhone, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage);
+    createCustomerNotification(ticket.clientPhone, "support_resolved", ticket.platform, ticket.accountEmail, resolutionMessage, replaced);
   }
   res.json({ ticket });
 });
@@ -60,6 +63,7 @@ router.post("/tickets/:id/replace", (req, res) => {
       clientPhone: ticket.clientPhone, platform: ticket.platform, email: ticket.accountEmail,
       targetAccountId, wholesalerId: ticket.wholesalerId,
     });
+    markSupportTicketReplaced(ticket.id);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ message: err?.message || "No se pudo reemplazar la cuenta." });
@@ -80,6 +84,7 @@ router.post("/tickets/:id/replace-manual", (req, res) => {
       newProfileName: String(req.body?.newProfileName || "").trim(),
       newProvider:    String(req.body?.newProvider || "").trim(),
     });
+    markSupportTicketReplaced(ticket.id);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ message: err?.message || "No se pudo crear la cuenta de reemplazo." });

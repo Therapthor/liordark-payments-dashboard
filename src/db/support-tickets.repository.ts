@@ -31,6 +31,7 @@ export type SupportTicket = {
   resolutionMessage: string;
   createdAt:       string;
   attendedAt:      string | null;
+  replacedAt:      string | null; // se marcó con "Reemplazar" antes de atenderlo
 };
 
 function toTicket(row: any): SupportTicket {
@@ -49,6 +50,7 @@ function toTicket(row: any): SupportTicket {
     resolutionMessage: row.resolution_message || "",
     createdAt:       row.created_at,
     attendedAt:      row.attended_at,
+    replacedAt:      row.replaced_at,
   };
 }
 
@@ -118,6 +120,12 @@ export function markSupportTicketSeen(id: number): SupportTicket | null {
   db.prepare(`UPDATE support_tickets SET status = 'seen' WHERE id = ? AND status = 'pending'`).run(id);
   const row = db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(id);
   return row ? toTicket(row) : null;
+}
+
+/** El admin usó "Reemplazar" (pool o manual) sobre este reporte — cambia
+ *  el mensaje por defecto de la notificación al atenderlo. */
+export function markSupportTicketReplaced(id: number): void {
+  db.prepare(`UPDATE support_tickets SET replaced_at = datetime('now') WHERE id = ?`).run(id);
 }
 
 export function markSupportTicketAttended(id: number, resolutionMessage = ""): SupportTicket | null {
