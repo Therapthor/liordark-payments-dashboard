@@ -731,6 +731,18 @@
     return platform.trim().toUpperCase() + "|" + email.trim().toLowerCase();
   }
 
+  // Netflix tiene casos de autoservicio (códigos) antes de pasar a soporte
+  // humano — el resto de plataformas va directo al reporte, como antes.
+  function isNetflixPlatform(platform) {
+    return /netflix/i.test(platform || "");
+  }
+
+  const SUPPORT_HELP_TEXT = {
+    "4": "Netflix te pide este código cuando confirma que el dispositivo es parte de tu hogar. Te llega por correo a la cuenta — revisa bandeja de entrada y spam.\n\nSi no te llega en unos minutos, usa \"Otro\" para que te ayudemos.",
+    "6": "Es el código de verificación que Netflix envía cuando inicias sesión desde un dispositivo o lugar nuevo. Te llega por correo a la cuenta — revisa bandeja de entrada y spam.\n\nSi no te llega, usa \"Otro\" para que te ayudemos.",
+    "hogar-sin-enlace": "Todavía no tenemos un enlace cargado para esta cuenta. Usa \"Otro\" para que te ayudemos directamente.",
+  };
+
   // "PLATAFORMA|correo" -> reporte más nuevo sin atender de esa cuenta.
   let supportTicketsByAccount = {};
 
@@ -762,6 +774,67 @@
   function closeSupportModal() {
     document.getElementById("support-modal").hidden = true;
     supportModalTarget = null;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MENÚ DE OPCIONES (Netflix) — se abre antes del reporte a soporte
+  // humano. "4/6 dígitos" solo muestran ayuda (autoservicio, no crean
+  // reporte); "Código hogar" abre el enlace de la cuenta; "Otro" pasa al
+  // flujo normal (openSupportModal).
+  // ─────────────────────────────────────────────────────────────
+
+  let supportOptionsTarget = null; // { platform, email, link }
+
+  function showSupportOptionsMenu() {
+    document.getElementById("support-options-menu").hidden = false;
+    document.getElementById("support-options-help").hidden = true;
+  }
+
+  function openSupportOptionsModal(platform, email, link) {
+    supportOptionsTarget = { platform, email, link };
+    document.getElementById("support-options-account").innerHTML =
+      `<b>${escapeHtml(platform)}</b> · ${escapeHtml(email)}`;
+    showSupportOptionsMenu();
+    document.getElementById("support-options-modal").hidden = false;
+  }
+
+  function closeSupportOptionsModal() {
+    document.getElementById("support-options-modal").hidden = true;
+    supportOptionsTarget = null;
+  }
+
+  function showSupportHelp(kind) {
+    document.getElementById("support-options-help-text").textContent = SUPPORT_HELP_TEXT[kind];
+    document.getElementById("support-options-menu").hidden = true;
+    document.getElementById("support-options-help").hidden = false;
+  }
+
+  function initSupportOptionsModal() {
+    document.getElementById("support-options-close").addEventListener("click", closeSupportOptionsModal);
+    document.getElementById("support-options-modal").addEventListener("click", (e) => {
+      if (e.target.id === "support-options-modal") closeSupportOptionsModal();
+    });
+    document.getElementById("support-option-4digits").addEventListener("click", () => showSupportHelp("4"));
+    document.getElementById("support-option-6digits").addEventListener("click", () => showSupportHelp("6"));
+    document.getElementById("support-options-back").addEventListener("click", showSupportOptionsMenu);
+    document.getElementById("support-options-help-close").addEventListener("click", closeSupportOptionsModal);
+
+    document.getElementById("support-option-hogar").addEventListener("click", () => {
+      if (!supportOptionsTarget) return;
+      if (!supportOptionsTarget.link) {
+        showSupportHelp("hogar-sin-enlace");
+        return;
+      }
+      window.open(supportOptionsTarget.link, "_blank", "noopener");
+      closeSupportOptionsModal();
+    });
+
+    document.getElementById("support-option-otro").addEventListener("click", () => {
+      if (!supportOptionsTarget) return;
+      const { platform, email } = supportOptionsTarget;
+      closeSupportOptionsModal();
+      openSupportModal(platform, email);
+    });
   }
 
   async function sendSupportReport() {
@@ -802,7 +875,11 @@
       const btn = e.target.closest(".success-support-btn");
       if (!btn || btn.classList.contains("success-support-status")) return;
       if (!isSupportTestUser()) return; // nada para el resto de clientes, a propósito
-      openSupportModal(btn.dataset.platform, btn.dataset.email);
+      if (isNetflixPlatform(btn.dataset.platform)) {
+        openSupportOptionsModal(btn.dataset.platform, btn.dataset.email, btn.dataset.link);
+      } else {
+        openSupportModal(btn.dataset.platform, btn.dataset.email);
+      }
     });
   }
 
@@ -1033,9 +1110,10 @@
     // botón y pasa a mostrar en qué va — mismo tamaño/estilo que Copiar,
     // solo cambia el texto (ver success-support-status en el CSS).
     const activeTicket = supportTicketsByAccount[accountSupportKey(a.platform, a.email)];
+    const isNetflix = isNetflixPlatform(a.platform);
     const supportHtml = activeTicket
       ? `<span class="success-support-btn success-support-status">${activeTicket.status === "seen" ? "🟡 Revisando" : "📨 Enviado"}</span>`
-      : `<button class="success-support-btn" type="button" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}"><span class="success-support-dot"></span>Soporte</button>`;
+      : `<button class="success-support-btn" type="button" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}" data-link="${escapeHtml(a.link || "")}"><span class="success-support-dot"></span>Soporte</button>`;
     return `
       <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head ${headClass}">
@@ -1051,7 +1129,7 @@
           <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
           <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
           ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
-          ${a.link ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
+          ${a.link && !isNetflix ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
           ${canRenew && nonRenewable ? `
             <div class="success-account-renew-box">
               <span class="badge-no-renewable">🚫 No Renovable</span>
@@ -1240,6 +1318,7 @@
     initDashboardRenewals();
     initDashboardExpiredToggle();
     initSupportModal();
+    initSupportOptionsModal();
     initComboBuilder();
     initCodesView();
 

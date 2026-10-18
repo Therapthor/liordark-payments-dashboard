@@ -545,23 +545,36 @@ a { color: var(--btn); }
 }
 
 /* Mismo criterio de fondo difuminado que el checkout. */
-#support-modal {
+#support-modal, #support-options-modal {
   background: rgba(255,255,255,.55);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
-#support-modal .mini-account {
+#support-modal .mini-account, #support-options-modal .mini-account {
   background: var(--chip-bg); border-radius: 10px; padding: 10px 12px;
   font-size: 12.5px; margin: 10px 0 14px;
 }
-#support-modal .mini-account b { font-family: 'Space Grotesk', sans-serif; }
+#support-modal .mini-account b, #support-options-modal .mini-account b { font-family: 'Space Grotesk', sans-serif; }
 #support-modal .sup-input {
   width: 100%; border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px;
   font-family: 'Manrope', sans-serif; font-size: 13.5px; resize: vertical; box-sizing: border-box;
 }
 #support-modal .form-error { margin: 8px 0 0; }
-#support-modal .btn-row { display: flex; gap: 8px; margin-top: 14px; }
-#support-modal .btn-row .btn-ghost { flex: 1; }
-#support-modal .btn-row .btn-primary { flex: 2; }
+#support-modal .btn-row, #support-options-modal .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+#support-modal .btn-row .btn-ghost, #support-options-modal .btn-row .btn-ghost { flex: 1; }
+#support-modal .btn-row .btn-primary, #support-options-modal .btn-row .btn-primary { flex: 2; }
+
+/* ── Menú de opciones de Soporte (Netflix: 4/6 dígitos, código hogar, otro) ── */
+.support-options-list { display: flex; flex-direction: column; gap: 8px; }
+.support-option-btn {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--chip-bg); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; cursor: pointer; font-family: inherit;
+}
+.support-option-btn:hover { border-color: var(--accent); }
+.support-option-icon { font-size: 19px; line-height: 1; }
+.support-option-title { display: block; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.support-option-sub { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.support-options-help p { font-size: 13.5px; line-height: 1.5; color: var(--text); white-space: pre-line; }
 /* padding en 0 y repartido en cada sección (header/body) en vez del
    viejo truco de márgenes negativos — ese dejaba un filo blanco
    asimétrico en las esquinas porque el radio de la cabecera y el de
