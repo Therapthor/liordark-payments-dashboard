@@ -1051,6 +1051,7 @@
           <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
           <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
           ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
+          ${a.link ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
           ${canRenew && nonRenewable ? `
             <div class="success-account-renew-box">
               <span class="badge-no-renewable">🚫 No Renovable</span>

@@ -687,6 +687,8 @@ a { color: var(--btn); }
    usa el header de color. */
 .success-account-expiry { display: none; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .success-account-row { font-size: 13px; color: var(--text); word-break: break-all; }
+.success-account-link { color: var(--accent); font-weight: 700; text-decoration: none; }
+.success-account-link:hover { text-decoration: underline; }
 
 /* ─── Pantalla de entrega ("¡Listo!") — cabecera verde con el check y
    los datos como recibo (filas con línea punteada), en vez de la
