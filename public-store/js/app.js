@@ -717,8 +717,9 @@
   // ─────────────────────────────────────────────────────────────
   // SOPORTE (botón en cada cuenta activa) — de prueba, solo para este
   // celular. Para cualquier otro cliente el botón no hace nada al
-  // presionarlo (el backend también lo bloquea, esto es solo para no
-  // ni abrir el modal). Se quita esta restricción cuando se dé por
+  // presionarlo (esto es solo para no ni abrir el modal — el backend
+  // también bloquea el único caso que todavía toca el servidor, "No
+  // tiene suscripción"). Se quita esta restricción cuando se dé por
   // probado — ver SUPPORT_TEST_PHONE en store.routes.ts.
   // ─────────────────────────────────────────────────────────────
 
@@ -731,19 +732,62 @@
     return platform.trim().toUpperCase() + "|" + email.trim().toLowerCase();
   }
 
-  // Netflix tiene casos de autoservicio (códigos) antes de pasar a soporte
-  // humano — el resto de plataformas va directo al reporte, como antes.
-  function isNetflixPlatform(platform) {
-    return /netflix/i.test(platform || "");
+  function waLink(text) {
+    return "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(text);
+  }
+
+  // Menú de autoservicio por plataforma — "Otro" (soporte humano por
+  // WhatsApp) y "No tiene suscripción" (reporte al panel de Soportes) se
+  // agregan siempre aparte (ver renderSupportAutoTab); acá solo van las
+  // opciones propias de cada plataforma.
+  // action: "help" (solo texto, ver SUPPORT_HELP_TEXT/SUPPORT_HELP_IMAGE),
+  // "wa_code" (abre WhatsApp pidiéndole el código a soporte),
+  // "link" (abre access_accounts.link de esa cuenta).
+  const SUPPORT_OPTIONS_CONFIG = [
+    { match: /netflix/i, items: [
+      { icon: "🔢", title: "Código de 4 dígitos", sub: "Cómo conseguirlo", action: "help", help: "netflix4" },
+      { icon: "🔢", title: "Código de 6 dígitos", sub: "Pedir por WhatsApp", action: "wa_code" },
+      { icon: "🏠", title: "Código hogar", sub: "Abre el enlace para pedirlo", action: "link" },
+    ] },
+    { match: /crunchyroll/i, items: [
+      { icon: "📧", title: "Enlace al correo", sub: "Abre el enlace", action: "link" },
+    ] },
+    { match: /amazon|prime/i, items: [
+      { icon: "🔗", title: "Código", sub: "Abre el enlace para pedirlo", action: "link" },
+    ] },
+    { match: /disney/i, items: [
+      { icon: "🔢", title: "Código de 6 dígitos", sub: "Pedir por WhatsApp", action: "wa_code" },
+    ] },
+    { match: /chatgpt|gpt/i, items: [
+      { icon: "🔢", title: "Código de 6 dígitos", sub: "Pedir por WhatsApp", action: "wa_code" },
+    ] },
+  ];
+
+  function getSupportOptionsFor(platform) {
+    const found = SUPPORT_OPTIONS_CONFIG.find(c => c.match.test(platform || ""));
+    return found ? found.items : null;
+  }
+
+  // El renglón fijo "Código" de la tarjeta se oculta cuando la plataforma
+  // ya ofrece ese mismo enlace dentro del menú (ver successAccountHtml),
+  // para no repetir el mismo acceso dos veces.
+  function platformHasLinkOption(platform) {
+    const items = getSupportOptionsFor(platform);
+    return !!items && items.some(i => i.action === "link");
   }
 
   const SUPPORT_HELP_TEXT = {
-    "4": "Netflix te pide este código cuando confirma que el dispositivo es parte de tu hogar. Te llega por correo a la cuenta — revisa bandeja de entrada y spam.\n\nSi no te llega en unos minutos, usa \"Otro\" para que te ayudemos.",
-    "6": "Es el código de verificación que Netflix envía cuando inicias sesión desde un dispositivo o lugar nuevo. Te llega por correo a la cuenta — revisa bandeja de entrada y spam.\n\nSi no te llega, usa \"Otro\" para que te ayudemos.",
-    "hogar-sin-enlace": "Todavía no tenemos un enlace cargado para esta cuenta. Usa \"Otro\" para que te ayudemos directamente.",
+    netflix4: "En la pantalla de Netflix, presiona \"Obtener ayuda\" y luego \"Usar contraseña\".",
+    "link-sin-enlace": "Todavía no tenemos un enlace cargado para esta cuenta. Usa \"Otro\" para que te ayudemos directamente.",
+  };
+  // Imagen de referencia del paso a paso (Netflix, 4 dígitos) — se completa
+  // cuando se suba a Cloudinary; por ahora el panel solo muestra el texto.
+  const SUPPORT_HELP_IMAGE = {
+    netflix4: "",
   };
 
-  // "PLATAFORMA|correo" -> reporte más nuevo sin atender de esa cuenta.
+  // "PLATAFORMA|correo" -> reporte más nuevo sin atender de esa cuenta
+  // (el único caso que sigue creando reporte es "No tiene suscripción").
   let supportTicketsByAccount = {};
 
   async function loadSupportTickets() {
@@ -759,6 +803,12 @@
       supportTicketsByAccount = map;
     } catch { supportTicketsByAccount = {}; }
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODAL "OTRO" — único caso con texto libre. Ya NO crea un reporte en
+  // el panel: abre WhatsApp con la plataforma, el correo y lo que
+  // escribió el cliente, directo a soporte humano.
+  // ─────────────────────────────────────────────────────────────
 
   let supportModalTarget = null; // { platform, email }
 
@@ -776,68 +826,7 @@
     supportModalTarget = null;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // MENÚ DE OPCIONES (Netflix) — se abre antes del reporte a soporte
-  // humano. "4/6 dígitos" solo muestran ayuda (autoservicio, no crean
-  // reporte); "Código hogar" abre el enlace de la cuenta; "Otro" pasa al
-  // flujo normal (openSupportModal).
-  // ─────────────────────────────────────────────────────────────
-
-  let supportOptionsTarget = null; // { platform, email, link }
-
-  function showSupportOptionsMenu() {
-    document.getElementById("support-options-menu").hidden = false;
-    document.getElementById("support-options-help").hidden = true;
-  }
-
-  function openSupportOptionsModal(platform, email, link) {
-    supportOptionsTarget = { platform, email, link };
-    document.getElementById("support-options-account").innerHTML =
-      `<b>${escapeHtml(platform)}</b> · ${escapeHtml(email)}`;
-    showSupportOptionsMenu();
-    document.getElementById("support-options-modal").hidden = false;
-  }
-
-  function closeSupportOptionsModal() {
-    document.getElementById("support-options-modal").hidden = true;
-    supportOptionsTarget = null;
-  }
-
-  function showSupportHelp(kind) {
-    document.getElementById("support-options-help-text").textContent = SUPPORT_HELP_TEXT[kind];
-    document.getElementById("support-options-menu").hidden = true;
-    document.getElementById("support-options-help").hidden = false;
-  }
-
-  function initSupportOptionsModal() {
-    document.getElementById("support-options-close").addEventListener("click", closeSupportOptionsModal);
-    document.getElementById("support-options-modal").addEventListener("click", (e) => {
-      if (e.target.id === "support-options-modal") closeSupportOptionsModal();
-    });
-    document.getElementById("support-option-4digits").addEventListener("click", () => showSupportHelp("4"));
-    document.getElementById("support-option-6digits").addEventListener("click", () => showSupportHelp("6"));
-    document.getElementById("support-options-back").addEventListener("click", showSupportOptionsMenu);
-    document.getElementById("support-options-help-close").addEventListener("click", closeSupportOptionsModal);
-
-    document.getElementById("support-option-hogar").addEventListener("click", () => {
-      if (!supportOptionsTarget) return;
-      if (!supportOptionsTarget.link) {
-        showSupportHelp("hogar-sin-enlace");
-        return;
-      }
-      window.open(supportOptionsTarget.link, "_blank", "noopener");
-      closeSupportOptionsModal();
-    });
-
-    document.getElementById("support-option-otro").addEventListener("click", () => {
-      if (!supportOptionsTarget) return;
-      const { platform, email } = supportOptionsTarget;
-      closeSupportOptionsModal();
-      openSupportModal(platform, email);
-    });
-  }
-
-  async function sendSupportReport() {
+  function sendSupportReport() {
     const problem = document.getElementById("support-modal-text").value.trim();
     const errorEl = document.getElementById("support-modal-error");
     if (!problem) {
@@ -845,22 +834,10 @@
       errorEl.hidden = false;
       return;
     }
-    const btn = document.getElementById("support-modal-send");
-    btn.disabled = true;
-    try {
-      await api("/support/tickets", {
-        method: "POST",
-        body: { platform: supportModalTarget.platform, accountEmail: supportModalTarget.email, problem },
-      });
-      closeSupportModal();
-      await loadSupportTickets();
-      await loadDashboardAccounts();
-    } catch (err) {
-      errorEl.textContent = err.message || "No se pudo enviar el reporte.";
-      errorEl.hidden = false;
-    } finally {
-      btn.disabled = false;
-    }
+    const { platform, email } = supportModalTarget;
+    const msg = `Hola! 👋 Tengo un problema con mi cuenta de *${platform}* (${email}):\n\n${problem}`;
+    window.open(waLink(msg), "_blank", "noopener");
+    closeSupportModal();
   }
 
   function initSupportModal() {
@@ -875,11 +852,122 @@
       const btn = e.target.closest(".success-support-btn");
       if (!btn || btn.classList.contains("success-support-status")) return;
       if (!isSupportTestUser()) return; // nada para el resto de clientes, a propósito
-      if (isNetflixPlatform(btn.dataset.platform)) {
-        openSupportOptionsModal(btn.dataset.platform, btn.dataset.email, btn.dataset.link);
+      const platform = btn.dataset.platform, email = btn.dataset.email, link = btn.dataset.link;
+      if (getSupportOptionsFor(platform)) {
+        openSupportOptionsModal(platform, email, link);
       } else {
-        openSupportModal(btn.dataset.platform, btn.dataset.email);
+        openSupportModal(platform, email); // plataformas sin menú propio: directo a "Otro"
       }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MENÚ DE OPCIONES — 2 pestañas: "Autoservicio" (las propias de la
+  // plataforma + "No tiene suscripción", que sí queda registrada en el
+  // panel de Soportes) y "Soporte humano" ("Otro", ver openSupportModal).
+  // ─────────────────────────────────────────────────────────────
+
+  let supportOptionsTarget = null; // { platform, email, link }
+
+  function renderSupportAutoTab() {
+    const items = getSupportOptionsFor(supportOptionsTarget.platform) || [];
+    const all = [...items, { icon: "🚫", title: "No tiene suscripción", sub: "Reportar a soporte", action: "no_subscription" }];
+    document.getElementById("support-tab-auto").innerHTML = all.map((item, idx) => `
+      <button class="support-option-btn" data-idx="${idx}" type="button">
+        <span class="support-option-icon">${item.icon}</span>
+        <span><span class="support-option-title">${escapeHtml(item.title)}</span><span class="support-option-sub">${escapeHtml(item.sub)}</span></span>
+      </button>
+    `).join("");
+    return all;
+  }
+
+  function setSupportTab(tab) {
+    document.querySelectorAll(".support-tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+    document.getElementById("support-tab-auto").hidden = tab !== "auto";
+    document.getElementById("support-tab-human").hidden = tab !== "human";
+    document.getElementById("support-options-help").hidden = true;
+  }
+
+  function openSupportOptionsModal(platform, email, link) {
+    supportOptionsTarget = { platform, email, link };
+    document.getElementById("support-options-account").innerHTML =
+      `<b>${escapeHtml(platform)}</b> · ${escapeHtml(email)}`;
+    const items = renderSupportAutoTab();
+    supportOptionsTarget.items = items;
+    setSupportTab("auto");
+    document.getElementById("support-options-modal").hidden = false;
+  }
+
+  function closeSupportOptionsModal() {
+    document.getElementById("support-options-modal").hidden = true;
+    supportOptionsTarget = null;
+  }
+
+  function showSupportHelp(text, imageUrl) {
+    document.getElementById("support-options-help-text").textContent = text;
+    const img = document.getElementById("support-options-help-img");
+    if (imageUrl) { img.src = imageUrl; img.hidden = false; } else { img.hidden = true; }
+    document.getElementById("support-tab-auto").hidden = true;
+    document.getElementById("support-tab-human").hidden = true;
+    document.getElementById("support-options-help").hidden = false;
+  }
+
+  async function reportNoSubscription(btn) {
+    const { platform, email } = supportOptionsTarget;
+    if (btn) btn.disabled = true;
+    try {
+      await api("/support/tickets", {
+        method: "POST",
+        body: { platform, accountEmail: email, problem: "No tiene suscripción" },
+      });
+      showSupportHelp("✅ Listo, ya lo reportamos — te avisamos apenas esté resuelto.");
+      await loadSupportTickets();
+      await loadDashboardAccounts();
+    } catch (err) {
+      showSupportHelp(err.message || "No se pudo reportar. Usa \"Otro\" para que te ayudemos.");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function initSupportOptionsModal() {
+    document.getElementById("support-options-close").addEventListener("click", closeSupportOptionsModal);
+    document.getElementById("support-options-modal").addEventListener("click", (e) => {
+      if (e.target.id === "support-options-modal") closeSupportOptionsModal();
+    });
+    document.querySelectorAll(".support-tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => setSupportTab(btn.dataset.tab));
+    });
+    document.getElementById("support-options-back").addEventListener("click", () => setSupportTab("auto"));
+    document.getElementById("support-options-help-close").addEventListener("click", closeSupportOptionsModal);
+
+    document.getElementById("support-tab-auto").addEventListener("click", (e) => {
+      const btn = e.target.closest(".support-option-btn");
+      if (!btn || !supportOptionsTarget) return;
+      const item = supportOptionsTarget.items[Number(btn.dataset.idx)];
+      if (!item) return;
+      const { platform, email, link } = supportOptionsTarget;
+
+      if (item.action === "help") {
+        showSupportHelp(SUPPORT_HELP_TEXT[item.help], SUPPORT_HELP_IMAGE[item.help]);
+      } else if (item.action === "wa_code") {
+        const msg = `Hola! 👋 Necesito el código para mi cuenta de *${platform}* (${email}). ¿Me ayudas a conseguirlo?`;
+        window.open(waLink(msg), "_blank", "noopener");
+        closeSupportOptionsModal();
+      } else if (item.action === "link") {
+        if (!link) { showSupportHelp(SUPPORT_HELP_TEXT["link-sin-enlace"]); return; }
+        window.open(link, "_blank", "noopener");
+        closeSupportOptionsModal();
+      } else if (item.action === "no_subscription") {
+        reportNoSubscription(btn);
+      }
+    });
+
+    document.getElementById("support-options-otro-btn").addEventListener("click", () => {
+      if (!supportOptionsTarget) return;
+      const { platform, email } = supportOptionsTarget;
+      closeSupportOptionsModal();
+      openSupportModal(platform, email);
     });
   }
 
@@ -1110,7 +1198,7 @@
     // botón y pasa a mostrar en qué va — mismo tamaño/estilo que Copiar,
     // solo cambia el texto (ver success-support-status en el CSS).
     const activeTicket = supportTicketsByAccount[accountSupportKey(a.platform, a.email)];
-    const isNetflix = isNetflixPlatform(a.platform);
+    const hasLinkInMenu = platformHasLinkOption(a.platform);
     const supportHtml = activeTicket
       ? `<span class="success-support-btn success-support-status">${activeTicket.status === "seen" ? "🟡 Revisando" : "📨 Enviado"}</span>`
       : `<button class="success-support-btn" type="button" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}" data-link="${escapeHtml(a.link || "")}"><span class="success-support-dot"></span>Soporte</button>`;
@@ -1129,7 +1217,7 @@
           <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
           <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
           ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
-          ${a.link && !isNetflix ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
+          ${a.link && !hasLinkInMenu ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
           ${canRenew && nonRenewable ? `
             <div class="success-account-renew-box">
               <span class="badge-no-renewable">🚫 No Renovable</span>
