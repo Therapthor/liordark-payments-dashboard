@@ -681,7 +681,7 @@
         }
       }
       closeProductDetail();
-      startCheckout({ kind, id, clientEmail, clientPassword });
+      startCheckout({ kind, id, clientEmail, clientPassword, isReserve: outOfStock, platformLabel: title });
     };
 
     document.getElementById("product-detail-modal").hidden = false;
@@ -1086,7 +1086,7 @@
   let cachedYapeText = "";
 
   function showCheckoutState(state) {
-    ["loading", "ready", "success", "error"].forEach(s => {
+    ["loading", "ready", "reserved", "success", "error"].forEach(s => {
       document.getElementById("checkout-" + s).hidden = s !== state;
     });
   }
@@ -1108,7 +1108,7 @@
     }
   }
 
-  async function startCheckout({ kind, id, clientEmail, clientPassword }) {
+  async function startCheckout({ kind, id, clientEmail, clientPassword, isReserve, platformLabel }) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -1138,7 +1138,7 @@
       document.getElementById("checkout-waiting-text").textContent = "Esperando tu pago…";
 
       showCheckoutState("ready");
-      startPolling(beforeAccounts, targetNewAccounts);
+      startPolling(beforeAccounts, targetNewAccounts, isReserve ? { platformLabel: platformLabel || id, amount: order.amount } : null);
     } catch (err) {
       document.getElementById("checkout-error-text").textContent = err.message;
       showCheckoutState("error");
@@ -1156,9 +1156,25 @@
     return after.filter(a => !beforeKeys.has(accountKey(a)));
   }
 
-  function startPolling(beforeAccounts, targetNewAccounts) {
+  let reservedScreenShown = false;
+
+  function showCheckoutReserved(reserveInfo) {
+    document.getElementById("checkout-reserved-text").innerHTML =
+      `Estamos subiendo stock nuevo de <b>${escapeHtml(reserveInfo.platformLabel)}</b> — apenas esté listo, ` +
+      `tu cuenta va a aparecer sola en "Mis cuentas". No necesitas hacer nada más 😊`;
+    document.getElementById("checkout-reserved-amount").textContent =
+      reserveInfo.platformLabel + " · S/ " + reserveInfo.amount;
+    showCheckoutState("reserved");
+  }
+
+  // reserveInfo: si el pedido es una reserva (sin stock al momento de pagar),
+  // al vencer el timeout se muestra la pantalla "¡Reservado!" en vez del
+  // texto de espera — pero el polling sigue corriendo igual en segundo
+  // plano, así que apenas llegue la cuenta pasa solo a "¡Listo!".
+  function startPolling(beforeAccounts, targetNewAccounts, reserveInfo) {
     stopPolling();
     pollExpiry = Date.now() + POLL_TIMEOUT_MS;
+    reservedScreenShown = false;
 
     pollTimer = setInterval(async () => {
       try {
@@ -1172,7 +1188,14 @@
       } catch { /* red momentánea — sigue intentando */ }
 
       if (Date.now() > pollExpiry) {
-        document.getElementById("checkout-waiting-text").textContent = "Seguimos esperando tu pago…";
+        if (reserveInfo) {
+          if (!reservedScreenShown) {
+            reservedScreenShown = true;
+            showCheckoutReserved(reserveInfo);
+          }
+        } else {
+          document.getElementById("checkout-waiting-text").textContent = "Seguimos esperando tu pago…";
+        }
       }
     }, POLL_MS);
   }
@@ -1388,6 +1411,10 @@
     document.getElementById("checkout-close").addEventListener("click", closeCheckout);
     document.getElementById("checkout-retry").addEventListener("click", closeCheckout);
     document.getElementById("checkout-goto-dashboard").addEventListener("click", closeCheckout);
+    document.getElementById("checkout-reserved-goto-dashboard").addEventListener("click", () => {
+      closeCheckout();
+      switchPage("dashboard");
+    });
     initYapeCopyButtons();
   }
 
