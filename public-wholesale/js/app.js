@@ -366,11 +366,27 @@
   }
 
   let currentBalanceCents = 0;
+  let currentWholesalerPhone = "";
+
+  // Mismo criterio que normalizePeruPhone del backend — celulares de Perú
+  // son 9 dígitos, así que comparamos siempre con el "51" puesto adelante.
+  function normalizedPhone(raw) {
+    const digits = String(raw || "").replace(/\D/g, "");
+    return digits.length === 9 ? "51" + digits : digits;
+  }
+
+  // "Es para el propio mayorista" (ver panel admin > Mayoristas > Asignar
+  // cuenta) deja el mismo celular del mayorista como clientPhone — esta
+  // cuenta no es de un cliente suyo, es para su propio uso.
+  function isOwnAccount(clientPhone) {
+    return !!currentWholesalerPhone && normalizedPhone(clientPhone) === normalizedPhone(currentWholesalerPhone);
+  }
 
   async function refreshBalance() {
     try {
       const { balanceCents, displayName, phone } = await api("/balance");
       currentBalanceCents = balanceCents;
+      currentWholesalerPhone = phone || currentWholesalerPhone;
       document.getElementById("header-hello").textContent = "Hola, " + (displayName || phone || "");
       document.getElementById("header-balance").textContent = "Saldo: " + money(balanceCents);
       const creditsBalanceEl = document.getElementById("credits-balance-value");
@@ -463,6 +479,10 @@
       ? `<span class="client-support-status">${activeTicket.status === "seen" ? "🟡 Revisando" : "📨 Enviado"}</span>`
       : `<button class="btn-ghost btn-sm" data-act="support" data-profile-id="${c.id}" type="button">🛟 Soporte</button>`;
 
+    // "Es para el propio mayorista" (asignada desde el panel admin) — no
+    // es un cliente real, así que se marca para no confundirla con uno.
+    const ownBadgeHtml = isOwnAccount(c.clientPhone) ? `<span class="client-own-badge">🧑‍💼 Tu cuenta</span>` : "";
+
     if (c.isOverride) {
       return `
         <div class="client-card" data-profile-id="${c.id}">
@@ -473,6 +493,7 @@
             </div>
           </div>
           <span class="client-override-badge">🛟 Garantía de soporte</span>
+          ${ownBadgeHtml}
           <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
           ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
           ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
@@ -492,6 +513,7 @@
           </div>
           <button class="renewal-btn renewal-${status || "unset"}" data-act="marker" data-profile-id="${c.id}" title="${RENEWAL_TITLE[status]}">${RENEWAL_ICON[status]}</button>
         </div>
+        ${ownBadgeHtml}
         <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
         ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
         ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
@@ -679,6 +701,7 @@
             <div class="client-phone">${escapeHtml(p.clientPhone)}</div>
           </div>
         </div>
+        ${isOwnAccount(p.clientPhone) ? `<span class="client-own-badge">🧑‍💼 Tu cuenta</span>` : ""}
         <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
         ${p.email ? `<div class="client-email">${escapeHtml(p.email)}</div>` : ""}
         <div class="client-card-actions">
