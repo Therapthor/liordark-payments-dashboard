@@ -1,8 +1,18 @@
 import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
-import { listExpiringClients, markReminderSent, listProfilesRemindedOn, limaTodayISOLocal } from "../db/access.repository";
+import {
+  listExpiringClients, markReminderSent, listProfilesRemindedOn, limaTodayISOLocal,
+  listUnSmsRemindedExpiringClients, markSmsReminderSent,
+} from "../db/access.repository";
 import { recordReminderSent, setReminderRunStatus, listReminderRuns } from "../db/reminder-runs.repository";
+import {
+  startSmsReminderRun, recordSmsReminderCounts, finishSmsReminderRun,
+  listSmsReminderRuns, logSmsReminderResult, listSmsReminderLogOn,
+} from "../db/sms-reminder-runs.repository";
+import { sendSms } from "../services/sms.service";
+import { buildSmsReminderText } from "../services/sms-reminder-message.service";
+import { createCustomerNotification } from "../db/customer-notifications.repository";
 
 const router = Router();
 
@@ -91,6 +101,95 @@ router.get("/notifications", async (req, res) => {
     console.error("❌ No se pudo obtener notificaciones de renovación del bot:", err?.response?.status || err?.message);
     res.status(502).json({ message: "No se pudo conectar con el bot." });
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// SMS DE VENCIMIENTO (ClickLab/Infobip) — panel > Renovaciones > SMS.
+// A diferencia de WhatsApp (tandas manuales por el bloqueador de
+// pop-ups), acá es un solo POST: agrupa por celular, manda un SMS por
+// cliente (todas sus cuentas por vencer en un solo mensaje) y deja
+// registro de quién recibió qué para el historial.
+// ─────────────────────────────────────────────────────────────
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isValidSmsPhone(phone: string): boolean {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 9 && digits.length <= 12;
+}
+
+function groupExpiringByPhone(clients: { profileId: number; clientPhone: string; platform: string; platformTag: string }[]) {
+  const map = new Map<string, typeof clients>();
+  for (const c of clients) {
+    if (!map.has(c.clientPhone)) map.set(c.clientPhone, []);
+    map.get(c.clientPhone)!.push(c);
+  }
+  return [...map.entries()].map(([clientPhone, accounts]) => ({ clientPhone, accounts }));
+}
+
+router.post("/sms/send", async (_req, res) => {
+  const clients = listUnSmsRemindedExpiringClients(REMINDERS_WINDOW_DAYS);
+  const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
+
+  if (groups.length === 0) {
+    return res.json({ ok: true, sent: 0, failed: 0, message: "No hay clientes pendientes de SMS." });
+  }
+
+  const runDate = limaTodayISOLocal();
+  startSmsReminderRun(runDate);
+
+  let sent = 0;
+  let failed = 0;
+  for (let i = 0; i < groups.length; i++) {
+    const group = groups[i];
+    const text = buildSmsReminderText(group.accounts);
+    const result = await sendSms(group.clientPhone, text);
+
+    if (result.ok) {
+      sent++;
+      for (const account of group.accounts) {
+        markSmsReminderSent(account.profileId);
+        createCustomerNotification(group.clientPhone, "expiring", account.platform);
+      }
+      logSmsReminderResult({
+        runDate, clientPhone: group.clientPhone,
+        platforms: group.accounts.map(a => a.platform).join(", "),
+        status: "sent", messageId: result.messageId,
+      });
+    } else {
+      failed++;
+      logSmsReminderResult({
+        runDate, clientPhone: group.clientPhone,
+        platforms: group.accounts.map(a => a.platform).join(", "),
+        status: "failed", error: result.error,
+      });
+    }
+    recordSmsReminderCounts(runDate, result.ok ? 1 : 0, result.ok ? 0 : 1);
+    if (i < groups.length - 1) await sleep(300);
+  }
+
+  finishSmsReminderRun(runDate, failed > 0 ? "incomplete" : "complete");
+  res.json({ ok: true, sent, failed });
+});
+
+router.get("/sms/runs", (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 14, 60);
+  const runs = listSmsReminderRuns(limit);
+  const today = limaTodayISOLocal();
+  if (!runs.some(r => r.runDate === today)) {
+    runs.unshift({ runDate: today, sentCount: 0, failedCount: 0, status: "pending", startedAt: null, completedAt: null });
+  }
+  res.json({ runs });
+});
+
+router.get("/sms/runs/:date/detail", (req, res) => {
+  const date = String(req.params.date || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: "Fecha inválida." });
+  }
+  res.json({ entries: listSmsReminderLogOn(date) });
 });
 
 export default router;

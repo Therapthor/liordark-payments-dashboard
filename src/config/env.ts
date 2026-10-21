@@ -36,4 +36,10 @@ export const env = {
   // queda inactivo (no rompe nada, solo no busca códigos nuevos).
   CODES_GMAIL_USER:         getEnv("CODES_GMAIL_USER", false),
   CODES_GMAIL_APP_PASSWORD: getEnv("CODES_GMAIL_APP_PASSWORD", false),
+
+  // SMS de recordatorio de vencimiento (ClickLab/Infobip) — panel >
+  // Renovaciones > SMS. Sin esto configurado, ese botón queda inactivo
+  // (no rompe nada, solo no se puede mandar SMS).
+  SMS_API_KEY: getEnv("SMS_API_KEY", false),
+  SMS_SENDER:  getEnv("SMS_SENDER", false) || "LIORDARK",
 };

@@ -10,7 +10,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved";
+export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring";
 
 export type CustomerNotification = {
   id:          number;
@@ -33,6 +33,7 @@ function platformTitle(platform: string): string {
 function buildMessage(type: CustomerNotificationType, platform: string): string {
   const name = platformTitle(platform);
   if (type === "new_account") return `🎉 Tu cuenta de ${name} ya está lista. ¡Disfrútala!`;
+  if (type === "expiring") return `⏰ Tu cuenta de ${name} vence pronto. Entra a liordark.com para renovarla.`;
   return `✅ Tu cuenta de ${name} fue renovada con éxito.`; // "renewed"
 }
 
