@@ -7,14 +7,33 @@ import {
   setWholesalerPassword,
 } from "../db/wholesaler.repository";
 import { applyWholesalerCreditChange, listLedgerForWholesaler } from "../db/wholesaler-credit.repository";
-import { assignProfilesToWholesaler } from "../db/access.repository";
+import {
+  assignProfilesToWholesaler,
+  sellProfileForWholesaler,
+  createManualActivationForWholesaler,
+} from "../db/access.repository";
 import {
   listPendingFullAccountQueue,
   markFullAccountPrepared,
   markFullAccountDelivered,
 } from "../db/wholesale-full-account.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
+import { touchWholesalerActivity } from "../db/wholesaler.repository";
+import { addDaysISO, limaTodayISO } from "../services/access.service";
 import type { Wholesaler } from "../db/wholesaler.repository";
+
+// CANVA, GEMINI AI PRO y YOUTUBE PREMIUM no tienen stock de perfiles — se
+// activan a mano (mismo criterio que wholesaler.routes.ts, duplicado acá
+// por ser un router aparte). CANVA se vende anual, el resto mensual.
+function isManualActivationPlatform(platform: string): boolean {
+  return /canva|gemini|youtube/i.test(platform);
+}
+function requiresPasswordPlatform(platform: string): boolean {
+  return /youtube/i.test(platform);
+}
+function manualActivationPlanDays(platform: string): number {
+  return /canva/i.test(platform) ? 365 : 30;
+}
 
 // ─────────────────────────────────────────────────────────────
 // GESTIÓN DE MAYORISTAS — desde panel.liordark.com (admin). Crear/editar
@@ -101,6 +120,67 @@ router.post("/:id/assign-profiles", (req, res) => {
 
   const assigned = assignProfilesToWholesaler(profileIds, wholesalerId);
   res.json({ assigned });
+});
+
+// Asigna una cuenta a un cliente de este mayorista SIN tocar su saldo —
+// para ventas ya cobradas aparte (ej. por WhatsApp, antes de tener panel).
+// "stock" saca del pool normal (o activa a mano si la plataforma no tiene
+// stock, igual que la compra real desde el panel mayorista); "manual" es
+// una cuenta completa que el admin escribe a mano (cualquier plataforma).
+router.post("/:id/assign-account", (req, res) => {
+  const wholesalerId = Number(req.params.id);
+  if (!findWholesalerById(wholesalerId)) {
+    return res.status(404).json({ message: "Mayorista no encontrado." });
+  }
+
+  const mode         = req.body?.mode === "manual" ? "manual" : "stock";
+  const platform      = String(req.body?.platform ?? "").trim().toUpperCase();
+  const clientPhone   = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
+  if (!platform) return res.status(400).json({ message: "Falta la plataforma." });
+  if (clientPhone.length < 9) return res.status(400).json({ message: "Celular del cliente inválido." });
+
+  const orderRef = "admin-assign:" + wholesalerId + ":" + Date.now();
+
+  if (mode === "manual") {
+    const email    = String(req.body?.email ?? "").trim();
+    const password = String(req.body?.password ?? "").trim();
+    const planDays = Math.max(1, Math.round(Number(req.body?.planDays)) || 30);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "Falta un correo válido." });
+    }
+    if (!password) return res.status(400).json({ message: "Falta la contraseña." });
+
+    const expiresAt = addDaysISO(limaTodayISO(), planDays);
+    const created = createManualActivationForWholesaler({
+      platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
+    });
+    touchWholesalerActivity(wholesalerId);
+    return res.status(201).json({ ok: true, account: { platform, email: created.email } });
+  }
+
+  // mode === "stock"
+  if (isManualActivationPlatform(platform)) {
+    const email = String(req.body?.email ?? "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "Falta un correo válido para activar esta plataforma." });
+    }
+    const password = requiresPasswordPlatform(platform) ? String(req.body?.password ?? "").trim() : "";
+    if (requiresPasswordPlatform(platform) && !password) {
+      return res.status(400).json({ message: "Falta la contraseña." });
+    }
+
+    const expiresAt = addDaysISO(limaTodayISO(), manualActivationPlanDays(platform));
+    const created = createManualActivationForWholesaler({
+      platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
+    });
+    touchWholesalerActivity(wholesalerId);
+    return res.status(201).json({ ok: true, account: { platform, email: created.email } });
+  }
+
+  const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef);
+  if (!result) return res.status(409).json({ message: `Sin stock disponible para "${platform}".` });
+  touchWholesalerActivity(wholesalerId);
+  res.status(201).json({ ok: true, account: { platform: result.platform, email: result.email } });
 });
 
 // ── COLA DE CUENTAS COMPLETAS A PEDIDO ──

@@ -112,6 +112,7 @@
           <button class="btn-secondary btn-sm ws-toggle-status-btn">${w.status === "active" ? "✏️ Deshabilitar" : "✏️ Habilitar"}</button>
           <button class="btn-secondary btn-sm ws-reset-password-btn">🔄 Resetear contraseña</button>
           <button class="btn-secondary btn-sm ws-adjust-btn">💰 Ajustar saldo</button>
+          <button class="btn-secondary btn-sm ws-assign-btn">🎁 Asignar cuenta</button>
           <button class="btn-secondary btn-sm ws-ledger-btn">📋 Ver historial</button>
         </div>
       </td>
@@ -156,6 +157,7 @@
       }
 
       if (e.target.closest(".ws-adjust-btn")) { openAdjustModal(w); return; }
+      if (e.target.closest(".ws-assign-btn")) { openAssignModal(w); return; }
       if (e.target.closest(".ws-ledger-btn"))  { openLedgerModal(w); return; }
     });
   }
@@ -255,6 +257,104 @@
         await loadAll();
       } catch (err) {
         errorEl.textContent = err.message || "No se pudo ajustar el saldo.";
+        errorEl.hidden = false;
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODAL — asignar cuenta a un cliente (venta ya cobrada por WhatsApp,
+  // no descuenta saldo). "Desde stock" reusa el mismo criterio de
+  // activación manual que la compra real (CANVA/GEMINI/YOUTUBE piden
+  // correo a mano); "Cuenta completa" deja escribir cualquier plataforma.
+  // ─────────────────────────────────────────────────────────────
+
+  function isManualActivationPlatform(platform) {
+    return /canva|gemini|youtube/i.test(platform);
+  }
+  function requiresPasswordPlatform(platform) {
+    return /youtube/i.test(platform);
+  }
+
+  let assignTarget = null;
+  let platformCatalog = [];
+
+  async function loadPlatformCatalog() {
+    if (platformCatalog.length) return platformCatalog;
+    try {
+      const res = await fetch("/api/access/platforms-catalog", { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      platformCatalog = data.platforms || [];
+    } catch { platformCatalog = []; }
+    return platformCatalog;
+  }
+
+  function populateAssignPlatformSelect() {
+    const select = document.getElementById("wholesaler-assign-platform");
+    select.innerHTML = platformCatalog
+      .map(p => `<option value="${escapeHtml(p.platform)}">${escapeHtml(p.platform)}</option>`)
+      .join("");
+  }
+
+  function updateAssignFieldsVisibility() {
+    const mode = document.getElementById("wholesaler-assign-mode").value;
+    const platform = document.getElementById("wholesaler-assign-platform").value;
+    const manualFields = document.getElementById("wholesaler-assign-manual-fields");
+    const stockManualFields = document.getElementById("wholesaler-assign-stock-manual-fields");
+    const stockPasswordLabel = document.getElementById("wholesaler-assign-stock-password-label");
+
+    manualFields.hidden = mode !== "manual";
+    stockManualFields.hidden = !(mode === "stock" && isManualActivationPlatform(platform));
+    stockPasswordLabel.hidden = !requiresPasswordPlatform(platform);
+  }
+
+  async function openAssignModal(w) {
+    assignTarget = w;
+    document.getElementById("wholesaler-assign-title").textContent = `Asignar cuenta — ${w.displayName}`;
+    document.getElementById("wholesaler-assign-form").reset();
+    document.getElementById("wholesaler-assign-error").hidden = true;
+    await loadPlatformCatalog();
+    populateAssignPlatformSelect();
+    updateAssignFieldsVisibility();
+    document.getElementById("wholesaler-assign-modal").hidden = false;
+  }
+
+  function initAssignModal() {
+    document.getElementById("wholesaler-assign-cancel").addEventListener("click", () => {
+      document.getElementById("wholesaler-assign-modal").hidden = true;
+    });
+    document.getElementById("wholesaler-assign-mode").addEventListener("change", updateAssignFieldsVisibility);
+    document.getElementById("wholesaler-assign-platform").addEventListener("change", updateAssignFieldsVisibility);
+
+    document.getElementById("wholesaler-assign-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("wholesaler-assign-error");
+      errorEl.hidden = true;
+      if (!assignTarget) return;
+
+      const mode = document.getElementById("wholesaler-assign-mode").value;
+      const platform = document.getElementById("wholesaler-assign-platform").value;
+      const body = {
+        mode,
+        platform,
+        clientPhone: document.getElementById("wholesaler-assign-phone").value.trim(),
+      };
+
+      if (mode === "manual") {
+        body.email = document.getElementById("wholesaler-assign-email").value.trim();
+        body.password = document.getElementById("wholesaler-assign-password").value.trim();
+        body.planDays = Number(document.getElementById("wholesaler-assign-days").value) || 30;
+      } else if (isManualActivationPlatform(platform)) {
+        body.email = document.getElementById("wholesaler-assign-stock-email").value.trim();
+        body.password = document.getElementById("wholesaler-assign-stock-password").value.trim();
+      }
+
+      try {
+        await api("/" + assignTarget.id + "/assign-account", { method: "POST", body: JSON.stringify(body) });
+        document.getElementById("wholesaler-assign-modal").hidden = true;
+        await loadAll();
+      } catch (err) {
+        errorEl.textContent = err.message || "No se pudo asignar la cuenta.";
         errorEl.hidden = false;
       }
     });
@@ -465,6 +565,7 @@
     initNewModal();
     initCredentialsModal();
     initAdjustModal();
+    initAssignModal();
     initWholesalersListActions();
     initPrepareModal();
     initDeliverModal();
