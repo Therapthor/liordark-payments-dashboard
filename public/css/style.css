@@ -942,6 +942,16 @@ button, input {
 .catalog-actions { display: flex; gap: 4px; flex-shrink: 0; }
 
 .catalog-item-off { opacity: 0.5; }
+
+/* ─── SMS — selector de día (Hoy/Mañana), pendiente/hecho ─── */
+.sms-days-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+.sms-day-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 12px 16px;
+}
+.sms-day-label { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.sms-day-count { font-size: 13px; color: var(--text-muted); font-weight: 400; }
 .catalog-tag-off { color: var(--critical); background: rgba(217,54,54,0.15); }
 
 .catalog-combos-header { margin-top: 28px; }

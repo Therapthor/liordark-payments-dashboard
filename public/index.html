@@ -327,19 +327,19 @@
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
 
-        <!-- SMS automático (ClickLab/Infobip) — alternativa al WhatsApp
-             manual de arriba. Un solo click manda a todos los pendientes
-             de hoy (sin el límite de tandas de 5, no hay bloqueador de
-             pop-ups de por medio). El remitente que ve el cliente es un
-             shortcode genérico, no el nombre de la marca. -->
+        <!-- SMS automático (ClickLab/Infobip). Corridas pendientes/hechas
+             por día — Hoy (quedaron colgados sin mandar) y Mañana (tanda
+             nueva), cada uno con su propio botón de envío. El remitente
+             que ve el cliente es un shortcode genérico, no la marca. -->
         <div class="panel-header standalone">
-          <h2>Recordatorios por SMS <span id="sms-run-status-badge" class="badge" hidden></span></h2>
-          <button id="sms-send-btn" class="btn-primary">Enviar SMS a pendientes</button>
+          <h2>Recordatorios por SMS</h2>
+          <button id="sms-history-btn" class="btn-secondary">Historial</button>
         </div>
 
-        <p class="panel-hint">Automático — manda un SMS a cada cliente con cuenta por vencer mañana (ClickLab). Cuesta créditos por mensaje.</p>
+        <p class="panel-hint">Automático — manda un SMS a cada cliente con cuenta por vencer. Cuesta créditos por mensaje.</p>
 
-        <p class="panel-hint" id="sms-summary"></p>
+        <div id="sms-days-list" class="sms-days-list"></div>
+        <p id="sms-summary" class="panel-hint" hidden></p>
 
         <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
              se venden al cliente como plan anual pero Liordark las paga
@@ -380,26 +380,6 @@
           </table>
         </div>
         <p id="renewals-run-history-empty" class="feed-empty" hidden>Todavía no hay corridas registradas.</p>
-
-        <div class="panel-header standalone">
-          <h2>SMS — corridas enviadas</h2>
-        </div>
-        <p class="panel-hint">Click en una fila para ver a quién se le mandó (o a quién le falló) ese día.</p>
-
-        <div class="panel" id="sms-run-history-panel">
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Enviados</th>
-                <th>Fallidos</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="sms-run-history-tbody"></tbody>
-          </table>
-        </div>
-        <p id="sms-run-history-empty" class="feed-empty" hidden>Todavía no hay corridas de SMS registradas.</p>
 
       </section>
 
@@ -976,6 +956,30 @@
           <tbody id="renewals-notif-tbody"></tbody>
         </table>
         <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="sms-history-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>Historial de SMS</h3>
+        <button type="button" class="modal-x" data-close-modal="sms-history-modal">✕</button>
+      </div>
+      <p class="panel-hint">Click en una fila para ver a quién se le mandó (o a quién le falló) ese día.</p>
+      <div class="modal-scroll-body">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Enviados</th>
+              <th>Fallidos</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="sms-run-history-tbody"></tbody>
+        </table>
+        <p id="sms-run-history-empty" class="feed-empty" hidden>Todavía no hay corridas de SMS registradas.</p>
       </div>
     </div>
   </div>
