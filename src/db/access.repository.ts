@@ -1130,6 +1130,48 @@ export function listAllClientPhones(): string[] {
   return [...phones];
 }
 
+export type AccessClientStat = { phone: string; purchaseCount: number; firstSeenAt: string | null };
+
+/**
+ * Compras por celular — perfiles activos (access_profiles) + archivados
+ * (access_accounts_history.profiles_json), sumados por el mismo cliente.
+ * Para "Clientes > Registro" en el panel admin: a diferencia de
+ * countProfilesByPhone (solo activos), esto cuenta TODO lo que compró
+ * alguna vez, aunque esas cuentas ya hayan vencido y se archivaran.
+ */
+export function listAccessClientStats(): AccessClientStat[] {
+  const activeRows = db.prepare(`
+    SELECT client_phone AS phone, COUNT(*) AS count, MIN(updated_at) AS firstSeenAt
+    FROM access_profiles
+    WHERE client_phone != ''
+    GROUP BY client_phone
+  `).all() as { phone: string; count: number; firstSeenAt: string }[];
+
+  const historyRows = db.prepare(`
+    SELECT profiles_json AS profilesJson, archived_at AS archivedAt FROM access_accounts_history
+  `).all() as { profilesJson: string; archivedAt: string }[];
+
+  const map = new Map<string, { count: number; firstSeenAt: string | null }>();
+  for (const r of activeRows) map.set(r.phone, { count: r.count, firstSeenAt: r.firstSeenAt });
+
+  for (const row of historyRows) {
+    let profiles: { clientPhone?: string }[] = [];
+    try { profiles = JSON.parse(row.profilesJson || "[]"); } catch { continue; }
+    for (const p of profiles) {
+      if (!p.clientPhone) continue;
+      const existing = map.get(p.clientPhone);
+      if (existing) {
+        existing.count += 1;
+        if (!existing.firstSeenAt || row.archivedAt < existing.firstSeenAt) existing.firstSeenAt = row.archivedAt;
+      } else {
+        map.set(p.clientPhone, { count: 1, firstSeenAt: row.archivedAt });
+      }
+    }
+  }
+
+  return [...map.entries()].map(([phone, v]) => ({ phone, purchaseCount: v.count, firstSeenAt: v.firstSeenAt }));
+}
+
 export function limaTodayISOLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
 }
