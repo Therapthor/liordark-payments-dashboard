@@ -265,10 +265,10 @@
 
     if (view === "history") { loadHistory(); loadChart(); }
     if (view === "renewals") {
-      loadReminders();
       loadReminderRuns();
       loadRenewalNotifications();
       loadSmsReminderRuns();
+      loadSmsPending();
       if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
@@ -1089,112 +1089,12 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RECORDATORIOS DE VENCIMIENTO — tandas manuales de WhatsApp.
-  // Reemplaza el aviso automático por WhatsApp Business API (dado de
-  // baja por Meta): acá se arman tandas de 5 con el mensaje ya escrito
-  // (sin mencionar ninguna plataforma) y el admin las manda él mismo,
-  // espaciadas cada 3-5 horas, para no repetir el patrón que causó el
-  // bloqueo del número anterior.
+  // RECORDATORIOS DE VENCIMIENTO — historial de las tandas manuales de
+  // WhatsApp que se mandaban desde acá (reemplazadas por el SMS
+  // automático, ver "RECORDATORIOS POR SMS" más abajo). Se deja el
+  // historial de corridas visible como registro, aunque ya no hay botón
+  // para generar una corrida nueva.
   // ─────────────────────────────────────────────────────────────
-
-  const REMINDERS_BATCH_SIZE   = 5;
-  const REMINDERS_COOLDOWN_MS  = 3000;
-  // Exactamente 1 día de anticipación (vence mañana) — ni el mismo día
-  // (ya tarde para muchos clientes) ni un rango más amplio.
-  const REMINDERS_WINDOW_DAYS  = 1;
-  let cachedExpiringClients    = [];
-
-  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
-  // Celulares de Perú son siempre 9 dígitos — sin el prefijo "51" (dato
-  // viejo, o cargado a mano sin él) WhatsApp no abre el chat correcto.
-  function remindersWaLink(phone, text) {
-    let digits = String(phone).replace(/\D/g, "");
-    if (digits.length === 9) digits = "51" + digits;
-    return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
-  }
-
-  // "15.00" → "15" (sin .00 de más, se ve más limpio en el mensaje).
-  function formatReminderPrice(price) {
-    const num = parseFloat(price);
-    if (!Number.isFinite(num)) return "";
-    return Number.isInteger(num) ? String(num) : num.toFixed(2);
-  }
-
-  function reminderMessage(client) {
-    const accountName = (client.platformTag || client.platform || "").trim();
-    const price = formatReminderPrice(client.price);
-
-    const accountLabel = accountName ? "*" + accountName + "*" : "cuenta";
-    const priceLine     = price ? " (S/" + price + ")" : "";
-
-    return "¡Hola! Tu " + accountLabel + " está por vencer" + priceLine + " 🎬 Renuévala en 🌐 liordark.com o escríbeme por aquí 💬 y te ayudo al toque. ¡Gracias por seguir con nosotros! 🙌";
-  }
-
-  // Cuando un cliente tiene más de una cuenta por vencer, se manda todo
-  // junto en un solo mensaje — nunca por partes.
-  function reminderMessageForGroup(group) {
-    if (group.accounts.length === 1) return reminderMessage(group.accounts[0]);
-
-    const lines = group.accounts.map(c => {
-      const name  = (c.platformTag || c.platform || "cuenta").trim();
-      const price = formatReminderPrice(c.price);
-      return "• *" + name + "*" + (price ? " (S/" + price + ")" : "");
-    }).join("\n");
-
-    return "¡Hola! Estas cuentas están por vencer 🎬\n" + lines + "\nRenuévalas en 🌐 liordark.com o escríbeme por aquí 💬 y te ayudo al toque con todas. ¡Gracias por seguir con nosotros! 🙌";
-  }
-
-  // Un celular real (con código de país 51) tiene 11 dígitos — algo mucho
-  // más largo es dato corrupto (visto en producción: un client_phone de
-  // 16 dígitos). Se descarta acá para no gastar una tanda en un link que
-  // ni va a abrir un chat de WhatsApp válido.
-  function isValidReminderPhone(phone) {
-    const digits = String(phone || "").replace(/\D/g, "");
-    return digits.length >= 9 && digits.length <= 12;
-  }
-
-  // Un cliente con 2+ cuentas por vencer se manda como un solo grupo — un
-  // solo mensaje, una sola ventana de WhatsApp, un solo lugar en la tanda.
-  function groupExpiringByClient(clients) {
-    const map = new Map();
-    for (const c of clients) {
-      if (!map.has(c.clientPhone)) map.set(c.clientPhone, []);
-      map.get(c.clientPhone).push(c);
-    }
-    return [...map.entries()].map(([clientPhone, accounts]) => ({
-      clientPhone,
-      accounts,
-      pending: accounts.some(a => !a.reminderSentAt),
-    }));
-  }
-
-  function renderRemindersSummary() {
-    const valid         = cachedExpiringClients.filter(c => isValidReminderPhone(c.clientPhone));
-    const groups        = groupExpiringByClient(valid);
-    const pendingGroups = groups.filter(g => g.pending);
-    const sentGroups    = groups.length - pendingGroups.length;
-    const batchesLeft   = Math.ceil(pendingGroups.length / REMINDERS_BATCH_SIZE);
-
-    const el = document.getElementById("reminders-summary");
-    if (groups.length === 0) {
-      el.textContent = "No hay clientes por vencer en los próximos días.";
-      return;
-    }
-    el.textContent = `${pendingGroups.length} pendientes de recordatorio · ${batchesLeft} tanda${batchesLeft === 1 ? "" : "s"} de ${REMINDERS_BATCH_SIZE} por mandar · ${sentGroups} ya recordados`;
-  }
-
-  async function loadReminders() {
-    try {
-      const { clients } = await api("/renewals/expiring?days=" + REMINDERS_WINDOW_DAYS);
-      cachedExpiringClients = clients || [];
-    } catch (err) {
-      cachedExpiringClients = [];
-      document.getElementById("reminders-summary").textContent = err.message;
-      return;
-    }
-    renderRemindersSummary();
-  }
 
   const RUN_STATUS_LABEL = { pending: "⏳ Pendiente", incomplete: "🟡 Incompleta", complete: "✅ Completa" };
 
@@ -1214,56 +1114,6 @@
     } catch {
       // se deja lo último mostrado
     }
-  }
-
-  async function prepareReminderBatch(btn) {
-    const valid  = cachedExpiringClients.filter(c => isValidReminderPhone(c.clientPhone));
-    const groups = groupExpiringByClient(valid).filter(g => g.pending);
-    if (groups.length === 0) {
-      alert("No quedan clientes pendientes de recordatorio en los próximos días.");
-      return;
-    }
-
-    const batch = groups.slice(0, REMINDERS_BATCH_SIZE);
-
-    // Mismo truco que el envío masivo de Accesos: las ventanas se abren
-    // TODAS durante el clic real (si no, el navegador las bloquea como
-    // pop-up no solicitado) y recién después se les asigna el link real,
-    // una por una con una pequeña pausa entre cada una. Un cliente con
-    // varias cuentas es UNA sola ventana con el mensaje combinado.
-    const windows = batch.map(() => window.open("", "_blank"));
-    const somethingBlocked = windows.some(w => !w);
-
-    const original = btn.textContent;
-    btn.disabled = true;
-
-    for (let i = 0; i < batch.length; i++) {
-      const group = batch[i];
-      const link  = remindersWaLink(group.clientPhone, reminderMessageForGroup(group));
-      if (windows[i]) windows[i].location = link;
-      for (const account of group.accounts) {
-        try {
-          await api(`/renewals/${account.profileId}/mark-reminded`, { method: "POST" });
-          account.reminderSentAt = new Date().toISOString(); // optimista, evita re-pedir todo al servidor
-        } catch { /* no crítico */ }
-      }
-      btn.textContent = `Preparando ${i + 1}/${batch.length}…`;
-      if (i < batch.length - 1) await sleep(REMINDERS_COOLDOWN_MS);
-    }
-
-    btn.disabled = false;
-    btn.textContent = original;
-
-    if (somethingBlocked) {
-      alert("El navegador bloqueó una o más ventanas. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.");
-    }
-
-    renderRemindersSummary();
-    loadReminderRuns();
-  }
-
-  function initReminders() {
-    document.getElementById("reminders-prepare-btn").addEventListener("click", (e) => prepareReminderBatch(e.currentTarget));
   }
 
   let currentDayEntries        = [];
@@ -1434,6 +1284,19 @@
     }
   }
 
+  // Cuántos están listos para el próximo envío — se muestra apenas se
+  // abre la pestaña, sin mandar nada todavía (botón "Enviar SMS" aparte).
+  async function loadSmsPending() {
+    try {
+      const { pendingCount } = await api("/renewals/sms/pending");
+      document.getElementById("sms-summary").textContent = pendingCount > 0
+        ? `${pendingCount} listo${pendingCount === 1 ? "" : "s"} para enviar.`
+        : "No hay clientes pendientes de SMS por ahora.";
+    } catch {
+      document.getElementById("sms-summary").textContent = "";
+    }
+  }
+
   async function openSmsRunDay(dateKey) {
     let entries = [];
     try {
@@ -1601,7 +1464,6 @@
     initSoundToggle();
     initMoneyToggle();
     initCodeSearch();
-    initReminders();
     if (window.LiordarkAccess) window.LiordarkAccess.init();
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();
     if (window.LiordarkSettings) window.LiordarkSettings.init();
