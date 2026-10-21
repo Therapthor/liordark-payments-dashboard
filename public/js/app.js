@@ -1091,8 +1091,8 @@
   // RECORDATORIOS DE VENCIMIENTO — historial de las tandas manuales de
   // WhatsApp que se mandaban desde acá (reemplazadas por el SMS
   // automático, ver "RECORDATORIOS POR SMS" más abajo). Se deja el
-  // historial de corridas visible como registro, aunque ya no hay botón
-  // para generar una corrida nueva.
+  // historial de corridas como registro, detrás del botón "Historial"
+  // (ya no hay botón para generar una corrida nueva).
   // ─────────────────────────────────────────────────────────────
 
   const RUN_STATUS_LABEL = { pending: "⏳ Pendiente", incomplete: "🟡 Incompleta", complete: "✅ Completa" };
@@ -1113,6 +1113,11 @@
     } catch {
       // se deja lo último mostrado
     }
+  }
+
+  function openWhatsappHistory() {
+    document.getElementById("whatsapp-history-modal").hidden = false;
+    loadReminderRuns();
   }
 
   let currentDayEntries        = [];
@@ -1499,6 +1504,7 @@
     initApprovedSearch();
     initRenewalNotifSearch();
     initSmsReminders();
+    document.getElementById("whatsapp-history-btn").addEventListener("click", openWhatsappHistory);
     initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();

@@ -377,30 +377,11 @@
 
         <div class="panel-header standalone">
           <h2>Renovaciones — avisos enviados</h2>
+          <span id="reminders-run-status-badge" class="badge" hidden></span>
+          <button id="whatsapp-history-btn" class="btn-secondary">Historial</button>
         </div>
 
         <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
-
-        <div class="panel-header standalone" id="renewals-run-history-header">
-          <h2>Corridas anteriores (resumen por día) <span id="reminders-run-status-badge" class="badge" hidden></span></h2>
-        </div>
-        <p class="panel-hint">Click en una fila para ver a quién se le mandó recordatorio ese día.</p>
-
-        <!-- Click en una fila abre el detalle (quiénes fueron recordados
-             esa fecha) en el modal de historial. -->
-        <div class="panel" id="renewals-run-history-panel">
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Enviados</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody id="renewals-run-history-tbody"></tbody>
-          </table>
-        </div>
-        <p id="renewals-run-history-empty" class="feed-empty" hidden>Todavía no hay corridas registradas.</p>
 
       </section>
 
@@ -977,6 +958,31 @@
           <tbody id="renewals-notif-tbody"></tbody>
         </table>
         <p id="renewals-notif-empty" class="feed-empty" hidden>No hay avisos registrados.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="whatsapp-history-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>Corridas anteriores (resumen por día)</h3>
+        <button type="button" class="modal-x" data-close-modal="whatsapp-history-modal">✕</button>
+      </div>
+      <p class="panel-hint">Reemplazado por el SMS automático — se deja como registro histórico. Click en una fila para ver a quién se le mandó recordatorio ese día.</p>
+      <div class="modal-scroll-body">
+        <div class="panel" id="renewals-run-history-panel">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Enviados</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="renewals-run-history-tbody"></tbody>
+          </table>
+        </div>
+        <p id="renewals-run-history-empty" class="feed-empty" hidden>Todavía no hay corridas registradas.</p>
       </div>
     </div>
   </div>
