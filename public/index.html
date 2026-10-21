@@ -327,24 +327,6 @@
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
 
-        <!-- Recordatorios manuales de vencimiento — reemplaza el aviso
-             automático por WhatsApp Business API (dado de baja por Meta).
-             El admin arma tandas de 5 y las manda él mismo, espaciadas
-             cada 3-5 horas, para no repetir el patrón que causó el
-             bloqueo (sin nombres de marca, sin automatizar el envío). -->
-        <div class="panel-header standalone">
-          <h2>Recordatorios de vencimiento <span id="reminders-run-status-badge" class="badge" hidden></span></h2>
-          <button id="reminders-prepare-btn" class="btn-primary">Preparar tanda de 5</button>
-        </div>
-
-        <p class="panel-hint">
-          Manual, no automático — se abren 5 chats de WhatsApp con el mensaje ya escrito
-          (sin mencionar plataformas) y los mandas tú. Repite cada 3-5 horas para que no
-          parezca un envío masivo.
-        </p>
-
-        <p class="panel-hint" id="reminders-summary">Cargando…</p>
-
         <!-- SMS automático (ClickLab/Infobip) — alternativa al WhatsApp
              manual de arriba. Un solo click manda a todos los pendientes
              de hoy (sin el límite de tandas de 5, no hay bloqueador de
@@ -379,7 +361,7 @@
         <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
 
         <div class="panel-header standalone" id="renewals-run-history-header">
-          <h2>Corridas anteriores (resumen por día)</h2>
+          <h2>Corridas anteriores (resumen por día) <span id="reminders-run-status-badge" class="badge" hidden></span></h2>
         </div>
         <p class="panel-hint">Click en una fila para ver a quién se le mandó recordatorio ese día.</p>
 

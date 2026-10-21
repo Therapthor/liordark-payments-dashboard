@@ -129,6 +129,14 @@ function groupExpiringByPhone(clients: { profileId: number; clientPhone: string;
   return [...map.entries()].map(([clientPhone, accounts]) => ({ clientPhone, accounts }));
 }
 
+// GET /sms/pending — cuántos clientes están listos para el próximo envío
+// (sin mandar nada) — para mostrar el conteo apenas se abre la pestaña.
+router.get("/sms/pending", (_req, res) => {
+  const clients = listUnSmsRemindedExpiringClients(REMINDERS_WINDOW_DAYS);
+  const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
+  res.json({ pendingCount: groups.length });
+});
+
 router.post("/sms/send", async (_req, res) => {
   const clients = listUnSmsRemindedExpiringClients(REMINDERS_WINDOW_DAYS);
   const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
