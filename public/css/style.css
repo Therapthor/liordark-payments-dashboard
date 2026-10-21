@@ -479,6 +479,15 @@ button, input {
   outline: none;
 }
 .feed-search input:focus { border-color: var(--accent); }
+.feed-search select {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  margin-left: auto;
+}
 .icon-btn-sm {
   background: var(--surface-raised);
   border: 1px solid var(--border);
