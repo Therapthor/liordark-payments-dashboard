@@ -11,6 +11,9 @@ import {
   assignProfilesToWholesaler,
   sellProfileForWholesaler,
   createManualActivationForWholesaler,
+  listWholesalerClients,
+  getProfileById,
+  getAccountById,
 } from "../db/access.repository";
 import {
   listPendingFullAccountQueue,
@@ -19,7 +22,7 @@ import {
 } from "../db/wholesale-full-account.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { touchWholesalerActivity } from "../db/wholesaler.repository";
-import { addDaysISO, limaTodayISO } from "../services/access.service";
+import { renewAccount } from "../services/access.service";
 import type { Wholesaler } from "../db/wholesaler.repository";
 
 // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM no tienen stock de perfiles — se
@@ -31,9 +34,13 @@ function isManualActivationPlatform(platform: string): boolean {
 function requiresPasswordPlatform(platform: string): boolean {
   return /youtube/i.test(platform);
 }
-function manualActivationPlanDays(platform: string): number {
-  return /canva/i.test(platform) ? 365 : 30;
+// YOUTUBE PREMIUM no es renovable — cada ciclo es una compra nueva (mismo
+// criterio que wholesaler.routes.ts).
+function isNonRenewablePlatform(platform: string): boolean {
+  return /youtube/i.test(platform);
 }
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ─────────────────────────────────────────────────────────────
 // GESTIÓN DE MAYORISTAS — desde panel.liordark.com (admin). Crear/editar
@@ -129,28 +136,38 @@ router.post("/:id/assign-profiles", (req, res) => {
 // una cuenta completa que el admin escribe a mano (cualquier plataforma).
 router.post("/:id/assign-account", (req, res) => {
   const wholesalerId = Number(req.params.id);
-  if (!findWholesalerById(wholesalerId)) {
+  const wholesaler = findWholesalerById(wholesalerId);
+  if (!wholesaler) {
     return res.status(404).json({ message: "Mayorista no encontrado." });
   }
 
-  const mode         = req.body?.mode === "manual" ? "manual" : "stock";
-  const platform      = String(req.body?.platform ?? "").trim().toUpperCase();
-  const clientPhone   = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
+  const mode    = req.body?.mode === "manual" ? "manual" : "stock";
+  const platform = String(req.body?.platform ?? "").trim().toUpperCase();
   if (!platform) return res.status(400).json({ message: "Falta la plataforma." });
-  if (clientPhone.length < 9) return res.status(400).json({ message: "Celular del cliente inválido." });
+
+  // "Para el propio mayorista" — usa su mismo celular como clientPhone,
+  // así queda igual de rastreable que una cuenta de cliente (aparece en
+  // "Mis cuentas"/"Ver cuentas" con su número) pero no es un sub-cliente real.
+  const forSelf = !!req.body?.forSelf;
+  const clientPhone = forSelf
+    ? wholesaler.phone.replace(/\D/g, "")
+    : String(req.body?.clientPhone ?? "").replace(/\D/g, "");
+  if (!forSelf && clientPhone.length < 9) {
+    return res.status(400).json({ message: "Celular del cliente inválido." });
+  }
 
   const orderRef = "admin-assign:" + wholesalerId + ":" + Date.now();
 
   if (mode === "manual") {
-    const email    = String(req.body?.email ?? "").trim();
-    const password = String(req.body?.password ?? "").trim();
-    const planDays = Math.max(1, Math.round(Number(req.body?.planDays)) || 30);
+    const email      = String(req.body?.email ?? "").trim();
+    const password   = String(req.body?.password ?? "").trim();
+    const expiresAt  = String(req.body?.expiresAt ?? "").trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: "Falta un correo válido." });
     }
     if (!password) return res.status(400).json({ message: "Falta la contraseña." });
+    if (!DATE_RE.test(expiresAt)) return res.status(400).json({ message: "Falta la fecha de vencimiento." });
 
-    const expiresAt = addDaysISO(limaTodayISO(), planDays);
     const created = createManualActivationForWholesaler({
       platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
     });
@@ -160,7 +177,8 @@ router.post("/:id/assign-account", (req, res) => {
 
   // mode === "stock"
   if (isManualActivationPlatform(platform)) {
-    const email = String(req.body?.email ?? "").trim();
+    const email     = String(req.body?.email ?? "").trim();
+    const expiresAt = String(req.body?.expiresAt ?? "").trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: "Falta un correo válido para activar esta plataforma." });
     }
@@ -168,8 +186,8 @@ router.post("/:id/assign-account", (req, res) => {
     if (requiresPasswordPlatform(platform) && !password) {
       return res.status(400).json({ message: "Falta la contraseña." });
     }
+    if (!DATE_RE.test(expiresAt)) return res.status(400).json({ message: "Falta la fecha de vencimiento." });
 
-    const expiresAt = addDaysISO(limaTodayISO(), manualActivationPlanDays(platform));
     const created = createManualActivationForWholesaler({
       platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
     });
@@ -181,6 +199,32 @@ router.post("/:id/assign-account", (req, res) => {
   if (!result) return res.status(409).json({ message: `Sin stock disponible para "${platform}".` });
   touchWholesalerActivity(wholesalerId);
   res.status(201).json({ ok: true, account: { platform: result.platform, email: result.email } });
+});
+
+// Cuentas/clientes asignados a este mayorista — para verlas y renovarlas
+// desde el admin sin pasar por el panel mayorista (ni tocar su saldo).
+router.get("/:id/clients", (req, res) => {
+  res.json({ clients: listWholesalerClients(Number(req.params.id)) });
+});
+
+// Renueva la cuenta completa de un cliente de este mayorista — GRATIS,
+// a diferencia de POST /api/wholesaler/clients/:profileId/renew (esa sí
+// descuenta saldo). Pensada para cuentas asignadas a mano por WhatsApp.
+router.post("/:id/clients/:profileId/renew", (req, res) => {
+  const wholesalerId = Number(req.params.id);
+  const profile = getProfileById(Number(req.params.profileId));
+  if (!profile || profile.wholesalerId !== wholesalerId) {
+    return res.status(404).json({ message: "Perfil no encontrado." });
+  }
+
+  const account = getAccountById(profile.accountId);
+  if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
+  if (isNonRenewablePlatform(account.platform)) {
+    return res.status(400).json({ message: account.platform + " no es renovable — se asigna de nuevo." });
+  }
+
+  renewAccount(account.id);
+  res.json({ ok: true, account: getAccountById(account.id) });
 });
 
 // ── COLA DE CUENTAS COMPLETAS A PEDIDO ──

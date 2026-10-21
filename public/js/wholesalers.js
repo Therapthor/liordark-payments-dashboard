@@ -113,6 +113,7 @@
           <button class="btn-secondary btn-sm ws-reset-password-btn">🔄 Resetear contraseña</button>
           <button class="btn-secondary btn-sm ws-adjust-btn">💰 Ajustar saldo</button>
           <button class="btn-secondary btn-sm ws-assign-btn">🎁 Asignar cuenta</button>
+          <button class="btn-secondary btn-sm ws-clients-btn">👥 Ver cuentas</button>
           <button class="btn-secondary btn-sm ws-ledger-btn">📋 Ver historial</button>
         </div>
       </td>
@@ -158,6 +159,7 @@
 
       if (e.target.closest(".ws-adjust-btn")) { openAdjustModal(w); return; }
       if (e.target.closest(".ws-assign-btn")) { openAssignModal(w); return; }
+      if (e.target.closest(".ws-clients-btn")) { openClientsModal(w); return; }
       if (e.target.closest(".ws-ledger-btn"))  { openLedgerModal(w); return; }
     });
   }
@@ -276,6 +278,14 @@
     return /youtube/i.test(platform);
   }
 
+  // Fecha por defecto para "Vence el" — hoy + N días, en formato yyyy-mm-dd
+  // (el admin la ajusta a mano según cuándo compró realmente el cliente).
+  function todayPlusDaysISO(days) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
   let assignTarget = null;
   let platformCatalog = [];
 
@@ -299,13 +309,25 @@
   function updateAssignFieldsVisibility() {
     const mode = document.getElementById("wholesaler-assign-mode").value;
     const platform = document.getElementById("wholesaler-assign-platform").value;
+    const forSelf = document.getElementById("wholesaler-assign-for-self").checked;
     const manualFields = document.getElementById("wholesaler-assign-manual-fields");
     const stockManualFields = document.getElementById("wholesaler-assign-stock-manual-fields");
     const stockPasswordLabel = document.getElementById("wholesaler-assign-stock-password-label");
+    const phoneWrap = document.getElementById("wholesaler-assign-phone-wrap");
 
+    phoneWrap.hidden = forSelf;
     manualFields.hidden = mode !== "manual";
     stockManualFields.hidden = !(mode === "stock" && isManualActivationPlatform(platform));
     stockPasswordLabel.hidden = !requiresPasswordPlatform(platform);
+  }
+
+  // Precarga "Vence el" con hoy + el plazo típico de esa plataforma —
+  // el admin la corrige si la compra fue hace unos días.
+  function updateAssignExpiryDefaults() {
+    const platform = document.getElementById("wholesaler-assign-platform").value;
+    const days = /canva/i.test(platform) ? 365 : 30;
+    document.getElementById("wholesaler-assign-expires").value = todayPlusDaysISO(days);
+    document.getElementById("wholesaler-assign-stock-expires").value = todayPlusDaysISO(days);
   }
 
   async function openAssignModal(w) {
@@ -316,6 +338,7 @@
     await loadPlatformCatalog();
     populateAssignPlatformSelect();
     updateAssignFieldsVisibility();
+    updateAssignExpiryDefaults();
     document.getElementById("wholesaler-assign-modal").hidden = false;
   }
 
@@ -324,7 +347,11 @@
       document.getElementById("wholesaler-assign-modal").hidden = true;
     });
     document.getElementById("wholesaler-assign-mode").addEventListener("change", updateAssignFieldsVisibility);
-    document.getElementById("wholesaler-assign-platform").addEventListener("change", updateAssignFieldsVisibility);
+    document.getElementById("wholesaler-assign-platform").addEventListener("change", () => {
+      updateAssignFieldsVisibility();
+      updateAssignExpiryDefaults();
+    });
+    document.getElementById("wholesaler-assign-for-self").addEventListener("change", updateAssignFieldsVisibility);
 
     document.getElementById("wholesaler-assign-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -334,19 +361,20 @@
 
       const mode = document.getElementById("wholesaler-assign-mode").value;
       const platform = document.getElementById("wholesaler-assign-platform").value;
-      const body = {
-        mode,
-        platform,
-        clientPhone: document.getElementById("wholesaler-assign-phone").value.trim(),
-      };
+      const forSelf = document.getElementById("wholesaler-assign-for-self").checked;
+      const body = { mode, platform, forSelf };
+      if (!forSelf) {
+        body.clientPhone = document.getElementById("wholesaler-assign-phone").value.trim();
+      }
 
       if (mode === "manual") {
         body.email = document.getElementById("wholesaler-assign-email").value.trim();
         body.password = document.getElementById("wholesaler-assign-password").value.trim();
-        body.planDays = Number(document.getElementById("wholesaler-assign-days").value) || 30;
+        body.expiresAt = document.getElementById("wholesaler-assign-expires").value;
       } else if (isManualActivationPlatform(platform)) {
         body.email = document.getElementById("wholesaler-assign-stock-email").value.trim();
         body.password = document.getElementById("wholesaler-assign-stock-password").value.trim();
+        body.expiresAt = document.getElementById("wholesaler-assign-stock-expires").value;
       }
 
       try {
@@ -356,6 +384,78 @@
       } catch (err) {
         errorEl.textContent = err.message || "No se pudo asignar la cuenta.";
         errorEl.hidden = false;
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODAL — cuentas asignadas a los clientes de un mayorista (+ Renovar,
+  // gratis — distinto del renovar del propio panel mayorista, que sí
+  // descuenta saldo). Diferencia cuenta PROPIA del mayorista (clientPhone
+  // == su mismo celular, ver "Es para el propio mayorista" en Asignar
+  // cuenta) de una cuenta de un cliente suyo.
+  // ─────────────────────────────────────────────────────────────
+
+  function normalizePeruPhoneClient(raw) {
+    const digits = String(raw ?? "").replace(/\D/g, "");
+    return digits.length === 9 ? "51" + digits : digits;
+  }
+
+  let clientsTarget = null;
+
+  function renderClientsRow(w, c) {
+    const isOwn = normalizePeruPhoneClient(c.clientPhone) === normalizePeruPhoneClient(w.phone);
+    const nonRenewable = /youtube/i.test(c.platform);
+    const tr = document.createElement("tr");
+    tr.dataset.profileId = c.id;
+    tr.innerHTML = `
+      <td>${escapeHtml(c.platform)}</td>
+      <td>${isOwn ? `<span class="badge access-badge-matched">🧑‍💼 Cuenta propia</span>` : escapeHtml(c.clientPhone)}</td>
+      <td>${fmtDateTime(c.expiresAt)}</td>
+      <td>${nonRenewable ? "" : `<button class="btn-secondary btn-sm wc-renew-btn">🔄 Renovar</button>`}</td>
+    `;
+    return tr;
+  }
+
+  function renderClientsList(clients) {
+    const tbody = document.getElementById("wholesaler-clients-tbody");
+    const empty = document.getElementById("wholesaler-clients-empty");
+    tbody.innerHTML = "";
+    if (clients.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const c of clients) tbody.appendChild(renderClientsRow(clientsTarget, c));
+  }
+
+  async function openClientsModal(w) {
+    clientsTarget = w;
+    document.getElementById("wholesaler-clients-title").textContent = `Cuentas asignadas — ${w.displayName}`;
+    const tbody = document.getElementById("wholesaler-clients-tbody");
+    const empty = document.getElementById("wholesaler-clients-empty");
+    tbody.innerHTML = "";
+    empty.hidden = true;
+    document.getElementById("wholesaler-clients-modal").hidden = false;
+
+    try {
+      const { clients } = await api("/" + w.id + "/clients");
+      renderClientsList(clients);
+    } catch (err) {
+      alert(err.message || "No se pudo cargar las cuentas.");
+    }
+  }
+
+  function initClientsModal() {
+    document.getElementById("wholesaler-clients-tbody").addEventListener("click", async (e) => {
+      const btn = e.target.closest(".wc-renew-btn");
+      if (!btn || !clientsTarget) return;
+      const tr = btn.closest("tr");
+      const profileId = tr.dataset.profileId;
+      btn.disabled = true;
+      try {
+        await api("/" + clientsTarget.id + "/clients/" + profileId + "/renew", { method: "POST" });
+        await openClientsModal(clientsTarget);
+      } catch (err) {
+        alert(err.message || "No se pudo renovar.");
+        btn.disabled = false;
       }
     });
   }
@@ -566,6 +666,7 @@
     initCredentialsModal();
     initAdjustModal();
     initAssignModal();
+    initClientsModal();
     initWholesalersListActions();
     initPrepareModal();
     initDeliverModal();
