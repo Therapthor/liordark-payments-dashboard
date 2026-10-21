@@ -193,7 +193,7 @@
     showApp();
     await Promise.all([refreshBalance(), refreshUnseenBadge()]);
     startNotifPolling();
-    switchPage("clientes");
+    switchPage("inicio");
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -276,21 +276,39 @@
   // mobile). Un solo arreglo de páginas genera ambas navegaciones.
   // ─────────────────────────────────────────────────────────────
 
-  const PAGES = [
-    { id: "comprar",       label: "Comprar",       icon: "🛒" },
+  // Sidebar (desktop, ≥768px) — lista completa, hay espacio de sobra.
+  const SIDEBAR_PAGES = [
+    { id: "inicio",        label: "Inicio",        icon: "🏠" },
     { id: "clientes",      label: "Clientes",      icon: "👥" },
+    { id: "comprar",       label: "Comprar",       icon: "🛒" },
     { id: "cuentas",       label: "Cuentas",       icon: "📦", badge: true },
-    { id: "resumen",       label: "Resumen",       icon: "📊" },
     { id: "creditos",      label: "Créditos",      icon: "💳" },
     { id: "recordatorios", label: "Recordatorios", icon: "🔔" },
     { id: "soporte",       label: "Soporte",       icon: "💬" },
   ];
 
+  // Tab bar (mobile) — Créditos/Recordatorios/Soporte se agrupan en "Más"
+  // (page-mas) para no amontonar íconos en una pantalla angosta.
+  const TAB_PAGES = [
+    { id: "inicio",   label: "Inicio",   icon: "🏠" },
+    { id: "clientes", label: "Clientes", icon: "👥" },
+    { id: "comprar",  label: "Comprar",  icon: "🛒" },
+    { id: "cuentas",  label: "Cuentas",  icon: "📦", badge: true },
+    { id: "mas",      label: "Más",      icon: "⋯" },
+  ];
+
+  // Páginas que en mobile viven dentro de "Más" — su tab activo visualmente
+  // sigue siendo "Más" (no hay botón propio en la tab bar para ellas).
+  const PAGES_UNDER_MAS = ["creditos", "recordatorios", "soporte"];
+  function mobileTabFor(view) {
+    return PAGES_UNDER_MAS.includes(view) ? "mas" : view;
+  }
+
   function renderNav() {
     const tabBar      = document.getElementById("tab-bar");
     const sidebarNav  = document.getElementById("sidebar-nav");
 
-    tabBar.innerHTML = PAGES.map(p => `
+    tabBar.innerHTML = TAB_PAGES.map(p => `
       <button class="tab-btn" data-page="${p.id}" type="button">
         <span class="tab-btn-icon">${p.icon}</span>
         <span>${escapeHtml(p.label)}</span>
@@ -298,7 +316,7 @@
       </button>
     `).join("");
 
-    sidebarNav.innerHTML = PAGES.map(p => `
+    sidebarNav.innerHTML = SIDEBAR_PAGES.map(p => `
       <button class="sidebar-btn" data-page="${p.id}" type="button">
         <span class="sidebar-btn-icon">${p.icon}</span>
         <span>${escapeHtml(p.label)}</span>
@@ -306,8 +324,12 @@
       </button>
     `).join("");
 
-    document.querySelectorAll(".tab-btn[data-page], .sidebar-btn[data-page]").forEach(btn => {
-      btn.addEventListener("click", () => switchPage(btn.dataset.page));
+    // Delegado al documento (no solo a los botones de nav) — así los
+    // accesos rápidos de Inicio y las filas de "Más" (data-page) navegan
+    // igual que la tab bar/sidebar, sin wiring aparte por cada uno.
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-page]");
+      if (btn) switchPage(btn.dataset.page);
     });
   }
 
@@ -328,16 +350,17 @@
   }
 
   function switchPage(view) {
-    document.querySelectorAll(".tab-btn[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === view));
+    const tabView = mobileTabFor(view);
+    document.querySelectorAll(".tab-btn[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === tabView));
     document.querySelectorAll(".sidebar-btn[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === view));
     document.querySelectorAll(".page").forEach(sec => { sec.hidden = sec.id !== "page-" + view; });
     document.getElementById("app-main").scrollTo(0, 0);
     window.scrollTo(0, 0);
 
-    if (view === "clientes")      loadClients();
+    if (view === "inicio")             loadInicio();
+    else if (view === "clientes")      loadClients();
     else if (view === "comprar")       loadComprar();
     else if (view === "cuentas")       loadCuentas();
-    else if (view === "resumen")       loadResumen();
     else if (view === "creditos")      loadCreditos();
     else if (view === "recordatorios") loadReminders();
   }
@@ -352,6 +375,8 @@
       document.getElementById("header-balance").textContent = "Saldo: " + money(balanceCents);
       const creditsBalanceEl = document.getElementById("credits-balance-value");
       if (creditsBalanceEl) creditsBalanceEl.textContent = money(balanceCents);
+      const homeBalanceEl = document.getElementById("home-balance-value");
+      if (homeBalanceEl) homeBalanceEl.textContent = money(balanceCents);
     } catch { /* se deja lo último mostrado */ }
   }
 
@@ -739,21 +764,71 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RESUMEN
+  // INICIO — saldo + stats + próximos vencimientos + accesos rápidos.
+  // Reemplaza a la vieja pantalla "Resumen" (ahora es la pantalla de
+  // aterrizaje tras el login, ver onAuthenticated).
   // ─────────────────────────────────────────────────────────────
 
-  async function loadResumen() {
+  const HOME_EXPIRING_DAYS = 5;
+  const HOME_EXPIRING_MAX  = 5;
+
+  function homeAlertRowHtml(c) {
+    return `
+      <div class="alert-row" data-profile-id="${c.profileId}">
+        <div>
+          <div class="alert-row-plat">${escapeHtml(c.platformTag || c.platform)}</div>
+          <div class="alert-row-sub">${escapeHtml(c.clientPhone)} · ${escapeHtml(expiryLabel(c.expiresAt, daysLeftFor(c.expiresAt)))}</div>
+        </div>
+        <button class="pill-btn" data-act="home-renew" data-profile-id="${c.profileId}" type="button">Renovar</button>
+      </div>`;
+  }
+
+  let cachedHomeExpiring = [];
+
+  async function loadInicio() {
+    const statActive   = document.getElementById("home-stat-active");
+    const statExpiring = document.getElementById("home-stat-expiring");
+    const statTotal    = document.getElementById("home-stat-total");
+    const alertsList    = document.getElementById("home-alerts-list");
+    const alertsEmpty   = document.getElementById("home-alerts-empty");
+
+    await Promise.all([refreshBalance(), fetchCatalog()]);
+
     try {
       const { activeCount, expiringCount, totalClients } = await api("/summary");
-      document.getElementById("stat-active").textContent    = activeCount;
-      document.getElementById("stat-expiring").textContent  = expiringCount;
-      document.getElementById("stat-total").textContent     = totalClients;
-    } catch (err) {
-      document.getElementById("stat-active").textContent = "—";
-      document.getElementById("stat-expiring").textContent = "—";
-      document.getElementById("stat-total").textContent = "—";
-      console.error(err.message);
+      statActive.textContent   = activeCount;
+      statExpiring.textContent = expiringCount;
+      statTotal.textContent    = totalClients;
+    } catch {
+      statActive.textContent = statExpiring.textContent = statTotal.textContent = "—";
     }
+
+    try {
+      const { clients } = await api(`/renewals/expiring?days=${HOME_EXPIRING_DAYS}`);
+      cachedHomeExpiring = (clients || []).slice(0, HOME_EXPIRING_MAX);
+      if (cachedHomeExpiring.length === 0) {
+        alertsList.innerHTML = "";
+        alertsEmpty.hidden = false;
+      } else {
+        alertsEmpty.hidden = true;
+        alertsList.innerHTML = cachedHomeExpiring.map(homeAlertRowHtml).join("");
+      }
+    } catch {
+      cachedHomeExpiring = [];
+      alertsList.innerHTML = "";
+      alertsEmpty.hidden = false;
+    }
+  }
+
+  function initInicioPage() {
+    document.getElementById("home-alerts-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-act='home-renew']");
+      if (!btn) return;
+      const c = cachedHomeExpiring.find(x => x.profileId === Number(btn.dataset.profileId));
+      if (!c) return;
+      await handleRenew({ id: c.profileId, platform: c.platform, clientPhone: c.clientPhone, expiresAt: c.expiresAt });
+      loadInicio();
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1052,11 +1127,11 @@
         return `
           <label class="muted small" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}</label>
           <input type="email" class="cart-checkout-email-input" id="cart-email-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
-            placeholder="cliente@correo.com" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+            placeholder="cliente@correo.com" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:15px; font-family:inherit; margin-top:4px;">
           ${needsPassword ? `
             <label class="muted small" for="cart-password-${escapeHtml(i.platform)}">Contraseña de esa cuenta</label>
             <input type="password" class="cart-checkout-password-input" id="cart-password-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
-              placeholder="Contraseña" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+              placeholder="Contraseña" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:15px; font-family:inherit; margin-top:4px;">
           ` : ""}
         `;
       }).join("");
@@ -1303,13 +1378,41 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // TEMA — claro/oscuro, manual (🌙 en el header). El <script> en el
+  // <head> de index.html ya aplicó el tema guardado antes de pintar,
+  // acá solo se sincroniza el ícono del botón y se guarda el cambio.
+  // ─────────────────────────────────────────────────────────────
+
+  const THEME_KEY = "mw-theme";
+
+  function applyThemeIcon() {
+    const isDark = document.documentElement.dataset.theme === "dark";
+    const btn = document.getElementById("theme-toggle-btn");
+    btn.textContent = isDark ? "☀️" : "🌙";
+    btn.title = isDark ? "Modo claro" : "Modo oscuro";
+  }
+
+  function initThemeToggle() {
+    applyThemeIcon();
+    document.getElementById("theme-toggle-btn").addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "" : "dark";
+      if (next) document.documentElement.dataset.theme = next;
+      else delete document.documentElement.dataset.theme;
+      try { localStorage.setItem(THEME_KEY, next || "light"); } catch { /* sin storage disponible */ }
+      applyThemeIcon();
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────────────
 
   async function init() {
     wireGlobalImgFallback();
     renderNav();
+    initThemeToggle();
     initLoginForm();
+    initInicioPage();
     initClientsPage();
     initCuentasPage();
     initCreditosPage();
