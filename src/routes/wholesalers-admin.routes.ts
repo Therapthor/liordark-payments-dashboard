@@ -14,6 +14,7 @@ import {
   listWholesalerClients,
   getProfileById,
   getAccountById,
+  setAccountExpiry,
 } from "../db/access.repository";
 import {
   listPendingFullAccountQueue,
@@ -195,8 +196,15 @@ router.post("/:id/assign-account", (req, res) => {
     return res.status(201).json({ ok: true, account: { platform, email: created.email } });
   }
 
+  const expiresAt = String(req.body?.expiresAt ?? "").trim();
+  if (!DATE_RE.test(expiresAt)) return res.status(400).json({ message: "Falta la fecha de vencimiento." });
+
   const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef);
   if (!result) return res.status(409).json({ message: `Sin stock disponible para "${platform}".` });
+  // La cuenta de stock ya trae su propio vencimiento (el de Accesos) —
+  // acá se pisa con la fecha real que puso el admin (compra de hace unos
+  // días), igual que en los otros 2 modos de este mismo endpoint.
+  setAccountExpiry(result.accountId, expiresAt);
   touchWholesalerActivity(wholesalerId);
   res.status(201).json({ ok: true, account: { platform: result.platform, email: result.email } });
 });
