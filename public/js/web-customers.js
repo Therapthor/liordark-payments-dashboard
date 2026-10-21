@@ -50,19 +50,23 @@
 
     const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
 
-    // id === null = no tiene cuenta real en este panel (nunca se
-    // registró en liordark.com) — solo existe porque alguna vez le
-    // asignaron una cuenta en Accesos. No hay contraseña ni se puede
-    // suspender/banear algo que no es una cuenta de login.
+    // id === null = registro general — no tiene cuenta real en este
+    // panel (nunca se registró en liordark.com), solo existe porque
+    // alguna vez le asignaron una cuenta en Accesos. No hay contraseña
+    // ni se puede suspender/banear algo que no es una cuenta de login.
     if (c.id === null) {
       div.innerHTML = `
         <div class="web-customer-main">
           <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
-          <span class="web-customer-status">📋 Solo en Accesos</span>
+          <span class="web-customer-status">📋 Registro general</span>
         </div>
         <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>`;
       return div;
     }
+
+    const originBadge = c.isGuest
+      ? `<span class="web-customer-badge web-customer-badge-guest">Automática</span>`
+      : `<span class="web-customer-badge web-customer-badge-own">Registro propio</span>`;
 
     const statusBadge = c.suspended
       ? `<span class="web-customer-status web-customer-status-suspended">⏸ Suspendida hasta ${formatDate(c.suspendedUntil)}</span>`
@@ -82,6 +86,7 @@
     div.innerHTML = `
       <div class="web-customer-main">
         <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
+        ${originBadge}
         ${statusBadge}
       </div>
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
@@ -137,8 +142,9 @@
 
   // Se guarda el último fetch para filtrar por celular sin golpear al
   // servidor en cada tecla — mismo patrón que "Pedidos pendientes". Se
-  // divide en dos grupos: "Web" (isGuest — cuenta automática por compra
-  // sin registrarse) y "Registro" (se registró por su cuenta).
+  // divide en dos grupos: "Web" (tiene cuenta real en este panel —
+  // registrada o automática por compra, con contraseña y acciones) y
+  // "Registro" (sin cuenta real, solo existe en Accesos — id: null).
   let cachedCustomers = [];
   let webSearchDigits = "";
   let registroSearchDigits = "";
@@ -153,7 +159,7 @@
   function renderWebList() {
     const list  = document.getElementById("web-customers-list");
     const empty = document.getElementById("web-customers-empty");
-    const webCustomers = cachedCustomers.filter(c => c.isGuest);
+    const webCustomers = cachedCustomers.filter(c => c.id !== null);
     const filtered = webSearchDigits
       ? webCustomers.filter(c => c.phone.replace(/\D/g, "").includes(webSearchDigits))
       : webCustomers;
@@ -163,7 +169,7 @@
       empty.hidden = false;
       empty.textContent = webSearchDigits
         ? "Sin resultados para ese número."
-        : "Todavía no hay clientes automáticos (compra sin registrarse) en liordark.com.";
+        : "Todavía no hay clientes con cuenta en liordark.com.";
     } else {
       empty.hidden = true;
       sortWebCustomers(filtered).forEach(c => list.appendChild(renderRow(c)));
@@ -173,7 +179,7 @@
   function renderRegistroList() {
     const list  = document.getElementById("registro-customers-list");
     const empty = document.getElementById("registro-customers-empty");
-    const registroCustomers = cachedCustomers.filter(c => !c.isGuest);
+    const registroCustomers = cachedCustomers.filter(c => c.id === null);
     const filtered = registroSearchDigits
       ? registroCustomers.filter(c => c.phone.replace(/\D/g, "").includes(registroSearchDigits))
       : registroCustomers;
@@ -183,7 +189,7 @@
       empty.hidden = false;
       empty.textContent = registroSearchDigits
         ? "Sin resultados para ese número."
-        : "Todavía no se registró ningún cliente por su cuenta en liordark.com.";
+        : "Todavía no hay clientes solo en Accesos (sin cuenta en liordark.com).";
     } else {
       empty.hidden = true;
       filtered.forEach(c => list.appendChild(renderRow(c)));
