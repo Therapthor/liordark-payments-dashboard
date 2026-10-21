@@ -377,7 +377,9 @@ export function setProfileRenewal(id: number, status: RenewalStatus): AccessProf
  *  cliente de esta cuenta, una renovación normal la reemplaza por la real. */
 export function resetRenewalMarkers(accountId: number): void {
   db.prepare(`
-    UPDATE access_profiles SET renewal_status = '', expiry_notified_at = NULL, expires_override = NULL WHERE account_id = ?
+    UPDATE access_profiles SET renewal_status = '', expiry_notified_at = NULL, expires_override = NULL,
+      sms_reminder_sent_at = NULL
+    WHERE account_id = ?
   `).run(accountId);
 }
 
@@ -1034,6 +1036,14 @@ export function markReminderSent(profileId: number): void {
 /** Clientes RETAIL (no mayoristas) que vencen EXACTO en `days` días y
  *  todavía no recibieron el SMS de hoy — para la corrida automática de
  *  SMS (panel > Renovaciones), separado del recordatorio por WhatsApp. */
+/**
+ * Clientes a mandar SMS hoy — incluye a quienes vencen mañana (tanda
+ * nueva) Y a quienes vencen hoy pero por algún motivo nunca recibieron
+ * el SMS (quedaron "colgados" de la tanda de ayer: falló el envío, o
+ * no se apretó el botón ese día). sms_reminder_sent_at se limpia solo
+ * al renovar (ver resetRenewalMarkers), así que una vez mandado no
+ * vuelve a aparecer para ese mismo ciclo de vencimiento.
+ */
 export function listUnSmsRemindedExpiringClients(days: number): ExpiringClient[] {
   const today = limaTodayISOLocal();
   const limit = addDaysISOLocal(today, days);
@@ -1045,10 +1055,11 @@ export function listUnSmsRemindedExpiringClients(days: number): ExpiringClient[]
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at = @limit
+    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL
+      AND a.expires_at >= @today AND a.expires_at <= @limit
       AND p.order_ref NOT LIKE 'combo:%'
-      AND (p.sms_reminder_sent_at IS NULL OR date(p.sms_reminder_sent_at) != @today)
-    ORDER BY p.client_phone ASC
+      AND p.sms_reminder_sent_at IS NULL
+    ORDER BY a.expires_at ASC, p.client_phone ASC
   `).all({ today, limit }) as ExpiringClient[];
 }
 
