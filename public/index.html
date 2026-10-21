@@ -1039,8 +1039,12 @@
         <button type="button" class="modal-x" data-close-modal="wholesaler-assign-modal">✕</button>
       </div>
       <p class="text-muted" style="margin-top:-8px;font-size:12.5px;">No descuenta saldo — para ventas ya cobradas por WhatsApp.</p>
-      <label>Celular del cliente
-        <input id="wholesaler-assign-phone" type="text" placeholder="ej. 987654321" required />
+      <label class="catalog-checkbox-label">
+        <input id="wholesaler-assign-for-self" type="checkbox" />
+        Es para el propio mayorista (no para un cliente suyo)
+      </label>
+      <label id="wholesaler-assign-phone-wrap">Celular del cliente
+        <input id="wholesaler-assign-phone" type="text" placeholder="ej. 987654321" />
       </label>
       <label>Origen
         <select id="wholesaler-assign-mode">
@@ -1058,8 +1062,8 @@
         <label>Contraseña
           <input id="wholesaler-assign-password" type="text" />
         </label>
-        <label>Días de vigencia
-          <input id="wholesaler-assign-days" type="number" min="1" value="30" />
+        <label>Vence el
+          <input id="wholesaler-assign-expires" type="date" />
         </label>
       </div>
       <div id="wholesaler-assign-stock-manual-fields" class="field-group" hidden>
@@ -1069,6 +1073,9 @@
         <label id="wholesaler-assign-stock-password-label">Contraseña
           <input id="wholesaler-assign-stock-password" type="text" />
         </label>
+        <label>Vence el
+          <input id="wholesaler-assign-stock-expires" type="date" />
+        </label>
       </div>
       <p id="wholesaler-assign-error" class="login-error" hidden></p>
       <div class="modal-actions">
@@ -1076,6 +1083,30 @@
         <button type="submit" class="btn-primary">Asignar</button>
       </div>
     </form>
+  </div>
+
+  <!-- ───────────── MODAL: cuentas asignadas a los clientes de un mayorista ───────────── -->
+  <div id="wholesaler-clients-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3 id="wholesaler-clients-title">Cuentas asignadas</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-clients-modal">✕</button>
+      </div>
+      <div class="modal-scroll-body">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Plataforma</th>
+              <th>Celular</th>
+              <th>Vence</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="wholesaler-clients-tbody"></tbody>
+        </table>
+        <p id="wholesaler-clients-empty" class="feed-empty" hidden>Este mayorista todavía no tiene cuentas asignadas.</p>
+      </div>
+    </div>
   </div>
 
   <!-- ───────────── MODAL: historial (ledger) de un mayorista ───────────── -->
