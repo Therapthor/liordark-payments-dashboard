@@ -1031,6 +1031,53 @@
     </form>
   </div>
 
+  <!-- ───────────── MODAL: asignar cuenta a un cliente del mayorista ───────────── -->
+  <div id="wholesaler-assign-modal" class="modal-backdrop" hidden>
+    <form id="wholesaler-assign-form" class="modal-card">
+      <div class="modal-head">
+        <h3 id="wholesaler-assign-title">Asignar cuenta</h3>
+        <button type="button" class="modal-x" data-close-modal="wholesaler-assign-modal">✕</button>
+      </div>
+      <p class="text-muted" style="margin-top:-8px;font-size:12.5px;">No descuenta saldo — para ventas ya cobradas por WhatsApp.</p>
+      <label>Celular del cliente
+        <input id="wholesaler-assign-phone" type="text" placeholder="ej. 987654321" required />
+      </label>
+      <label>Origen
+        <select id="wholesaler-assign-mode">
+          <option value="stock">Desde stock disponible</option>
+          <option value="manual">Cuenta completa (a mano)</option>
+        </select>
+      </label>
+      <label>Plataforma
+        <select id="wholesaler-assign-platform" required></select>
+      </label>
+      <div id="wholesaler-assign-manual-fields" class="field-group" hidden>
+        <label>Correo
+          <input id="wholesaler-assign-email" type="text" />
+        </label>
+        <label>Contraseña
+          <input id="wholesaler-assign-password" type="text" />
+        </label>
+        <label>Días de vigencia
+          <input id="wholesaler-assign-days" type="number" min="1" value="30" />
+        </label>
+      </div>
+      <div id="wholesaler-assign-stock-manual-fields" class="field-group" hidden>
+        <label>Correo (para activar)
+          <input id="wholesaler-assign-stock-email" type="text" />
+        </label>
+        <label id="wholesaler-assign-stock-password-label">Contraseña
+          <input id="wholesaler-assign-stock-password" type="text" />
+        </label>
+      </div>
+      <p id="wholesaler-assign-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" id="wholesaler-assign-cancel" class="btn-secondary">Cancelar</button>
+        <button type="submit" class="btn-primary">Asignar</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ───────────── MODAL: historial (ledger) de un mayorista ───────────── -->
   <div id="wholesaler-ledger-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">

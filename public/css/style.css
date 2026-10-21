@@ -611,6 +611,11 @@ button, input {
   font-size: 13px;
   color: var(--text-secondary);
 }
+.modal-card .field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .modal-card input, .modal-card select, .modal-card textarea {
   background: var(--surface-raised);
   border: 1px solid var(--border);
