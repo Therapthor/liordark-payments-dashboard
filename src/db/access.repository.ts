@@ -1033,20 +1033,14 @@ export function markReminderSent(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
-/** Clientes RETAIL (no mayoristas) que vencen EXACTO en `days` días y
- *  todavía no recibieron el SMS de hoy — para la corrida automática de
- *  SMS (panel > Renovaciones), separado del recordatorio por WhatsApp. */
 /**
- * Clientes a mandar SMS hoy — incluye a quienes vencen mañana (tanda
- * nueva) Y a quienes vencen hoy pero por algún motivo nunca recibieron
- * el SMS (quedaron "colgados" de la tanda de ayer: falló el envío, o
- * no se apretó el botón ese día). sms_reminder_sent_at se limpia solo
- * al renovar (ver resetRenewalMarkers), así que una vez mandado no
- * vuelve a aparecer para ese mismo ciclo de vencimiento.
+ * Clientes RETAIL (no mayoristas) que vencen EXACTO en esa fecha y
+ * todavía no recibieron el SMS para ese ciclo de vencimiento — panel >
+ * Renovaciones > SMS, selector de día (Hoy/Mañana). sms_reminder_sent_at
+ * se limpia solo al renovar (ver resetRenewalMarkers), así que una vez
+ * mandado no vuelve a aparecer para ese mismo ciclo.
  */
-export function listUnSmsRemindedExpiringClients(days: number): ExpiringClient[] {
-  const today = limaTodayISOLocal();
-  const limit = addDaysISOLocal(today, days);
+export function listUnSmsRemindedExpiringClientsForDate(dateISO: string): ExpiringClient[] {
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
@@ -1056,11 +1050,11 @@ export function listUnSmsRemindedExpiringClients(days: number): ExpiringClient[]
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.client_phone != '' AND p.wholesaler_id IS NULL
-      AND a.expires_at >= @today AND a.expires_at <= @limit
+      AND a.expires_at = @dateISO
       AND p.order_ref NOT LIKE 'combo:%'
       AND p.sms_reminder_sent_at IS NULL
-    ORDER BY a.expires_at ASC, p.client_phone ASC
-  `).all({ today, limit }) as ExpiringClient[];
+    ORDER BY p.client_phone ASC
+  `).all({ dateISO }) as ExpiringClient[];
 }
 
 /** Marca el SMS de vencimiento como mandado — separado de markReminderSent (WhatsApp). */
@@ -1140,7 +1134,7 @@ export function limaTodayISOLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date());
 }
 
-function addDaysISOLocal(dateISO: string, days: number): string {
+export function addDaysISOLocal(dateISO: string, days: number): string {
   const [y, m, d] = dateISO.split("-").map(Number);
   const dt = new Date(Date.UTC(y as number, (m as number) - 1, d as number));
   dt.setUTCDate(dt.getUTCDate() + days);

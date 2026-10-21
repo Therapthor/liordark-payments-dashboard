@@ -2,8 +2,8 @@ import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
 import {
-  listExpiringClients, markReminderSent, listProfilesRemindedOn, limaTodayISOLocal,
-  listUnSmsRemindedExpiringClients, markSmsReminderSent,
+  listExpiringClients, markReminderSent, listProfilesRemindedOn, limaTodayISOLocal, addDaysISOLocal,
+  listUnSmsRemindedExpiringClientsForDate, markSmsReminderSent,
 } from "../db/access.repository";
 import { recordReminderSent, setReminderRunStatus, listReminderRuns } from "../db/reminder-runs.repository";
 import {
@@ -129,23 +129,37 @@ function groupExpiringByPhone(clients: { profileId: number; clientPhone: string;
   return [...map.entries()].map(([clientPhone, accounts]) => ({ clientPhone, accounts }));
 }
 
-// GET /sms/pending — cuántos clientes están listos para el próximo envío
-// (sin mandar nada) — para mostrar el conteo apenas se abre la pestaña.
-router.get("/sms/pending", (_req, res) => {
-  const clients = listUnSmsRemindedExpiringClients(REMINDERS_WINDOW_DAYS);
-  const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
-  res.json({ pendingCount: groups.length });
+// GET /sms/days — "Hoy" y "Mañana" con cuántos clientes están listos
+// para cada uno (sin mandar nada) — corridas pendientes/hechas, para que
+// el admin elija qué día mandar en vez de un solo botón para ambos.
+router.get("/sms/days", (_req, res) => {
+  const today = limaTodayISOLocal();
+  const tomorrow = addDaysISOLocal(today, 1);
+  const days = [
+    { date: today, label: "Hoy" },
+    { date: tomorrow, label: "Mañana" },
+  ].map(d => {
+    const clients = listUnSmsRemindedExpiringClientsForDate(d.date);
+    const pendingCount = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone)).length;
+    return { ...d, pendingCount };
+  });
+  res.json({ days });
 });
 
-router.post("/sms/send", async (_req, res) => {
-  const clients = listUnSmsRemindedExpiringClients(REMINDERS_WINDOW_DAYS);
+router.post("/sms/send", async (req, res) => {
+  const date = String(req.body?.date || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: "Falta la fecha a mandar." });
+  }
+
+  const clients = listUnSmsRemindedExpiringClientsForDate(date);
   const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
 
   if (groups.length === 0) {
-    return res.json({ ok: true, sent: 0, failed: 0, message: "No hay clientes pendientes de SMS." });
+    return res.json({ ok: true, sent: 0, failed: 0, message: "No hay clientes pendientes de SMS para ese día." });
   }
 
-  const runDate = limaTodayISOLocal();
+  const runDate = date;
   startSmsReminderRun(runDate);
 
   let sent = 0;
