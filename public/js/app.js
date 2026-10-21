@@ -268,6 +268,7 @@
       loadReminders();
       loadReminderRuns();
       loadRenewalNotifications();
+      loadSmsReminderRuns();
       if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
@@ -1376,6 +1377,119 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // RECORDATORIOS POR SMS (ClickLab/Infobip) — alternativa automática
+  // al WhatsApp manual de arriba. Mismo patrón de corridas/historial,
+  // con "Enviando" como estado intermedio (acá no hay tandas de 5, es
+  // un solo POST que manda a todos los pendientes del día).
+  // ─────────────────────────────────────────────────────────────
+
+  const SMS_RUN_STATUS_LABEL = {
+    pending: "⏳ Pendiente", sending: "📨 Enviando", incomplete: "🟡 Incompleta", complete: "✅ Completa",
+  };
+  const SMS_RUN_STATUS_CLASS = {
+    pending: "badge-run-pending", sending: "badge-run-sending", incomplete: "badge-run-incomplete", complete: "badge-run-complete",
+  };
+
+  function renderSmsRunStatusBadge(status) {
+    const el = document.getElementById("sms-run-status-badge");
+    el.className = "badge " + (SMS_RUN_STATUS_CLASS[status] || "badge-run-pending");
+    el.textContent = SMS_RUN_STATUS_LABEL[status] || status;
+    el.hidden = false;
+  }
+
+  function renderSmsRunHistory(runs) {
+    const panel = document.getElementById("sms-run-history-panel");
+    const empty = document.getElementById("sms-run-history-empty");
+    const tbody = document.getElementById("sms-run-history-tbody");
+
+    if (runs.length === 0) {
+      panel.hidden = true;
+      empty.hidden = false;
+      return;
+    }
+    panel.hidden = false;
+    empty.hidden = true;
+    tbody.innerHTML = runs.map(r => `
+      <tr data-date-key="${r.runDate}">
+        <td>${fmtDateLong(r.runDate)}</td>
+        <td>${r.sentCount}</td>
+        <td>${r.failedCount}</td>
+        <td><span class="badge ${SMS_RUN_STATUS_CLASS[r.status] || "badge-run-pending"}">${escapeHtml(SMS_RUN_STATUS_LABEL[r.status] || r.status)}</span></td>
+      </tr>
+    `).join("");
+
+    tbody.querySelectorAll("tr").forEach(tr => {
+      tr.addEventListener("click", () => openSmsRunDay(tr.dataset.dateKey));
+    });
+  }
+
+  async function loadSmsReminderRuns() {
+    try {
+      const { runs } = await api("/renewals/sms/runs?limit=14");
+      renderSmsRunHistory(runs || []);
+      const today = runs && runs[0];
+      if (today) renderSmsRunStatusBadge(today.status);
+    } catch {
+      // se deja lo último mostrado
+    }
+  }
+
+  async function openSmsRunDay(dateKey) {
+    let entries = [];
+    try {
+      const data = await api("/renewals/sms/runs/" + dateKey + "/detail");
+      entries = data.entries || [];
+    } catch { /* se deja vacío */ }
+
+    const tbody = document.getElementById("sms-run-detail-tbody");
+    const empty = document.getElementById("sms-run-detail-empty");
+    tbody.innerHTML = "";
+    if (entries.length === 0) {
+      empty.hidden = false;
+    } else {
+      empty.hidden = true;
+      for (const e of entries) {
+        const tr = document.createElement("tr");
+        const statusBadge = e.status === "sent"
+          ? `<span class="badge sent">✅ Enviado</span>`
+          : `<span class="badge failed" title="${escapeHtml(e.error)}">❌ Falló</span>`;
+        tr.innerHTML = `
+          <td>${fmtDateTime(e.createdAt)}</td>
+          <td>${escapeHtml(e.clientPhone)}</td>
+          <td>${escapeHtml(e.platforms)}</td>
+          <td>${statusBadge}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    document.getElementById("sms-run-day-title").textContent = "Historial de SMS — " + fmtDateLong(dateKey);
+    document.getElementById("sms-run-history-modal").hidden = false;
+  }
+
+  async function sendSmsReminders(btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Enviando…";
+    document.getElementById("sms-summary").textContent = "Enviando SMS a los pendientes de hoy…";
+    try {
+      const { sent, failed, message } = await api("/renewals/sms/send", { method: "POST" });
+      document.getElementById("sms-summary").textContent = message
+        || `Listo: ${sent} enviado${sent === 1 ? "" : "s"}${failed ? `, ${failed} fallido${failed === 1 ? "" : "s"}` : ""}.`;
+    } catch (err) {
+      document.getElementById("sms-summary").textContent = err.message || "No se pudo enviar.";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+      loadSmsReminderRuns();
+    }
+  }
+
+  function initSmsReminders() {
+    document.getElementById("sms-send-btn").addEventListener("click", (e) => sendSmsReminders(e.currentTarget));
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // HISTÓRICO POR MES
   // ─────────────────────────────────────────────────────────────
 
@@ -1504,6 +1618,7 @@
     initPendingSearch();
     initApprovedSearch();
     initRenewalNotifSearch();
+    initSmsReminders();
     initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();

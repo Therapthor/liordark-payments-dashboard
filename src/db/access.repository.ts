@@ -1031,6 +1031,32 @@ export function markReminderSent(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
+/** Clientes RETAIL (no mayoristas) que vencen EXACTO en `days` días y
+ *  todavía no recibieron el SMS de hoy — para la corrida automática de
+ *  SMS (panel > Renovaciones), separado del recordatorio por WhatsApp. */
+export function listUnSmsRemindedExpiringClients(days: number): ExpiringClient[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  return db.prepare(`
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
+           COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
+           COALESCE((SELECT c.price FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS price,
+           a.email AS email, a.password AS password, a.expires_at AS expiresAt,
+           p.reminder_sent_at AS reminderSentAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at = @limit
+      AND p.order_ref NOT LIKE 'combo:%'
+      AND (p.sms_reminder_sent_at IS NULL OR date(p.sms_reminder_sent_at) != @today)
+    ORDER BY p.client_phone ASC
+  `).all({ today, limit }) as ExpiringClient[];
+}
+
+/** Marca el SMS de vencimiento como mandado — separado de markReminderSent (WhatsApp). */
+export function markSmsReminderSent(profileId: number): void {
+  db.prepare(`UPDATE access_profiles SET sms_reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
+}
+
 /** Sub-clientes de este mayorista que vencen EXACTO en `days` días y todavía
  *  no generaron la campanita de "cliente por vencer" en mayorista.liordark.com
  *  (se limpia solo al renovar la cuenta — ver resetRenewalMarkers). */

@@ -189,6 +189,35 @@ CREATE TABLE IF NOT EXISTS reminder_runs (
   completed_at TEXT
 );
 
+-- Corridas de SMS de vencimiento (panel > Renovaciones) — igual que
+-- reminder_runs pero para el canal SMS (ClickLab/Infobip), que es
+-- automático (un solo clic manda a todos los pendientes de hoy, sin el
+-- límite de tandas de 5 que tiene WhatsApp por el bloqueador de pop-ups).
+-- sending = la corrida está en curso, incomplete = terminó pero algún
+-- envío falló, complete = se mandó a todos sin errores.
+CREATE TABLE IF NOT EXISTS sms_reminder_runs (
+  run_date     TEXT PRIMARY KEY, -- YYYY-MM-DD (hora Lima)
+  sent_count   INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  status       TEXT    NOT NULL DEFAULT 'pending', -- pending | sending | incomplete | complete
+  started_at   TEXT,
+  completed_at TEXT
+);
+
+-- Detalle por cliente de cada corrida de SMS — para el modal "Ver
+-- clientes notificados" de panel > Renovaciones > SMS.
+CREATE TABLE IF NOT EXISTS sms_reminder_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_date     TEXT    NOT NULL,
+  client_phone TEXT    NOT NULL,
+  platforms    TEXT    NOT NULL DEFAULT '', -- plataformas incluidas en ese SMS, separadas por coma
+  status       TEXT    NOT NULL DEFAULT 'sent', -- sent | failed
+  message_id   TEXT    NOT NULL DEFAULT '',
+  error        TEXT    NOT NULL DEFAULT '',
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sms_reminder_log_run_date ON sms_reminder_log(run_date);
+
 -- Bitácora de activación manual (CANVA, GEMINI AI PRO, ...) — reemplaza
 -- el registro que se hacía en la hoja 'CANVA ANUAL'. Estas plataformas no
 -- usan el modelo de stock (access_accounts): el admin activa el plan a

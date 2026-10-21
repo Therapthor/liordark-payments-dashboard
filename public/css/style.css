@@ -532,6 +532,7 @@ button, input {
 .badge.sent   { background: rgba(22,163,74,0.15); color: var(--good); }
 .badge.failed { background: rgba(217,54,54,0.15); color: var(--critical); cursor: help; }
 .badge-run-pending    { background: rgba(154,154,154,0.15); color: var(--text-muted); }
+.badge-run-sending    { background: rgba(37,99,235,0.15);   color: #2563eb; }
 .badge-run-incomplete { background: rgba(180,120,10,0.15);  color: var(--warning); }
 .badge-run-complete   { background: rgba(22,163,74,0.15);   color: var(--good); }
 

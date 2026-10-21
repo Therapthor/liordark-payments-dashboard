@@ -44,6 +44,7 @@ ensureColumn("payment_methods", "image_url", "image_url TEXT NOT NULL DEFAULT ''
 ensureColumn("catalog_products", "keywords", "keywords TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "order_ref", "order_ref TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "reminder_sent_at", "reminder_sent_at TEXT");
+ensureColumn("access_profiles", "sms_reminder_sent_at", "sms_reminder_sent_at TEXT"); // recordatorio SMS (ClickLab) — separado del de WhatsApp
 ensureColumn("access_accounts", "provider_renewal_enabled",   "provider_renewal_enabled INTEGER NOT NULL DEFAULT 0");
 ensureColumn("access_accounts", "provider_renewal_cost",      "provider_renewal_cost TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_accounts", "provider_renewal_currency",  "provider_renewal_currency TEXT NOT NULL DEFAULT 'USDT'");
