@@ -313,11 +313,13 @@
     const manualFields = document.getElementById("wholesaler-assign-manual-fields");
     const stockManualFields = document.getElementById("wholesaler-assign-stock-manual-fields");
     const stockPasswordLabel = document.getElementById("wholesaler-assign-stock-password-label");
+    const stockExpiresWrap = document.getElementById("wholesaler-assign-stock-expires-wrap");
     const phoneWrap = document.getElementById("wholesaler-assign-phone-wrap");
 
     phoneWrap.hidden = forSelf;
     manualFields.hidden = mode !== "manual";
     stockManualFields.hidden = !(mode === "stock" && isManualActivationPlatform(platform));
+    stockExpiresWrap.hidden = mode !== "stock";
     stockPasswordLabel.hidden = !requiresPasswordPlatform(platform);
   }
 
@@ -371,10 +373,16 @@
         body.email = document.getElementById("wholesaler-assign-email").value.trim();
         body.password = document.getElementById("wholesaler-assign-password").value.trim();
         body.expiresAt = document.getElementById("wholesaler-assign-expires").value;
-      } else if (isManualActivationPlatform(platform)) {
-        body.email = document.getElementById("wholesaler-assign-stock-email").value.trim();
-        body.password = document.getElementById("wholesaler-assign-stock-password").value.trim();
+      } else {
+        // mode === "stock" — siempre manda la fecha (aplica incluso
+        // sacando de stock: pisa el vencimiento heredado del pool con el
+        // real de la compra). Si además es plataforma de activación
+        // manual, también manda correo/contraseña.
         body.expiresAt = document.getElementById("wholesaler-assign-stock-expires").value;
+        if (isManualActivationPlatform(platform)) {
+          body.email = document.getElementById("wholesaler-assign-stock-email").value.trim();
+          body.password = document.getElementById("wholesaler-assign-stock-password").value.trim();
+        }
       }
 
       try {
