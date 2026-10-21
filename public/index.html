@@ -43,7 +43,7 @@
         </div>
         <button class="tab-btn" data-view="access">Accesos</button>
         <button class="tab-btn" data-view="wholesalers">Mayoristas <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
-        <button class="tab-btn" data-view="web-customers">Clientes web</button>
+        <button class="tab-btn" data-view="web-customers">Clientes</button>
         <button class="tab-btn" data-view="config">Configuración</button>
         <button class="tab-btn" data-view="support">Soportes <span class="tab-badge-alert" id="support-pending-badge" hidden>0</span></button>
       </nav>
@@ -254,7 +254,7 @@
       <!-- ═══════════ VISTA: CLIENTES WEB (liordark.com) ═══════════ -->
       <section id="view-web-customers" class="view" hidden>
         <div class="panel-header standalone">
-          <h2>Clientes de la tienda web</h2>
+          <h2>Clientes</h2>
         </div>
 
         <div class="panel-grid resumen-top-grid">
@@ -273,12 +273,33 @@
           </div>
         </div>
 
-        <div class="feed-search">
-          <input id="web-customers-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
-          <button id="web-customers-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+        <div class="config-subnav">
+          <button class="config-subnav-item active" data-customers-section="web">Web</button>
+          <button class="config-subnav-item" data-customers-section="registro">Registro</button>
         </div>
-        <div id="web-customers-list" class="web-customers-list"></div>
-        <p id="web-customers-empty" class="feed-empty" hidden>Todavía no se registró ningún cliente en liordark.com.</p>
+
+        <div id="customers-section-web">
+          <div class="feed-search">
+            <input id="web-customers-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+            <button id="web-customers-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+            <select id="web-customers-sort">
+              <option value="recent">Más recientes</option>
+              <option value="purchases-desc">Quién compró más</option>
+              <option value="purchases-asc">Quién compró menos</option>
+            </select>
+          </div>
+          <div id="web-customers-list" class="web-customers-list"></div>
+          <p id="web-customers-empty" class="feed-empty" hidden>Todavía no hay clientes automáticos (compra sin registrarse) en liordark.com.</p>
+        </div>
+
+        <div id="customers-section-registro" hidden>
+          <div class="feed-search">
+            <input id="registro-customers-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+            <button id="registro-customers-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+          </div>
+          <div id="registro-customers-list" class="web-customers-list"></div>
+          <p id="registro-customers-empty" class="feed-empty" hidden>Todavía no se registró ningún cliente por su cuenta en liordark.com.</p>
+        </div>
       </section>
 
       <!-- ═══════════ VISTA: HISTORIAL ═══════════ -->

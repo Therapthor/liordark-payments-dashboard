@@ -48,10 +48,6 @@
     div.className = "web-customer-row";
     div.dataset.id = c.id;
 
-    const originBadge = c.isGuest
-      ? `<span class="web-customer-badge web-customer-badge-guest">Automática</span>`
-      : `<span class="web-customer-badge web-customer-badge-own">Registro propio</span>`;
-
     const statusBadge = c.suspended
       ? `<span class="web-customer-status web-customer-status-suspended">⏸ Suspendida hasta ${formatDate(c.suspendedUntil)}</span>`
       : `<span class="web-customer-status">✅ Cuenta creada</span>`;
@@ -72,7 +68,6 @@
     div.innerHTML = `
       <div class="web-customer-main">
         <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
-        ${originBadge}
         ${statusBadge}
       </div>
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
@@ -127,23 +122,54 @@
   }
 
   // Se guarda el último fetch para filtrar por celular sin golpear al
-  // servidor en cada tecla — mismo patrón que "Pedidos pendientes".
+  // servidor en cada tecla — mismo patrón que "Pedidos pendientes". Se
+  // divide en dos grupos: "Web" (isGuest — cuenta automática por compra
+  // sin registrarse) y "Registro" (se registró por su cuenta).
   let cachedCustomers = [];
-  let searchDigits = "";
+  let webSearchDigits = "";
+  let registroSearchDigits = "";
+  let webSort = "recent";
 
-  function renderList() {
+  function sortWebCustomers(list) {
+    if (webSort === "purchases-desc") return [...list].sort((a, b) => b.purchaseCount - a.purchaseCount);
+    if (webSort === "purchases-asc")  return [...list].sort((a, b) => a.purchaseCount - b.purchaseCount);
+    return list; // "recent" — ya viene ordenado por fecha desde el servidor
+  }
+
+  function renderWebList() {
     const list  = document.getElementById("web-customers-list");
     const empty = document.getElementById("web-customers-empty");
-    const filtered = searchDigits
-      ? cachedCustomers.filter(c => c.phone.replace(/\D/g, "").includes(searchDigits))
-      : cachedCustomers;
+    const webCustomers = cachedCustomers.filter(c => c.isGuest);
+    const filtered = webSearchDigits
+      ? webCustomers.filter(c => c.phone.replace(/\D/g, "").includes(webSearchDigits))
+      : webCustomers;
 
     list.innerHTML = "";
     if (filtered.length === 0) {
       empty.hidden = false;
-      empty.textContent = searchDigits
+      empty.textContent = webSearchDigits
         ? "Sin resultados para ese número."
-        : "Todavía no se registró ningún cliente en liordark.com.";
+        : "Todavía no hay clientes automáticos (compra sin registrarse) en liordark.com.";
+    } else {
+      empty.hidden = true;
+      sortWebCustomers(filtered).forEach(c => list.appendChild(renderRow(c)));
+    }
+  }
+
+  function renderRegistroList() {
+    const list  = document.getElementById("registro-customers-list");
+    const empty = document.getElementById("registro-customers-empty");
+    const registroCustomers = cachedCustomers.filter(c => !c.isGuest);
+    const filtered = registroSearchDigits
+      ? registroCustomers.filter(c => c.phone.replace(/\D/g, "").includes(registroSearchDigits))
+      : registroCustomers;
+
+    list.innerHTML = "";
+    if (filtered.length === 0) {
+      empty.hidden = false;
+      empty.textContent = registroSearchDigits
+        ? "Sin resultados para ese número."
+        : "Todavía no se registró ningún cliente por su cuenta en liordark.com.";
     } else {
       empty.hidden = true;
       filtered.forEach(c => list.appendChild(renderRow(c)));
@@ -151,19 +177,48 @@
   }
 
   function initSearch() {
-    const input    = document.getElementById("web-customers-search");
-    const clearBtn = document.getElementById("web-customers-search-clear");
-
-    input.addEventListener("input", () => {
-      searchDigits = input.value.replace(/\D/g, "");
-      clearBtn.hidden = !searchDigits;
-      renderList();
+    const webInput    = document.getElementById("web-customers-search");
+    const webClearBtn = document.getElementById("web-customers-search-clear");
+    webInput.addEventListener("input", () => {
+      webSearchDigits = webInput.value.replace(/\D/g, "");
+      webClearBtn.hidden = !webSearchDigits;
+      renderWebList();
     });
-    clearBtn.addEventListener("click", () => {
-      input.value = "";
-      searchDigits = "";
-      clearBtn.hidden = true;
-      renderList();
+    webClearBtn.addEventListener("click", () => {
+      webInput.value = "";
+      webSearchDigits = "";
+      webClearBtn.hidden = true;
+      renderWebList();
+    });
+
+    document.getElementById("web-customers-sort").addEventListener("change", (e) => {
+      webSort = e.target.value;
+      renderWebList();
+    });
+
+    const registroInput    = document.getElementById("registro-customers-search");
+    const registroClearBtn = document.getElementById("registro-customers-search-clear");
+    registroInput.addEventListener("input", () => {
+      registroSearchDigits = registroInput.value.replace(/\D/g, "");
+      registroClearBtn.hidden = !registroSearchDigits;
+      renderRegistroList();
+    });
+    registroClearBtn.addEventListener("click", () => {
+      registroInput.value = "";
+      registroSearchDigits = "";
+      registroClearBtn.hidden = true;
+      renderRegistroList();
+    });
+  }
+
+  function initCustomersSubnav() {
+    document.querySelectorAll("[data-customers-section]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const section = btn.dataset.customersSection;
+        document.querySelectorAll("[data-customers-section]").forEach(b => b.classList.toggle("active", b === btn));
+        document.getElementById("customers-section-web").hidden     = section !== "web";
+        document.getElementById("customers-section-registro").hidden = section !== "registro";
+      });
     });
   }
 
@@ -172,7 +227,8 @@
     try {
       const { customers } = await api("/");
       cachedCustomers = customers || [];
-      renderList();
+      renderWebList();
+      renderRegistroList();
     } catch (err) {
       list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
     }
@@ -230,7 +286,9 @@
   }
 
   initRowActions(document.getElementById("web-customers-list"));
+  initRowActions(document.getElementById("registro-customers-list"));
   initSearch();
+  initCustomersSubnav();
 
   window.LiordarkWebCustomers = { load };
 })();
