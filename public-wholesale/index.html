@@ -8,6 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
+<script>
+  // Aplica el tema guardado ANTES de pintar — si no, se ve un flash
+  // claro→oscuro al cargar con el modo oscuro ya elegido.
+  try {
+    var t = localStorage.getItem("mw-theme");
+    if (t === "dark") document.documentElement.dataset.theme = "dark";
+  } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -49,6 +57,7 @@
         <span class="app-header-hello" id="header-hello">Hola</span>
         <span class="app-header-balance" id="header-balance">Saldo: S/ 0.00</span>
       </div>
+      <button class="theme-toggle-btn" id="theme-toggle-btn" type="button" title="Modo oscuro" aria-label="Modo oscuro">🌙</button>
       <div class="notif-wrap">
         <button class="nav-btn-bell" id="notif-bell-btn" type="button" title="Notificaciones" aria-label="Notificaciones">
           <span class="nav-btn-bell-icon">🔔</span>
@@ -70,8 +79,50 @@
 
       <main class="app-main" id="app-main">
 
+        <!-- ─── INICIO ─── -->
+        <section id="page-inicio" class="page">
+          <h2 class="page-title">🏠 Inicio</h2>
+          <div class="home-top-grid">
+            <div class="home-hero">
+              <div class="home-hero-label">Tu saldo</div>
+              <div class="home-hero-value" id="home-balance-value">S/ 0.00</div>
+              <div class="home-hero-actions">
+                <button type="button" class="home-hero-btn" data-page="creditos">💳 Recargar</button>
+                <button type="button" class="home-hero-btn" data-page="comprar">🛒 Comprar</button>
+                <button type="button" class="home-hero-btn" data-page="cuentas">📦 Pedidos</button>
+              </div>
+            </div>
+            <div class="stat-grid">
+              <div class="stat-card"><div class="stat-card-value ok" id="home-stat-active">—</div><div class="stat-card-label">Activos</div></div>
+              <div class="stat-card"><div class="stat-card-value warn" id="home-stat-expiring">—</div><div class="stat-card-label">Por vencer</div></div>
+              <div class="stat-card"><div class="stat-card-value" id="home-stat-total">—</div><div class="stat-card-label">Clientes</div></div>
+            </div>
+          </div>
+          <div class="home-bottom-grid">
+            <div class="home-panel">
+              <div class="home-section-head">
+                <h3>⚠️ Vencen pronto</h3>
+                <button type="button" data-page="clientes">Ver todos</button>
+              </div>
+              <div id="home-alerts-list"></div>
+              <p id="home-alerts-empty" class="empty-state" hidden>Ningún cliente vence en los próximos días. 🎉</p>
+            </div>
+            <div class="home-panel">
+              <div class="home-section-head">
+                <h3>Accesos rápidos</h3>
+              </div>
+              <div class="quick-grid">
+                <button type="button" class="quick-tile" data-page="clientes"><div class="quick-tile-icon">👥</div><div class="quick-tile-lbl">Clientes</div></button>
+                <button type="button" class="quick-tile" data-page="cuentas"><div class="quick-tile-icon">📦</div><div class="quick-tile-lbl">Cuentas</div></button>
+                <button type="button" class="quick-tile" data-page="recordatorios"><div class="quick-tile-icon">🔔</div><div class="quick-tile-lbl">Avisos</div></button>
+                <button type="button" class="quick-tile" data-page="soporte"><div class="quick-tile-icon">💬</div><div class="quick-tile-lbl">Soporte</div></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- ─── CLIENTES ─── -->
-        <section id="page-clientes" class="page">
+        <section id="page-clientes" class="page" hidden>
           <h2 class="page-title">👥 Clientes</h2>
           <p class="page-subtitle muted small">Tus sub-clientes con cuenta asignada.</p>
           <div id="clients-list" class="client-list"></div>
@@ -126,26 +177,6 @@
           <p id="cuentas-orders-empty" class="empty-state" hidden>No has pedido ninguna cuenta completa todavía.</p>
         </section>
 
-        <!-- ─── RESUMEN ─── -->
-        <section id="page-resumen" class="page" hidden>
-          <h2 class="page-title">📊 Resumen</h2>
-          <p class="page-subtitle muted small">Un vistazo rápido a tu cartera de clientes.</p>
-          <div class="stat-grid">
-            <div class="stat-card">
-              <div class="stat-card-value" id="stat-active">—</div>
-              <div class="stat-card-label">Activos</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card-value" id="stat-expiring">—</div>
-              <div class="stat-card-label">Por vencer</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-card-value" id="stat-total">—</div>
-              <div class="stat-card-label">Total clientes</div>
-            </div>
-          </div>
-        </section>
-
         <!-- ─── CRÉDITOS ─── -->
         <section id="page-creditos" class="page" hidden>
           <h2 class="page-title">💳 Créditos</h2>
@@ -186,6 +217,16 @@
             <h3>¿Necesitas ayuda?</h3>
             <p class="muted">Escríbenos directo por WhatsApp y te respondemos al toque.</p>
             <a class="btn-wa btn-block" id="support-wa-link" href="#" target="_blank" rel="noopener">💬 Chatear por WhatsApp</a>
+          </div>
+        </section>
+
+        <!-- ─── MÁS (solo mobile — agrupa Créditos/Recordatorios/Soporte) ─── -->
+        <section id="page-mas" class="page" hidden>
+          <h2 class="page-title">⋯ Más</h2>
+          <div class="mas-list">
+            <button type="button" class="mas-row" data-page="creditos"><span class="mas-row-icon">💳</span><span class="mas-row-label">Créditos</span><span class="mas-row-chevron">›</span></button>
+            <button type="button" class="mas-row" data-page="recordatorios"><span class="mas-row-icon">🔔</span><span class="mas-row-label">Recordatorios</span><span class="mas-row-chevron">›</span></button>
+            <button type="button" class="mas-row" data-page="soporte"><span class="mas-row-icon">💬</span><span class="mas-row-label">Soporte</span><span class="mas-row-chevron">›</span></button>
           </div>
         </section>
 
@@ -238,7 +279,7 @@
       <p class="muted small">Escribe el celular del cliente final — ahí le enviamos la cuenta.</p>
       <form id="cart-checkout-form">
         <label for="cart-checkout-phone" class="muted small">Celular del cliente</label>
-        <input type="tel" id="cart-checkout-phone" required placeholder="9XXXXXXXX" autocomplete="tel" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); font-size:15px; font-family:inherit; margin-top:4px;">
+        <input type="tel" id="cart-checkout-phone" required placeholder="9XXXXXXXX" autocomplete="tel" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:15px; font-family:inherit; margin-top:4px;">
         <div id="cart-checkout-emails"></div>
         <p class="form-error" id="cart-checkout-error" hidden></p>
         <button type="submit" class="btn-primary btn-block" style="margin-top:14px;">Confirmar compra</button>
