@@ -9,7 +9,7 @@ import {
   countAllCustomers,
   dailyRegistrationsThisMonth,
 } from "../db/customer.repository";
-import { countProfilesByPhone } from "../db/access.repository";
+import { listAccessClientStats } from "../db/access.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { limaTodayISO } from "../services/access.service";
 
@@ -24,19 +24,51 @@ import { limaTodayISO } from "../services/access.service";
 
 const router = Router();
 
+// Últimos 9 dígitos — mismo criterio que el resto del código para
+// comparar celulares sin importar si quedaron guardados con o sin "51".
+function last9(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-9);
+}
+
+// "Clientes > Registro" muestra DOS orígenes en una sola lista: quienes
+// se registraron de verdad en liordark.com (tabla customers) Y quienes
+// solo existen porque alguna vez les asignaron una cuenta en Accesos
+// (compra por el bot, o asignación manual) sin pasar nunca por un
+// registro web. Estos últimos no tienen contraseña ni se pueden
+// suspender/banear desde acá (id: null) — son solo un registro, no una
+// cuenta de login real.
 router.get("/", (_req, res) => {
-  const purchaseCounts = countProfilesByPhone();
-  const customers = listAllCustomers().map(c => ({
-    id:             c.id,
-    phone:          c.phone,
-    isGuest:        c.isGuest,
-    password:       c.passwordPlain,
-    purchaseCount:  purchaseCounts[c.phone] ?? 0,
-    suspended:      isCustomerSuspended(c),
-    suspendedUntil: c.suspendedUntil,
-    createdAt:      c.createdAt,
-  }));
-  res.json({ customers });
+  const accessStats = listAccessClientStats();
+  const registeredDigits = new Set(listAllCustomers().map(c => last9(c.phone)));
+
+  const customers = listAllCustomers().map(c => {
+    const stat = accessStats.find(s => last9(s.phone) === last9(c.phone));
+    return {
+      id:             c.id,
+      phone:          c.phone,
+      isGuest:        c.isGuest,
+      password:       c.passwordPlain,
+      purchaseCount:  stat?.purchaseCount ?? 0,
+      suspended:      isCustomerSuspended(c),
+      suspendedUntil: c.suspendedUntil,
+      createdAt:      c.createdAt,
+    };
+  });
+
+  const accessOnly = accessStats
+    .filter(s => !registeredDigits.has(last9(s.phone)))
+    .map(s => ({
+      id:             null,
+      phone:          s.phone,
+      isGuest:        false,
+      password:       null,
+      purchaseCount:  s.purchaseCount,
+      suspended:      false,
+      suspendedUntil: null,
+      createdAt:      s.firstSeenAt || "",
+    }));
+
+  res.json({ customers: [...customers, ...accessOnly] });
 });
 
 // GET /stats — total de clientes + registros por día del mes en curso,

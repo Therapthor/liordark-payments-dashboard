@@ -46,13 +46,27 @@
   function renderRow(c) {
     const div = document.createElement("div");
     div.className = "web-customer-row";
-    div.dataset.id = c.id;
+    div.dataset.id = c.id === null ? "" : c.id;
+
+    const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
+
+    // id === null = no tiene cuenta real en este panel (nunca se
+    // registró en liordark.com) — solo existe porque alguna vez le
+    // asignaron una cuenta en Accesos. No hay contraseña ni se puede
+    // suspender/banear algo que no es una cuenta de login.
+    if (c.id === null) {
+      div.innerHTML = `
+        <div class="web-customer-main">
+          <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
+          <span class="web-customer-status">📋 Solo en Accesos</span>
+        </div>
+        <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>`;
+      return div;
+    }
 
     const statusBadge = c.suspended
       ? `<span class="web-customer-status web-customer-status-suspended">⏸ Suspendida hasta ${formatDate(c.suspendedUntil)}</span>`
       : `<span class="web-customer-status">✅ Cuenta creada</span>`;
-
-    const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
 
     // Cuentas registradas antes de guardar password_plain no tienen
     // contraseña visible (quedó solo como hash) — se les puede generar
@@ -289,6 +303,15 @@
   initRowActions(document.getElementById("registro-customers-list"));
   initSearch();
   initCustomersSubnav();
+
+  // "En tiempo real" — mientras esta pestaña esté abierta, se refresca
+  // sola cada 20s (sin recargar la página) para reflejar registros
+  // nuevos o asignaciones manuales recién hechas en Accesos.
+  const LIVE_POLL_MS = 20_000;
+  setInterval(() => {
+    const view = document.getElementById("view-web-customers");
+    if (view && !view.hidden) load();
+  }, LIVE_POLL_MS);
 
   window.LiordarkWebCustomers = { load };
 })();
