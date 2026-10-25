@@ -12,7 +12,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // atendido (ver support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed";
 
 export type WholesalerNotification = {
   id:           number;
@@ -47,14 +47,17 @@ function buildSupportResolvedHeadline(platform: string, replaced: boolean): stri
 
 /** customMessage: el texto que escribió el admin al atender — en
  *  "support_resolved" va DESPUÉS del encabezado fijo (reemplazo o no),
- *  nunca lo reemplaza. replaced: si Soporte usó "Reemplazar" antes de
- *  atender este reporte (ver support.routes.ts). */
+ *  nunca lo reemplaza. En "password_changed" es la contraseña nueva.
+ *  replaced: si Soporte usó "Reemplazar" antes de atender este reporte
+ *  (ver support.routes.ts). */
 export function createWholesalerNotification(
   wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = "", customMessage = "", replaced = false
 ): void {
   if (!wholesalerId || !platform) return;
   const message = type === "support_resolved"
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
+    : type === "password_changed"
+    ? `🔑 La cuenta de ${platformTitle(platform)} de tu cliente tiene una contraseña nueva: ${customMessage}`
     : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO wholesaler_notifications (wholesaler_id, type, platform, account_email, message)

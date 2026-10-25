@@ -115,9 +115,13 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Solo números de Perú — 9 dígitos locales, o 11 con el prefijo 51. Un
+// número de otro país (ej. Venezuela "58...") queda afuera del filtro acá
+// mismo, antes de intentar mandarlo, para que nunca llegue a sendSms() y la
+// tanda siga de corrido con el resto de clientes.
 function isValidSmsPhone(phone: string): boolean {
   const digits = phone.replace(/\D/g, "");
-  return digits.length >= 9 && digits.length <= 12;
+  return digits.length === 9 || (digits.length === 11 && digits.startsWith("51"));
 }
 
 function groupExpiringByPhone(clients: { profileId: number; clientPhone: string; platform: string; platformTag: string }[]) {

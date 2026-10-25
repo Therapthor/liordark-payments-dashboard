@@ -5,6 +5,7 @@
   const SUPPORT_PHONE = "51963081436"; // wa.me — sin +, sin espacios
   const POLL_MS        = 4000;
   const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+  const API_TIMEOUT_MS  = 20_000;
 
   // ─────────────────────────────────────────────────────────────
   // HELPER — fetch con cookie de sesión de cliente
@@ -12,15 +13,35 @@
 
   async function api(path, opts) {
     opts = opts || {};
-    const res = await fetch(API_BASE + path, {
-      method: opts.method || "GET",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-    });
+    const controller = new AbortController();
+    const timeoutId  = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+    let res;
+    try {
+      res = await fetch(API_BASE + path, {
+        method: opts.method || "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        signal: controller.signal,
+      });
+    } catch {
+      // No llegó respuesta (timeout/red) — del otro lado el pedido puede
+      // haberse creado igual, así que esto NO es un error de negocio
+      // (sin .isBusinessError) y el caller decide mostrar un mensaje
+      // tranquilizador en vez de un error tajante.
+      throw new Error("No se pudo confirmar la respuesta del servidor. Si corresponde, tu pedido puede haberse registrado igual.");
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
     let data = {};
     try { data = await res.json(); } catch { /* respuesta vacía */ }
-    if (!res.ok) throw new Error(data.message || "Ocurrió un error. Intenta de nuevo.");
+    if (!res.ok) {
+      const err = new Error(data.message || "Ocurrió un error. Intenta de nuevo.");
+      err.isBusinessError = true;
+      throw err;
+    }
     return data;
   }
 
@@ -570,8 +591,9 @@
     modal.hidden = false;
     showCheckoutState("loading");
 
+    let beforeAccounts = cachedDashboard;
     try {
-      const beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
+      beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
       const order = await api("/checkout", { method: "POST", body: { customComboPlatforms: platforms } });
 
       await ensureYapeInfo();
@@ -589,8 +611,14 @@
       showCheckoutState("ready");
       startPolling(beforeAccounts, platforms.length);
     } catch (err) {
-      document.getElementById("checkout-error-text").textContent = err.message;
-      showCheckoutState("error");
+      if (err.isBusinessError) {
+        document.getElementById("checkout-error-text").textContent = err.message;
+        showCheckoutState("error");
+      } else {
+        const reserveInfo = { platformLabel: "tu combo", amount: null };
+        showCheckoutReserved(reserveInfo);
+        startPolling(beforeAccounts, platforms.length, reserveInfo);
+      }
     }
   }
 
@@ -1071,8 +1099,14 @@
 
       showCheckoutState("ready");
     } catch (err) {
-      document.getElementById("checkout-error-text").textContent = err.message;
-      showCheckoutState("error");
+      if (err.isBusinessError) {
+        document.getElementById("checkout-error-text").textContent = err.message;
+        showCheckoutState("error");
+      } else {
+        // Igual que en startCheckout: no llegó la respuesta, pero la
+        // renovación puede haberse registrado igual del otro lado.
+        showCheckoutReserved({ platformLabel: platform, amount: null });
+      }
     }
   }
 
@@ -1119,8 +1153,9 @@
       targetNewAccounts = combo ? combo.items.length : 1;
     }
 
+    let beforeAccounts = cachedDashboard;
     try {
-      const beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
+      beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
       const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword };
       const order = await api("/checkout", { method: "POST", body });
 
@@ -1140,8 +1175,14 @@
       showCheckoutState("ready");
       startPolling(beforeAccounts, targetNewAccounts, isReserve ? { platformLabel: platformLabel || id, amount: order.amount } : null);
     } catch (err) {
-      document.getElementById("checkout-error-text").textContent = err.message;
-      showCheckoutState("error");
+      if (err.isBusinessError) {
+        document.getElementById("checkout-error-text").textContent = err.message;
+        showCheckoutState("error");
+      } else {
+        const reserveInfo = { platformLabel: platformLabel || id, amount: null };
+        showCheckoutReserved(reserveInfo);
+        startPolling(beforeAccounts, targetNewAccounts, reserveInfo);
+      }
     }
   }
 
@@ -1158,12 +1199,20 @@
 
   let reservedScreenShown = false;
 
+  // reserveInfo.amount === null → la orden ni siquiera llegó a confirmarse
+  // (la respuesta del checkout se perdió/tardó), así que no hay monto que
+  // mostrar — mensaje distinto al de "sin stock, reservado".
   function showCheckoutReserved(reserveInfo) {
-    document.getElementById("checkout-reserved-text").innerHTML =
-      `Estamos subiendo stock nuevo de <b>${escapeHtml(reserveInfo.platformLabel)}</b> — apenas esté listo, ` +
-      `tu cuenta va a aparecer sola en "Mis cuentas". No necesitas hacer nada más 😊`;
-    document.getElementById("checkout-reserved-amount").textContent =
-      reserveInfo.platformLabel + " · S/ " + reserveInfo.amount;
+    document.getElementById("checkout-reserved-text").innerHTML = reserveInfo.amount === null
+      ? `Tu pedido de <b>${escapeHtml(reserveInfo.platformLabel)}</b> se está procesando — puede tardar unos segundos más de lo normal. ` +
+        `Si el pago ya se realizó, tu cuenta va a aparecer sola en "Mis cuentas" y te vamos a notificar. No necesitas hacer nada más 😊`
+      : `Estamos subiendo stock nuevo de <b>${escapeHtml(reserveInfo.platformLabel)}</b> — apenas esté listo, ` +
+        `tu cuenta va a aparecer sola en "Mis cuentas". No necesitas hacer nada más 😊`;
+    document.getElementById("checkout-reserved-order").hidden = reserveInfo.amount === null;
+    if (reserveInfo.amount !== null) {
+      document.getElementById("checkout-reserved-amount").textContent =
+        reserveInfo.platformLabel + " · S/ " + reserveInfo.amount;
+    }
     showCheckoutState("reserved");
   }
 

@@ -74,9 +74,6 @@
     const perfilLine = p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "";
     return `🔄 Reemplazo de cuenta\n\n✅ *${p.platform}*\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Días restantes: *${p.daysLeft}*\n\nCualquier inconveniente adicional, estoy atento. 😊`;
   }
-  function msgPassword(p, newPassword) {
-    return `🔄 *Cambio de contraseña*\n\n✅ *${p.platform}*\n📧 Correo: *${p.email}*\n🔑 Nueva contraseña: *${newPassword}*`;
-  }
   function msgResumen(items) {
     const lines = items.map((it, i) => {
       const perfilLine = it.profileName ? `\n👤 Perfil: ${it.profileName}` : "";
@@ -451,7 +448,7 @@
     });
 
     target.querySelectorAll(".access-password-all").forEach(btn => {
-      btn.addEventListener("click", () => openPasswordModalBulk(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+      btn.addEventListener("click", () => notifyPasswordChangeAll(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
     target.querySelectorAll(".access-open-link").forEach(btn => {
@@ -810,31 +807,32 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MODAL — cambio de contraseña, SOLO masivo (a todos los perfiles
-  // con cliente asignado). No guarda nada — la contraseña real se
-  // actualiza aparte, editando la cuenta.
+  // CAMBIO DE CONTRASEÑA — SOLO masivo (a todos los perfiles con cliente
+  // asignado). Usa la contraseña que la cuenta YA tiene guardada (se edita
+  // aparte, en "✏️ Editar cuenta", ANTES de tocar este botón) — ya no pide
+  // escribirla de nuevo acá. Avisa por la campanita de notificaciones de
+  // cada cliente/mayorista, no por WhatsApp.
   // ─────────────────────────────────────────────────────────────
 
-  let passwordBulkTarget = null; // { btn, account }
+  async function notifyPasswordChangeAll(btn, account) {
+    const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
+    if (occupiedCount === 0) return;
+    if (!confirm(
+      `¿Avisar la contraseña actual de ${account.platform} (${account.email}) a los ${occupiedCount} cliente(s) con esta cuenta?\n\n` +
+      `Se les llega por su campanita de notificaciones, no por WhatsApp.`
+    )) return;
 
-  function openPasswordModalBulk(btn, account) {
-    passwordBulkTarget = { btn, account };
-    document.getElementById("password-form").reset();
-    document.getElementById("password-modal").hidden = false;
-  }
-
-  function initPasswordModal() {
-    document.getElementById("password-cancel").addEventListener("click", () => { document.getElementById("password-modal").hidden = true; });
-
-    document.getElementById("password-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const newPassword = document.getElementById("password-new").value;
-      document.getElementById("password-modal").hidden = true;
-      if (!passwordBulkTarget) return;
-      const { btn, account } = passwordBulkTarget;
-      passwordBulkTarget = null;
-      await bulkSendToOccupied(btn, account, p => msgPassword(profileCtx(account, p), newPassword));
-    });
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Avisando…";
+    try {
+      await api("/accounts/" + account.id + "/notify-password-change", { method: "POST" });
+    } catch (err) {
+      alert(err.message || "No se pudo avisar el cambio de contraseña.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1509,7 +1507,6 @@
     initBulkModal();
     initEditModal();
     initProfileModal();
-    initPasswordModal();
     initRenewNewModal();
     initHistoryModal();
     initRenewingModal();

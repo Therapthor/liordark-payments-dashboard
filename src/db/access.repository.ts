@@ -1084,6 +1084,24 @@ export function markExpiryNotified(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET expiry_notified_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
+/** Igual que listUnnotifiedExpiringClientsForWholesaler, pero para UN cliente
+ *  RETAIL (no mayorista) — campanita de liordark.com (ver GET /api/store/notifications). */
+export function listUnnotifiedExpiringClientsForCustomer(
+  phone: string, days: number
+): { profileId: number; platform: string; email: string }[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  const last9 = phone.replace(/\D/g, "").slice(-9);
+  return db.prepare(`
+    SELECT p.id AS profileId, a.platform AS platform, a.email AS email
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.wholesaler_id IS NULL AND substr(p.client_phone, -9) = @last9
+      AND a.expires_at = @limit AND p.expiry_notified_at IS NULL
+      AND p.order_ref NOT LIKE 'combo:%'
+  `).all({ last9, limit }) as { profileId: number; platform: string; email: string }[];
+}
+
 export type RemindedClient = { profileId: number; clientPhone: string; platform: string; email: string; remindedAt: string };
 
 /** Quiénes recibieron recordatorio en una fecha dada (YYYY-MM-DD, hora Lima) — detalle al hacer click en una corrida. */

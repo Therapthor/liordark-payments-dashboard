@@ -10,7 +10,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring";
+export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed";
 
 export type CustomerNotification = {
   id:          number;
@@ -49,8 +49,9 @@ function buildSupportResolvedHeadline(platform: string, replaced: boolean): stri
 
 /** customMessage: el texto que escribió el admin al atender — en
  *  "support_resolved" va DESPUÉS del encabezado fijo (reemplazo o no),
- *  nunca lo reemplaza. replaced: si Soporte usó "Reemplazar" antes de
- *  atender este reporte (ver support.routes.ts). */
+ *  nunca lo reemplaza. En "password_changed" es la contraseña nueva.
+ *  replaced: si Soporte usó "Reemplazar" antes de atender este reporte
+ *  (ver support.routes.ts). */
 export function createCustomerNotification(
   clientPhone: string, type: CustomerNotificationType, platform: string, accountEmail = "", customMessage = "", replaced = false
 ): void {
@@ -58,6 +59,8 @@ export function createCustomerNotification(
   if (!digits || !platform) return;
   const message = type === "support_resolved"
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
+    : type === "password_changed"
+    ? `🔑 Tu cuenta de ${platformTitle(platform)} tiene una contraseña nueva: ${customMessage}`
     : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO customer_notifications (client_phone, type, platform, account_email, message)

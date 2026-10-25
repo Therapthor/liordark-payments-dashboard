@@ -6,7 +6,10 @@ import { findCustomerById } from "../db/customer.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
-import { listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone, getActiveAccountForClient } from "../db/access.repository";
+import {
+  listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone, getActiveAccountForClient,
+  listUnnotifiedExpiringClientsForCustomer, markExpiryNotified,
+} from "../db/access.repository";
 import { listArchivedAccountsByPhone } from "../db/access-history.repository";
 import { daysLeft } from "../services/access.service";
 import { normalizePeruPhone } from "../utils/phone.util";
@@ -19,6 +22,7 @@ import {
   MAX_CODE_REQUESTS_PER_ACCOUNT,
 } from "../db/codes.repository";
 import {
+  createCustomerNotification,
   listCustomerNotifications,
   countUnreadCustomerNotifications,
   markAllCustomerNotificationsRead,
@@ -266,6 +270,19 @@ router.get("/dashboard", (req, res) => {
   res.json({ accounts, expiredAccounts });
 });
 
+// Igual que generateExpiryNotifications en wholesaler.routes.ts — "cuenta por
+// vencer" no tiene un evento propio, se genera acá mismo, de forma perezosa,
+// cada vez que ESTE cliente pide sus notificaciones (mismo polling del front).
+const EXPIRY_NOTIFY_DAYS = 1;
+
+function generateExpiryNotificationsForCustomer(phone: string): void {
+  const expiring = listUnnotifiedExpiringClientsForCustomer(phone, EXPIRY_NOTIFY_DAYS);
+  for (const c of expiring) {
+    createCustomerNotification(phone, "expiring", c.platform, c.email);
+    markExpiryNotified(c.profileId);
+  }
+}
+
 // GET /api/store/notifications — campanita del topbar: solo avisos de
 // cuenta nueva o renovada, para ESTE cliente logueado.
 router.get("/notifications", (req, res) => {
@@ -274,6 +291,8 @@ router.get("/notifications", (req, res) => {
   if (!customer) {
     return res.status(401).json({ message: "Sesión inválida." });
   }
+
+  generateExpiryNotificationsForCustomer(customer.phone);
 
   res.json({
     notifications: listCustomerNotifications(customer.phone),
