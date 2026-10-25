@@ -52,18 +52,23 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // GATE — login / registro
+  // MODAL — iniciar sesión / comprar sin cuenta
+  //
+  // Ya no es un gate de pantalla completa: el catálogo (#view-app) se ve
+  // siempre, con o sin sesión. Este modal aparece al tocar "🔑 Iniciar
+  // sesión" en la barra, o al intentar comprar/armar combo sin sesión
+  // (ver initCatalogClicks).
   // ─────────────────────────────────────────────────────────────
 
-  function showAuth() {
-    document.getElementById("view-auth").hidden = false;
-    document.getElementById("view-app").hidden = true;
+  let isAuthenticated = false;
+
+  function openAuthModal() {
     showAuthCard("start-card");
+    document.getElementById("auth-modal").hidden = false;
   }
 
-  function showApp() {
-    document.getElementById("view-auth").hidden = true;
-    document.getElementById("view-app").hidden = false;
+  function closeAuthModal() {
+    document.getElementById("auth-modal").hidden = true;
   }
 
   function hideAllAuthCards() {
@@ -77,11 +82,24 @@
     document.getElementById(id).hidden = false;
   }
 
+  // Muestra/oculta los botones de la barra según haya sesión o no —
+  // "Mis cuentas"/Soporte/Códigos/campanita/salir vs. "Iniciar sesión"/
+  // "Acceso Mayorista".
+  function setNavMode(authed) {
+    document.getElementById("nav-auth-actions").hidden  = !authed;
+    document.getElementById("nav-guest-actions").hidden = authed;
+  }
+
   function initAuthToggle() {
     document.getElementById("show-login-btn").addEventListener("click", () => showAuthCard("login-card"));
     document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
     document.getElementById("back-to-start-from-login").addEventListener("click", () => showAuthCard("start-card"));
     document.getElementById("back-to-start-from-guest").addEventListener("click", () => showAuthCard("start-card"));
+    document.getElementById("nav-login-btn").addEventListener("click", openAuthModal);
+    document.getElementById("auth-modal-close").addEventListener("click", closeAuthModal);
+    document.getElementById("auth-modal").addEventListener("click", (e) => {
+      if (e.target.id === "auth-modal") closeAuthModal();
+    });
   }
 
   function setFormError(id, message) {
@@ -125,14 +143,16 @@
     document.getElementById("logout-btn").addEventListener("click", async () => {
       try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }
       stopNotifPolling();
-      showAuth();
+      await enterGuestMode();
     });
   }
 
   let currentPhone = "";
 
   async function onAuthenticated() {
-    showApp();
+    isAuthenticated = true;
+    closeAuthModal();
+    setNavMode(true);
     try {
       const me = await api("/auth/me");
       currentPhone = me.phone || "";
@@ -140,6 +160,17 @@
       // complicado de lo esperado); el botón queda oculto para todos.
     } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
     startNotifPolling();
+    await loadCatalog();
+  }
+
+  // Sin sesión — catálogo visible igual, pero con el precio tapado por
+  // "Inicia sesión para comprar" (ver productCardHtml) y la barra en modo
+  // invitado (ver setNavMode). Se usa al arrancar sin sesión y al cerrarla.
+  async function enterGuestMode() {
+    isAuthenticated = false;
+    currentPhone = "";
+    setNavMode(false);
+    switchPage("catalog");
     await loadCatalog();
   }
 
@@ -406,6 +437,15 @@
       ? '<span class="product-badge-overlay badge-exclusive">★ EXCLUSIVO</span>'
       : (annual ? '<span class="product-badge-overlay badge-annual">ANUAL</span>' : "");
 
+    // Sin sesión no se muestra el precio — invita a iniciar sesión en vez
+    // de eso (tocar la card igual abre el modal de login, ver initCatalogClicks).
+    const priceHtml = isAuthenticated
+      ? `${outOfStock ? '<span class="product-reserve-tag-sm">Reservar</span>' : ""}
+         <div class="product-price-pill${outOfStock ? " product-price-pill-reserve" : ""}">
+           <span class="product-price-pill-currency">S/</span><span class="product-price-pill-amount">${escapeHtml(p.price)}</span>
+         </div>`
+      : `<span class="login-prompt-pill">🔒 Inicia sesión para comprar</span>`;
+
     return `
       <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
         <div class="product-img-wrap">
@@ -414,10 +454,7 @@
         </div>
         <div class="product-body product-body-pill">
           <span class="product-title">${escapeHtml(title)}</span>
-          ${outOfStock ? '<span class="product-reserve-tag-sm">Reservar</span>' : ""}
-          <div class="product-price-pill${outOfStock ? " product-price-pill-reserve" : ""}">
-            <span class="product-price-pill-currency">S/</span><span class="product-price-pill-amount">${escapeHtml(p.price)}</span>
-          </div>
+          ${priceHtml}
         </div>
       </div>`;
   }
@@ -468,9 +505,15 @@
 
   function initCatalogClicks() {
     document.getElementById("catalog-sections").addEventListener("click", (e) => {
-      if (e.target.closest("#build-combo-btn")) { openComboBuilder(); return; }
+      const comboBtn = e.target.closest("#build-combo-btn");
       const card = e.target.closest("[data-detail-platform], [data-detail-combo]");
-      if (!card) return;
+      if (!comboBtn && !card) return;
+
+      // Sin sesión, cualquier intento de comprar (card o "Armar combo")
+      // abre el modal de login en vez de avanzar.
+      if (!isAuthenticated) { openAuthModal(); return; }
+
+      if (comboBtn) { openComboBuilder(); return; }
       if (card.dataset.detailPlatform) openProductDetail({ kind: "platform", id: card.dataset.detailPlatform });
       else openProductDetail({ kind: "combo", id: Number(card.dataset.detailCombo) });
     });
@@ -1489,8 +1532,8 @@
     try {
       const me = await api("/auth/me");
       if (me.authenticated) { await onAuthenticated(); return; }
-    } catch { /* sin sesión — muestra el login */ }
-    showAuth();
+    } catch { /* sin sesión — sigue como invitado */ }
+    await enterGuestMode();
   }
 
   document.addEventListener("DOMContentLoaded", init);

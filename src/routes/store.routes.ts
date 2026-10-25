@@ -94,8 +94,9 @@ function customComboDiscountRate(itemCount: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TIENDA WEB (liordark.com) — todo detrás de sesión de cliente, como
-// pidió el negocio: nada se ve sin loguearse primero.
+// TIENDA WEB (liordark.com) — el catálogo (/catalog, más abajo) es
+// público a propósito; todo lo demás (comprar, Mis cuentas, Códigos,
+// notificaciones) sigue detrás de sesión de cliente, como pidió el negocio.
 // ─────────────────────────────────────────────────────────────
 
 const router = Router();
@@ -171,6 +172,27 @@ router.post("/renewals/checkout", async (req, res) => {
   }
 });
 
+// GET /api/store/catalog — productos + combos activos, con disponibilidad
+// real (mismo dato que ya usa el bot) para que la web no venda algo que
+// no se puede entregar. PÚBLICO a propósito — liordark.com ahora abre
+// directo en el catálogo, sin pedir sesión; recién se exige login al
+// intentar comprar (ver /checkout, /checkout de combo, etc. abajo).
+router.get("/catalog", (_req, res) => {
+  const available = availabilityByPlatform();
+
+  const products = listCatalogProducts(true).map(p => ({
+    ...p,
+    available: availableFor(p.platform, available),
+  }));
+
+  const combos = listCombos(true).map(c => ({
+    ...c,
+    inStock: c.items.every(i => availableFor(i.platform, available) >= i.quantity),
+  }));
+
+  res.json({ products, combos });
+});
+
 router.use(requireCustomerSession);
 
 // ─────────────────────────────────────────────────────────────
@@ -223,25 +245,6 @@ router.post("/codes/:accountId/request", (req, res) => {
     code:       latest?.code ?? null,
     receivedAt: latest?.receivedAt ?? null,
   });
-});
-
-// GET /api/store/catalog — productos + combos activos, con disponibilidad
-// real (mismo dato que ya usa el bot) para que la web no venda algo que
-// no se puede entregar.
-router.get("/catalog", (_req, res) => {
-  const available = availabilityByPlatform();
-
-  const products = listCatalogProducts(true).map(p => ({
-    ...p,
-    available: availableFor(p.platform, available),
-  }));
-
-  const combos = listCombos(true).map(c => ({
-    ...c,
-    inStock: c.items.every(i => availableFor(i.platform, available) >= i.quantity),
-  }));
-
-  res.json({ products, combos });
 });
 
 // GET /api/store/payment-methods — para mostrar el QR de Yape, etc.

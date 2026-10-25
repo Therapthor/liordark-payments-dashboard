@@ -97,63 +97,17 @@ a { color: var(--btn); }
   50%      { box-shadow: 0 0 0 1px rgba(191,143,31,0.6), 0 4px 20px rgba(191,143,31,0.6); }
 }
 
-/* ─── Gate de login/registro ─────────────────────────────────── */
+/* ─── Modal de iniciar sesión / comprar sin cuenta ───────────────
+   (antes era un gate de pantalla completa — ver auth-modal en el HTML) */
 
-.view-auth {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  padding: 24px;
-}
-.auth-blob {
-  position: absolute;
-  width: 360px; height: 360px;
-  border-radius: 50%;
-  background: var(--accent2);
-  opacity: .16;
-}
-.auth-blob-1 { top: -120px; right: -120px; animation: blobFloat1 14s ease-in-out infinite; }
-.auth-blob-2 {
-  bottom: -140px; left: -140px; width: 300px; height: 300px;
-  background: var(--accent); opacity: .12;
-  animation: blobFloat2 18s ease-in-out infinite;
-}
-@keyframes blobFloat1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%      { transform: translate(-30px, 30px) scale(1.08); }
-}
-@keyframes blobFloat2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%      { transform: translate(25px, -25px) scale(1.1); }
-}
-.auth-wrap {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 400px;
-  animation: riseIn .5s ease both;
-}
 @keyframes riseIn {
   from { opacity: 0; transform: translateY(18px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .brand { display: flex; align-items: center; gap: 10px; }
-.brand-center { flex-direction: column; margin-bottom: 28px; }
-.brand-logo { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; box-shadow: 0 10px 28px -12px rgba(255,122,26,.35); }
 .brand-logo-sm { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
 .brand-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: .3px; }
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 26px 24px;
-  box-shadow: 0 16px 40px -22px rgba(255,122,26,.28);
-}
 
 .auth-card form { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
 .auth-card label { font-size: 11.5px; color: var(--muted); margin: 10px 0 2px; }
@@ -203,6 +157,33 @@ a { color: var(--btn); }
   position: sticky; top: 0; z-index: 10;
 }
 .topnav { display: flex; align-items: center; gap: 6px; }
+.topnav-group { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ─── Barra sin sesión — "Iniciar sesión" / "Acceso Mayorista" ─── */
+.btn-login-top {
+  border: 1.5px solid var(--border); background: var(--card); color: var(--text);
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  padding: 8px 16px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-login-top:hover { background: var(--chip-bg); }
+.btn-gold-top {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+  color: #3a2a00; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  padding: 8px 16px; border-radius: 9px;
+  background: linear-gradient(120deg, #bf8f1f, #f4e08a, #d4af37, #f4e08a, #bf8f1f);
+  background-size: 300% 100%;
+  box-shadow: 0 0 0 1px rgba(191,143,31,.4), 0 4px 14px rgba(191,143,31,.3);
+  animation: goldShimmer 4.5s ease-in-out infinite;
+}
+.btn-gold-top:hover { filter: brightness(1.05); }
+
+/* ─── Catálogo sin sesión — en vez del precio, invita a iniciar sesión ─── */
+.login-prompt-pill {
+  display: inline-flex; align-items: center; gap: 5px; border: none; cursor: pointer;
+  border: 1.5px dashed var(--accent); color: var(--btn); background: var(--chip-bg);
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 11.5px;
+  padding: 6px 14px; border-radius: 999px;
+}
 .nav-btn {
   border: none; background: transparent; color: var(--muted);
   font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
@@ -824,7 +805,7 @@ a { color: var(--btn); }
 }
 
 @media (max-width: 480px) {
-  .nav-btn, .nav-support-btn { font-size: 12px; padding: 7px 10px; }
+  .nav-btn, .nav-support-btn, .btn-login-top, .btn-gold-top { font-size: 12px; padding: 7px 10px; }
   .brand-name { font-size: 16px; }
   .content { padding: 20px 14px 48px; }
   .checkout-amount { font-size: 26px; }
