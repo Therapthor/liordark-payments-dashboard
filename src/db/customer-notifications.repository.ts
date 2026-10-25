@@ -33,7 +33,7 @@ function platformTitle(platform: string): string {
 function buildMessage(type: CustomerNotificationType, platform: string): string {
   const name = platformTitle(platform);
   if (type === "new_account") return `🎉 Tu cuenta de ${name} ya está lista. ¡Disfrútala!`;
-  if (type === "expiring") return `⏰ Tu cuenta de ${name} vence pronto. Entra a liordark.com para renovarla.`;
+  if (type === "expiring") return `⏰ Tu cuenta de ${name} vence pronto. Tócame para renovarla en "Mis cuentas".`;
   return `✅ Tu cuenta de ${name} fue renovada con éxito.`; // "renewed"
 }
 
