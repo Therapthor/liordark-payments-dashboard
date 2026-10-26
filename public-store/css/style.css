@@ -1032,7 +1032,21 @@ a { color: var(--btn); }
 .from-admin .chat-bubble    { background: var(--card); color: var(--text); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
 .chat-bubble-time { display: block; font-size: 10px; margin-top: 4px; opacity: .7; }
 .chat-bubble-media { display: block; max-width: 220px; border-radius: 12px; margin-bottom: 4px; }
+.chat-bubble-media-zoomable { cursor: zoom-in; }
 .chat-bubble-expired { font-style: italic; opacity: .75; }
+
+/* ─── Stickers del chat ──────────────────────────────────────── */
+.chat-bubble-row-sticker { padding: 2px 0; }
+.chat-sticker { font-size: 46px; line-height: 1; display: inline-block; filter: drop-shadow(0 2px 4px rgba(36,26,16,.15)); }
+.chat-sticker-wiggle   { animation: chatStickerWiggle 1.6s ease-in-out infinite; }
+.chat-sticker-pulse    { animation: chatStickerPulse 1.2s ease-in-out infinite; }
+.chat-sticker-shake    { animation: chatStickerShake 1.4s ease-in-out infinite; }
+.chat-sticker-bounce   { animation: chatMangoBounce .8s ease-in-out infinite; }
+.chat-sticker-flicker  { animation: chatStickerFlicker 1s ease-in-out infinite; }
+@keyframes chatStickerWiggle { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
+@keyframes chatStickerPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@keyframes chatStickerShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes chatStickerFlicker { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 
 .chat-typing-row {
   flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 16px 8px;
@@ -1059,11 +1073,11 @@ a { color: var(--btn); }
   flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 12px 14px;
   border-top: 1px solid var(--border); background: var(--card);
 }
-.chat-attach-btn, .chat-send-btn {
+.chat-attach-btn, .chat-sticker-btn, .chat-send-btn {
   border: none; width: 36px; height: 36px; border-radius: 999px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer;
 }
-.chat-attach-btn { background: var(--chip-bg); color: var(--btn); }
+.chat-attach-btn, .chat-sticker-btn { background: var(--chip-bg); color: var(--btn); }
 .chat-send-btn { background: var(--btn); color: #fff; }
 .chat-send-btn:disabled { opacity: .5; cursor: default; }
 #chat-text-input {
@@ -1071,6 +1085,26 @@ a { color: var(--btn); }
   border: 1.5px solid var(--border); font-family: inherit; font-size: 13.5px; color: var(--text);
 }
 #chat-text-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+
+.chat-sticker-popover {
+  flex-shrink: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  padding: 10px 14px; border-top: 1px solid var(--border); background: var(--card); max-height: 160px; overflow-y: auto;
+}
+.chat-sticker-pick {
+  border: none; background: none; font-size: 26px; padding: 6px; border-radius: 10px; cursor: pointer;
+}
+.chat-sticker-pick:hover { background: var(--chip-bg); }
+
+/* ─── Lightbox de imágenes (chat) ────────────────────────────── */
+.img-lightbox {
+  position: fixed; inset: 0; background: rgba(20,14,8,.88); z-index: 500;
+  display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;
+}
+.img-lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px; }
+.img-lightbox-close {
+  position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; border-radius: 999px;
+  border: none; background: rgba(255,255,255,.15); color: #fff; font-size: 16px; cursor: pointer;
+}
 
 /* ─── Chat: pedido de cuenta + tarjeta de respuesta ──────────── */
 .chat-quick-tag { display: block; font-size: 10.5px; font-weight: 700; opacity: .85; margin-bottom: 3px; }

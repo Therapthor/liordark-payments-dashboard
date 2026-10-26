@@ -298,6 +298,11 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_support_chats_phone ON support_chats(client_phone)`);
 
+// Etiqueta manual del admin para ordenar el inbox ("pendiente" = por
+// atender, "cerrado" = ya resuelto pero sin borrar la conversación —
+// distinto del botón "Cerrar chat", que sí borra todo).
+ensureColumn("support_chats", "tag", "tag TEXT NOT NULL DEFAULT 'pendiente'");
+
 // type: "text" | "image" | "video". media_url/media_public_id quedan vacíos
 // una vez que el archivo se autodestruye (1 día, ver expiry-chat-media.job.ts)
 // — el mensaje se queda como marcador de que hubo una foto/video ahí.

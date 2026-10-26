@@ -1168,6 +1168,7 @@ export function listEmailReminderCandidates(days: number): EmailReminderCandidat
     WHERE p.wholesaler_id IS NULL AND p.client_phone != '' AND c.email != ''
       AND a.expires_at <= @limit AND p.email_reminder_1d_sent_at IS NULL
       AND p.order_ref NOT LIKE 'combo:%'
+      AND a.platform NOT LIKE '%YOUTUBE%'
   `).all({ limit }) as any[]).map(row => ({
     profileId:     row.profileId,
     clientPhone:   row.clientPhone,

@@ -1523,6 +1523,34 @@
     document.getElementById("resumen-quick-assign-btn").addEventListener("click", () => {
       if (window.LiordarkAccess) window.LiordarkAccess.openComboOrderModal();
     });
+
+    initLiveResync();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Resincronización al volver a la pestaña — un navegador en segundo
+  // plano pausa/retarda setInterval y puede dejar el EventSource colgado
+  // sin que dispare onerror (el admin notaba "tengo que refrescar" tras
+  // minutos sin mirar el panel). Al recuperar foco: reconecta el SSE si
+  // quedó cerrado y refresca de una vez pedidos, soportes y chat.
+  // ─────────────────────────────────────────────────────────────
+
+  function resyncAll() {
+    if (!evtSource || evtSource.readyState === EventSource.CLOSED) connectLive();
+    loadPendingOrders();
+    loadConnectorsStatus();
+    loadStockAlert();
+    if (window.LiordarkSupport) window.LiordarkSupport.load();
+    if (window.LiordarkSupportChat) window.LiordarkSupportChat.load();
+    if (window.LiordarkWholesalers) window.LiordarkWholesalers.load();
+    if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
+  }
+
+  function initLiveResync() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resyncAll();
+    });
+    window.addEventListener("focus", resyncAll);
   }
 
   checkAuth();

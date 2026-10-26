@@ -24,6 +24,20 @@
     return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Mismo catálogo cerrado que public-store/js/app.js — el id es lo único
+  // que viaja al server (ver isValidStickerId en support-chat.repository.ts).
+  const CHAT_STICKERS = [
+    { id: "mango_hi",    emoji: "🥭👋", anim: "wiggle" },
+    { id: "mango_love",  emoji: "🥭❤️", anim: "pulse" },
+    { id: "mango_lol",   emoji: "🥭😂", anim: "shake" },
+    { id: "mango_thumb", emoji: "🥭👍", anim: "" },
+    { id: "mango_party", emoji: "🥭🎉", anim: "bounce" },
+    { id: "mango_sad",   emoji: "🥭😢", anim: "" },
+    { id: "mango_sleep", emoji: "🥭💤", anim: "" },
+    { id: "mango_fire",  emoji: "🥭🔥", anim: "flicker" },
+  ];
+  const CHAT_STICKER_MAP = Object.fromEntries(CHAT_STICKERS.map(s => [s.id, s]));
+
   function fmtPhone(phone) {
     const digits = String(phone || "").replace(/\D/g, "").slice(-9);
     return digits.replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3") || phone;
@@ -43,6 +57,7 @@
   let typingTimer = null;
   let isTyping = false;
   let renderedIds = new Set();
+  let listFilter = "pendiente"; // "pendiente" | "cerrado" | "todos"
 
   // ─── Lista de chats ─────────────────────────────────────────
 
@@ -55,17 +70,22 @@
 
   function renderChatList() {
     const el = document.getElementById("chat-admin-list");
+    const visible = listFilter === "todos" ? cachedChats : cachedChats.filter(c => c.tag === listFilter);
     const empty = document.getElementById("chat-admin-list-empty");
-    empty.hidden = cachedChats.length > 0;
+    empty.hidden = visible.length > 0;
+    empty.textContent = cachedChats.length === 0
+      ? "No hay chats abiertos."
+      : (listFilter === "cerrado" ? "No hay chats cerrados." : "No hay chats pendientes.");
 
     el.querySelectorAll(".chat-admin-list-item").forEach(n => n.remove());
-    cachedChats.forEach(c => {
+    visible.forEach(c => {
       const item = document.createElement("button");
       item.type = "button";
       item.className = "chat-admin-list-item" + (c.id === selectedChatId ? " active" : "");
       item.innerHTML = `
         <div class="chat-admin-list-item-row">
           <b>${escapeHtml(fmtPhone(c.clientPhone))}</b>
+          <span class="chat-admin-list-item-tag ${c.tag}">${c.tag === "cerrado" ? "Cerrado" : "Pendiente"}</span>
           ${c.unreadForAdmin > 0 ? `<span class="chat-admin-list-dot">${c.unreadForAdmin}</span>` : ""}
         </div>
         <div class="chat-admin-list-preview">${escapeHtml(c.lastMessage || "Sin mensajes todavía")}</div>
@@ -73,6 +93,14 @@
       item.addEventListener("click", () => openChat(c.id));
       el.appendChild(item);
     });
+  }
+
+  function setListFilter(filter) {
+    listFilter = filter;
+    ["pendiente", "cerrado", "todos"].forEach(f => {
+      document.getElementById(`chat-filter-${f}`).classList.toggle("active", f === filter);
+    });
+    renderChatList();
   }
 
   async function loadChats() {
@@ -109,10 +137,16 @@
         </div>`;
     } else if (m.type === "text") {
       body = escapeHtml(m.text);
+    } else if (m.type === "sticker") {
+      const s = CHAT_STICKER_MAP[m.text];
+      return `
+        <div class="chat-admin-bubble-row ${who} chat-admin-bubble-row-sticker">
+          <span class="chat-admin-sticker${s && s.anim ? " chat-admin-sticker-" + s.anim : ""}">${s ? s.emoji : "🥭"}</span>
+        </div>`;
     } else if (m.mediaExpired) {
       body = `<span class="chat-admin-bubble-expired">${m.type === "image" ? "📷 Foto" : "🎥 Video"} (se autodestruyó)</span>`;
     } else if (m.type === "image") {
-      body = `<img class="chat-admin-bubble-media" src="${escapeHtml(m.mediaUrl)}" alt="Foto">`;
+      body = `<img class="chat-admin-bubble-media chat-admin-bubble-media-zoomable" src="${escapeHtml(m.mediaUrl)}" alt="Foto">`;
     } else {
       body = `<video class="chat-admin-bubble-media" src="${escapeHtml(m.mediaUrl)}" controls></video>`;
     }
@@ -141,11 +175,17 @@
     if (show) scrollMessagesToBottom();
   }
 
+  function updateTagBtn(tag) {
+    const btn = document.getElementById("chat-admin-tag-btn");
+    btn.textContent = tag === "cerrado" ? "🏷️ Marcar pendiente" : "🏷️ Marcar cerrado";
+  }
+
   async function openChat(chatId) {
     selectedChatId = chatId;
     renderChatList();
     document.getElementById("chat-admin-empty").hidden = true;
     document.getElementById("chat-admin-thread").hidden = false;
+    document.getElementById("chat-admin-sticker-popover").hidden = true;
     showTyping(false);
 
     const messagesEl = document.getElementById("chat-admin-messages");
@@ -154,6 +194,7 @@
     try {
       const { chat, messages } = await api(`/${chatId}/messages`);
       document.getElementById("chat-admin-thread-phone").textContent = fmtPhone(chat.clientPhone);
+      updateTagBtn(chat.tag);
       messages.forEach(m => renderedIds.add(m.id));
       messagesEl.innerHTML = messages.length
         ? messages.map(bubbleHtml).join("")
@@ -235,6 +276,54 @@
     }
   }
 
+  async function toggleSelectedChatTag() {
+    if (!selectedChatId) return;
+    const current = cachedChats.find(c => c.id === selectedChatId);
+    const nextTag = current?.tag === "cerrado" ? "pendiente" : "cerrado";
+    updateTagBtn(nextTag); // optimista
+    try {
+      await api(`/${selectedChatId}/tag`, { method: "POST", body: JSON.stringify({ tag: nextTag }) });
+      await loadChats();
+    } catch (err) {
+      updateTagBtn(current?.tag || "pendiente"); // revierte si falló
+      alert(err.message || "No se pudo cambiar la etiqueta.");
+    }
+  }
+
+  async function sendSticker(stickerId) {
+    if (!selectedChatId) return;
+    toggleStickerPopover(false);
+    try {
+      const { message } = await api(`/${selectedChatId}/messages`, {
+        method: "POST", body: JSON.stringify({ type: "sticker", stickerId }),
+      });
+      appendBubble(message);
+    } catch (err) {
+      alert(err.message || "No se pudo mandar el sticker.");
+    }
+  }
+
+  function toggleStickerPopover(show) {
+    const pop = document.getElementById("chat-admin-sticker-popover");
+    if (show === undefined) show = pop.hidden;
+    pop.hidden = !show;
+    if (show && !pop.dataset.built) {
+      pop.dataset.built = "1";
+      pop.innerHTML = CHAT_STICKERS.map(s => `
+        <button type="button" class="chat-admin-sticker-pick" data-sticker="${s.id}">${s.emoji}</button>
+      `).join("");
+    }
+  }
+
+  function openImgLightbox(src) {
+    document.getElementById("img-lightbox-img").src = src;
+    document.getElementById("img-lightbox").hidden = false;
+  }
+  function closeImgLightbox() {
+    document.getElementById("img-lightbox").hidden = true;
+    document.getElementById("img-lightbox-img").src = "";
+  }
+
   async function closeSelectedChat() {
     if (!selectedChatId) return;
     if (!confirm("¿Cerrar este chat? Se borran todos los mensajes y archivos — no se puede deshacer.")) return;
@@ -280,6 +369,10 @@
     initialized = true;
 
     document.getElementById("chat-admin-close-btn").addEventListener("click", closeSelectedChat);
+    document.getElementById("chat-admin-tag-btn").addEventListener("click", toggleSelectedChatTag);
+    ["pendiente", "cerrado", "todos"].forEach(f => {
+      document.getElementById(`chat-filter-${f}`).addEventListener("click", () => setListFilter(f));
+    });
     document.getElementById("chat-admin-input-form").addEventListener("submit", (e) => {
       e.preventDefault();
       sendText();
@@ -299,6 +392,20 @@
     });
     document.getElementById("chat-quick-greeting").addEventListener("click", () => sendQuick("text", GREETING_TEXT));
     document.getElementById("chat-quick-account").addEventListener("click", () => sendQuick("account_request", ACCOUNT_REQUEST_TEXT));
+
+    document.getElementById("chat-admin-sticker-btn").addEventListener("click", () => toggleStickerPopover());
+    document.getElementById("chat-admin-sticker-popover").addEventListener("click", (e) => {
+      const btn = e.target.closest(".chat-admin-sticker-pick");
+      if (btn) sendSticker(btn.dataset.sticker);
+    });
+    document.getElementById("chat-admin-messages").addEventListener("click", (e) => {
+      const img = e.target.closest(".chat-admin-bubble-media-zoomable");
+      if (img) openImgLightbox(img.src);
+    });
+    document.getElementById("img-lightbox-close").addEventListener("click", closeImgLightbox);
+    document.getElementById("img-lightbox").addEventListener("click", (e) => {
+      if (e.target.id === "img-lightbox") closeImgLightbox();
+    });
 
     loadChats();
     connectStream();

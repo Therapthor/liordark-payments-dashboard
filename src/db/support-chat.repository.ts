@@ -12,7 +12,21 @@ export type ChatSender = "customer" | "admin";
 // elija cuál de sus cuentas tiene el problema — el cliente ve un selector
 // inline en esa burbuja. account_reply: lo que el cliente mandó de vuelta,
 // ya verificado contra SU cuenta real (ver /chat/messages en store.routes.ts).
-export type ChatMessageType = "text" | "image" | "video" | "account_request" | "account_reply";
+// sticker: text guarda el id del catálogo (ver CHAT_STICKER_IDS más abajo) —
+// cliente y admin lo renderizan cada uno con su propio mapa emoji/animación.
+export type ChatMessageType = "text" | "image" | "video" | "account_request" | "account_reply" | "sticker";
+
+// Catálogo cerrado — ambos lados (cliente y admin) solo pueden mandar un id
+// de esta lista, nunca texto libre, para no abrir una puerta de contenido
+// arbitrario disfrazado de sticker.
+export const CHAT_STICKER_IDS = [
+  "mango_hi", "mango_love", "mango_lol", "mango_thumb",
+  "mango_party", "mango_sad", "mango_sleep", "mango_fire",
+] as const;
+export type ChatStickerId = typeof CHAT_STICKER_IDS[number];
+export function isValidStickerId(id: string): id is ChatStickerId {
+  return (CHAT_STICKER_IDS as readonly string[]).includes(id);
+}
 
 export type ChatMessage = {
   id:               number;
@@ -25,11 +39,14 @@ export type ChatMessage = {
   createdAt:        string;
 };
 
+export type ChatTag = "pendiente" | "cerrado";
+
 export type Chat = {
   id:               number;
   clientPhone:      string;
   adminTyping:      boolean;
   customerTyping:   boolean;
+  tag:              ChatTag;
   createdAt:        string;
   updatedAt:        string;
 };
@@ -61,6 +78,7 @@ function toChat(row: any): Chat {
     clientPhone:    row.client_phone,
     adminTyping:    isTypingNow(row.admin_typing_at),
     customerTyping: isTypingNow(row.customer_typing_at),
+    tag:            row.tag === "cerrado" ? "cerrado" : "pendiente",
     createdAt:      row.created_at,
     updatedAt:      row.updated_at,
   };
@@ -140,9 +158,14 @@ export function addMessage(chatId: number, sender: ChatSender, params: {
   );
 
   // Mandar un mensaje implica que ya dejó de escribir, y renueva la
-  // actividad del chat (orden del inbox del panel).
+  // actividad del chat (orden del inbox del panel). Si el cliente escribe
+  // en uno que el admin ya había marcado "cerrado", vuelve a "pendiente"
+  // solo — si no, pasaría desapercibido.
   const typingCol = sender === "admin" ? "admin_typing_at" : "customer_typing_at";
   db.prepare(`UPDATE support_chats SET ${typingCol} = NULL, updated_at = datetime('now') WHERE id = ?`).run(chatId);
+  if (sender === "customer") {
+    db.prepare(`UPDATE support_chats SET tag = 'pendiente' WHERE id = ? AND tag = 'cerrado'`).run(chatId);
+  }
 
   return toMessage(db.prepare(`SELECT * FROM support_chat_messages WHERE id = ?`).get(info.lastInsertRowid));
 }
@@ -150,6 +173,13 @@ export function addMessage(chatId: number, sender: ChatSender, params: {
 export function setTyping(chatId: number, sender: ChatSender, typing: boolean): void {
   const col = sender === "admin" ? "admin_typing_at" : "customer_typing_at";
   db.prepare(`UPDATE support_chats SET ${col} = ? WHERE id = ?`).run(typing ? new Date().toISOString() : null, chatId);
+}
+
+/** El cliente escribe en un chat marcado "cerrado": vuelve solo a
+ *  "pendiente" (si no, se perdería entre los cerrados sin que el admin
+ *  se dé cuenta de que hay algo nuevo). */
+export function setChatTag(chatId: number, tag: ChatTag): void {
+  db.prepare(`UPDATE support_chats SET tag = ? WHERE id = ?`).run(tag, chatId);
 }
 
 export function markSeen(chatId: number, by: ChatSender): void {

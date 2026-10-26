@@ -486,8 +486,15 @@
         </div>
 
         <div class="chat-admin-layout">
-          <div class="chat-admin-list" id="chat-admin-list">
-            <p class="feed-empty" id="chat-admin-list-empty">No hay chats abiertos.</p>
+          <div class="chat-admin-list-col">
+            <div class="chat-admin-filter-row">
+              <button class="chat-admin-filter-btn active" id="chat-filter-pendiente" data-filter="pendiente" type="button">Pendientes</button>
+              <button class="chat-admin-filter-btn" id="chat-filter-cerrado" data-filter="cerrado" type="button">Cerrados</button>
+              <button class="chat-admin-filter-btn" id="chat-filter-todos" data-filter="todos" type="button">Todos</button>
+            </div>
+            <div class="chat-admin-list" id="chat-admin-list">
+              <p class="feed-empty" id="chat-admin-list-empty">No hay chats abiertos.</p>
+            </div>
           </div>
 
           <div class="chat-admin-conversation">
@@ -499,7 +506,10 @@
                   <b id="chat-admin-thread-phone"></b>
                   <div class="chat-admin-thread-sub">Chat en vivo</div>
                 </div>
-                <button class="btn-secondary" id="chat-admin-close-btn" type="button">🗑️ Cerrar chat</button>
+                <div class="chat-admin-thread-actions">
+                  <button class="btn-secondary" id="chat-admin-tag-btn" type="button">🏷️ Marcar cerrado</button>
+                  <button class="btn-secondary" id="chat-admin-close-btn" type="button">🗑️ Cerrar chat</button>
+                </div>
               </div>
 
               <div class="chat-admin-messages" id="chat-admin-messages"></div>
@@ -514,9 +524,12 @@
                 <button class="chat-admin-quick-btn" id="chat-quick-account" type="button">📋 Solicitar cuenta</button>
               </div>
 
+              <div class="chat-admin-sticker-popover" id="chat-admin-sticker-popover" hidden></div>
+
               <form class="chat-admin-input-row" id="chat-admin-input-form">
                 <input type="file" id="chat-admin-file-input" accept="image/*,video/*" hidden>
                 <button type="button" class="chat-admin-attach-btn" id="chat-admin-attach-btn" title="Adjuntar foto o video">📎</button>
+                <button type="button" class="chat-admin-sticker-btn" id="chat-admin-sticker-btn" title="Stickers">😊</button>
                 <input type="text" id="chat-admin-text-input" placeholder="Escribe tu respuesta…" autocomplete="off">
                 <button type="submit" class="chat-admin-send-btn" aria-label="Enviar">➤</button>
               </form>
@@ -1276,6 +1289,11 @@
         <button type="button" id="wholesaler-deliver-send-btn" class="btn-primary">📨 Enviar al cliente por WhatsApp</button>
       </div>
     </div>
+  </div>
+
+  <div id="img-lightbox" class="img-lightbox" hidden>
+    <button class="img-lightbox-close" id="img-lightbox-close" type="button" aria-label="Cerrar">✕</button>
+    <img id="img-lightbox-img" src="" alt="">
   </div>
 
   <script src="js/access.js"></script>

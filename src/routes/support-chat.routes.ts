@@ -1,7 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
 import {
-  listChatsForAdmin, getChatById, listMessages, addMessage, setTyping, markSeen, closeChat,
+  listChatsForAdmin, getChatById, listMessages, addMessage, setTyping, markSeen, closeChat, setChatTag,
+  isValidStickerId, type ChatMessage,
 } from "../db/support-chat.repository";
 import { uploadChatMedia, deleteChatMedia } from "../services/cloudinary.service";
 import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
@@ -33,14 +34,23 @@ router.get("/:id/messages", (req, res) => {
   res.json({ chat, messages: listMessages(chatId) });
 });
 
-// type: "text" (normal, o el botón rápido "👋 Saludo") o "account_request"
+// type: "text" (normal, o el botón rápido "👋 Saludo"), "account_request"
 // (botón "📋 Solicitar cuenta" — el cliente ve un selector de sus cuentas
-// en esa burbuja). Nunca "account_reply" — esa solo la manda el cliente,
-// verificada contra su cuenta real (ver store.routes.ts).
+// en esa burbuja) o "sticker" (id del catálogo cerrado, nunca texto
+// libre). Nunca "account_reply" — esa solo la manda el cliente, verificada
+// contra su cuenta real (ver store.routes.ts).
 router.post("/:id/messages", (req, res) => {
   const chatId = Number(req.params.id);
   const chat = getChatById(chatId);
   if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
+
+  if (req.body?.type === "sticker") {
+    const stickerId = String(req.body?.stickerId ?? "");
+    if (!isValidStickerId(stickerId)) return res.status(400).json({ message: "Sticker no válido." });
+    const message = addMessage(chatId, "admin", { type: "sticker", text: stickerId });
+    emitChatEvent({ type: "message", chatId, message });
+    return res.status(201).json({ message });
+  }
 
   const type = req.body?.type === "account_request" ? "account_request" : "text";
   const text = String(req.body?.text ?? "").trim();
@@ -87,12 +97,38 @@ router.post("/:id/typing", (req, res) => {
   res.json({ ok: true });
 });
 
+// "Pendiente"/"cerrado" — orden del panel, no borra nada (eso es el botón
+// de abajo). Si el cliente vuelve a escribir, el repositorio lo regresa
+// solo a "pendiente" (ver addMessage).
+router.post("/:id/tag", (req, res) => {
+  const chatId = Number(req.params.id);
+  const chat = getChatById(chatId);
+  if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
+
+  const tag = req.body?.tag === "cerrado" ? "cerrado" : "pendiente";
+  setChatTag(chatId, tag);
+  res.json({ ok: true, tag });
+});
+
+const CLOSE_FAREWELL_TEXT =
+  "🥭 Esperamos que haya sido de tu agrado la atención. Cualquier duda o pregunta, no dudes en hacérnosla — " +
+  "estamos felices de poder ayudarte 💛😊";
+
 // Cierra Y BORRA todo — mensajes y medios de Cloudinary, a propósito
-// (pedido explícito del negocio, para no acumular espacio).
+// (pedido explícito del negocio, para no acumular espacio). Antes de
+// borrar, manda una despedida — no se guarda (no tiene sentido, se borra
+// en el siguiente paso), solo se emite para que el cliente, si tiene el
+// chat abierto, la vea llegar antes del aviso de "chat cerrado".
 router.post("/:id/close", async (req, res) => {
   const chatId = Number(req.params.id);
   const chat = getChatById(chatId);
   if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
+
+  const farewell: ChatMessage = {
+    id: Date.now(), chatId, sender: "admin", type: "text",
+    text: CLOSE_FAREWELL_TEXT, mediaUrl: "", mediaExpired: false, createdAt: new Date().toISOString(),
+  };
+  emitChatEvent({ type: "message", chatId, message: farewell });
 
   const media = closeChat(chatId);
   await Promise.all(media.map(m => deleteChatMedia(m.publicId, m.resourceType)));

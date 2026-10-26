@@ -164,7 +164,20 @@
     updateDashboardNotifyBtn();
     updateEmailBanner();
     startNotifPolling();
+    initVisibilityResync();
     await loadCatalog();
+  }
+
+  // Si el celular bloquea la pantalla o cambia de pestaña, el navegador
+  // pausa los setInterval y puede dejar el chat SSE colgado sin avisar
+  // (notificaciones/chat "atrasados" hasta refrescar). Al volver: resync
+  // inmediato en vez de esperar al siguiente tick del polling.
+  function initVisibilityResync() {
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      loadNotifications();
+      if (chatSource && chatSource.readyState === EventSource.CLOSED) connectChatStream();
+    });
   }
 
   // Sin sesión — catálogo visible igual, pero con el precio tapado por
@@ -1686,6 +1699,21 @@
   let chatIsTyping = false;
   let chatRenderedIds = new Set();
 
+  // Catálogo cerrado de stickers — el id es lo único que viaja al server
+  // (ver isValidStickerId en support-chat.repository.ts); "anim" es puro
+  // CSS, nunca un archivo (sin asset que subir ni GIF que mantener).
+  const CHAT_STICKERS = [
+    { id: "mango_hi",    emoji: "🥭👋", anim: "wiggle" },
+    { id: "mango_love",  emoji: "🥭❤️", anim: "pulse" },
+    { id: "mango_lol",   emoji: "🥭😂", anim: "shake" },
+    { id: "mango_thumb", emoji: "🥭👍", anim: "" },
+    { id: "mango_party", emoji: "🥭🎉", anim: "bounce" },
+    { id: "mango_sad",   emoji: "🥭😢", anim: "" },
+    { id: "mango_sleep", emoji: "🥭💤", anim: "" },
+    { id: "mango_fire",  emoji: "🥭🔥", anim: "flicker" },
+  ];
+  const CHAT_STICKER_MAP = Object.fromEntries(CHAT_STICKERS.map(s => [s.id, s]));
+
   function fmtChatTime(sqliteUTC) {
     try {
       return new Date(sqliteUTC.replace(" ", "T") + "Z").toLocaleTimeString("es-PE", {
@@ -1720,10 +1748,16 @@
         </div>`;
     } else if (m.type === "text") {
       body = escapeHtml(m.text);
+    } else if (m.type === "sticker") {
+      const s = CHAT_STICKER_MAP[m.text];
+      return `
+        <div class="chat-bubble-row ${who} chat-bubble-row-sticker">
+          <span class="chat-sticker${s && s.anim ? " chat-sticker-" + s.anim : ""}">${s ? s.emoji : "🥭"}</span>
+        </div>`;
     } else if (m.mediaExpired) {
       body = `<span class="chat-bubble-expired">${m.type === "image" ? "📷 Foto" : "🎥 Video"} (se autodestruyó)</span>`;
     } else if (m.type === "image") {
-      body = `<img class="chat-bubble-media" src="${escapeHtml(m.mediaUrl)}" alt="Foto">`;
+      body = `<img class="chat-bubble-media chat-bubble-media-zoomable" src="${escapeHtml(m.mediaUrl)}" alt="Foto">`;
     } else {
       body = `<video class="chat-bubble-media" src="${escapeHtml(m.mediaUrl)}" controls></video>`;
     }
@@ -1840,6 +1874,7 @@
 
   function closeChatModal() {
     document.getElementById("chat-modal").hidden = true;
+    document.getElementById("chat-sticker-popover").hidden = true;
     if (chatSource) { chatSource.close(); chatSource = null; }
     sendChatTyping(false);
   }
@@ -1885,10 +1920,55 @@
     }
   }
 
+  async function sendChatSticker(stickerId) {
+    toggleStickerPopover(false);
+    try {
+      const { message } = await api("/chat/messages", { method: "POST", body: { type: "sticker", stickerId } });
+      appendChatMessage(message);
+    } catch (err) {
+      alert(err.message || "No se pudo mandar el sticker.");
+    }
+  }
+
+  function toggleStickerPopover(show) {
+    const pop = document.getElementById("chat-sticker-popover");
+    if (show === undefined) show = pop.hidden;
+    pop.hidden = !show;
+    if (show && !pop.dataset.built) {
+      pop.dataset.built = "1";
+      pop.innerHTML = CHAT_STICKERS.map(s => `
+        <button type="button" class="chat-sticker-pick" data-sticker="${s.id}">${s.emoji}</button>
+      `).join("");
+    }
+  }
+
+  function openImgLightbox(src) {
+    document.getElementById("img-lightbox-img").src = src;
+    document.getElementById("img-lightbox").hidden = false;
+  }
+  function closeImgLightbox() {
+    document.getElementById("img-lightbox").hidden = true;
+    document.getElementById("img-lightbox-img").src = "";
+  }
+
   function initChatModal() {
     document.getElementById("chat-close").addEventListener("click", closeChatModal);
     document.getElementById("chat-modal").addEventListener("click", (e) => {
       if (e.target.id === "chat-modal") closeChatModal();
+    });
+
+    document.getElementById("chat-sticker-btn").addEventListener("click", () => toggleStickerPopover());
+    document.getElementById("chat-sticker-popover").addEventListener("click", (e) => {
+      const btn = e.target.closest(".chat-sticker-pick");
+      if (btn) sendChatSticker(btn.dataset.sticker);
+    });
+    document.getElementById("chat-messages").addEventListener("click", (e) => {
+      const img = e.target.closest(".chat-bubble-media-zoomable");
+      if (img) openImgLightbox(img.src);
+    });
+    document.getElementById("img-lightbox-close").addEventListener("click", closeImgLightbox);
+    document.getElementById("img-lightbox").addEventListener("click", (e) => {
+      if (e.target.id === "img-lightbox") closeImgLightbox();
     });
 
     document.getElementById("chat-input-form").addEventListener("submit", (e) => {

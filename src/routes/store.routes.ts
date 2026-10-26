@@ -33,7 +33,7 @@ import { createSupportTicket, listSupportTicketsForClient } from "../db/support-
 import { verifyRenewalToken } from "../utils/renewal-token.util";
 import {
   getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
-  countUnreadForCustomer,
+  countUnreadForCustomer, isValidStickerId,
 } from "../db/support-chat.repository";
 import { uploadChatMedia } from "../services/cloudinary.service";
 import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
@@ -651,6 +651,14 @@ router.post("/chat/messages", (req, res) => {
 
   const type = req.body?.type === "account_reply" ? "account_reply" : "text";
   const chat = getOrCreateOpenChatForPhone(who.phone);
+
+  if (req.body?.type === "sticker") {
+    const stickerId = String(req.body?.stickerId ?? "");
+    if (!isValidStickerId(stickerId)) return res.status(400).json({ message: "Sticker no válido." });
+    const message = addMessage(chat.id, "customer", { type: "sticker", text: stickerId });
+    emitChatEvent({ type: "message", chatId: chat.id, message });
+    return res.status(201).json({ message });
+  }
 
   if (type === "account_reply") {
     // Nunca confía en lo que mande el navegador para correo/contraseña —

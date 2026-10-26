@@ -12,6 +12,11 @@ const COLOR = {
 };
 
 const LOGO_URL = "https://liordark.com/assets/logo.webp";
+// GIF chico (~10KB) de manguitos cayendo, tileable, mismo tono que
+// COLOR.bg — de fondo en el correo. Outlook de escritorio ignora
+// background-image en CSS (motor Word) y cae solo al color sólido, así
+// que no se rompe ahí, se ve animado en Gmail/Apple Mail/la mayoría.
+const MANGO_BG_GIF_URL = "https://liordark.com/assets/manguitos-cayendo.gif";
 
 export function buildExpiryReminderSubject(platformTag: string, daysLeft: 1 | 3): string {
   return daysLeft === 1
@@ -37,7 +42,7 @@ export function buildExpiryReminderHtml(params: {
     : `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="width: 40px; height: 40px; border-radius: 10px; background: ${COLOR.accent2}; font-family: Arial, sans-serif; font-weight: bold; font-size: 17px; color: #ffffff; text-align: center; vertical-align: middle;">${platformTag.charAt(0)}</td></tr></table>`;
 
   return `
-<div style="background: ${COLOR.bg}; padding: 24px 16px; font-family: Arial, Helvetica, sans-serif;">
+<div style="background-color: ${COLOR.bg}; background-image: url('${MANGO_BG_GIF_URL}'); background-repeat: repeat; padding: 24px 16px; font-family: Arial, Helvetica, sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 420px; margin: 0 auto;">
     <tr>
       <td align="center" style="padding-bottom: 16px;">
