@@ -253,6 +253,19 @@
       document.getElementById("notif-dot").hidden = !unreadCount;
     } catch { /* no crítico */ }
     loadChatUnread();
+    refreshEmailStatus();
+  }
+
+  // Se re-confirma con el servidor cada ciclo (en vez de confiar solo en
+  // el flag local) — así el banner/botón de "Mis cuentas" se autocorrige
+  // solo si algún punto del código se queda con el estado viejo.
+  async function refreshEmailStatus() {
+    try {
+      const { email } = await api("/account/email");
+      customerHasEmail = !!email;
+      updateDashboardNotifyBtn();
+      updateEmailBanner();
+    } catch { /* no crítico */ }
   }
 
   // Numerito en "💬 Soporte" — para que sepa que ya le respondieron sin
@@ -1344,7 +1357,11 @@
     try {
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
       const body = kind === "combo" ? { comboId: id, notifyEmail } : { platform: id, clientEmail, clientPassword, notifyEmail };
-      if (notifyEmail) customerHasEmail = true;
+      if (notifyEmail) {
+        customerHasEmail = true;
+        updateDashboardNotifyBtn();
+        updateEmailBanner();
+      }
       const order = await api("/checkout", { method: "POST", body });
 
       await ensureYapeInfo();
