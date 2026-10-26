@@ -2,13 +2,13 @@ import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
 import { requireCustomerSession, type RequestWithCustomer } from "../services/customer-auth.service";
-import { findCustomerById } from "../db/customer.repository";
+import { findCustomerById, setCustomerEmail } from "../db/customer.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import {
   listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone, getActiveAccountForClient,
-  listUnnotifiedExpiringClientsForCustomer, markExpiryNotified,
+  listUnnotifiedExpiringClientsForCustomer, listAllUnnotifiedExpiringRetailClients, markExpiryNotified,
 } from "../db/access.repository";
 import { listArchivedAccountsByPhone } from "../db/access-history.repository";
 import { daysLeft } from "../services/access.service";
@@ -29,6 +29,7 @@ import {
   deleteAllCustomerNotifications,
 } from "../db/customer-notifications.repository";
 import { createSupportTicket, listSupportTicketsForClient } from "../db/support-tickets.repository";
+import { verifyRenewalToken } from "../utils/renewal-token.util";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
 // quita esta restricción cuando se dé por probado.
@@ -172,6 +173,74 @@ router.post("/renewals/checkout", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────
+// RENOVAR DESDE EL CORREO — botón "Renovar ahora" del recordatorio de
+// vencimiento (ver expiry-reminder.job.ts). El token ya trae celular +
+// plataforma firmados (ver renewal-token.util.ts), así que esta página NO
+// pide login — igual de público que /renewals/checkout, solo que acá no
+// hace falta que el cliente tipee nada para identificarse.
+// ─────────────────────────────────────────────────────────────
+
+router.get("/renew/:token", (req, res) => {
+  const payload = verifyRenewalToken(req.params.token);
+  if (!payload) {
+    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
+  }
+
+  const account = listRenewalAccountsByPhone(payload.phone)
+    .find(a => a.platform.trim().toUpperCase() === payload.platform.trim().toUpperCase());
+  if (!account) {
+    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+  }
+
+  res.json({
+    platform:    account.platform,
+    platformTag: account.platformTag,
+    price:       account.price,
+    daysLeft:    daysLeft(account.expiresAt),
+    needsEmail:    isManualActivationPlatform(account.platform),
+    needsPassword: requiresPasswordPlatform(account.platform),
+  });
+});
+
+router.post("/renew/:token/checkout", async (req, res) => {
+  const payload = verifyRenewalToken(req.params.token);
+  if (!payload) {
+    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
+  }
+
+  const { phone, platform } = payload;
+  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
+
+  if (isNonRenewablePlatform(platform)) {
+    return res.status(400).json({ message: platform + " no es renovable — se compra nuevamente." });
+  }
+  if (isManualActivationPlatform(platform) && !clientEmail) {
+    return res.status(400).json({ message: "Falta el correo para activar " + platform + "." });
+  }
+  if (requiresPasswordPlatform(platform) && !clientPassword) {
+    return res.status(400).json({ message: "Falta la contraseña para activar " + platform + "." });
+  }
+
+  const owns = listRenewalAccountsByPhone(phone).some(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
+  if (!owns) {
+    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+  }
+
+  try {
+    const response = await axios.post(
+      env.BOT_BASE_URL + "/api/web-orders",
+      { phone, platform, clientEmail, clientPassword, isRenewal: true },
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
+    );
+    res.json({ orderName: response.data.orderName, amount: response.data.amount });
+  } catch (err: any) {
+    const message = err?.response?.data?.message || "No se pudo crear la orden. Intenta de nuevo.";
+    res.status(err?.response?.status || 502).json({ message });
+  }
+});
+
 // GET /api/store/catalog — productos + combos activos, con disponibilidad
 // real (mismo dato que ya usa el bot) para que la web no venda algo que
 // no se puede entregar. PÚBLICO a propósito — liordark.com ahora abre
@@ -191,6 +260,13 @@ router.get("/catalog", (_req, res) => {
   }));
 
   res.json({ products, combos });
+});
+
+// GET /api/store/payment-methods — QR de Yape, etc. PÚBLICO a propósito,
+// igual que /catalog: no es sensible, y ahora también lo usa renovar.html
+// (link del correo, sin sesión de cliente).
+router.get("/payment-methods", (_req, res) => {
+  res.json({ methods: listPaymentMethods().filter(m => m.active) });
 });
 
 router.use(requireCustomerSession);
@@ -247,11 +323,6 @@ router.post("/codes/:accountId/request", (req, res) => {
   });
 });
 
-// GET /api/store/payment-methods — para mostrar el QR de Yape, etc.
-router.get("/payment-methods", (_req, res) => {
-  res.json({ methods: listPaymentMethods().filter(m => m.active) });
-});
-
 // GET /api/store/dashboard — cuentas activas del cliente logueado, con
 // días restantes. El checkout de la web hace polling acá para saber si
 // ya le llegó la cuenta que acaba de pagar (no hay WhatsApp que le avise).
@@ -273,6 +344,37 @@ router.get("/dashboard", (req, res) => {
   res.json({ accounts, expiredAccounts });
 });
 
+// ─────────────────────────────────────────────────────────────
+// CORREO PARA AVISO DE VENCIMIENTO — banner al ingresar (si no tiene) y
+// botón "Recordatorio de vencimiento" en Mis cuentas. GET lo consulta
+// (para no volver a pedirlo si ya lo tiene), POST lo guarda/actualiza.
+// ─────────────────────────────────────────────────────────────
+
+router.get("/account/email", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) {
+    return res.status(401).json({ message: "Sesión inválida." });
+  }
+  res.json({ email: customer.email });
+});
+
+router.post("/account/email", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) {
+    return res.status(401).json({ message: "Sesión inválida." });
+  }
+
+  const email = String(req.body?.email ?? "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: "Ingresa un correo válido." });
+  }
+
+  const updated = setCustomerEmail(customer.id, email);
+  res.json({ email: updated?.email || email });
+});
+
 // Igual que generateExpiryNotifications en wholesaler.routes.ts — "cuenta por
 // vencer" no tiene un evento propio, se genera acá mismo, de forma perezosa,
 // cada vez que ESTE cliente pide sus notificaciones (mismo polling del front).
@@ -282,6 +384,17 @@ function generateExpiryNotificationsForCustomer(phone: string): void {
   const expiring = listUnnotifiedExpiringClientsForCustomer(phone, EXPIRY_NOTIFY_DAYS);
   for (const c of expiring) {
     createCustomerNotification(phone, "expiring", c.platform, c.email);
+    markExpiryNotified(c.profileId);
+  }
+}
+
+/** Mismo criterio, pero para TODOS los clientes de una — job proactivo
+ *  (ver runGenerateExpiryNotifications en index.ts) para que la campanita
+ *  no dependa de que el cliente entre a la web a pedirla. */
+export function generateExpiryNotificationsForAllCustomers(): void {
+  const expiring = listAllUnnotifiedExpiringRetailClients(EXPIRY_NOTIFY_DAYS);
+  for (const c of expiring) {
+    createCustomerNotification(c.clientPhone, "expiring", c.platform, c.email);
     markExpiryNotified(c.profileId);
   }
 }
@@ -341,6 +454,13 @@ router.post("/checkout", async (req, res) => {
   const comboId        = req.body?.comboId ? Number(req.body.comboId) : undefined;
   const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
+
+  // "¿Avisarme antes de vencer?" en el checkout — solo si todavía no tiene
+  // correo guardado (no pisa uno ya confirmado desde "Mis cuentas").
+  const notifyEmail = req.body?.notifyEmail ? String(req.body.notifyEmail).trim() : undefined;
+  if (notifyEmail && !customer.email) {
+    setCustomerEmail(customer.id, notifyEmail);
+  }
 
   // Combo armado por el cliente ("¿Quieres armar tu combo? ¡Hazlo!") —
   // lista de plataformas elegidas, sin id de catálogo. Se valida y se

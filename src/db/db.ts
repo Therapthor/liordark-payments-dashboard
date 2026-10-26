@@ -265,4 +265,16 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_ti
 // notificación (avisa primero que se reemplazó la cuenta).
 ensureColumn("support_tickets", "replaced_at", "replaced_at TEXT");
 
+// Correo del cliente retail — opcional, solo para el aviso de vencimiento
+// por correo (Resend). Vacío = no quiso o no lo puso todavía; en ese caso
+// no se le manda nada y liordark.com le sigue mostrando el banner para pedirlo.
+ensureColumn("customers", "email", "email TEXT NOT NULL DEFAULT ''");
+
+// Recordatorio de vencimiento por CORREO — separado del de la campanita
+// (expiry_notified_at) y del SMS/WhatsApp: una cuenta puede avisar por
+// varios canales a la vez. Se manda a los 3 días y al 1 día antes de
+// vencer; cada marca es independiente para no repetir ninguno de los dos.
+ensureColumn("access_profiles", "email_reminder_3d_sent_at", "email_reminder_3d_sent_at TEXT");
+ensureColumn("access_profiles", "email_reminder_1d_sent_at", "email_reminder_1d_sent_at TEXT");
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

@@ -61,6 +61,7 @@
   // ─────────────────────────────────────────────────────────────
 
   let isAuthenticated = false;
+  let customerHasEmail = false;
 
   function openAuthModal() {
     showAuthCard("start-card");
@@ -156,9 +157,11 @@
     try {
       const me = await api("/auth/me");
       currentPhone = me.phone || "";
+      customerHasEmail = !!me.hasEmail;
       // Códigos — apagado por ahora (el reenvío de Gmail resultó más
       // complicado de lo esperado); el botón queda oculto para todos.
     } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
+    updateEmailBanner();
     startNotifPolling();
     await loadCatalog();
   }
@@ -169,7 +172,9 @@
   async function enterGuestMode() {
     isAuthenticated = false;
     currentPhone = "";
+    customerHasEmail = false;
     setNavMode(false);
+    updateEmailBanner();
     switchPage("catalog");
     await loadCatalog();
   }
@@ -731,6 +736,14 @@
     // nuevo de esa plataforma (el bot revisa cada pocos minutos).
     document.getElementById("detail-reserve-note").hidden = !outOfStock;
 
+    // "Avisarme antes de vencer" — ya tiene correo guardado: no se pide
+    // nada, solo se informa. Si no tiene, el switch arranca apagado.
+    document.getElementById("detail-notify-done").hidden = !customerHasEmail;
+    document.getElementById("detail-notify").hidden = customerHasEmail;
+    setDetailNotifyOn(false);
+    document.getElementById("detail-notify-email-input").value = "";
+    setFormError("detail-notify-email-error", "");
+
     const buyBtn = document.getElementById("detail-buy-btn");
     buyBtn.disabled = false;
     buyBtn.textContent = outOfStock ? "Reservar" : "Comprar";
@@ -751,8 +764,16 @@
           return;
         }
       }
+      let notifyEmail;
+      if (!customerHasEmail && detailNotifyOn) {
+        notifyEmail = document.getElementById("detail-notify-email-input").value.trim();
+        if (!isValidEmail(notifyEmail)) {
+          setFormError("detail-notify-email-error", "Escribe un correo válido, o apaga el aviso.");
+          return;
+        }
+      }
       closeProductDetail();
-      startCheckout({ kind, id, clientEmail, clientPassword, isReserve: outOfStock, platformLabel: title });
+      startCheckout({ kind, id, clientEmail, clientPassword, notifyEmail, isReserve: outOfStock, platformLabel: title });
     };
 
     document.getElementById("product-detail-modal").hidden = false;
@@ -767,11 +788,20 @@
     }, 180);
   }
 
+  let detailNotifyOn = false;
+
+  function setDetailNotifyOn(on) {
+    detailNotifyOn = on;
+    document.getElementById("detail-notify-switch").classList.toggle("on", on);
+    document.getElementById("detail-notify-email-wrap").hidden = !on;
+  }
+
   function initProductDetailModal() {
     document.getElementById("detail-close").addEventListener("click", closeProductDetail);
     document.getElementById("product-detail-modal").addEventListener("click", (e) => {
       if (e.target.id === "product-detail-modal") closeProductDetail();
     });
+    document.getElementById("detail-notify-toggle").addEventListener("click", () => setDetailNotifyOn(!detailNotifyOn));
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1055,6 +1085,91 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // RECORDATORIO DE VENCIMIENTO POR CORREO — botón en "Mis cuentas" y
+  // banner al entrar si no tiene correo guardado. Ambos abren el mismo
+  // modal; si ya tiene correo, el campo sale prellenado (no hace falta
+  // volver a escribirlo, solo confirmar/cambiar).
+  // ─────────────────────────────────────────────────────────────
+
+  let emailToastTimer = null;
+
+  function showEmailToast(desc) {
+    clearTimeout(emailToastTimer);
+    document.getElementById("email-toast-desc").textContent = desc;
+    const toast = document.getElementById("email-toast");
+    toast.hidden = false;
+    emailToastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
+  }
+
+  function closeEmailReminderModal() {
+    document.getElementById("email-reminder-modal").hidden = true;
+  }
+
+  async function openEmailReminderModal() {
+    setFormError("email-reminder-error", "");
+    const input = document.getElementById("email-reminder-input");
+    input.value = "";
+    try {
+      const { email } = await api("/account/email");
+      input.value = email || "";
+    } catch { /* no crítico — queda vacío */ }
+    document.getElementById("email-reminder-modal").hidden = false;
+  }
+
+  function initEmailReminderModal() {
+    document.getElementById("dashboard-notify-btn").addEventListener("click", openEmailReminderModal);
+    document.getElementById("email-reminder-close").addEventListener("click", closeEmailReminderModal);
+    document.getElementById("email-reminder-modal").addEventListener("click", (e) => {
+      if (e.target.id === "email-reminder-modal") closeEmailReminderModal();
+    });
+
+    document.getElementById("email-reminder-save").addEventListener("click", async () => {
+      const email = document.getElementById("email-reminder-input").value.trim();
+      if (!isValidEmail(email)) {
+        setFormError("email-reminder-error", "Escribe un correo válido.");
+        return;
+      }
+      try {
+        await api("/account/email", { method: "POST", body: { email } });
+        customerHasEmail = true;
+        closeEmailReminderModal();
+        updateEmailBanner();
+        showEmailToast("Te avisaremos a " + email + " antes de que venzan.");
+      } catch (err) {
+        setFormError("email-reminder-error", err.message);
+      }
+    });
+  }
+
+  // Banner "falta tu correo" — se puede cerrar, pero reaparece a las 12h
+  // (no en cada visita) hasta que agregue el correo. El propio navegador
+  // guarda cuándo lo cerró; el backend solo dice si ya tiene correo o no.
+  const EMAIL_BANNER_SNOOZE_MS = 12 * 60 * 60 * 1000;
+  const EMAIL_BANNER_SNOOZE_KEY = "emailBannerSnoozedAt";
+
+  function isEmailBannerSnoozed() {
+    try {
+      const at = Number(localStorage.getItem(EMAIL_BANNER_SNOOZE_KEY) || 0);
+      return Date.now() - at < EMAIL_BANNER_SNOOZE_MS;
+    } catch { return false; }
+  }
+
+  function snoozeEmailBanner() {
+    try { localStorage.setItem(EMAIL_BANNER_SNOOZE_KEY, String(Date.now())); } catch { /* localStorage bloqueado — no crítico */ }
+    document.getElementById("email-banner").hidden = true;
+  }
+
+  function updateEmailBanner() {
+    document.getElementById("email-banner").hidden =
+      !isAuthenticated || customerHasEmail || isEmailBannerSnoozed();
+  }
+
+  function initEmailBanner() {
+    document.getElementById("email-banner-close").addEventListener("click", snoozeEmailBanner);
+    document.getElementById("email-banner-add").addEventListener("click", openEmailReminderModal);
+  }
+
   function expiredAccountCardHtml(a) {
     return `
       <div class="renewal-account-card">
@@ -1185,7 +1300,7 @@
     }
   }
 
-  async function startCheckout({ kind, id, clientEmail, clientPassword, isReserve, platformLabel }) {
+  async function startCheckout({ kind, id, clientEmail, clientPassword, notifyEmail, isReserve, platformLabel }) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -1199,7 +1314,8 @@
     let beforeAccounts = cachedDashboard;
     try {
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
-      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword };
+      const body = kind === "combo" ? { comboId: id, notifyEmail } : { platform: id, clientEmail, clientPassword, notifyEmail };
+      if (notifyEmail) customerHasEmail = true;
       const order = await api("/checkout", { method: "POST", body });
 
       await ensureYapeInfo();
@@ -1528,6 +1644,8 @@
     initSupportOptionsModal();
     initComboBuilder();
     initCodesView();
+    initEmailReminderModal();
+    initEmailBanner();
 
     try {
       const me = await api("/auth/me");

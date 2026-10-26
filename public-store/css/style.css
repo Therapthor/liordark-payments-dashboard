@@ -383,6 +383,29 @@ a { color: var(--btn); }
 }
 .detail-canva-email input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
 
+/* "Avisarme antes de vencer" en el detalle de producto — switch apagado
+   por defecto, el campo de correo solo aparece si lo prenden. */
+.detail-notify { margin-top: 14px; text-align: left; background: var(--chip-bg); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
+.detail-notify-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+.detail-notify-icon { font-size: 16px; line-height: 1; }
+.detail-notify-label { flex-grow: 1; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); }
+.detail-notify-switch { width: 36px; height: 21px; border-radius: 999px; background: var(--border); position: relative; flex-shrink: 0; transition: background .15s; }
+.detail-notify-switch.on { background: var(--accent); }
+.detail-notify-knob { position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: left .15s; }
+.detail-notify-switch.on .detail-notify-knob { left: 17px; }
+.detail-notify-email { margin-top: 10px; }
+.detail-notify-email label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.detail-notify-email input {
+  width: 100%; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: #fff; color: var(--text);
+  font-size: 13.5px; font-family: inherit; box-sizing: border-box;
+}
+.detail-notify-email input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+.detail-notify-done {
+  margin-top: 14px; background: var(--chip-bg); border: 1px solid var(--border); border-radius: 14px;
+  padding: 11px 14px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: left;
+}
+
 .detail-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
 .detail-footer .product-price { font-size: 19px; color: var(--accent); }
 
@@ -810,6 +833,94 @@ a { color: var(--btn); }
   .content { padding: 20px 14px 48px; }
   .checkout-amount { font-size: 26px; }
   .checkout-qr { width: 160px; height: 160px; }
+}
+
+/* ─── Botón + modal "Recordatorio de vencimiento" (Mis cuentas) ─── */
+.dashboard-notify-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
+  padding: 11px 14px; margin-bottom: 14px; border-radius: 12px; border: 1.5px dashed var(--accent);
+  background: var(--chip-bg); color: var(--btn); font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.dashboard-notify-btn:hover { filter: brightness(0.98); }
+.email-reminder-icon { font-size: 22px; margin-bottom: 4px; }
+.email-reminder-label { display: block; font-size: 11.5px; color: var(--muted); margin: 14px 0 4px; }
+#email-reminder-input {
+  width: 100%; padding: 11px 13px; border-radius: 11px; border: 1px solid var(--border);
+  background: #fcfcfc; color: var(--text); font-size: 14px; font-family: inherit; box-sizing: border-box;
+}
+#email-reminder-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+#email-reminder-save { margin-top: 16px; }
+
+.email-toast {
+  position: fixed; left: 20px; right: 20px; bottom: 24px; max-width: 380px; margin: 0 auto;
+  background: var(--text); border-radius: 14px; padding: 13px 15px; display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.25); z-index: 50;
+  animation: emailToastIn .25s ease both;
+}
+.email-toast-check {
+  width: 28px; height: 28px; border-radius: 999px; background: var(--ok); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0;
+}
+.email-toast-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: #fff; }
+.email-toast-desc { font-size: 12px; color: #cbbfae; margin-top: 1px; }
+@keyframes emailToastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── Banner "falta tu correo" (catálogo/Mis cuentas, con sesión) ─── */
+.email-banner {
+  margin: 0 0 16px; background: linear-gradient(135deg, var(--chip-bg), #fff3e0);
+  border: 1px solid var(--accent2); border-radius: 14px; padding: 14px 40px 14px 16px;
+  display: flex; align-items: center; gap: 12px; position: relative;
+}
+.email-banner-icon { font-size: 20px; flex-shrink: 0; }
+.email-banner-text { flex-grow: 1; min-width: 0; }
+.email-banner-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); }
+.email-banner-desc { font-size: 12px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+.email-banner-add {
+  background: var(--btn); color: #fff; border: none; border-radius: 9px; padding: 8px 12px;
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12px; white-space: nowrap;
+  cursor: pointer; flex-shrink: 0;
+}
+.email-banner-close {
+  position: absolute; top: 8px; right: 10px; background: none; border: none;
+  color: var(--muted); font-size: 13px; cursor: pointer; padding: 4px;
+}
+
+/* ─── Página de renovación por link del correo (renovar.html) — standalone,
+   sin topbar/catálogo, el mismo botón "Renovar ahora" del recordatorio por
+   correo abre esto directo. Reutiliza las clases de #checkout-modal de
+   arriba (checkout-ready-header, checkout-qr, yape-info, success-check,
+   etc.) para que el pago se vea idéntico al checkout normal. ─── */
+.renew-page {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  padding: 40px 20px 60px; box-sizing: border-box;
+  background: linear-gradient(180deg, #141413 0%, #241a10 34%, var(--bg) 34%);
+}
+.renew-brand { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; color: #FFB13D; letter-spacing: .4px; margin-bottom: 2px; }
+.renew-subtitle { font-size: 12.5px; color: rgba(255,255,255,.55); margin-bottom: 26px; }
+.renew-card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+.renew-card .checkout-state { padding: 28px 24px; }
+.renew-card #renew-ready, .renew-card #renew-success, .renew-card #renew-error { padding: 0; }
+.renew-form { display: flex; flex-direction: column; gap: 10px; padding: 24px; }
+.renew-form input {
+  width: 100%; padding: 11px 12px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-family: inherit; font-size: 14px; color: var(--text); box-sizing: border-box;
+}
+.renew-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+
+/* Ráfaga de confeti alrededor del check verde al confirmarse sola la
+   renovación — misma idea que el "éxito" del checkout pero con fiesta,
+   a pedido explícito ("explosión de celebración tipo fiesta"). */
+.confetti-burst { position: relative; width: 56px; height: 56px; margin: 0 auto 6px; }
+.confetti-burst .success-check { margin-bottom: 0; }
+.confetti-dot {
+  position: absolute; width: 7px; height: 7px; opacity: 0;
+  animation: confettiPop .9s ease-out .15s both;
+}
+@keyframes confettiPop {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.4) rotate(0deg); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--dr)); }
 }
 
 /* ─── Renovaciones (público, sin login) ──────────────────────── */

@@ -18,6 +18,7 @@ import {
   markReminderSent,
   listExpiringClientsForWholesaler,
   listUnnotifiedExpiringClientsForWholesaler,
+  listAllUnnotifiedExpiringClientsForWholesalers,
   markExpiryNotified,
   getActiveAccountForWholesalerClient,
   type RenewalStatus,
@@ -426,6 +427,17 @@ function generateExpiryNotifications(wholesalerId: number): void {
   const expiring = listUnnotifiedExpiringClientsForWholesaler(wholesalerId, EXPIRY_NOTIFY_DAYS);
   for (const c of expiring) {
     createWholesalerNotification(wholesalerId, "client_expiring", c.platform, c.email);
+    markExpiryNotified(c.profileId);
+  }
+}
+
+/** Mismo criterio, pero para TODOS los mayoristas de una — job proactivo
+ *  (ver runGenerateExpiryNotifications en index.ts) para que la campanita
+ *  no dependa de que el mayorista entre al panel a pedirla. */
+export function generateExpiryNotificationsForAllWholesalers(): void {
+  const expiring = listAllUnnotifiedExpiringClientsForWholesalers(EXPIRY_NOTIFY_DAYS);
+  for (const c of expiring) {
+    createWholesalerNotification(c.wholesalerId, "client_expiring", c.platform, c.email);
     markExpiryNotified(c.profileId);
   }
 }

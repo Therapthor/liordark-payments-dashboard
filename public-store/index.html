@@ -99,6 +99,19 @@
     </header>
 
     <main class="content">
+      <!-- Banner "falta tu correo" — solo con sesión y sin correo guardado.
+           Se puede cerrar; reaparece a las 12h (ver updateEmailBanner en
+           app.js), nunca más una vez que lo agregue. -->
+      <div class="email-banner" id="email-banner" hidden>
+        <span class="email-banner-icon">📧</span>
+        <div class="email-banner-text">
+          <div class="email-banner-title">No te quedes sin aviso</div>
+          <div class="email-banner-desc">Agrega tu correo y te avisamos antes de que venzan tus cuentas.</div>
+        </div>
+        <button class="email-banner-add" id="email-banner-add" type="button">Agregar</button>
+        <button class="email-banner-close" id="email-banner-close" type="button" aria-label="Cerrar">✕</button>
+      </div>
+
       <section id="page-catalog" class="page">
         <div id="catalog-sections"></div>
         <p id="catalog-empty" class="muted" hidden>Todavía no hay productos cargados.</p>
@@ -106,6 +119,10 @@
 
       <section id="page-dashboard" class="page" hidden>
         <h2>Mis cuentas</h2>
+
+        <button class="dashboard-notify-btn" id="dashboard-notify-btn" type="button">
+          🔔 Recordatorio de vencimiento
+        </button>
 
         <div id="dashboard-active-section">
           <h3 class="dashboard-subtitle">Activas</h3>
@@ -154,6 +171,26 @@
       <p class="muted small detail-reserve-note" id="detail-reserve-note" hidden>
         ⏳ Subiendo stock, sé uno de los primeros en tener acceso.
       </p>
+
+      <!-- "Avisarme antes de vencer" — apagado por defecto, el correo solo
+           se pide si lo prende. Si el cliente ya tiene correo guardado, no
+           se le vuelve a pedir nada (ver detail-notify-done). -->
+      <div class="detail-notify" id="detail-notify" hidden>
+        <div class="detail-notify-row" id="detail-notify-toggle" role="button" tabindex="0">
+          <span class="detail-notify-icon">🔔</span>
+          <span class="detail-notify-label">Avisarme antes de vencer</span>
+          <span class="detail-notify-switch" id="detail-notify-switch"><span class="detail-notify-knob"></span></span>
+        </div>
+        <div class="detail-notify-email" id="detail-notify-email-wrap" hidden>
+          <label for="detail-notify-email-input">Te escribimos cuando esté por vencer</label>
+          <input type="email" id="detail-notify-email-input" placeholder="tu@correo.com" autocomplete="email">
+          <p class="form-error" id="detail-notify-email-error" hidden></p>
+        </div>
+      </div>
+      <div class="detail-notify-done" id="detail-notify-done" hidden>
+        🔔 Te avisaremos a tu correo antes de que venza
+      </div>
+
       <div class="detail-footer">
         <span class="product-price" id="detail-price"></span>
         <button class="btn-primary" id="detail-buy-btn" type="button">Comprar</button>
@@ -291,6 +328,29 @@
         <p class="form-error" id="build-combo-error" hidden></p>
         <button class="btn-primary btn-block" id="build-combo-buy-btn" type="button" disabled>Comprar combo</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODAL: recordatorio de vencimiento por correo ═══════════ -->
+  <div id="email-reminder-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="email-reminder-close" type="button" aria-label="Cerrar">✕</button>
+      <div class="email-reminder-icon">🔔</div>
+      <h2>Recordatorio de vencimiento</h2>
+      <p class="muted small">Te avisamos a tu correo cuando tus cuentas estén por vencer.</p>
+      <label for="email-reminder-input" class="email-reminder-label">Tu correo</label>
+      <input type="email" id="email-reminder-input" placeholder="tu@correo.com" autocomplete="email">
+      <p class="form-error" id="email-reminder-error" hidden></p>
+      <button class="btn-primary btn-block" id="email-reminder-save" type="button">Guardar</button>
+    </div>
+  </div>
+
+  <!-- Toast de confirmación tras guardar el correo -->
+  <div id="email-toast" class="email-toast" hidden>
+    <span class="email-toast-check">✓</span>
+    <div>
+      <div class="email-toast-title">¡Listo!</div>
+      <div class="email-toast-desc" id="email-toast-desc"></div>
     </div>
   </div>
 

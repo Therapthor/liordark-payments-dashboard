@@ -17,6 +17,7 @@ export type Customer = {
   passwordHash:    string;
   passwordPlain:   string;
   isGuest:         boolean;
+  email:           string;
   suspendedUntil:  string | null;
   lockedUntil:     string | null;
   createdAt:       string;
@@ -29,6 +30,7 @@ function toCustomer(row: any): Customer {
     passwordHash:    row.password_hash,
     passwordPlain:   row.password_plain,
     isGuest:         !!row.is_guest,
+    email:           row.email || "",
     suspendedUntil:  row.suspended_until,
     lockedUntil:     row.locked_until,
     createdAt:       row.created_at,
@@ -121,6 +123,16 @@ export function recordCustomerLoginSuccess(phone: string): void {
   const customer = findCustomerByPhone(phone);
   if (!customer) return;
   db.prepare(`UPDATE customers SET failed_login_count = 0, locked_until = NULL WHERE id = ?`).run(customer.id);
+}
+
+/** Correo para avisos de vencimiento (Resend) — opcional, el cliente lo
+ *  pone en el checkout o desde "Mis cuentas" (banner / botón recordatorio).
+ *  Simple sanity check, no hace falta verificación: si está mal escrito
+ *  el correo rebota y no pasa nada más. */
+export function setCustomerEmail(id: number, email: string): Customer | null {
+  const trimmed = email.trim().toLowerCase();
+  db.prepare(`UPDATE customers SET email = ? WHERE id = ?`).run(trimmed, id);
+  return findCustomerById(id);
 }
 
 export function countAllCustomers(): number {

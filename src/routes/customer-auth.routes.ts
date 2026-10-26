@@ -96,7 +96,7 @@ router.get("/me", (req, res) => {
   if (!customer) {
     return res.json({ authenticated: false });
   }
-  res.json({ authenticated: true, phone: customer.phone });
+  res.json({ authenticated: true, phone: customer.phone, hasEmail: !!customer.email });
 });
 
 export default router;

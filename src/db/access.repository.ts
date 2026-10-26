@@ -1075,8 +1075,25 @@ export function listUnnotifiedExpiringClientsForWholesaler(
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId
-      AND a.expires_at = @limit AND p.expiry_notified_at IS NULL
+      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
   `).all({ wholesalerId, limit }) as { profileId: number; platform: string; email: string }[];
+}
+
+/** Igual que arriba pero para TODOS los mayoristas a la vez — usado por el
+ *  job proactivo (ver index.ts) para que la campanita se genere sola sin
+ *  depender de que el mayorista entre a pedir sus notificaciones. */
+export function listAllUnnotifiedExpiringClientsForWholesalers(
+  days: number
+): { profileId: number; wholesalerId: number; platform: string; email: string }[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  return db.prepare(`
+    SELECT p.id AS profileId, p.wholesaler_id AS wholesalerId, a.platform AS platform, a.email AS email
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.client_phone != '' AND p.wholesaler_id IS NOT NULL
+      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
+  `).all({ limit }) as { profileId: number; wholesalerId: number; platform: string; email: string }[];
 }
 
 /** Marca que ya se le avisó por la campanita del panel mayorista — evita repetir en el próximo polling. */
@@ -1097,9 +1114,76 @@ export function listUnnotifiedExpiringClientsForCustomer(
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id IS NULL AND substr(p.client_phone, -9) = @last9
-      AND a.expires_at = @limit AND p.expiry_notified_at IS NULL
+      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
       AND p.order_ref NOT LIKE 'combo:%'
   `).all({ last9, limit }) as { profileId: number; platform: string; email: string }[];
+}
+
+/** Igual que arriba pero para TODOS los clientes retail a la vez — usado
+ *  por el job proactivo (ver index.ts) para que la campanita se genere
+ *  sola sin depender de que el cliente entre a pedir sus notificaciones. */
+export function listAllUnnotifiedExpiringRetailClients(
+  days: number
+): { profileId: number; clientPhone: string; platform: string; email: string }[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  return db.prepare(`
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform, a.email AS email
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.wholesaler_id IS NULL AND p.client_phone != ''
+      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
+      AND p.order_ref NOT LIKE 'combo:%'
+  `).all({ limit }) as { profileId: number; clientPhone: string; platform: string; email: string }[];
+}
+
+export type EmailReminderCandidate = {
+  profileId:      number;
+  clientPhone:    string;
+  customerEmail:  string;
+  platform:       string;
+  platformTag:    string;
+  price:          string;
+  expiresAt:      string;
+  d3AlreadySent:  boolean;
+};
+
+/** Clientes retail con correo registrado y a 3 días o menos de vencer, que
+ *  todavía no recibieron el recordatorio FINAL por correo (el de 1 día) —
+ *  ver expiry-reminder.job.ts, que decide ahí mismo (según los días que
+ *  le queden de verdad) si toca mandar el de 3 días o el de 1 día. */
+export function listEmailReminderCandidates(days: number): EmailReminderCandidate[] {
+  const today = limaTodayISOLocal();
+  const limit = addDaysISOLocal(today, days);
+  return (db.prepare(`
+    SELECT p.id AS profileId, p.client_phone AS clientPhone, c.email AS customerEmail,
+           a.platform AS platform, COALESCE(cp.title, '') AS platformTag, COALESCE(cp.price, '') AS price,
+           a.expires_at AS expiresAt, p.email_reminder_3d_sent_at AS d3SentAt
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    JOIN customers c ON substr(c.phone, -9) = substr(p.client_phone, -9)
+    LEFT JOIN catalog_products cp ON UPPER(TRIM(cp.platform)) = a.platform
+    WHERE p.wholesaler_id IS NULL AND p.client_phone != '' AND c.email != ''
+      AND a.expires_at <= @limit AND p.email_reminder_1d_sent_at IS NULL
+      AND p.order_ref NOT LIKE 'combo:%'
+  `).all({ limit }) as any[]).map(row => ({
+    profileId:     row.profileId,
+    clientPhone:   row.clientPhone,
+    customerEmail: row.customerEmail,
+    platform:      row.platform,
+    platformTag:   row.platformTag || row.platform,
+    price:         row.price,
+    expiresAt:     row.expiresAt,
+    d3AlreadySent: !!row.d3SentAt,
+  }));
+}
+
+export function markEmailReminder3dSent(profileId: number): void {
+  db.prepare(`UPDATE access_profiles SET email_reminder_3d_sent_at = datetime('now') WHERE id = ?`).run(profileId);
+}
+
+export function markEmailReminder1dSent(profileId: number): void {
+  db.prepare(`UPDATE access_profiles SET email_reminder_1d_sent_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
 export type RemindedClient = { profileId: number; clientPhone: string; platform: string; email: string; remindedAt: string };

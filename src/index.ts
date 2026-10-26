@@ -20,10 +20,10 @@ import stockRoutes from "./routes/stock.routes";
 import renewalsRoutes from "./routes/renewals.routes";
 import botFlowRoutes from "./routes/bot-flow.routes";
 import customerAuthRoutes from "./routes/customer-auth.routes";
-import storeRoutes from "./routes/store.routes";
+import storeRoutes, { generateExpiryNotificationsForAllCustomers } from "./routes/store.routes";
 import customersRoutes from "./routes/customers.routes";
 import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
-import wholesalerRoutes from "./routes/wholesaler.routes";
+import wholesalerRoutes, { generateExpiryNotificationsForAllWholesalers } from "./routes/wholesaler.routes";
 import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
 import supportRoutes from "./routes/support.routes";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
@@ -34,6 +34,7 @@ import { getPlatformCatalog } from "./services/catalog.service";
 import { archiveExpiredAccounts } from "./db/access-history.repository";
 import { limaTodayISO } from "./services/access.service";
 import { disableInactiveWholesalers } from "./db/wholesaler.repository";
+import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
 
 const app = express();
 
@@ -119,6 +120,12 @@ const server = app.listen(env.PORT, () => {
   runDisableInactiveWholesalers();
   setInterval(runDisableInactiveWholesalers, ARCHIVE_INTERVAL_MS);
 
+  runGenerateExpiryNotifications();
+  setInterval(runGenerateExpiryNotifications, EXPIRY_NOTIFY_INTERVAL_MS);
+
+  runEmailReminders();
+  setInterval(runEmailReminders, EMAIL_REMINDER_INTERVAL_MS);
+
   // Códigos apagado por ahora (el reenvío de Gmail resultó más complicado
   // de lo esperado) — no se arranca el poller ni la limpieza periódica.
 });
@@ -145,6 +152,32 @@ function runDisableInactiveWholesalers(): void {
   } catch (err: any) {
     console.error("⚠️ Error deshabilitando mayoristas inactivos:", err?.message);
   }
+}
+
+// Campanita de "cuenta por vencer" (clientes y mayoristas) — antes solo se
+// generaba de forma perezosa cuando cada uno entraba a pedir sus propias
+// notificaciones, así que quien no visitaba la web nunca se enteraba. Corre
+// cada 30 min (y al arrancar, para ponerse al día con lo que quedó pendiente).
+const EXPIRY_NOTIFY_INTERVAL_MS = 30 * 60 * 1000;
+
+function runGenerateExpiryNotifications(): void {
+  try {
+    generateExpiryNotificationsForAllCustomers();
+    generateExpiryNotificationsForAllWholesalers();
+  } catch (err: any) {
+    console.error("⚠️ Error generando notificaciones de vencimiento:", err?.message);
+  }
+}
+
+// Recordatorio de vencimiento por CORREO (3 días y 1 día antes, ver
+// expiry-reminder-email.job.ts) — cada hora alcanza, no es tan urgente
+// como la campanita y evita mandar de más si algo queda reintentando.
+const EMAIL_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
+
+function runEmailReminders(): void {
+  runExpiryReminderEmails().catch((err: any) => {
+    console.error("⚠️ Error mandando recordatorios de vencimiento por correo:", err?.message);
+  });
 }
 
 let isShuttingDown = false;

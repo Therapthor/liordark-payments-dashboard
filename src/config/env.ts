@@ -42,4 +42,11 @@ export const env = {
   // (no rompe nada, solo no se puede mandar SMS).
   SMS_API_KEY: getEnv("SMS_API_KEY", false),
   SMS_SENDER:  getEnv("SMS_SENDER", false) || "LIORDARK",
+
+  // Recordatorio de vencimiento por correo (Resend) — panel > job diario.
+  // Sin esto configurado, el job queda inactivo (no rompe nada, solo no
+  // manda correos). RESEND_FROM_EMAIL debe ser de un dominio ya verificado
+  // en Resend (Domains > Verify) — si no, Resend rechaza el envío.
+  RESEND_API_KEY:   getEnv("RESEND_API_KEY", false),
+  RESEND_FROM_EMAIL: getEnv("RESEND_FROM_EMAIL", false) || "Liordark <avisos@liordark.com>",
 };

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renovar — Liordark</title>
+<link rel="icon" href="/assets/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="renew-page">
+  <div class="renew-brand">LIORDARK</div>
+  <div class="renew-subtitle">Renovación exprés</div>
+
+  <div class="renew-card">
+
+    <div id="renew-loading" class="checkout-state">
+      <span class="spinner"></span>
+      <p>Verificando tu link…</p>
+    </div>
+
+    <div id="renew-error" class="checkout-state" hidden>
+      <p class="form-error" id="renew-error-text"></p>
+      <a class="btn-ghost btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a liordark.com</a>
+    </div>
+
+    <!-- Datos del cliente para plataformas de activación manual (CANVA, GEMINI, YOUTUBE) -->
+    <div id="renew-form" class="checkout-state" hidden>
+      <div class="renew-form">
+        <p class="muted" id="renew-form-label" style="margin: 0 0 6px;"></p>
+        <input id="renew-email" type="email" placeholder="Tu correo" hidden>
+        <input id="renew-password" type="password" placeholder="Contraseña de tu cuenta" hidden>
+        <button class="btn-primary btn-block" id="renew-form-continue" type="button">Continuar</button>
+      </div>
+    </div>
+
+    <div id="renew-ready" class="checkout-state" hidden>
+      <div class="checkout-ready-header">
+        <h2 id="renew-platform-label">Renovación</h2>
+        <p class="muted">Envía exactamente este monto por Yape:</p>
+        <div class="checkout-amount-row">
+          <span class="checkout-amount" id="renew-amount">S/ 0.00</span>
+          <button class="yape-copy-btn yape-copy-btn-amount" id="renew-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
+        </div>
+      </div>
+      <div class="checkout-ready-body">
+        <img id="renew-qr" class="checkout-qr" alt="QR de Yape" hidden>
+        <div class="yape-info" id="renew-instructions"></div>
+        <div class="checkout-waiting">
+          <span class="spinner spinner-sm"></span>
+          <span>En cuanto detectemos tu pago, esto se confirma solo — no hace falta que hagas nada más.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="renew-success" class="checkout-state" hidden>
+      <div class="checkout-success-header">
+        <div class="confetti-burst">
+          <div class="confetti-dot" style="background:#ff7a1a; top:26px; left:26px; --dx:-30px; --dy:-26px; --dr:40deg;"></div>
+          <div class="confetti-dot" style="background:#ffb020; top:26px; left:26px; --dx:30px; --dy:-26px; --dr:-30deg;"></div>
+          <div class="confetti-dot" style="background:#fff; top:26px; left:26px; --dx:-36px; --dy:14px; --dr:20deg;"></div>
+          <div class="confetti-dot" style="background:#ffb020; top:26px; left:26px; --dx:36px; --dy:14px; --dr:-20deg;"></div>
+          <div class="confetti-dot" style="background:#ff7a1a; top:26px; left:26px; --dx:0px; --dy:-40px; --dr:15deg;"></div>
+          <div class="confetti-dot" style="background:#fff; top:26px; left:26px; --dx:0px; --dy:38px; --dr:-15deg;"></div>
+          <div class="success-check">✓</div>
+        </div>
+        <h2>¡Renovado!</h2>
+        <p class="muted">Gracias por confiar en Manguito 🥭</p>
+      </div>
+      <div class="checkout-success-body">
+        <p style="text-align: center; margin: 4px 0 14px;">Se renovó con la misma cuenta que ya tenías.</p>
+        <a class="btn-primary btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a liordark.com</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/js/renovar.js"></script>
+</body>
+</html>
