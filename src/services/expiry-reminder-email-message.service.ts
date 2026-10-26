@@ -11,28 +11,46 @@ const COLOR = {
   border: "#f1e4d3", danger: "#d1373d",
 };
 
+const LOGO_URL = "https://liordark.com/assets/logo.webp";
+
 export function buildExpiryReminderSubject(platformTag: string, daysLeft: 1 | 3): string {
   return daysLeft === 1
-    ? `Tu cuenta de ${platformTag} vence mañana`
-    : `Tu cuenta de ${platformTag} vence en 3 días`;
+    ? `🥭 ¡Manguito! Tu cuenta de ${platformTag} vence mañana`
+    : `🥭 ¡Manguito! Tu cuenta de ${platformTag} vence en ${daysLeft} días`;
 }
 
 export function buildExpiryReminderHtml(params: {
   platformTag: string;
   price: string;
+  imageUrl: string;
   daysLeft: 1 | 3;
   renewUrl: string;
 }): string {
-  const { platformTag, price, daysLeft, renewUrl } = params;
+  const { platformTag, price, imageUrl, daysLeft, renewUrl } = params;
   const whenLabel = daysLeft === 1 ? "Vence mañana" : `Vence en ${daysLeft} días`;
+
+  // Si el producto tiene imagen (Cloudinary) se usa esa; si no, el bloque
+  // de color de siempre con la inicial de la plataforma, para que nunca
+  // quede un hueco vacío.
+  const platformVisual = imageUrl
+    ? `<img src="${imageUrl}" width="40" height="40" alt="${platformTag}" style="display: block; width: 40px; height: 40px; border-radius: 10px; object-fit: cover;">`
+    : `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="width: 40px; height: 40px; border-radius: 10px; background: ${COLOR.accent2}; font-family: Arial, sans-serif; font-weight: bold; font-size: 17px; color: #ffffff; text-align: center; vertical-align: middle;">${platformTag.charAt(0)}</td></tr></table>`;
 
   return `
 <div style="background: ${COLOR.bg}; padding: 24px 16px; font-family: Arial, Helvetica, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 420px; margin: 0 auto;">
+    <tr>
+      <td align="center" style="padding-bottom: 16px;">
+        <img src="${LOGO_URL}" width="36" height="36" alt="Liordark" style="display: block; width: 36px; height: 36px; border-radius: 999px; margin-bottom: 6px;">
+        <div style="font-family: Arial, sans-serif; font-weight: bold; font-size: 15px; color: ${COLOR.text}; letter-spacing: .3px;">🥭 ¡Manguito!</div>
+      </td>
+    </tr>
+  </table>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 420px; margin: 0 auto; background: ${COLOR.card}; border-radius: 18px; overflow: hidden; box-shadow: 0 12px 30px rgba(36,26,16,.12);">
     <tr>
       <td style="padding: 26px 26px 20px;">
         <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-          <td style="width: 40px; height: 40px; border-radius: 10px; background: ${COLOR.accent2}; font-size: 0; line-height: 0;">&nbsp;</td>
+          <td>${platformVisual}</td>
           <td style="padding-left: 12px;">
             <div style="font-family: Arial, sans-serif; font-weight: bold; font-size: 14px; color: ${COLOR.text};">${platformTag}</div>
             <div style="font-size: 11.5px; color: ${COLOR.danger}; font-weight: bold;">${whenLabel}</div>
@@ -53,7 +71,7 @@ export function buildExpiryReminderHtml(params: {
           Renovar ahora
         </a>
         <p style="margin: 16px 0 0; text-align: center; font-size: 11px; color: ${COLOR.muted};">
-          Liordark — si no reconoces esta cuenta, ignora este correo.
+          Liordark 🥭 — si no reconoces esta cuenta, ignora este correo.
         </p>
       </td>
     </tr>

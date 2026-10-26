@@ -30,14 +30,14 @@ export async function runExpiryReminderEmails(): Promise<void> {
       const ok = await sendEmail(
         c.customerEmail,
         buildExpiryReminderSubject(c.platformTag, 1),
-        buildExpiryReminderHtml({ platformTag: c.platformTag, price: c.price, daysLeft: 1, renewUrl })
+        buildExpiryReminderHtml({ platformTag: c.platformTag, price: c.price, imageUrl: c.imageUrl, daysLeft: 1, renewUrl })
       );
       if (ok) markEmailReminder1dSent(c.profileId);
     } else if (left <= 3 && !c.d3AlreadySent) {
       const ok = await sendEmail(
         c.customerEmail,
         buildExpiryReminderSubject(c.platformTag, 3),
-        buildExpiryReminderHtml({ platformTag: c.platformTag, price: c.price, daysLeft: 3, renewUrl })
+        buildExpiryReminderHtml({ platformTag: c.platformTag, price: c.price, imageUrl: c.imageUrl, daysLeft: 3, renewUrl })
       );
       if (ok) markEmailReminder3dSent(c.profileId);
     }

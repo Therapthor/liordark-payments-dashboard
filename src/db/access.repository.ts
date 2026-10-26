@@ -1144,6 +1144,7 @@ export type EmailReminderCandidate = {
   platform:       string;
   platformTag:    string;
   price:          string;
+  imageUrl:       string;
   expiresAt:      string;
   d3AlreadySent:  boolean;
 };
@@ -1158,6 +1159,7 @@ export function listEmailReminderCandidates(days: number): EmailReminderCandidat
   return (db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, c.email AS customerEmail,
            a.platform AS platform, COALESCE(cp.title, '') AS platformTag, COALESCE(cp.price, '') AS price,
+           COALESCE(cp.image_url, '') AS imageUrl,
            a.expires_at AS expiresAt, p.email_reminder_3d_sent_at AS d3SentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
@@ -1173,6 +1175,7 @@ export function listEmailReminderCandidates(days: number): EmailReminderCandidat
     platform:      row.platform,
     platformTag:   row.platformTag || row.platform,
     price:         row.price,
+    imageUrl:      row.imageUrl,
     expiresAt:     row.expiresAt,
     d3AlreadySent: !!row.d3SentAt,
   }));
