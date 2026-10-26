@@ -1,5 +1,6 @@
 import { Router } from "express";
 import axios from "axios";
+import multer from "multer";
 import { env } from "../config/env";
 import { requireCustomerSession, type RequestWithCustomer } from "../services/customer-auth.service";
 import { findCustomerById, setCustomerEmail } from "../db/customer.repository";
@@ -30,6 +31,11 @@ import {
 } from "../db/customer-notifications.repository";
 import { createSupportTicket, listSupportTicketsForClient } from "../db/support-tickets.repository";
 import { verifyRenewalToken } from "../utils/renewal-token.util";
+import {
+  getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
+} from "../db/support-chat.repository";
+import { uploadChatMedia } from "../services/cloudinary.service";
+import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
 // quita esta restricción cuando se dé por probado.
@@ -594,6 +600,121 @@ router.post("/support/tickets", (req, res) => {
     problem,
   });
   res.status(201).json({ ticket });
+});
+
+// ─────────────────────────────────────────────────────────────
+// CHAT DE SOPORTE EN VIVO — de prueba, solo SUPPORT_TEST_PHONE (mismo
+// gate que los reportes de arriba). El botón "💬 Soporte" de la barra
+// abre esto en vez de WhatsApp SOLO para ese celular (ver app.js).
+// ─────────────────────────────────────────────────────────────
+
+const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+function requireChatTestUser(req: any, res: any): { phone: string } | null {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) { res.status(401).json({ message: "Sesión inválida." }); return null; }
+  if (!isSupportTestUser(customer.phone)) {
+    res.status(403).json({ message: "El chat todavía no está disponible para tu cuenta." });
+    return null;
+  }
+  return { phone: customer.phone };
+}
+
+function mediaExpiresAtISO(): string {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+router.get("/chat", (req, res) => {
+  const who = requireChatTestUser(req, res);
+  if (!who) return;
+
+  const isNew = !findChatByPhone(who.phone);
+  const chat = getOrCreateOpenChatForPhone(who.phone);
+  markSeen(chat.id, "customer");
+  if (isNew) emitChatEvent({ type: "chat_created", chatId: chat.id, clientPhone: who.phone });
+  res.json({ chatId: chat.id, adminTyping: chat.adminTyping, messages: listMessages(chat.id) });
+});
+
+router.post("/chat/messages", (req, res) => {
+  const who = requireChatTestUser(req, res);
+  if (!who) return;
+
+  const text = String(req.body?.text ?? "").trim();
+  if (!text) return res.status(400).json({ message: "Escribe un mensaje." });
+
+  const chat = getOrCreateOpenChatForPhone(who.phone);
+  const message = addMessage(chat.id, "customer", { type: "text", text });
+  emitChatEvent({ type: "message", chatId: chat.id, message });
+  res.status(201).json({ message });
+});
+
+router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) => {
+  const who = requireChatTestUser(req, res);
+  if (!who) return;
+
+  const file = (req as any).file as Express.Multer.File | undefined;
+  if (!file) return res.status(400).json({ message: "Falta el archivo." });
+
+  const isImage = file.mimetype.startsWith("image/");
+  const isVideo = file.mimetype.startsWith("video/");
+  if (!isImage && !isVideo) return res.status(400).json({ message: "Solo se pueden enviar fotos o videos." });
+
+  try {
+    const chat = getOrCreateOpenChatForPhone(who.phone);
+    const { url, publicId } = await uploadChatMedia(file.buffer, isImage ? "image" : "video");
+    const message = addMessage(chat.id, "customer", {
+      type: isImage ? "image" : "video", mediaUrl: url, mediaPublicId: publicId,
+      mediaResourceType: isImage ? "image" : "video", mediaExpiresAt: mediaExpiresAtISO(),
+    });
+    emitChatEvent({ type: "message", chatId: chat.id, message });
+    res.status(201).json({ message });
+  } catch (err: any) {
+    res.status(502).json({ message: err?.message || "No se pudo subir el archivo." });
+  }
+});
+
+router.post("/chat/typing", (req, res) => {
+  const who = requireChatTestUser(req, res);
+  if (!who) return;
+
+  const chat = getOrCreateOpenChatForPhone(who.phone);
+  const typing = !!req.body?.typing;
+  setTyping(chat.id, "customer", typing);
+  emitChatEvent({ type: "typing", chatId: chat.id, sender: "customer", typing });
+  res.json({ ok: true });
+});
+
+// SSE — mensajes y "escribiendo" del admin, en vivo. Filtra por el chat de
+// ESTE celular; si todavía no tiene chat creado, no hay nada que seguir.
+router.get("/chat/stream", (req, res) => {
+  const customerId = (req as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer || !isSupportTestUser(customer.phone)) {
+    return res.status(403).end();
+  }
+
+  const chat = getOrCreateOpenChatForPhone(customer.phone);
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.write("retry: 3000\n\n");
+
+  const unsubscribe = onChatEvent((evt) => {
+    if (evt.chatId !== chat.id) return;
+    res.write(`data: ${JSON.stringify(evt)}\n\n`);
+  });
+
+  const ping = setInterval(() => res.write(":ping\n\n"), 25_000);
+
+  req.on("close", () => {
+    clearInterval(ping);
+    unsubscribe();
+  });
 });
 
 export default router;

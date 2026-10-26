@@ -253,6 +253,7 @@
     document.getElementById("view-renewals").hidden      = view !== "renewals";
     document.getElementById("view-config").hidden        = view !== "config";
     document.getElementById("view-support").hidden       = view !== "support";
+    document.getElementById("view-support-chat").hidden  = view !== "support-chat";
 
     const isPagos = view === "history" || view === "renewals";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
@@ -274,6 +275,7 @@
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "support" && window.LiordarkSupport) window.LiordarkSupport.load();
+    if (view === "support-chat" && window.LiordarkSupportChat) window.LiordarkSupportChat.load();
     if (view === "config") switchConfigSection("catalog");
   }
 
@@ -1492,6 +1494,7 @@
     if (window.LiordarkSettings) window.LiordarkSettings.init();
     if (window.LiordarkWholesalers) window.LiordarkWholesalers.init();
     if (window.LiordarkSupport) window.LiordarkSupport.init();
+    if (window.LiordarkSupportChat) window.LiordarkSupportChat.init();
 
     const { payments, stats } = await api("/live/initial");
     cachedLivePayments = payments;

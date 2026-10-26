@@ -76,3 +76,47 @@ export async function getPrincipalImageUrl(): Promise<string | null> {
   const result = await cloudinary.search.expression(`folder:${principalFolder()}`).max_results(1).execute();
   return result?.resources?.[0]?.secure_url ?? null;
 }
+
+// ─────────────────────────────────────────────────────────────
+// CHAT DE SOPORTE — fotos/videos que el cliente o el admin mandan en la
+// conversación. A diferencia de la imagen principal (una sola, se
+// reemplaza), acá cada archivo es su propio recurso — se borra solo
+// (expiry-chat-media.job.ts, 1 día) o todos juntos al cerrar el chat
+// (support-chat.repository.ts closeChat).
+// ─────────────────────────────────────────────────────────────
+
+function chatMediaFolder(): string {
+  return `${env.CLOUDINARY_FOLDER_UTILS || "utilitarios"}/soporte-chat`;
+}
+
+export async function uploadChatMedia(
+  fileBuffer: Buffer, resourceType: "image" | "video"
+): Promise<{ url: string; publicId: string }> {
+  if (!isCloudinaryConfigured()) {
+    throw new Error("Cloudinary no está configurado en el panel (faltan variables de entorno).");
+  }
+  ensureConfigured();
+
+  const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: chatMediaFolder(), resource_type: resourceType },
+      (err, result) => {
+        if (err || !result) reject(err ?? new Error("Cloudinary no devolvió resultado"));
+        else resolve(result);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+
+  return { url: uploaded.secure_url, publicId: uploaded.public_id };
+}
+
+export async function deleteChatMedia(publicId: string, resourceType: string): Promise<void> {
+  if (!publicId || !isCloudinaryConfigured()) return;
+  ensureConfigured();
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType || "image" });
+  } catch (err: any) {
+    console.error("⚠️ No se pudo borrar media del chat en Cloudinary:", publicId, err?.message);
+  }
+}

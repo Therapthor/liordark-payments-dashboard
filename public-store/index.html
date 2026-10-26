@@ -354,6 +354,36 @@
     </div>
   </div>
 
+  <!-- ═══════════ MODAL: chat de soporte en vivo (de prueba) ═══════════ -->
+  <div id="chat-modal" class="modal-backdrop" hidden>
+    <div class="modal-card chat-card">
+      <div class="chat-header">
+        <div class="chat-header-brand">
+          <span class="chat-header-logo">🥭</span>
+          <div>
+            <div class="chat-header-title">Soporte Liordark</div>
+            <div class="chat-header-sub">Manguito te atiende al toque</div>
+          </div>
+        </div>
+        <button class="modal-close" id="chat-close" type="button" aria-label="Cerrar">✕</button>
+      </div>
+
+      <div class="chat-messages" id="chat-messages"></div>
+
+      <div class="chat-typing-row" id="chat-typing-row" hidden>
+        <span class="chat-typing-avatar">🥭</span>
+        <span class="chat-typing-dots"><span></span><span></span><span></span></span>
+      </div>
+
+      <form class="chat-input-row" id="chat-input-form">
+        <input type="file" id="chat-file-input" accept="image/*,video/*" hidden>
+        <button type="button" class="chat-attach-btn" id="chat-attach-btn" title="Adjuntar foto o video" aria-label="Adjuntar foto o video">📎</button>
+        <input type="text" id="chat-text-input" placeholder="Escribe tu mensaje…" autocomplete="off">
+        <button type="submit" class="chat-send-btn" aria-label="Enviar">➤</button>
+      </form>
+    </div>
+  </div>
+
 </div>
 
 <script src="/js/app.js"></script>

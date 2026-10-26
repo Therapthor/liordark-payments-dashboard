@@ -277,4 +277,45 @@ ensureColumn("customers", "email", "email TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "email_reminder_3d_sent_at", "email_reminder_3d_sent_at TEXT");
 ensureColumn("access_profiles", "email_reminder_1d_sent_at", "email_reminder_1d_sent_at TEXT");
 
+// ─────────────────────────────────────────────────────────────
+// CHAT DE SOPORTE EN VIVO — liordark.com <-> panel admin (de prueba, solo
+// para un celular — ver SUPPORT_CHAT_TEST_PHONE en store.routes.ts).
+// Un solo chat "open" a la vez por celular; al cerrarlo desde el panel se
+// borra TODO (mensajes y medios de Cloudinary), a propósito, para no ir
+// acumulando espacio con conversaciones ya resueltas.
+// ─────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS support_chats (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_phone       TEXT    NOT NULL,
+    admin_typing_at    TEXT,
+    customer_typing_at TEXT,
+    admin_seen_at      TEXT,
+    customer_seen_at   TEXT,
+    created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_support_chats_phone ON support_chats(client_phone)`);
+
+// type: "text" | "image" | "video". media_url/media_public_id quedan vacíos
+// una vez que el archivo se autodestruye (1 día, ver expiry-chat-media.job.ts)
+// — el mensaje se queda como marcador de que hubo una foto/video ahí.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS support_chat_messages (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id          INTEGER NOT NULL,
+    sender           TEXT    NOT NULL,
+    type             TEXT    NOT NULL DEFAULT 'text',
+    text             TEXT    NOT NULL DEFAULT '',
+    media_url        TEXT    NOT NULL DEFAULT '',
+    media_public_id  TEXT    NOT NULL DEFAULT '',
+    media_resource_type TEXT NOT NULL DEFAULT '',
+    media_expires_at TEXT,
+    media_expired     INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_support_chat_messages_chat ON support_chat_messages(chat_id)`);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

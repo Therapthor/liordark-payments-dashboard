@@ -26,6 +26,7 @@ import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
 import wholesalerRoutes, { generateExpiryNotificationsForAllWholesalers } from "./routes/wholesaler.routes";
 import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
 import supportRoutes from "./routes/support.routes";
+import supportChatRoutes from "./routes/support-chat.routes";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
@@ -35,6 +36,7 @@ import { archiveExpiredAccounts } from "./db/access-history.repository";
 import { limaTodayISO } from "./services/access.service";
 import { disableInactiveWholesalers } from "./db/wholesaler.repository";
 import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
+import { runExpireChatMedia } from "./jobs/expiry-chat-media.job";
 
 const app = express();
 
@@ -72,6 +74,7 @@ apiRouter.use("/wholesaler", requireWholesalerSession, wholesalerRoutes);
 // saldo, asignar stock, cola de cuentas completas) — requireAuth normal.
 apiRouter.use("/wholesalers", requireAuth, wholesalersAdminRoutes);
 apiRouter.use("/support", requireAuth, supportRoutes);
+apiRouter.use("/support-chat", requireAuth, supportChatRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {
@@ -124,6 +127,9 @@ const server = app.listen(env.PORT, () => {
   setInterval(runGenerateExpiryNotifications, EXPIRY_NOTIFY_INTERVAL_MS);
 
   scheduleEmailRemindersDaily();
+
+  runExpireChatMediaJob();
+  setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);
 
   // Códigos apagado por ahora (el reenvío de Gmail resultó más complicado
   // de lo esperado) — no se arranca el poller ni la limpieza periódica.
@@ -199,6 +205,16 @@ function scheduleEmailRemindersDaily(): void {
     runEmailReminders();
     setInterval(runEmailReminders, ONE_DAY_MS);
   }, delay);
+}
+
+// Fotos/videos del chat de soporte autodestruidos al día — cada 15 min
+// alcanza de sobra (no hace falta borrarlos al segundo exacto).
+const CHAT_MEDIA_EXPIRY_INTERVAL_MS = 15 * 60 * 1000;
+
+function runExpireChatMediaJob(): void {
+  runExpireChatMedia().catch((err: any) => {
+    console.error("⚠️ Error autodestruyendo medios del chat de soporte:", err?.message);
+  });
 }
 
 let isShuttingDown = false;

@@ -310,6 +310,11 @@
       btn.addEventListener("click", () => switchPage(btn.dataset.view));
     });
     document.getElementById("topbar-support-link").href = "https://wa.me/" + SUPPORT_PHONE;
+    document.getElementById("topbar-support-link").addEventListener("click", (e) => {
+      if (!isSupportTestUser()) return; // resto de clientes sigue yendo a WhatsApp
+      e.preventDefault();
+      openChatModal();
+    });
   }
 
   function switchPage(view) {
@@ -1627,6 +1632,179 @@
   }
 
   // ─────────────────────────────────────────────────────────────
+  // CHAT DE SOPORTE EN VIVO — de prueba, solo isSupportTestUser(). El
+  // botón "💬 Soporte" de la barra abre esto en vez de WhatsApp (ver
+  // initNav). Un solo chat por celular — lo crea solo el backend al
+  // pedir GET /chat; si el admin lo cierra, el siguiente mensaje abre
+  // uno nuevo de cero.
+  // ─────────────────────────────────────────────────────────────
+
+  let chatSource = null;
+  let chatLastId = 0;
+  let chatTypingTimer = null;
+  let chatIsTyping = false;
+  let chatRenderedIds = new Set();
+
+  function fmtChatTime(sqliteUTC) {
+    try {
+      return new Date(sqliteUTC.replace(" ", "T") + "Z").toLocaleTimeString("es-PE", {
+        timeZone: "America/Lima", hour: "2-digit", minute: "2-digit",
+      });
+    } catch { return ""; }
+  }
+
+  function chatBubbleHtml(m) {
+    chatLastId = Math.max(chatLastId, m.id);
+    chatRenderedIds.add(m.id);
+    const who = m.sender === "customer" ? "from-customer" : "from-admin";
+    let body;
+    if (m.type === "text") {
+      body = escapeHtml(m.text);
+    } else if (m.mediaExpired) {
+      body = `<span class="chat-bubble-expired">${m.type === "image" ? "📷 Foto" : "🎥 Video"} (se autodestruyó)</span>`;
+    } else if (m.type === "image") {
+      body = `<img class="chat-bubble-media" src="${escapeHtml(m.mediaUrl)}" alt="Foto">`;
+    } else {
+      body = `<video class="chat-bubble-media" src="${escapeHtml(m.mediaUrl)}" controls></video>`;
+    }
+    return `
+      <div class="chat-bubble-row ${who}">
+        <div class="chat-bubble">${body}<span class="chat-bubble-time">${fmtChatTime(m.createdAt)}</span></div>
+      </div>`;
+  }
+
+  function appendChatMessage(m) {
+    if (chatRenderedIds.has(m.id)) return; // ya se mostró optimista al mandarlo — evita duplicar cuando llega por SSE
+    chatRenderedIds.add(m.id);
+    const el = document.getElementById("chat-messages");
+    const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    el.insertAdjacentHTML("beforeend", chatBubbleHtml(m));
+    if (wasAtBottom) el.scrollTop = el.scrollHeight;
+  }
+
+  function showChatTyping(show) {
+    document.getElementById("chat-typing-row").hidden = !show;
+    if (show) {
+      const el = document.getElementById("chat-messages");
+      el.scrollTop = el.scrollHeight;
+    }
+  }
+
+  function connectChatStream() {
+    if (chatSource) chatSource.close();
+    chatSource = new EventSource(API_BASE + "/chat/stream", { withCredentials: true });
+    chatSource.onmessage = (ev) => {
+      let evt;
+      try { evt = JSON.parse(ev.data); } catch { return; }
+      if (evt.type === "message") {
+        if (evt.message.sender === "admin") showChatTyping(false);
+        appendChatMessage(evt.message);
+      } else if (evt.type === "typing") {
+        if (evt.sender === "admin") showChatTyping(evt.typing);
+      } else if (evt.type === "closed") {
+        showChatTyping(false);
+        document.getElementById("chat-messages").insertAdjacentHTML("beforeend",
+          `<div class="chat-empty">— Este chat fue cerrado por soporte —</div>`);
+        if (chatSource) { chatSource.close(); chatSource = null; }
+      }
+    };
+  }
+
+  async function openChatModal() {
+    document.getElementById("chat-modal").hidden = false;
+    const list = document.getElementById("chat-messages");
+    list.innerHTML = `<div class="chat-empty">Cargando…</div>`;
+    showChatTyping(false);
+    chatLastId = 0;
+    chatRenderedIds = new Set();
+    try {
+      const { messages, adminTyping } = await api("/chat");
+      list.innerHTML = messages.length
+        ? messages.map(chatBubbleHtml).join("")
+        : `<div class="chat-empty">Cuéntanos qué necesitas 🥭</div>`;
+      list.scrollTop = list.scrollHeight;
+      showChatTyping(adminTyping);
+      connectChatStream();
+    } catch (err) {
+      list.innerHTML = `<div class="chat-empty">${escapeHtml(err.message || "No se pudo cargar el chat.")}</div>`;
+    }
+  }
+
+  function closeChatModal() {
+    document.getElementById("chat-modal").hidden = true;
+    if (chatSource) { chatSource.close(); chatSource = null; }
+    sendChatTyping(false);
+  }
+
+  function sendChatTyping(typing) {
+    if (typing === chatIsTyping) return;
+    chatIsTyping = typing;
+    api("/chat/typing", { method: "POST", body: { typing } }).catch(() => {});
+  }
+
+  async function sendChatText() {
+    const input = document.getElementById("chat-text-input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    clearTimeout(chatTypingTimer);
+    sendChatTyping(false);
+    try {
+      const { message } = await api("/chat/messages", { method: "POST", body: { text } });
+      appendChatMessage(message); // optimista — no espera a que vuelva por SSE
+    } catch (err) {
+      alert(err.message || "No se pudo mandar el mensaje.");
+    }
+  }
+
+  async function sendChatMedia(file) {
+    const btn = document.getElementById("chat-attach-btn");
+    const original = btn.textContent;
+    btn.textContent = "⏳";
+    btn.disabled = true;
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(API_BASE + "/chat/messages/media", { method: "POST", credentials: "include", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "No se pudo subir el archivo.");
+      appendChatMessage(data.message);
+    } catch (err) {
+      alert(err.message || "No se pudo subir el archivo.");
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  }
+
+  function initChatModal() {
+    document.getElementById("chat-close").addEventListener("click", closeChatModal);
+    document.getElementById("chat-modal").addEventListener("click", (e) => {
+      if (e.target.id === "chat-modal") closeChatModal();
+    });
+
+    document.getElementById("chat-input-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      sendChatText();
+    });
+
+    document.getElementById("chat-text-input").addEventListener("input", () => {
+      sendChatTyping(true);
+      clearTimeout(chatTypingTimer);
+      chatTypingTimer = setTimeout(() => sendChatTyping(false), 2000);
+    });
+
+    document.getElementById("chat-attach-btn").addEventListener("click", () => {
+      document.getElementById("chat-file-input").click();
+    });
+    document.getElementById("chat-file-input").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (file) sendChatMedia(file);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────────────
 
@@ -1646,6 +1824,7 @@
     initCodesView();
     initEmailReminderModal();
     initEmailBanner();
+    initChatModal();
 
     try {
       const me = await api("/auth/me");
