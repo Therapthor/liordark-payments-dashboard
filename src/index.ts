@@ -123,8 +123,7 @@ const server = app.listen(env.PORT, () => {
   runGenerateExpiryNotifications();
   setInterval(runGenerateExpiryNotifications, EXPIRY_NOTIFY_INTERVAL_MS);
 
-  runEmailReminders();
-  setInterval(runEmailReminders, EMAIL_REMINDER_INTERVAL_MS);
+  scheduleEmailRemindersDaily();
 
   // Códigos apagado por ahora (el reenvío de Gmail resultó más complicado
   // de lo esperado) — no se arranca el poller ni la limpieza periódica.
@@ -170,14 +169,36 @@ function runGenerateExpiryNotifications(): void {
 }
 
 // Recordatorio de vencimiento por CORREO (3 días y 1 día antes, ver
-// expiry-reminder-email.job.ts) — cada hora alcanza, no es tan urgente
-// como la campanita y evita mandar de más si algo queda reintentando.
-const EMAIL_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
+// expiry-reminder-email.job.ts) — a propósito UNA vez al día, a las 8am
+// hora de Lima (no al arrancar ni cada tanto como los demás jobs): que
+// siempre le llegue al cliente a una hora decente, nunca de madrugada.
+const EMAIL_REMINDER_HOUR_LIMA   = 8;
+const EMAIL_REMINDER_MINUTE_LIMA = 0;
+const LIMA_OFFSET_HOURS = 5; // UTC-5 fijo, sin horario de verano (mismo criterio que limaTodayISO)
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function msUntilNextLimaTime(hour: number, minute: number): number {
+  const nowMs = Date.now();
+  const limaNowMs = nowMs - LIMA_OFFSET_HOURS * 60 * 60 * 1000;
+  const limaNow = new Date(limaNowMs);
+  let targetMs = Date.UTC(limaNow.getUTCFullYear(), limaNow.getUTCMonth(), limaNow.getUTCDate(), hour, minute, 0, 0);
+  if (targetMs <= limaNowMs) targetMs += ONE_DAY_MS;
+  return targetMs - limaNowMs;
+}
 
 function runEmailReminders(): void {
   runExpiryReminderEmails().catch((err: any) => {
     console.error("⚠️ Error mandando recordatorios de vencimiento por correo:", err?.message);
   });
+}
+
+function scheduleEmailRemindersDaily(): void {
+  const delay = msUntilNextLimaTime(EMAIL_REMINDER_HOUR_LIMA, EMAIL_REMINDER_MINUTE_LIMA);
+  console.log(`📧 Recordatorios de vencimiento por correo: próxima corrida en ${Math.round(delay / 60000)} min (8am Lima)`);
+  setTimeout(() => {
+    runEmailReminders();
+    setInterval(runEmailReminders, ONE_DAY_MS);
+  }, delay);
 }
 
 let isShuttingDown = false;
