@@ -86,10 +86,28 @@
 
   // ─── Conversación abierta ───────────────────────────────────
 
+  function fmtDateShort(iso) {
+    if (!iso) return "";
+    const [y, m, d] = String(iso).split("-");
+    return d && m && y ? `${d}/${m}/${y}` : iso;
+  }
+
   function bubbleHtml(m) {
     const who = m.sender === "admin" ? "from-admin" : "from-customer";
     let body;
-    if (m.type === "text") {
+    if (m.type === "account_request") {
+      body = `<span class="chat-quick-tag">📋 Pedido de cuenta</span>${escapeHtml(m.text)}`;
+    } else if (m.type === "account_reply") {
+      let acc = {};
+      try { acc = JSON.parse(m.text); } catch { /* texto raro — se ignora */ }
+      body = `
+        <div class="chat-account-card">
+          <div class="chat-account-card-title">📋 ${escapeHtml(acc.platform || "")}</div>
+          <div><b>Correo:</b> ${escapeHtml(acc.email || "")}</div>
+          <div><b>Contraseña:</b> ${escapeHtml(acc.password || "")}</div>
+          <div><b>Vence:</b> ${fmtDateShort(acc.expiresAt)}</div>
+        </div>`;
+    } else if (m.type === "text") {
       body = escapeHtml(m.text);
     } else if (m.mediaExpired) {
       body = `<span class="chat-admin-bubble-expired">${m.type === "image" ? "📷 Foto" : "🎥 Video"} (se autodestruyó)</span>`;
@@ -172,6 +190,23 @@
     try {
       const { message } = await api(`/${selectedChatId}/messages`, { method: "POST", body: JSON.stringify({ text }) });
       appendBubble(message); // optimista — no espera a que vuelva por SSE
+    } catch (err) {
+      alert(err.message || "No se pudo mandar el mensaje.");
+    }
+  }
+
+  // ─── Botones de respuesta rápida ────────────────────────────
+
+  const GREETING_TEXT = "¡Hola! 👋 Soy del equipo de soporte de Liordark. ¿En qué podemos ayudarte hoy?";
+  const ACCOUNT_REQUEST_TEXT = "Selecciona la cuenta con el problema 👇";
+
+  async function sendQuick(type, text) {
+    if (!selectedChatId) return;
+    try {
+      const { message } = await api(`/${selectedChatId}/messages`, {
+        method: "POST", body: JSON.stringify({ type, text }),
+      });
+      appendBubble(message);
     } catch (err) {
       alert(err.message || "No se pudo mandar el mensaje.");
     }
@@ -262,6 +297,8 @@
       e.target.value = "";
       if (file) sendMedia(file);
     });
+    document.getElementById("chat-quick-greeting").addEventListener("click", () => sendQuick("text", GREETING_TEXT));
+    document.getElementById("chat-quick-account").addEventListener("click", () => sendQuick("account_request", ACCOUNT_REQUEST_TEXT));
 
     loadChats();
     connectStream();

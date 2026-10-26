@@ -1062,3 +1062,43 @@ a { color: var(--btn); }
   border: 1.5px solid var(--border); font-family: inherit; font-size: 13.5px; color: var(--text);
 }
 #chat-text-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+
+/* ─── Chat: pedido de cuenta + tarjeta de respuesta ──────────── */
+.chat-quick-tag { display: block; font-size: 10.5px; font-weight: 700; opacity: .85; margin-bottom: 3px; }
+.chat-account-card { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 170px; }
+.chat-account-card-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; margin-bottom: 2px; }
+
+.chat-account-picker { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.chat-picker-loading, .chat-picker-empty { font-size: 12px; opacity: .85; }
+.chat-picker-option {
+  display: flex; align-items: center; gap: 6px; font-size: 12.5px;
+  background: rgba(255,255,255,.5); border-radius: 8px; padding: 6px 8px; cursor: pointer;
+}
+.from-admin .chat-picker-option { background: var(--chip-bg); }
+.chat-picker-send-btn {
+  margin-top: 2px; border: none; border-radius: 999px; padding: 7px 10px;
+  background: var(--btn); color: #fff; font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700; font-size: 12px; cursor: pointer;
+}
+.chat-picker-send-btn:disabled { opacity: .6; cursor: default; }
+
+/* ─── Numerito de no leídos en el botón "💬 Soporte" ─────────── */
+.nav-support-btn { position: relative; }
+.nav-support-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px; margin-left: 5px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1; vertical-align: 2px;
+}
+
+/* ─── Chat de soporte — adaptado a celular (pantalla completa, sin
+   bordes redondeados ni margen del backdrop, para aprovechar todo el
+   alto y que el teclado no lo achique de más) ─── */
+@media (max-width: 560px) {
+  #chat-modal { padding: 0; }
+  .chat-card { max-width: 100%; height: 100%; border-radius: 0; }
+  .chat-header { padding: 14px 14px; }
+  .chat-messages { padding: 12px; }
+  .chat-input-row { padding: 10px 12px; }
+  .chat-bubble { max-width: 86%; }
+}

@@ -250,6 +250,19 @@
       renderNotifications(notifications);
       document.getElementById("notif-dot").hidden = !unreadCount;
     } catch { /* no crítico */ }
+    loadChatUnread();
+  }
+
+  // Numerito en "💬 Soporte" — para que sepa que ya le respondieron sin
+  // tener que abrir el chat. Mismo ciclo de polling que la campanita.
+  async function loadChatUnread() {
+    if (!isSupportTestUser()) return;
+    try {
+      const { count } = await api("/chat/unread");
+      const badge = document.getElementById("chat-unread-badge");
+      badge.textContent = String(count);
+      badge.hidden = count === 0;
+    } catch { /* no crítico */ }
   }
 
   async function openNotifPanel() {
@@ -1653,12 +1666,31 @@
     } catch { return ""; }
   }
 
+  function fmtChatDateShort(iso) {
+    if (!iso) return "";
+    const [y, m, d] = String(iso).split("-");
+    return d && m && y ? `${d}/${m}/${y}` : iso;
+  }
+
   function chatBubbleHtml(m) {
     chatLastId = Math.max(chatLastId, m.id);
     chatRenderedIds.add(m.id);
     const who = m.sender === "customer" ? "from-customer" : "from-admin";
     let body;
-    if (m.type === "text") {
+    if (m.type === "account_request") {
+      body = `<span class="chat-quick-tag">📋 Pedido de cuenta</span>${escapeHtml(m.text)}` +
+        `<div class="chat-account-picker" id="chat-picker-${m.id}"></div>`;
+    } else if (m.type === "account_reply") {
+      let acc = {};
+      try { acc = JSON.parse(m.text); } catch { /* texto raro — se ignora */ }
+      body = `
+        <div class="chat-account-card">
+          <div class="chat-account-card-title">📋 ${escapeHtml(acc.platform || "")}</div>
+          <div><b>Correo:</b> ${escapeHtml(acc.email || "")}</div>
+          <div><b>Contraseña:</b> ${escapeHtml(acc.password || "")}</div>
+          <div><b>Vence:</b> ${fmtChatDateShort(acc.expiresAt)}</div>
+        </div>`;
+    } else if (m.type === "text") {
       body = escapeHtml(m.text);
     } else if (m.mediaExpired) {
       body = `<span class="chat-bubble-expired">${m.type === "image" ? "📷 Foto" : "🎥 Video"} (se autodestruyó)</span>`;
@@ -1673,6 +1705,51 @@
       </div>`;
   }
 
+  async function renderAccountPicker(messageId) {
+    const container = document.getElementById("chat-picker-" + messageId);
+    if (!container) return;
+    container.innerHTML = `<div class="chat-picker-loading">Cargando tus cuentas…</div>`;
+    try {
+      const { accounts } = await api("/dashboard");
+      if (!accounts || !accounts.length) {
+        container.innerHTML = `<div class="chat-picker-empty">No tienes cuentas activas todavía.</div>`;
+        return;
+      }
+      container.dataset.accounts = JSON.stringify(accounts.map(a => ({ platform: a.platform, email: a.email })));
+      container.innerHTML = accounts.map((a, i) => `
+        <label class="chat-picker-option">
+          <input type="radio" name="chat-picker-${messageId}" value="${i}">
+          <span>${escapeHtml(a.platform)} · ${escapeHtml(a.email)}</span>
+        </label>
+      `).join("") + `<button type="button" class="chat-picker-send-btn" data-msgid="${messageId}">Enviar cuenta</button>`;
+    } catch {
+      container.innerHTML = `<div class="chat-picker-empty">No se pudo cargar tus cuentas.</div>`;
+    }
+  }
+
+  async function sendAccountPickerReply(messageId) {
+    const container = document.getElementById("chat-picker-" + messageId);
+    const btn = container.querySelector(".chat-picker-send-btn");
+    const selected = container.querySelector("input[type=radio]:checked");
+    if (!selected) { alert("Elige una cuenta."); return; }
+
+    const accounts = JSON.parse(container.dataset.accounts || "[]");
+    const acc = accounts[Number(selected.value)];
+    btn.disabled = true;
+    btn.textContent = "Enviando…";
+    try {
+      const { message } = await api("/chat/messages", {
+        method: "POST", body: { type: "account_reply", platform: acc.platform, accountEmail: acc.email },
+      });
+      appendChatMessage(message);
+      container.innerHTML = `<div class="chat-picker-empty">✓ Cuenta enviada</div>`;
+    } catch (err) {
+      alert(err.message || "No se pudo enviar la cuenta.");
+      btn.disabled = false;
+      btn.textContent = "Enviar cuenta";
+    }
+  }
+
   function appendChatMessage(m) {
     if (chatRenderedIds.has(m.id)) return; // ya se mostró optimista al mandarlo — evita duplicar cuando llega por SSE
     chatRenderedIds.add(m.id);
@@ -1680,6 +1757,7 @@
     const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     el.insertAdjacentHTML("beforeend", chatBubbleHtml(m));
     if (wasAtBottom) el.scrollTop = el.scrollHeight;
+    if (m.type === "account_request") renderAccountPicker(m.id);
   }
 
   function showChatTyping(show) {
@@ -1723,8 +1801,10 @@
         ? messages.map(chatBubbleHtml).join("")
         : `<div class="chat-empty">Cuéntanos qué necesitas 🥭</div>`;
       list.scrollTop = list.scrollHeight;
+      messages.filter(m => m.type === "account_request").forEach(m => renderAccountPicker(m.id));
       showChatTyping(adminTyping);
       connectChatStream();
+      document.getElementById("chat-unread-badge").hidden = true; // ya se vio — markSeen corrió en el server
     } catch (err) {
       list.innerHTML = `<div class="chat-empty">${escapeHtml(err.message || "No se pudo cargar el chat.")}</div>`;
     }
@@ -1801,6 +1881,11 @@
       const file = e.target.files[0];
       e.target.value = "";
       if (file) sendChatMedia(file);
+    });
+
+    document.getElementById("chat-messages").addEventListener("click", (e) => {
+      const btn = e.target.closest(".chat-picker-send-btn");
+      if (btn) sendAccountPickerReply(btn.dataset.msgid);
     });
   }
 

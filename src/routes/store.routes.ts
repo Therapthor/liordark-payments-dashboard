@@ -33,6 +33,7 @@ import { createSupportTicket, listSupportTicketsForClient } from "../db/support-
 import { verifyRenewalToken } from "../utils/renewal-token.util";
 import {
   getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
+  countUnreadForCustomer,
 } from "../db/support-chat.repository";
 import { uploadChatMedia } from "../services/cloudinary.service";
 import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
@@ -636,14 +637,44 @@ router.get("/chat", (req, res) => {
   res.json({ chatId: chat.id, adminTyping: chat.adminTyping, messages: listMessages(chat.id) });
 });
 
+// GET /api/store/chat/unread — numerito en el botón "💬 Soporte" de la
+// barra, sin necesidad de abrir el chat (ver polling en app.js).
+router.get("/chat/unread", (req, res) => {
+  const who = requireChatTestUser(req, res);
+  if (!who) return;
+  res.json({ count: countUnreadForCustomer(who.phone) });
+});
+
 router.post("/chat/messages", (req, res) => {
   const who = requireChatTestUser(req, res);
   if (!who) return;
 
+  const type = req.body?.type === "account_reply" ? "account_reply" : "text";
+  const chat = getOrCreateOpenChatForPhone(who.phone);
+
+  if (type === "account_reply") {
+    // Nunca confía en lo que mande el navegador para correo/contraseña —
+    // se reconfirma la cuenta real del cliente, mismo criterio que los
+    // reportes de soporte de arriba (getActiveAccountForClient).
+    const platform     = String(req.body?.platform ?? "").trim();
+    const accountEmail = String(req.body?.accountEmail ?? "").trim();
+    if (!platform || !accountEmail) return res.status(400).json({ message: "Falta elegir la cuenta." });
+
+    const account = getActiveAccountForClient(who.phone, platform, accountEmail);
+    if (!account) return res.status(404).json({ message: "Esa cuenta no está activa en tu perfil." });
+
+    const payload = JSON.stringify({
+      platform: account.platform, email: account.email, password: account.password,
+      expiresAt: account.expiresAt,
+    });
+    const message = addMessage(chat.id, "customer", { type: "account_reply", text: payload });
+    emitChatEvent({ type: "message", chatId: chat.id, message });
+    return res.status(201).json({ message });
+  }
+
   const text = String(req.body?.text ?? "").trim();
   if (!text) return res.status(400).json({ message: "Escribe un mensaje." });
 
-  const chat = getOrCreateOpenChatForPhone(who.phone);
   const message = addMessage(chat.id, "customer", { type: "text", text });
   emitChatEvent({ type: "message", chatId: chat.id, message });
   res.status(201).json({ message });

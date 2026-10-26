@@ -8,7 +8,11 @@ import { normalizePeruPhone } from "../utils/phone.util";
 // ─────────────────────────────────────────────────────────────
 
 export type ChatSender = "customer" | "admin";
-export type ChatMessageType = "text" | "image" | "video";
+// account_request: el admin pide (botón "Solicitar cuenta") que el cliente
+// elija cuál de sus cuentas tiene el problema — el cliente ve un selector
+// inline en esa burbuja. account_reply: lo que el cliente mandó de vuelta,
+// ya verificado contra SU cuenta real (ver /chat/messages en store.routes.ts).
+export type ChatMessageType = "text" | "image" | "video" | "account_request" | "account_reply";
 
 export type ChatMessage = {
   id:               number;
@@ -151,6 +155,19 @@ export function setTyping(chatId: number, sender: ChatSender, typing: boolean): 
 export function markSeen(chatId: number, by: ChatSender): void {
   const col = by === "admin" ? "admin_seen_at" : "customer_seen_at";
   db.prepare(`UPDATE support_chats SET ${col} = datetime('now') WHERE id = ?`).run(chatId);
+}
+
+/** Para el numerito en el botón "💬 Soporte" de la barra — así el cliente
+ *  sabe que ya le respondieron sin tener que abrir el chat. */
+export function countUnreadForCustomer(phone: string): number {
+  const chat = findChatByPhone(phone);
+  if (!chat) return 0;
+  const row = db.prepare(`SELECT customer_seen_at AS seenAt FROM support_chats WHERE id = ?`).get(chat.id) as { seenAt: string | null };
+  const unread = db.prepare(`
+    SELECT COUNT(*) AS n FROM support_chat_messages
+    WHERE chat_id = ? AND sender = 'admin' AND (? IS NULL OR created_at > ?)
+  `).get(chat.id, row.seenAt, row.seenAt) as { n: number };
+  return unread.n;
 }
 
 export type ChatMediaRef = { publicId: string; resourceType: string };

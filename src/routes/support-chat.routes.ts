@@ -33,15 +33,20 @@ router.get("/:id/messages", (req, res) => {
   res.json({ chat, messages: listMessages(chatId) });
 });
 
+// type: "text" (normal, o el botón rápido "👋 Saludo") o "account_request"
+// (botón "📋 Solicitar cuenta" — el cliente ve un selector de sus cuentas
+// en esa burbuja). Nunca "account_reply" — esa solo la manda el cliente,
+// verificada contra su cuenta real (ver store.routes.ts).
 router.post("/:id/messages", (req, res) => {
   const chatId = Number(req.params.id);
   const chat = getChatById(chatId);
   if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
 
+  const type = req.body?.type === "account_request" ? "account_request" : "text";
   const text = String(req.body?.text ?? "").trim();
   if (!text) return res.status(400).json({ message: "Escribe un mensaje." });
 
-  const message = addMessage(chatId, "admin", { type: "text", text });
+  const message = addMessage(chatId, "admin", { type, text });
   emitChatEvent({ type: "message", chatId, message });
   res.status(201).json({ message });
 });

@@ -1122,3 +1122,23 @@ button, input {
   border: 1px solid var(--border); font: inherit; font-size: 13.5px; color: var(--text-primary);
 }
 #chat-admin-text-input:focus { outline: none; border-color: var(--accent); }
+
+/* ─── Chat admin — botones rápidos + tarjeta de cuenta reportada ─── */
+.chat-admin-quick-row { flex-shrink: 0; display: flex; gap: 8px; padding: 8px 14px 0; flex-wrap: wrap; }
+.chat-admin-quick-btn {
+  background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.chat-admin-quick-btn:hover { background: var(--surface); border-color: var(--accent); }
+
+.chat-quick-tag { display: block; font-size: 11px; font-weight: 700; color: var(--accent-dim); margin-bottom: 4px; }
+.chat-account-card { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 180px; }
+.chat-account-card-title { font-weight: 700; margin-bottom: 2px; }
+
+/* ─── Chat admin — celular: lista arriba, conversación abajo ─── */
+@media (max-width: 760px) {
+  .chat-admin-layout { flex-direction: column; height: auto; }
+  .chat-admin-list { width: 100%; max-height: 160px; }
+  .chat-admin-conversation { height: 70vh; min-height: 360px; }
+  .chat-admin-quick-row { flex-wrap: wrap; }
+}
