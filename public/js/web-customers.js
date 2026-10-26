@@ -269,8 +269,9 @@
 
   async function loadStats() {
     try {
-      const { totalCustomers, registrationsThisMonth } = await api("/stats");
+      const { totalCustomers, customersWithEmail, registrationsThisMonth } = await api("/stats");
       document.getElementById("web-customers-total").textContent = totalCustomers;
+      document.getElementById("web-customers-with-email").textContent = customersWithEmail;
 
       const canvas = document.getElementById("chart-web-customers");
       if (!canvas || typeof Chart === "undefined") return;

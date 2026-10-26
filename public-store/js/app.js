@@ -161,6 +161,7 @@
       // Códigos — apagado por ahora (el reenvío de Gmail resultó más
       // complicado de lo esperado); el botón queda oculto para todos.
     } catch { /* no crítico — el link de soporte queda sin el celular prellenado */ }
+    updateDashboardNotifyBtn();
     updateEmailBanner();
     startNotifPolling();
     await loadCatalog();
@@ -174,6 +175,7 @@
     currentPhone = "";
     customerHasEmail = false;
     setNavMode(false);
+    updateDashboardNotifyBtn();
     updateEmailBanner();
     switchPage("catalog");
     await loadCatalog();
@@ -1135,8 +1137,16 @@
     document.getElementById("email-reminder-modal").hidden = false;
   }
 
+  // Botón grande (sin correo) vs. fila chica "✓ Recordatorios activados"
+  // + "Cambiar correo" (ya lo tiene) — nunca los dos a la vez.
+  function updateDashboardNotifyBtn() {
+    document.getElementById("dashboard-notify-btn").hidden = customerHasEmail;
+    document.getElementById("dashboard-notify-active").hidden = !customerHasEmail;
+  }
+
   function initEmailReminderModal() {
     document.getElementById("dashboard-notify-btn").addEventListener("click", openEmailReminderModal);
+    document.getElementById("dashboard-notify-change-btn").addEventListener("click", openEmailReminderModal);
     document.getElementById("email-reminder-close").addEventListener("click", closeEmailReminderModal);
     document.getElementById("email-reminder-modal").addEventListener("click", (e) => {
       if (e.target.id === "email-reminder-modal") closeEmailReminderModal();
@@ -1151,6 +1161,7 @@
       try {
         await api("/account/email", { method: "POST", body: { email } });
         customerHasEmail = true;
+        updateDashboardNotifyBtn();
         closeEmailReminderModal();
         updateEmailBanner();
         showEmailToast("Te avisaremos a " + email + " antes de que venzan.");

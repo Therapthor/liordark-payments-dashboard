@@ -843,6 +843,15 @@ a { color: var(--btn); }
   font-weight: 700; font-size: 13px; cursor: pointer;
 }
 .dashboard-notify-btn:hover { filter: brightness(0.98); }
+.dashboard-notify-active {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 12.5px;
+}
+.dashboard-notify-check { color: var(--ok); font-weight: 700; }
+.dashboard-notify-change-link {
+  background: none; border: none; padding: 0; color: var(--muted); font-size: 11.5px;
+  text-decoration: underline; cursor: pointer; font-family: inherit;
+}
+.dashboard-notify-change-link:hover { color: var(--btn); }
 .email-reminder-icon { font-size: 22px; margin-bottom: 4px; }
 .email-reminder-label { display: block; font-size: 11.5px; color: var(--muted); margin: 14px 0 4px; }
 #email-reminder-input {

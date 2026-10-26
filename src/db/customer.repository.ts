@@ -135,6 +135,13 @@ export function setCustomerEmail(id: number, email: string): Customer | null {
   return findCustomerById(id);
 }
 
+/** Cuántos ya pusieron su correo (banner/botón de recordatorio) — panel
+ *  "Clientes", para seguir qué tanto se está adoptando el aviso por correo. */
+export function countCustomersWithEmail(): number {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE email != ''`).get() as { n: number };
+  return row.n;
+}
+
 export function countAllCustomers(): number {
   const row = db.prepare(`SELECT COUNT(*) AS n FROM customers`).get() as { n: number };
   return row.n;

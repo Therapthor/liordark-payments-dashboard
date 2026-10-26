@@ -7,6 +7,7 @@ import {
   findCustomerById,
   setCustomerPassword,
   countAllCustomers,
+  countCustomersWithEmail,
   dailyRegistrationsThisMonth,
 } from "../db/customer.repository";
 import { listAccessClientStats } from "../db/access.repository";
@@ -85,7 +86,11 @@ router.get("/stats", (_req, res) => {
     series.push({ date, count: byDay.get(date) ?? 0 });
   }
 
-  res.json({ totalCustomers: countAllCustomers(), registrationsThisMonth: series });
+  res.json({
+    totalCustomers: countAllCustomers(),
+    customersWithEmail: countCustomersWithEmail(),
+    registrationsThisMonth: series,
+  });
 });
 
 router.post("/:id/suspend", (req, res) => {
