@@ -47,6 +47,7 @@
     const div = document.createElement("div");
     div.className = "web-customer-row";
     div.dataset.id = c.id === null ? "" : c.id;
+    div.dataset.email = c.email || "";
 
     const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
 
@@ -72,6 +73,12 @@
       ? `<span class="web-customer-status web-customer-status-suspended">⏸ Suspendida hasta ${formatDate(c.suspendedUntil)}</span>`
       : `<span class="web-customer-status">✅ Cuenta creada</span>`;
 
+    const emailArea = c.email
+      ? `<span class="web-customer-email">✉️ ${escapeHtml(c.email)}</span>
+         <button class="btn-secondary btn-sm web-customer-email-btn" type="button">✏️ Cambiar correo</button>`
+      : `<span class="web-customer-email web-customer-email-none">Sin correo de aviso</span>
+         <button class="btn-secondary btn-sm web-customer-email-btn" type="button">✉️ Agregar correo</button>`;
+
     // Cuentas registradas antes de guardar password_plain no tienen
     // contraseña visible (quedó solo como hash) — se les puede generar
     // una nueva en vez de mostrar un envío vacío.
@@ -92,6 +99,7 @@
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
       <div class="web-customer-actions">
         ${passwordArea}
+        ${emailArea}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
         <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
       </div>`;
@@ -118,6 +126,18 @@
     }
   }
 
+  async function setEmail(id, currentEmail) {
+    const email = prompt("Correo de aviso de vencimiento para este cliente:", currentEmail || "");
+    if (email === null) return; // canceló
+    if (!email.trim()) return alert("Escribe un correo.");
+    try {
+      await api(`/${id}/email`, { method: "POST", body: JSON.stringify({ email: email.trim() }) });
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
   async function ban(id) {
     if (!confirm("Esto BORRA la cuenta y su contraseña de este panel. No se puede deshacer. ¿Continuar?")) return;
     if (!confirm("Confirmá de nuevo: ¿estás seguro de banear y borrar esta cuenta?")) return;
@@ -136,6 +156,7 @@
       const id = Number(row.dataset.id);
       if (e.target.closest(".web-customer-suspend-btn")) suspend(id, row);
       if (e.target.closest(".web-customer-reset-btn")) resetPassword(id);
+      if (e.target.closest(".web-customer-email-btn")) setEmail(id, row.dataset.email);
       if (e.target.closest(".web-customer-ban-btn")) ban(id);
     });
   }

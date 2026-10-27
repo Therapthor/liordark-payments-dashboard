@@ -6,6 +6,7 @@ import {
   isCustomerSuspended,
   findCustomerById,
   setCustomerPassword,
+  setCustomerEmail,
   countAllCustomers,
   countCustomersWithEmail,
   dailyRegistrationsThisMonth,
@@ -49,6 +50,7 @@ router.get("/", (_req, res) => {
       phone:          c.phone,
       isGuest:        c.isGuest,
       password:       c.passwordPlain,
+      email:          c.email,
       purchaseCount:  stat?.purchaseCount ?? 0,
       suspended:      isCustomerSuspended(c),
       suspendedUntil: c.suspendedUntil,
@@ -115,6 +117,22 @@ router.post("/:id/reset-password", async (req, res) => {
   const passwordHash = await hashPassword(newPassword);
   setCustomerPassword(id, passwordHash, newPassword);
   res.json({ ok: true, password: newPassword });
+});
+
+// Permite al admin poner/corregir el correo de aviso de vencimiento de un
+// cliente a mano — útil para recuperar casos puntuales (ej. el cliente lo
+// dio por WhatsApp) sin depender de que él mismo vuelva a entrar al banner.
+router.post("/:id/email", (req, res) => {
+  const id = Number(req.params.id);
+  if (!findCustomerById(id)) {
+    return res.status(404).json({ message: "Cliente no encontrado." });
+  }
+  const email = String(req.body?.email ?? "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: "Ingresa un correo válido." });
+  }
+  const updated = setCustomerEmail(id, email);
+  res.json({ ok: true, email: updated?.email ?? email });
 });
 
 router.delete("/:id", (req, res) => {

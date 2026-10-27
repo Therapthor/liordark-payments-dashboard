@@ -415,6 +415,8 @@ button, input {
   background: var(--surface-raised); padding: 4px 10px; border-radius: 8px; letter-spacing: .5px;
 }
 .web-customer-password-none { font-family: var(--font); font-weight: 400; font-style: italic; color: var(--text-muted); background: none; padding: 0; }
+.web-customer-email { font-size: 13px; color: var(--text); }
+.web-customer-email-none { font-style: italic; color: var(--text-muted); }
 
 /* ─────────────────────────────────────────────────────────────
    PEDIDOS — pendientes / aprobados
