@@ -383,6 +383,19 @@ a { color: var(--btn); }
 }
 .detail-canva-email input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
 
+/* Correo/contraseña para activar Canva/Gemini/YouTube dentro de un combo armado */
+.build-combo-manual-fields {
+  margin: 4px 0 2px; padding: 12px 14px; background: var(--chip-bg);
+  border-radius: 12px; text-align: left; display: flex; flex-direction: column; gap: 10px;
+}
+.build-combo-manual-fields label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.build-combo-manual-fields input {
+  width: 100%; padding: 11px 13px; border-radius: 11px;
+  border: 1px solid var(--border); background: #fcfcfc; color: var(--text);
+  font-size: 14px; font-family: inherit; box-sizing: border-box;
+}
+.build-combo-manual-fields input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+
 /* "Avisarme antes de vencer" en el detalle de producto — switch apagado
    por defecto, el campo de correo solo aparece si lo prenden. */
 .detail-notify { margin-top: 14px; text-align: left; background: var(--chip-bg); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }

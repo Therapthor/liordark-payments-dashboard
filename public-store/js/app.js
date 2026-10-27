@@ -716,12 +716,25 @@
     }
 
     buyBtn.disabled = items.length < MIN_CUSTOM_COMBO_ITEMS;
+
+    // Canva / Gemini AI Pro (y YouTube Premium, que además pide contraseña)
+    // se activan a mano con el correo del cliente — se pide una sola vez
+    // para todo el combo, aunque incluya más de una de estas plataformas.
+    const manualItems = items.filter(p => isManualActivationPlatform(p.platform));
+    document.getElementById("build-combo-manual-fields").hidden = manualItems.length === 0;
+    document.getElementById("build-combo-manual-platforms").textContent =
+      manualItems.map(p => p.title).join(" y ");
+    document.getElementById("build-combo-manual-password-wrap").hidden =
+      !manualItems.some(p => requiresPasswordPlatform(p.platform));
+
     renderComboBuilderCatalog();
   }
 
   function openComboBuilder() {
     comboBuilderCart = [];
     document.getElementById("build-combo-error").hidden = true;
+    document.getElementById("build-combo-manual-email").value = "";
+    document.getElementById("build-combo-manual-password").value = "";
     renderComboBuilderCart();
     document.getElementById("build-combo-modal").hidden = false;
   }
@@ -730,7 +743,7 @@
     document.getElementById("build-combo-modal").hidden = true;
   }
 
-  async function startCustomComboCheckout(platforms) {
+  async function startCustomComboCheckout(platforms, clientEmail, clientPassword) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -738,7 +751,10 @@
     let beforeAccounts = cachedDashboard;
     try {
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
-      const order = await api("/checkout", { method: "POST", body: { customComboPlatforms: platforms } });
+      const order = await api("/checkout", {
+        method: "POST",
+        body: { customComboPlatforms: platforms, clientEmail, clientPassword },
+      });
 
       await ensureYapeInfo();
       document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
@@ -786,9 +802,32 @@
 
     document.getElementById("build-combo-buy-btn").addEventListener("click", () => {
       if (comboBuilderCart.length < MIN_CUSTOM_COMBO_ITEMS) return;
+      const errorEl = document.getElementById("build-combo-error");
+      errorEl.hidden = true;
+
+      const { items } = comboBuilderSelection();
+      const manualItems = items.filter(p => isManualActivationPlatform(p.platform));
+      let clientEmail, clientPassword;
+      if (manualItems.length > 0) {
+        clientEmail = document.getElementById("build-combo-manual-email").value.trim();
+        if (!isValidEmail(clientEmail)) {
+          errorEl.textContent = "Escribe un correo válido para activar " + manualItems.map(p => p.title).join(" y ") + ".";
+          errorEl.hidden = false;
+          return;
+        }
+        if (manualItems.some(p => requiresPasswordPlatform(p.platform))) {
+          clientPassword = document.getElementById("build-combo-manual-password").value;
+          if (!clientPassword.trim()) {
+            errorEl.textContent = "Escribe la contraseña de tu cuenta de YouTube.";
+            errorEl.hidden = false;
+            return;
+          }
+        }
+      }
+
       const platforms = [...comboBuilderCart];
       closeComboBuilder();
-      startCustomComboCheckout(platforms);
+      startCustomComboCheckout(platforms, clientEmail, clientPassword);
     });
   }
 

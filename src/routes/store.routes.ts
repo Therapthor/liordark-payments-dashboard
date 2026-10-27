@@ -509,6 +509,15 @@ router.post("/checkout", async (req, res) => {
     if (customComboPlatforms.length < MIN_CUSTOM_COMBO_ITEMS) {
       return res.status(400).json({ message: `Un combo armado necesita al menos ${MIN_CUSTOM_COMBO_ITEMS} productos.` });
     }
+    // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM dentro de un combo armado —
+    // mismo correo (y, si incluye YOUTUBE, contraseña) que se les pide en
+    // la compra suelta, acá para todo el combo de una vez.
+    if (customComboPlatforms.some(isManualActivationPlatform) && !clientEmail) {
+      return res.status(400).json({ message: "Falta el correo para activar las plataformas de tu combo." });
+    }
+    if (customComboPlatforms.some(requiresPasswordPlatform) && !clientPassword) {
+      return res.status(400).json({ message: "Falta la contraseña para activar YouTube Premium en tu combo." });
+    }
     const catalog = listCatalogProducts(true);
     let sum = 0;
     for (const plat of customComboPlatforms) {

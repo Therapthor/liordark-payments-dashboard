@@ -283,6 +283,19 @@
         <h3>Tu combo</h3>
         <div id="build-combo-cart-list" class="build-combo-cart-list"></div>
         <p class="muted small" id="build-combo-cart-empty">Todavía no agregaste productos.</p>
+
+        <!-- Canva / Gemini AI Pro (y YouTube Premium con su contraseña) se
+             activan a mano con el correo del cliente — solo aparece si el
+             combo armado incluye alguna de esas plataformas. -->
+        <div class="build-combo-manual-fields" id="build-combo-manual-fields" hidden>
+          <label for="build-combo-manual-email">Tu correo (para activar <span id="build-combo-manual-platforms"></span>)</label>
+          <input type="email" id="build-combo-manual-email" placeholder="tu@correo.com" autocomplete="email">
+          <div id="build-combo-manual-password-wrap" hidden>
+            <label for="build-combo-manual-password">Contraseña de tu cuenta de YouTube</label>
+            <input type="password" id="build-combo-manual-password" autocomplete="current-password">
+          </div>
+        </div>
+
         <div class="build-combo-summary">
           <span class="build-combo-discount-label" id="build-combo-discount-label"></span>
           <span class="build-combo-total" id="build-combo-total"></span>
