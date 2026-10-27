@@ -1022,7 +1022,7 @@ a { color: var(--btn); }
 
 .build-combo-head {
   background: linear-gradient(135deg, var(--accent) 0%, #ff9d3d 55%, var(--accent2) 100%);
-  padding: 24px 22px 30px; position: relative; overflow: hidden; flex-shrink: 0;
+  padding: 24px 22px 20px; position: relative; overflow: hidden; flex-shrink: 0;
 }
 .build-combo-head::after {
   content: "🥭"; position: absolute; font-size: 84px; opacity: .18;
@@ -1045,7 +1045,7 @@ a { color: var(--btn); }
 
 .build-combo-catalog {
   display: flex; flex-direction: column; gap: 9px;
-  margin: -34px 0 16px; padding: 2px 2px 0;
+  margin: 0 0 16px; padding: 2px 2px 0;
 }
 .build-combo-item {
   display: flex; align-items: center; gap: 12px;
