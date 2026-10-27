@@ -590,8 +590,23 @@
   function buildComboPromptHtml() {
     return `
       <div class="build-combo-prompt">
-        <p class="build-combo-prompt-text">¿Quieres armar tu combo? ¡Hazlo!</p>
-        <button class="btn-primary" id="build-combo-btn" type="button">🛒 Armar combo</button>
+        <div class="build-combo-prompt-deco1"></div>
+        <div class="build-combo-prompt-deco2"></div>
+        <div class="build-combo-prompt-icons">
+          <span class="build-combo-prompt-icon build-combo-prompt-icon--netflix">N</span>
+          <span class="build-combo-prompt-icon build-combo-prompt-icon--disney">D+</span>
+          <span class="build-combo-prompt-icon build-combo-prompt-icon--max">M</span>
+        </div>
+        <span class="build-combo-prompt-arrow">→</span>
+        <div class="build-combo-prompt-badge">
+          <span class="build-combo-prompt-badge-top">Hasta</span>
+          <span class="build-combo-prompt-badge-bottom">-15%</span>
+        </div>
+        <div class="build-combo-prompt-text-wrap">
+          <p class="build-combo-prompt-title">Junta tus plataformas, paga menos</p>
+          <p class="build-combo-prompt-desc">Elige 2 o más del catálogo y ahorra hasta 15% de descuento.</p>
+        </div>
+        <button class="build-combo-prompt-btn" id="build-combo-btn" type="button">🛒 Armar combo</button>
       </div>
     `;
   }
