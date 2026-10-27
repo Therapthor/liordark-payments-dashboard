@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import {
   listChatsForAdmin, getChatById, listMessages, addMessage, setTyping, markSeen, closeChat, setChatTag,
-  isValidStickerId, type ChatMessage,
+  isValidStickerId,
 } from "../db/support-chat.repository";
 import { uploadChatMedia, deleteChatMedia } from "../services/cloudinary.service";
 import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
@@ -110,25 +110,16 @@ router.post("/:id/tag", (req, res) => {
   res.json({ ok: true, tag });
 });
 
-const CLOSE_FAREWELL_TEXT =
-  "🥭 Esperamos que haya sido de tu agrado la atención. Cualquier duda o pregunta, no dudes en hacérnosla — " +
-  "estamos felices de poder ayudarte 💛😊";
-
 // Cierra Y BORRA todo — mensajes y medios de Cloudinary, a propósito
-// (pedido explícito del negocio, para no acumular espacio). Antes de
-// borrar, manda una despedida — no se guarda (no tiene sentido, se borra
-// en el siguiente paso), solo se emite para que el cliente, si tiene el
-// chat abierto, la vea llegar antes del aviso de "chat cerrado".
+// (pedido explícito del negocio, para no acumular espacio). Ya NO manda
+// despedida automática acá — eso duplicaba el mensaje cuando el admin ya
+// la había mandado con el botón rápido "🙏 Despedida" antes de cerrar
+// (y el sintético de acá traía un formato de fecha que el cliente
+// mostraba como "Invalid Date"). El admin la manda aparte si quiere.
 router.post("/:id/close", async (req, res) => {
   const chatId = Number(req.params.id);
   const chat = getChatById(chatId);
   if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
-
-  const farewell: ChatMessage = {
-    id: Date.now(), chatId, sender: "admin", type: "text",
-    text: CLOSE_FAREWELL_TEXT, mediaUrl: "", mediaExpired: false, createdAt: new Date().toISOString(),
-  };
-  emitChatEvent({ type: "message", chatId, message: farewell });
 
   const media = closeChat(chatId);
   await Promise.all(media.map(m => deleteChatMedia(m.publicId, m.resourceType)));
