@@ -244,7 +244,12 @@
 
   // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
   // Renovaciones); "Accesos" es un botón directo aparte.
+  const ADMIN_VIEW_KEY = "ldp_admin_view";
+  const VALID_VIEWS = ["resumen", "access", "wholesalers", "web-customers", "history", "renewals", "config", "support-chat"];
+
   function switchView(view) {
+    try { localStorage.setItem(ADMIN_VIEW_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
+
     document.getElementById("view-live").hidden          = view !== "resumen";
     document.getElementById("view-access").hidden        = view !== "access";
     document.getElementById("view-wholesalers").hidden   = view !== "wholesalers";
@@ -274,12 +279,24 @@
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "support-chat" && window.LiordarkSupportChat) window.LiordarkSupportChat.load();
-    if (view === "config") switchConfigSection("catalog");
+    if (view === "config") {
+      let savedSection = "catalog";
+      try {
+        const stored = localStorage.getItem(ADMIN_CONFIG_SECTION_KEY);
+        if (stored && VALID_CONFIG_SECTIONS.includes(stored)) savedSection = stored;
+      } catch { /* localStorage bloqueado */ }
+      switchConfigSection(savedSection);
+    }
   }
 
   // "Configuración" tiene su propio sub-menú (Catálogo / Métodos de pago /
   // Proveedores) — se maneja aparte del menú principal de arriba.
+  const ADMIN_CONFIG_SECTION_KEY = "ldp_admin_config_section";
+  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers"];
+
   function switchConfigSection(section) {
+    try { localStorage.setItem(ADMIN_CONFIG_SECTION_KEY, section); } catch { /* localStorage bloqueado */ }
+
     document.getElementById("config-section-catalog").hidden         = section !== "catalog";
     document.getElementById("config-section-payment-methods").hidden = section !== "payment-methods";
     document.getElementById("config-section-providers").hidden       = section !== "providers";
@@ -1484,6 +1501,15 @@
 
     initTabs();
     initConfigSubnav();
+
+    // Se queda en la sección donde estaba al actualizar la página, en vez
+    // de volver siempre a "Resumen" — el dato se recarga igual (cada vista
+    // pide lo suyo al entrar), solo no se pierde DÓNDE estaba parado.
+    try {
+      const savedView = localStorage.getItem(ADMIN_VIEW_KEY);
+      if (savedView && VALID_VIEWS.includes(savedView) && savedView !== "resumen") switchView(savedView);
+    } catch { /* localStorage bloqueado — se queda en Resumen, default normal */ }
+
     initSoundToggle();
     initMoneyToggle();
     initCodeSearch();

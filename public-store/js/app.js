@@ -198,6 +198,15 @@
     startNotifPolling();
     initVisibilityResync();
     await loadCatalog();
+
+    // Se queda en la página donde estaba (Catálogo/Mis cuentas) al
+    // actualizar, en vez de volver siempre al catálogo — los datos se
+    // recargan igual (loadDashboardAccounts/loadCodesAccounts arriba),
+    // solo no se pierde dónde estaba parado.
+    try {
+      const savedPage = localStorage.getItem(STORE_PAGE_KEY);
+      if (savedPage && VALID_STORE_PAGES.includes(savedPage) && savedPage !== "catalog") switchPage(savedPage);
+    } catch { /* localStorage bloqueado — se queda en Catálogo, default normal */ }
   }
 
   // Si el celular bloquea la pantalla o cambia de pestaña, el navegador
@@ -427,7 +436,12 @@
     });
   }
 
+  const STORE_PAGE_KEY = "ldp_store_page";
+  const VALID_STORE_PAGES = ["catalog", "dashboard", "codes"];
+
   function switchPage(view) {
+    try { localStorage.setItem(STORE_PAGE_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
+
     document.querySelectorAll(".nav-btn[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === view));
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
