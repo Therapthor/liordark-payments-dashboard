@@ -131,43 +131,20 @@ db.exec(`DROP TABLE IF EXISTS provider_subscriptions`);
   }
 }
 
-// customers: dejó de usarse el correo (login/registro es solo con celular).
-// Se reconstruye la tabla con "phone" como identificador único — antes el
-// único era "email", así que podían existir dos cuentas con el mismo
-// celular. Si eso pasa acá, se conserva la primera y se descartan las
-// demás (fueron pruebas de los primeros días de la tienda).
-{
-  const customerCols = db.prepare(`PRAGMA table_info(customers)`).all() as { name: string }[];
-  if (customerCols.some(c => c.name === "email")) {
-    const oldCustomers = db.prepare(`SELECT * FROM customers ORDER BY id`).all() as any[];
-
-    db.exec(`DROP TABLE customers`);
-    db.exec(`
-      CREATE TABLE customers (
-        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-        phone               TEXT    NOT NULL UNIQUE,
-        password_hash       TEXT    NOT NULL,
-        is_guest            INTEGER NOT NULL DEFAULT 0,
-        generated_password  TEXT    NOT NULL DEFAULT '',
-        created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
-      );
-    `);
-
-    const insertCustomer = db.prepare(`
-      INSERT OR IGNORE INTO customers (id, phone, password_hash, created_at)
-      VALUES (?, ?, ?, ?)
-    `);
-    const migrate = db.transaction((rows: any[]) => {
-      for (const r of rows) {
-        if (!r.phone) continue; // sin celular no hay forma de loguearlo — eran pruebas
-        insertCustomer.run(r.id, r.phone, r.password_hash, r.created_at);
-      }
-    });
-    migrate(oldCustomers);
-
-    console.log(`🗄️  Migración: customers pasó a usar el celular como identificador (${oldCustomers.length} cuenta(s) revisadas)`);
-  }
-}
+// customers: dejó de usarse el correo como identificador (login/registro
+// es solo con celular) — migración de una sola vez, de cuando la tabla
+// todavía tenía "email" como columna ÚNICA/identificador viejo. YA SE
+// EJECUTÓ en su momento y quedó retirada del todo: el guard de abajo
+// comparaba "¿existe una columna llamada email?" para decidir si corría,
+// pero como el correo de aviso de vencimiento (feature nueva, sin
+// relación con el login viejo) también se llama "email" y vive en esta
+// misma tabla, el guard volvía a dar true en CADA reinicio del servidor
+// y volvía a *reconstruir* la tabla entera desde cero — borrando correo,
+// contraseña en texto plano, is_guest, suspensión y bloqueo por intentos
+// fallidos de TODOS los clientes, cada vez que pm2 reiniciaba el proceso.
+// Si ves este comentario y estás por reactivar algo parecido: nunca
+// reutilices el nombre de una columna futura como condición de una
+// migración de una sola vez ya completada.
 ensureColumn("customers", "is_guest", "is_guest INTEGER NOT NULL DEFAULT 0");
 ensureColumn("customers", "suspended_until", "suspended_until TEXT");
 
