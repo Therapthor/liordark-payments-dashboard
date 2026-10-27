@@ -1007,7 +1007,18 @@ a { color: var(--btn); }
 
 /* ─── "Arma tu combo" — degradé de marca, cards glass, progreso de dcto ── */
 .build-combo-card { padding: 0; overflow: hidden; }
-.build-combo-card.modal-card--wide { overflow-y: hidden; display: flex; flex-direction: column; max-height: 88vh; }
+.build-combo-card.modal-card--wide { overflow-y: hidden; display: flex; flex-direction: column; max-height: 92vh; height: 92vh; }
+
+/* Celular (donde más se compra) — hoja casi de pantalla completa pegada
+   abajo, en vez de una tarjeta chica centrada con espacio vacío alrededor. */
+@media (max-width: 480px) {
+  #build-combo-modal.modal-backdrop { padding: 0; align-items: flex-end; }
+  .build-combo-card.modal-card--wide {
+    max-width: 100%; width: 100%; max-height: 94vh; height: 94vh;
+    border-radius: 22px 22px 0 0; animation: riseInSheet .22s ease both;
+  }
+}
+@keyframes riseInSheet { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 .build-combo-head {
   background: linear-gradient(135deg, var(--accent) 0%, #ff9d3d 55%, var(--accent2) 100%);
@@ -1030,11 +1041,11 @@ a { color: var(--btn); }
   font-size: 10px; color: rgba(255,255,255,.85); font-weight: 700;
 }
 
-.build-combo-body { padding: 18px 20px 20px; overflow-y: auto; }
+.build-combo-body { padding: 18px 20px 20px; overflow-y: auto; flex: 1; min-height: 0; }
 
 .build-combo-catalog {
-  display: flex; flex-direction: column; gap: 9px; max-height: 240px;
-  overflow-y: auto; margin: -34px 0 16px; padding: 2px 2px 0;
+  display: flex; flex-direction: column; gap: 9px;
+  margin: -34px 0 16px; padding: 2px 2px 0;
 }
 .build-combo-item {
   display: flex; align-items: center; gap: 12px;
