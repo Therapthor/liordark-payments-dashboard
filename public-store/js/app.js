@@ -287,14 +287,45 @@
     } catch { /* no crítico */ }
   }
 
+  // Sonido de "soporte ya te contestó" — así el cliente se entera aunque
+  // no tenga el chat abierto en ese momento (ver loadChatUnread), y
+  // también si lo tiene abierto y le llega en vivo por SSE.
+  let chatAudioCtx = null;
+  function playChatReplyChime() {
+    try {
+      chatAudioCtx = chatAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const now = chatAudioCtx.currentTime;
+      [700, 1050].forEach((freq, i) => {
+        const osc  = chatAudioCtx.createOscillator();
+        const gain = chatAudioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + i * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.17, now + i * 0.1 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.1 + 0.35);
+        osc.connect(gain).connect(chatAudioCtx.destination);
+        osc.start(now + i * 0.1);
+        osc.stop(now + i * 0.1 + 0.4);
+      });
+    } catch { /* navegador sin soporte de audio — no crítico */ }
+  }
+
   // Numerito en "💬 Soporte" — para que sepa que ya le respondieron sin
   // tener que abrir el chat. Mismo ciclo de polling que la campanita.
+  // chatUnreadInitialized: no suena en el primer chequeo al cargar la
+  // página (sería sonar por algo viejo, no por algo que "acaba de pasar").
+  let lastChatUnreadCount = 0;
+  let chatUnreadInitialized = false;
   async function loadChatUnread() {
     try {
       const { count } = await api("/chat/unread");
       const badge = document.getElementById("chat-unread-badge");
       badge.textContent = String(count);
       badge.hidden = count === 0;
+      const chatModalOpen = !document.getElementById("chat-modal").hidden;
+      if (chatUnreadInitialized && count > lastChatUnreadCount && !chatModalOpen) playChatReplyChime();
+      lastChatUnreadCount = count;
+      chatUnreadInitialized = true;
     } catch { /* no crítico */ }
   }
 
@@ -1589,7 +1620,7 @@
       let evt;
       try { evt = JSON.parse(ev.data); } catch { return; }
       if (evt.type === "message") {
-        if (evt.message.sender === "admin") showChatTyping(false);
+        if (evt.message.sender === "admin") { showChatTyping(false); playChatReplyChime(); }
         appendChatMessage(evt.message);
       } else if (evt.type === "typing") {
         if (evt.sender === "admin") showChatTyping(evt.typing);

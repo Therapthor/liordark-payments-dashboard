@@ -44,6 +44,15 @@ app.use(express.json());
 app.use(cookieParser());
 
 const apiRouter = express.Router();
+// Ninguna respuesta de la API se cachea en el navegador — sin esto, un GET
+// (ej. /store/account/email, /store/auth/me) puede quedar servido desde
+// el caché HTTP local tras un reinicio del servidor o entre pestañas,
+// mostrando datos viejos (ej. "todavía no tienes correo") aunque el valor
+// real en la base ya haya cambiado hace rato.
+apiRouter.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 apiRouter.use("/auth", authRoutes);
 apiRouter.use("/live", requireAuth, liveRoutes);
 apiRouter.use("/stats", requireAuth, statsRoutes);

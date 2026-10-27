@@ -2,11 +2,34 @@
   "use strict";
 
   // ─────────────────────────────────────────────────────────────
-  // PANEL ADMIN > CHAT — de prueba, un solo chat posible por ahora (el
-  // celular de prueba en liordark.com, ver SUPPORT_TEST_PHONE). Igual
-  // queda armado para varios: lista a la izquierda, conversación a la
-  // derecha, se puede cambiar de uno a otro sin perder nada.
+  // PANEL ADMIN > CHAT — abierto a todos los clientes de liordark.com.
+  // Lista de chats a la izquierda, conversación a la derecha, se puede
+  // cambiar de uno a otro sin perder nada.
   // ─────────────────────────────────────────────────────────────
+
+  // Sonido distinto de los otros avisos del panel (pagos/clientes nuevos,
+  // ver app.js) — para reconocer de oído que es un mensaje de chat, sin
+  // tener que mirar la pantalla. Mismo mute global ("ldp_muted").
+  let chatAudioCtx = null;
+  function playChatChime() {
+    if (localStorage.getItem("ldp_muted") === "1") return;
+    try {
+      chatAudioCtx = chatAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const now = chatAudioCtx.currentTime;
+      [520, 780, 1040].forEach((freq, i) => {
+        const osc  = chatAudioCtx.createOscillator();
+        const gain = chatAudioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + i * 0.07);
+        gain.gain.exponentialRampToValueAtTime(0.15, now + i * 0.07 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.07 + 0.3);
+        osc.connect(gain).connect(chatAudioCtx.destination);
+        osc.start(now + i * 0.07);
+        osc.stop(now + i * 0.07 + 0.35);
+      });
+    } catch { /* navegador sin soporte de audio — no crítico */ }
+  }
 
   async function api(path, options = {}) {
     const res = await fetch("/api/support-chat" + path, {
@@ -351,6 +374,7 @@
       try { evt = JSON.parse(ev.data); } catch { return; }
 
       if (evt.type === "message") {
+        if (evt.message.sender === "customer") playChatChime();
         loadChats();
         if (evt.chatId === selectedChatId) {
           if (evt.message.sender === "customer") showTyping(false);
