@@ -1,7 +1,13 @@
 (() => {
   "use strict";
 
-  const token = new URLSearchParams(location.search).get("token") || "";
+  // El botón del correo manda "token" (firmado, largo); el link del SMS
+  // manda "code" (corto, ver sms-renewal-links.repository.ts) — mismo
+  // destino final, solo cambia el prefijo de la ruta en el backend.
+  const params = new URLSearchParams(location.search);
+  const token  = params.get("token") || "";
+  const code   = params.get("code") || "";
+  const renewBase = token ? "/renew/" + encodeURIComponent(token) : "/renew-code/" + encodeURIComponent(code);
   const POLL_MS = 4000;
 
   function escapeHtml(s) {
@@ -76,7 +82,7 @@
     stopPolling();
     pollTimer = setInterval(async () => {
       try {
-        const info = await api("/renew/" + encodeURIComponent(token));
+        const info = await api(renewBase);
         if (initialDaysLeft !== null && info.daysLeft > initialDaysLeft) {
           stopPolling();
           showState("renew-success");
@@ -88,7 +94,7 @@
   async function createOrder(clientEmail, clientPassword) {
     showState("renew-loading");
     try {
-      const order = await api("/renew/" + encodeURIComponent(token) + "/checkout", {
+      const order = await api(renewBase + "/checkout", {
         method: "POST",
         body: { clientEmail, clientPassword },
       });
@@ -110,13 +116,13 @@
   }
 
   async function init() {
-    if (!token) {
+    if (!token && !code) {
       showError("Este link no es válido. Entra a liordark.com para renovar.");
       return;
     }
 
     try {
-      const info = await api("/renew/" + encodeURIComponent(token));
+      const info = await api(renewBase);
       initialDaysLeft = info.daysLeft;
       document.getElementById("renew-platform-label").textContent = "Renovación — " + (info.platformTag || info.platform);
       document.getElementById("renew-form-label").textContent =

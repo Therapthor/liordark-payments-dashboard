@@ -11,8 +11,9 @@ import {
   listSmsReminderRuns, logSmsReminderResult, listSmsReminderLogOn,
 } from "../db/sms-reminder-runs.repository";
 import { sendSms } from "../services/sms.service";
-import { buildSmsReminderText } from "../services/sms-reminder-message.service";
+import { buildSmsReminderText, isNonRenewablePlatform } from "../services/sms-reminder-message.service";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
+import { createSmsRenewalLink, cleanExpiredSmsRenewalLinks } from "../db/sms-renewal-links.repository";
 
 const router = Router();
 
@@ -173,12 +174,23 @@ router.post("/sms/send", async (req, res) => {
 
   const runDate = date;
   startSmsReminderRun(runDate);
+  cleanExpiredSmsRenewalLinks();
 
   let sent = 0;
   let failed = 0;
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
-    const text = buildSmsReminderText(group.accounts);
+
+    // Link de renovación directa — solo cuando es una sola cuenta y es
+    // renovable (ver buildSmsReminderText: con 2+ cuentas no se manda,
+    // porque el link solo renovaría una).
+    let renewUrl: string | undefined;
+    if (group.accounts.length === 1 && !isNonRenewablePlatform(group.accounts[0].platform)) {
+      const code = createSmsRenewalLink(group.clientPhone, group.accounts[0].platform);
+      renewUrl = `https://liordark.com/renovar.html?code=${code}`;
+    }
+
+    const text = buildSmsReminderText(group.accounts, renewUrl);
     const result = await sendSms(group.clientPhone, text);
 
     if (result.ok) {

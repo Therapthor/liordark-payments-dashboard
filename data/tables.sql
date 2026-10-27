@@ -218,6 +218,19 @@ CREATE TABLE IF NOT EXISTS sms_reminder_log (
 );
 CREATE INDEX IF NOT EXISTS idx_sms_reminder_log_run_date ON sms_reminder_log(run_date);
 
+-- Enlace de renovación de un solo SMS — a diferencia del correo (que usa
+-- un token firmado largo, sin problema porque va en un botón HTML), el
+-- SMS tiene 160 caracteres de presupuesto, así que acá se guarda un
+-- código corto por fila en vez de armar el token en el propio link.
+-- Mismo destino final que el botón del correo: renovar.html, sin login.
+CREATE TABLE IF NOT EXISTS sms_renewal_links (
+  code       TEXT PRIMARY KEY,
+  phone      TEXT NOT NULL,
+  platform   TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Bitácora de activación manual (CANVA, GEMINI AI PRO, ...) — reemplaza
 -- el registro que se hacía en la hoja 'CANVA ANUAL'. Estas plataformas no
 -- usan el modelo de stock (access_accounts): el admin activa el plan a

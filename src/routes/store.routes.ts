@@ -30,6 +30,7 @@ import {
   deleteAllCustomerNotifications,
 } from "../db/customer-notifications.repository";
 import { verifyRenewalToken } from "../utils/renewal-token.util";
+import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
 import {
   getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
   countUnreadForCustomer, isValidStickerId,
@@ -180,51 +181,37 @@ router.post("/renewals/checkout", async (req, res) => {
 // hace falta que el cliente tipee nada para identificarse.
 // ─────────────────────────────────────────────────────────────
 
-router.get("/renew/:token", (req, res) => {
-  const payload = verifyRenewalToken(req.params.token);
-  if (!payload) {
-    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
-  }
+function renewalAccountInfo(phone: string, platform: string): any {
+  const account = listRenewalAccountsByPhone(phone)
+    .find(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
+  if (!account) return null;
 
-  const account = listRenewalAccountsByPhone(payload.phone)
-    .find(a => a.platform.trim().toUpperCase() === payload.platform.trim().toUpperCase());
-  if (!account) {
-    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
-  }
-
-  res.json({
+  return {
     platform:    account.platform,
     platformTag: account.platformTag,
     price:       account.price,
     daysLeft:    daysLeft(account.expiresAt),
     needsEmail:    isManualActivationPlatform(account.platform),
     needsPassword: requiresPasswordPlatform(account.platform),
-  });
-});
+  };
+}
 
-router.post("/renew/:token/checkout", async (req, res) => {
-  const payload = verifyRenewalToken(req.params.token);
-  if (!payload) {
-    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
-  }
-
-  const { phone, platform } = payload;
-  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
-  const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
-
+async function renewalCheckout(
+  phone: string, platform: string, clientEmail: string | undefined, clientPassword: string | undefined
+): Promise<{ status: number; body: any }> {
   if (isNonRenewablePlatform(platform)) {
-    return res.status(400).json({ message: platform + " no es renovable — se compra nuevamente." });
+    return { status: 400, body: { message: platform + " no es renovable — se compra nuevamente." } };
   }
   if (isManualActivationPlatform(platform) && !clientEmail) {
-    return res.status(400).json({ message: "Falta el correo para activar " + platform + "." });
+    return { status: 400, body: { message: "Falta el correo para activar " + platform + "." } };
   }
   if (requiresPasswordPlatform(platform) && !clientPassword) {
-    return res.status(400).json({ message: "Falta la contraseña para activar " + platform + "." });
+    return { status: 400, body: { message: "Falta la contraseña para activar " + platform + "." } };
   }
 
   const owns = listRenewalAccountsByPhone(phone).some(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
   if (!owns) {
-    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+    return { status: 404, body: { message: "Esa cuenta ya no está pendiente de renovar." } };
   }
 
   try {
@@ -233,11 +220,65 @@ router.post("/renew/:token/checkout", async (req, res) => {
       { phone, platform, clientEmail, clientPassword, isRenewal: true },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
-    res.json({ orderName: response.data.orderName, amount: response.data.amount });
+    return { status: 200, body: { orderName: response.data.orderName, amount: response.data.amount } };
   } catch (err: any) {
     const message = err?.response?.data?.message || "No se pudo crear la orden. Intenta de nuevo.";
-    res.status(err?.response?.status || 502).json({ message });
+    return { status: err?.response?.status || 502, body: { message } };
   }
+}
+
+router.get("/renew/:token", (req, res) => {
+  const payload = verifyRenewalToken(req.params.token);
+  if (!payload) {
+    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
+  }
+
+  const info = renewalAccountInfo(payload.phone, payload.platform);
+  if (!info) {
+    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+  }
+  res.json(info);
+});
+
+router.post("/renew/:token/checkout", async (req, res) => {
+  const payload = verifyRenewalToken(req.params.token);
+  if (!payload) {
+    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
+  }
+
+  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
+  const { status, body } = await renewalCheckout(payload.phone, payload.platform, clientEmail, clientPassword);
+  res.status(status).json(body);
+});
+
+// RENOVAR DESDE EL SMS — mismo destino final (renovar.html), pero el SMS
+// no tiene espacio para el token largo firmado del correo: en su lugar
+// lleva un código corto que apunta a la fila con celular + plataforma
+// (ver sms-renewal-links.repository.ts).
+router.get("/renew-code/:code", (req, res) => {
+  const link = findSmsRenewalLink(req.params.code);
+  if (!link) {
+    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
+  }
+
+  const info = renewalAccountInfo(link.phone, link.platform);
+  if (!info) {
+    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+  }
+  res.json(info);
+});
+
+router.post("/renew-code/:code/checkout", async (req, res) => {
+  const link = findSmsRenewalLink(req.params.code);
+  if (!link) {
+    return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
+  }
+
+  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
+  const { status, body } = await renewalCheckout(link.phone, link.platform, clientEmail, clientPassword);
+  res.status(status).json(body);
 });
 
 // GET /api/store/catalog — productos + combos activos, con disponibilidad

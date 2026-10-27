@@ -16,7 +16,7 @@ const SMS_MAX_NAMED_PLATFORMS = 3;
 
 // YOUTUBE PREMIUM no es renovable — cada ciclo es una compra nueva
 // (mismo criterio que wholesaler.routes.ts / wholesalers-admin.routes.ts).
-function isNonRenewablePlatform(platform: string): boolean {
+export function isNonRenewablePlatform(platform: string): boolean {
   return /youtube/i.test(platform);
 }
 
@@ -28,7 +28,13 @@ function toGsmSafe(s: string): string {
     .replace(/ñ/gi, m => (m === "ñ" ? "n" : "N"));
 }
 
-export function buildSmsReminderText(accounts: { platform: string; platformTag: string }[]): string {
+// Enlace de renovación directa — solo tiene sentido cuando el SMS habla de
+// UNA sola cuenta renovable (con 2+ cuentas el link solo renovaría una,
+// así que ahí se manda a liordark.com como antes).
+export function buildSmsReminderText(
+  accounts: { platform: string; platformTag: string }[],
+  renewUrl?: string
+): string {
   const names = accounts.map(a => (a.platformTag || a.platform).trim().toUpperCase());
   const allNonRenewable = accounts.every(a => isNonRenewablePlatform(a.platform));
   const someNonRenewable = accounts.some(a => isNonRenewablePlatform(a.platform));
@@ -41,7 +47,9 @@ export function buildSmsReminderText(accounts: { platform: string; platformTag: 
     : "Renueva en liordark.com o escribenos: 963081436.";
 
   let text: string;
-  if (names.length === 1) {
+  if (names.length === 1 && renewUrl && !allNonRenewable) {
+    text = `Manguito! Tu cuenta ${names[0]} vence pronto. Renuevala aqui: ${renewUrl} Buen dia!`;
+  } else if (names.length === 1) {
     text = `Manguito! Tu cuenta ${names[0]} vence pronto. ${actionLine} Buen dia!`;
   } else if (names.length <= SMS_MAX_NAMED_PLATFORMS) {
     text = `Manguito! Estas cuentas vencen pronto: ${names.join(" y ")}. ${actionLine} Buen dia!`;
