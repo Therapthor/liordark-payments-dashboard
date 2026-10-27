@@ -683,7 +683,7 @@ router.post("/chat/messages", (req, res) => {
 
     const payload = JSON.stringify({
       platform: account.platform, email: account.email, password: account.password,
-      expiresAt: account.expiresAt,
+      expiresAt: account.expiresAt, provider: account.provider || "",
     });
     const message = addMessage(chat.id, "customer", { type: "account_reply", text: payload });
     emitChatEvent({ type: "message", chatId: chat.id, message });

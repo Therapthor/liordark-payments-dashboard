@@ -47,6 +47,34 @@
     return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Celulares de Perú son siempre 9 dígitos — si el proveedor quedó
+  // guardado sin el prefijo "51", WhatsApp no abre el chat correcto.
+  function waLink(phone, text) {
+    let digits = String(phone).replace(/\D/g, "");
+    if (digits.length === 9) digits = "51" + digits;
+    return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
+  }
+
+  // Catálogo de proveedores (Configuración > Proveedores) — se pide una
+  // sola vez, para el botón "Enviar a proveedor" de la cuenta que mande
+  // el cliente en el chat. Mismo endpoint que ya usa Accesos.
+  let providerCatalog = [];
+  async function loadProviderCatalog() {
+    if (providerCatalog.length) return providerCatalog;
+    try {
+      const res = await fetch("/api/access/providers-catalog", { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      providerCatalog = data.providers || [];
+    } catch {
+      providerCatalog = [];
+    }
+    return providerCatalog;
+  }
+  function providerWhatsapp(name) {
+    const found = providerCatalog.find(p => p.name.trim().toUpperCase() === String(name).trim().toUpperCase());
+    return found?.whatsapp || "";
+  }
+
   // Mismo catálogo cerrado que public-store/js/app.js — el id es lo único
   // que viaja al server (ver isValidStickerId en support-chat.repository.ts).
   const CHAT_STICKERS = [
@@ -151,12 +179,14 @@
     } else if (m.type === "account_reply") {
       let acc = {};
       try { acc = JSON.parse(m.text); } catch { /* texto raro — se ignora */ }
+      const accAttr = JSON.stringify(acc).replace(/"/g, "&quot;");
       body = `
         <div class="chat-account-card">
           <div class="chat-account-card-title">📋 ${escapeHtml(acc.platform || "")}</div>
           <div><b>Correo:</b> ${escapeHtml(acc.email || "")}</div>
           <div><b>Contraseña:</b> ${escapeHtml(acc.password || "")}</div>
           <div><b>Vence:</b> ${fmtDateShort(acc.expiresAt)}</div>
+          ${acc.provider ? `<button class="btn-secondary btn-sm chat-send-to-provider-btn" type="button" data-account="${accAttr}">📤 Enviar a proveedor</button>` : ""}
         </div>`;
     } else if (m.type === "text") {
       body = escapeHtml(m.text);
@@ -332,10 +362,80 @@
     }
   }
 
+  // ─── Códigos (Netflix / Prime Video / Crunchyroll / En soporte) ─────
+
+  const NETFLIX_4D_TEXT = "☑️ Netflix 4 Dígitos\n\n✅ Presionar en Obtener Ayuda\n✅ Usar Contraseña";
+  const NETFLIX_HOGAR_TEXT =
+    "🥭 ¡SOLICITUD DE CÓDIGO NETFLIX! ☑️\n\n" +
+    "1️⃣ Presiona \"Estoy de viaje\" o \"Ver temporalmente\" ✈️\n" +
+    "2️⃣ Selecciona la opción \"Enviar email\" 📩";
+  const CODE_LINK_URL = "https://vegamig.com/solicitud%20codigo/index.php";
+  function codeLinkText(platformLabel) {
+    return `Ingresa tu correo aquí para ver tu código de ${platformLabel}:\n${CODE_LINK_URL}`;
+  }
+  const SUPPORT_TEXT =
+    "Tu cuenta ha entrado en soporte 🛠️ — en cuanto esté resuelto te vamos a avisar por este mismo medio.";
+
+  // Prime Video / Crunchyroll mandan primero la imagen de referencia del
+  // sitio de códigos, y recién después el link — mismo endpoint fijo
+  // (/messages/code-reference), no se sube nada cada vez.
+  async function sendCodeReferenceImage() {
+    if (!selectedChatId) return;
+    const { message } = await api(`/${selectedChatId}/messages/code-reference`, { method: "POST" });
+    appendBubble(message);
+  }
+
+  async function sendCodeLinkWithImage(platformLabel) {
+    try {
+      await sendCodeReferenceImage();
+      await sendQuick("text", codeLinkText(platformLabel));
+    } catch (err) {
+      alert(err.message || "No se pudo mandar el mensaje.");
+    }
+  }
+
+  function toggleCodesPopover(show) {
+    const pop = document.getElementById("chat-admin-codes-popover");
+    if (show === undefined) show = pop.hidden;
+    pop.hidden = !show;
+    if (show) document.getElementById("chat-admin-sticker-popover").hidden = true;
+    if (show && !pop.dataset.built) {
+      pop.dataset.built = "1";
+      pop.innerHTML = `
+        <div class="chat-admin-codes-group">
+          <span class="chat-admin-codes-group-title">🎬 Netflix</span>
+          <button type="button" class="chat-admin-codes-pick" data-code="netflix-4d">4 dígitos</button>
+          <button type="button" class="chat-admin-codes-pick" data-code="netflix-hogar">Código hogar</button>
+        </div>
+        <div class="chat-admin-codes-group">
+          <span class="chat-admin-codes-group-title">📺 Prime Video</span>
+          <button type="button" class="chat-admin-codes-pick" data-code="prime">Código</button>
+        </div>
+        <div class="chat-admin-codes-group">
+          <span class="chat-admin-codes-group-title">🍥 Crunchyroll</span>
+          <button type="button" class="chat-admin-codes-pick" data-code="crunchyroll">Código</button>
+        </div>
+        <div class="chat-admin-codes-group">
+          <button type="button" class="chat-admin-codes-pick chat-admin-codes-pick-wide" data-code="support">🛠️ En soporte</button>
+        </div>
+      `;
+    }
+  }
+
+  function handleCodePick(code) {
+    toggleCodesPopover(false);
+    if (code === "netflix-4d") return sendQuick("text", NETFLIX_4D_TEXT);
+    if (code === "netflix-hogar") return sendQuick("text", NETFLIX_HOGAR_TEXT);
+    if (code === "prime") return sendCodeLinkWithImage("Prime Video");
+    if (code === "crunchyroll") return sendCodeLinkWithImage("Crunchyroll");
+    if (code === "support") return sendQuick("text", SUPPORT_TEXT);
+  }
+
   function toggleStickerPopover(show) {
     const pop = document.getElementById("chat-admin-sticker-popover");
     if (show === undefined) show = pop.hidden;
     pop.hidden = !show;
+    if (show) document.getElementById("chat-admin-codes-popover").hidden = true;
     if (show && !pop.dataset.built) {
       pop.dataset.built = "1";
       pop.innerHTML = CHAT_STICKERS.map(s => `
@@ -424,14 +524,33 @@
     document.getElementById("chat-quick-account").addEventListener("click", () => sendQuick("account_request", ACCOUNT_REQUEST_TEXT));
     document.getElementById("chat-quick-farewell").addEventListener("click", () => sendQuick("text", FAREWELL_TEXT));
 
+    document.getElementById("chat-quick-codes").addEventListener("click", () => toggleCodesPopover());
+    document.getElementById("chat-admin-codes-popover").addEventListener("click", (e) => {
+      const btn = e.target.closest(".chat-admin-codes-pick");
+      if (btn) handleCodePick(btn.dataset.code);
+    });
+
     document.getElementById("chat-admin-sticker-btn").addEventListener("click", () => toggleStickerPopover());
     document.getElementById("chat-admin-sticker-popover").addEventListener("click", (e) => {
       const btn = e.target.closest(".chat-admin-sticker-pick");
       if (btn) sendSticker(btn.dataset.sticker);
     });
-    document.getElementById("chat-admin-messages").addEventListener("click", (e) => {
+    document.getElementById("chat-admin-messages").addEventListener("click", async (e) => {
       const img = e.target.closest(".chat-admin-bubble-media-zoomable");
-      if (img) openImgLightbox(img.src);
+      if (img) { openImgLightbox(img.src); return; }
+
+      const providerBtn = e.target.closest(".chat-send-to-provider-btn");
+      if (providerBtn) {
+        const acc = JSON.parse(providerBtn.dataset.account.replace(/&quot;/g, '"'));
+        await loadProviderCatalog();
+        const phone = providerWhatsapp(acc.provider);
+        if (!phone) {
+          alert(`No hay WhatsApp guardado para "${acc.provider}". Agrégalo en Configuración > Proveedores.`);
+          return;
+        }
+        const msg = `Hola! Necesito soporte con una cuenta de *${acc.platform}*.\n📧 Correo: ${acc.email}\n🔑 Contraseña: ${acc.password}`;
+        window.open(waLink(phone, msg), "_blank");
+      }
     });
     document.getElementById("img-lightbox-close").addEventListener("click", closeImgLightbox);
     document.getElementById("img-lightbox").addEventListener("click", (e) => {
@@ -439,6 +558,7 @@
     });
 
     loadChats();
+    loadProviderCatalog(); // para el botón "Enviar a proveedor" — no bloquea el render
     connectStream();
   }
 

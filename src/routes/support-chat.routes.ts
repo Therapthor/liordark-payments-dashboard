@@ -60,6 +60,21 @@ router.post("/:id/messages", (req, res) => {
   res.status(201).json({ message });
 });
 
+// Imagen fija de referencia para "Códigos > Prime Video / Crunchyroll" —
+// no es un archivo del cliente (no hay nada que autodestruir), así que
+// no pasa por Cloudinary: vive en /assets y se manda siempre la misma URL.
+router.post("/:id/messages/code-reference", (req, res) => {
+  const chatId = Number(req.params.id);
+  const chat = getChatById(chatId);
+  if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
+
+  const message = addMessage(chatId, "admin", {
+    type: "image", mediaUrl: "/assets/codigo-referencia-1.png", mediaResourceType: "image",
+  });
+  emitChatEvent({ type: "message", chatId, message });
+  res.status(201).json({ message });
+});
+
 router.post("/:id/messages/media", upload.single("file"), async (req, res) => {
   const chatId = Number(req.params.id);
   const chat = getChatById(chatId);
