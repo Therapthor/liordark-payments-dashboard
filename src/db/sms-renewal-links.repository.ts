@@ -20,8 +20,13 @@ function generateCode(): string {
   return out;
 }
 
-export function createSmsRenewalLink(phone: string, platform: string): string {
+// Un combo puede traer varias plataformas en el mismo SMS — el cliente
+// elige cuál renovar al abrir el link (ver renovar.js, estado "picker").
+// Se guardan separadas por coma en la misma columna "platform" (nunca
+// lleva coma un nombre de plataforma real, así que es un separador seguro).
+export function createSmsRenewalLink(phone: string, platforms: string[]): string {
   const expiresAt = new Date(Date.now() + LINK_TTL_MS).toISOString();
+  const platformList = platforms.join(",");
   // Colisión de código es prácticamente imposible (32^8), pero por las
   // dudas se reintenta si ya existe uno igual.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -30,13 +35,13 @@ export function createSmsRenewalLink(phone: string, platform: string): string {
     if (exists) continue;
     db.prepare(`
       INSERT INTO sms_renewal_links (code, phone, platform, expires_at) VALUES (?, ?, ?, ?)
-    `).run(code, phone, platform, expiresAt);
+    `).run(code, phone, platformList, expiresAt);
     return code;
   }
   throw new Error("No se pudo generar un código de renovación único.");
 }
 
-export type SmsRenewalLink = { phone: string; platform: string };
+export type SmsRenewalLink = { phone: string; platforms: string[] };
 
 export function findSmsRenewalLink(code: string): SmsRenewalLink | null {
   const row = db.prepare(`
@@ -45,7 +50,7 @@ export function findSmsRenewalLink(code: string): SmsRenewalLink | null {
 
   if (!row) return null;
   if (new Date(row.expiresAt).getTime() < Date.now()) return null;
-  return { phone: row.phone, platform: row.platform };
+  return { phone: row.phone, platforms: row.platform.split(",").filter(Boolean) };
 }
 
 /** Borra los códigos ya vencidos — se llama de paso al mandar la tanda diaria. */

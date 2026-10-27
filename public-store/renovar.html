@@ -27,6 +27,13 @@
       <a class="btn-ghost btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a liordark.com</a>
     </div>
 
+    <!-- Combo con 2+ cuentas por vencer en el mismo link — el cliente elige cuál renovar. -->
+    <div id="renew-picker" class="checkout-state" hidden>
+      <h2 style="margin: 0 0 4px;">¿Cuál renovamos?</h2>
+      <p class="muted" style="margin: 0 0 14px;">Tienes varias cuentas por vencer — elige una.</p>
+      <div id="renew-picker-list" class="renew-picker-list"></div>
+    </div>
+
     <!-- Datos del cliente para plataformas de activación manual (CANVA, GEMINI, YOUTUBE) -->
     <div id="renew-form" class="checkout-state" hidden>
       <div class="renew-form">

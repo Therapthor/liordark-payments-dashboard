@@ -254,19 +254,31 @@ router.post("/renew/:token/checkout", async (req, res) => {
 
 // RENOVAR DESDE EL SMS — mismo destino final (renovar.html), pero el SMS
 // no tiene espacio para el token largo firmado del correo: en su lugar
-// lleva un código corto que apunta a la fila con celular + plataforma
-// (ver sms-renewal-links.repository.ts).
+// lleva un código corto que apunta a la fila con celular + plataforma(s)
+// (ver sms-renewal-links.repository.ts). Un combo trae más de una
+// plataforma en el mismo código — el cliente elige cuál renovar
+// (respuesta con multi:true y la lista, en vez de una sola cuenta).
 router.get("/renew-code/:code", (req, res) => {
   const link = findSmsRenewalLink(req.params.code);
   if (!link) {
     return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
   }
 
-  const info = renewalAccountInfo(link.phone, link.platform);
-  if (!info) {
-    return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+  if (link.platforms.length === 1) {
+    const info = renewalAccountInfo(link.phone, link.platforms[0]!);
+    if (!info) {
+      return res.status(404).json({ message: "Esa cuenta ya no está pendiente de renovar." });
+    }
+    return res.json(info);
   }
-  res.json(info);
+
+  const accounts = link.platforms
+    .map(p => renewalAccountInfo(link.phone, p))
+    .filter((a): a is NonNullable<typeof a> => !!a);
+  if (accounts.length === 0) {
+    return res.status(404).json({ message: "Esas cuentas ya no están pendientes de renovar." });
+  }
+  res.json({ multi: true, accounts });
 });
 
 router.post("/renew-code/:code/checkout", async (req, res) => {
@@ -275,9 +287,21 @@ router.post("/renew-code/:code/checkout", async (req, res) => {
     return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
   }
 
+  // Un solo código: se renueva directo (compatible con el link viejo,
+  // que no mandaba "platform" porque solo había una opción posible).
+  // Combo (2+ plataformas): el cliente elige cuál en la página, así que
+  // acá hace falta que lo diga.
+  const platform = link.platforms.length === 1
+    ? link.platforms[0]!
+    : String(req.body?.platform ?? "").trim();
+
+  if (!link.platforms.some(p => p.trim().toUpperCase() === platform.trim().toUpperCase())) {
+    return res.status(400).json({ message: "Elige una de las cuentas del link." });
+  }
+
   const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
-  const { status, body } = await renewalCheckout(link.phone, link.platform, clientEmail, clientPassword);
+  const { status, body } = await renewalCheckout(link.phone, platform, clientEmail, clientPassword);
   res.status(status).json(body);
 });
 

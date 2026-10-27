@@ -32,7 +32,7 @@
   }
 
   function showState(id) {
-    ["renew-loading", "renew-error", "renew-form", "renew-ready", "renew-success"].forEach(s => {
+    ["renew-loading", "renew-error", "renew-picker", "renew-form", "renew-ready", "renew-success"].forEach(s => {
       document.getElementById(s).hidden = s !== id;
     });
   }
@@ -72,6 +72,10 @@
 
   let pollTimer = null;
   let initialDaysLeft = null;
+  // Cuando el link trae varias cuentas (combo), el cliente elige una acá
+  // — el GET sigue devolviendo la lista completa, así que el polling y el
+  // checkout necesitan saber CUÁL de todas quedó elegida.
+  let selectedPlatform = null;
 
   function stopPolling() {
     if (pollTimer) clearInterval(pollTimer);
@@ -83,7 +87,10 @@
     pollTimer = setInterval(async () => {
       try {
         const info = await api(renewBase);
-        if (initialDaysLeft !== null && info.daysLeft > initialDaysLeft) {
+        const current = selectedPlatform
+          ? (info.accounts || []).find(a => a.platform === selectedPlatform)
+          : info;
+        if (current && initialDaysLeft !== null && current.daysLeft > initialDaysLeft) {
           stopPolling();
           showState("renew-success");
         }
@@ -96,7 +103,7 @@
     try {
       const order = await api(renewBase + "/checkout", {
         method: "POST",
-        body: { clientEmail, clientPassword },
+        body: { clientEmail, clientPassword, platform: selectedPlatform || undefined },
       });
 
       document.getElementById("renew-amount").textContent = "S/ " + order.amount;
@@ -115,6 +122,52 @@
     }
   }
 
+  // Ya se sabe qué cuenta renovar (la única del link, o la que el cliente
+  // eligió en el picker) — pide correo/contraseña si hace falta y sigue.
+  function proceedWithAccount(info) {
+    initialDaysLeft = info.daysLeft;
+    document.getElementById("renew-platform-label").textContent = "Renovación — " + (info.platformTag || info.platform);
+    document.getElementById("renew-form-label").textContent =
+      "Para renovar " + (info.platformTag || info.platform) + " necesitamos estos datos:";
+
+    if (info.needsEmail || info.needsPassword) {
+      document.getElementById("renew-email").hidden = !info.needsEmail;
+      document.getElementById("renew-password").hidden = !info.needsPassword;
+      showState("renew-form");
+      document.getElementById("renew-form-continue").onclick = () => {
+        const email = document.getElementById("renew-email").value.trim();
+        const password = document.getElementById("renew-password").value;
+        if (info.needsEmail && !email) return alert("Falta tu correo.");
+        if (info.needsPassword && !password) return alert("Falta tu contraseña.");
+        createOrder(email, password);
+      };
+      return;
+    }
+
+    createOrder();
+  }
+
+  function renderPicker(accounts) {
+    const list = document.getElementById("renew-picker-list");
+    list.innerHTML = accounts.map((a, idx) => `
+      <div class="renew-picker-item">
+        <div class="renew-picker-info">
+          <span class="renew-picker-name">${escapeHtml(a.platformTag || a.platform)}</span>
+          <span class="renew-picker-days">Vence en ${a.daysLeft} día(s)</span>
+        </div>
+        <button class="renew-picker-btn" type="button" data-idx="${idx}">Renovar</button>
+      </div>
+    `).join("");
+    list.querySelectorAll(".renew-picker-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const account = accounts[Number(btn.dataset.idx)];
+        selectedPlatform = account.platform;
+        proceedWithAccount(account);
+      });
+    });
+    showState("renew-picker");
+  }
+
   async function init() {
     if (!token && !code) {
       showError("Este link no es válido. Entra a liordark.com para renovar.");
@@ -123,26 +176,11 @@
 
     try {
       const info = await api(renewBase);
-      initialDaysLeft = info.daysLeft;
-      document.getElementById("renew-platform-label").textContent = "Renovación — " + (info.platformTag || info.platform);
-      document.getElementById("renew-form-label").textContent =
-        "Para renovar " + (info.platformTag || info.platform) + " necesitamos estos datos:";
-
-      if (info.needsEmail || info.needsPassword) {
-        document.getElementById("renew-email").hidden = !info.needsEmail;
-        document.getElementById("renew-password").hidden = !info.needsPassword;
-        showState("renew-form");
-        document.getElementById("renew-form-continue").onclick = () => {
-          const email = document.getElementById("renew-email").value.trim();
-          const password = document.getElementById("renew-password").value;
-          if (info.needsEmail && !email) return alert("Falta tu correo.");
-          if (info.needsPassword && !password) return alert("Falta tu contraseña.");
-          createOrder(email, password);
-        };
+      if (info.multi) {
+        renderPicker(info.accounts);
         return;
       }
-
-      await createOrder();
+      proceedWithAccount(info);
     } catch (err) {
       showError(err.status === 410 || err.status === 404
         ? err.message

@@ -28,9 +28,13 @@ function toGsmSafe(s: string): string {
     .replace(/ñ/gi, m => (m === "ñ" ? "n" : "N"));
 }
 
-// Enlace de renovación directa — solo tiene sentido cuando el SMS habla de
-// UNA sola cuenta renovable (con 2+ cuentas el link solo renovaría una,
-// así que ahí se manda a liordark.com como antes).
+// Enlace de renovación directa — el caller ya arma el código solo con las
+// plataformas RENOVABLES del grupo (ver renewals.routes.ts), así que acá
+// alcanza con mirar cuántas hay para decidir el texto: 1 sola nombra la
+// cuenta igual que antes; 2+ (combo) dice "elige cuál" porque en el link
+// el cliente va a ver todas y elegir una. Si no hay ninguna renovable
+// (ej. una sola cuenta y es Youtube), renewUrl viene undefined y se cae
+// al texto viejo sin link.
 export function buildSmsReminderText(
   accounts: { platform: string; platformTag: string }[],
   renewUrl?: string
@@ -39,6 +43,7 @@ export function buildSmsReminderText(
   const allNonRenewable = accounts.every(a => isNonRenewablePlatform(a.platform));
   const someNonRenewable = accounts.some(a => isNonRenewablePlatform(a.platform));
   const mixed = someNonRenewable && !allNonRenewable;
+  const renewableCount = accounts.filter(a => !isNonRenewablePlatform(a.platform)).length;
 
   const actionLine = mixed
     ? "Entra a liordark.com o escribenos: 963081436."
@@ -47,8 +52,12 @@ export function buildSmsReminderText(
     : "Renueva en liordark.com o escribenos: 963081436.";
 
   let text: string;
-  if (names.length === 1 && renewUrl && !allNonRenewable) {
-    text = `Manguito! Tu cuenta ${names[0]} vence pronto. Renuevala aqui: ${renewUrl} Buen dia!`;
+  if (renewUrl && renewableCount === 1) {
+    const renewableName = (accounts.find(a => !isNonRenewablePlatform(a.platform))?.platformTag
+      || accounts.find(a => !isNonRenewablePlatform(a.platform))?.platform || names[0]).trim().toUpperCase();
+    text = `Manguito! Tu cuenta ${renewableName} vence pronto. Renuevala aqui: ${renewUrl} Buen dia!`;
+  } else if (renewUrl && renewableCount > 1) {
+    text = `Manguito! Tienes ${renewableCount} cuentas por vencer. Elige cual renovar aqui: ${renewUrl} Buen dia!`;
   } else if (names.length === 1) {
     text = `Manguito! Tu cuenta ${names[0]} vence pronto. ${actionLine} Buen dia!`;
   } else if (names.length <= SMS_MAX_NAMED_PLATFORMS) {

@@ -181,12 +181,18 @@ router.post("/sms/send", async (req, res) => {
   for (let i = 0; i < groups.length; i++) {
     const group = groups[i];
 
-    // Link de renovación directa — solo cuando es una sola cuenta y es
-    // renovable (ver buildSmsReminderText: con 2+ cuentas no se manda,
-    // porque el link solo renovaría una).
+    // Link de renovación directa — incluye TODAS las plataformas
+    // renovables del grupo (un combo trae más de una); el cliente elige
+    // cuál renovar al abrir el link. Las no renovables (ej. Youtube) no
+    // entran al código porque esa pantalla no las acepta (se compran de
+    // nuevo, no se "renuevan").
+    const renewablePlatforms = group.accounts
+      .filter(a => !isNonRenewablePlatform(a.platform))
+      .map(a => a.platform);
+
     let renewUrl: string | undefined;
-    if (group.accounts.length === 1 && !isNonRenewablePlatform(group.accounts[0].platform)) {
-      const code = createSmsRenewalLink(group.clientPhone, group.accounts[0].platform);
+    if (renewablePlatforms.length > 0) {
+      const code = createSmsRenewalLink(group.clientPhone, renewablePlatforms);
       renewUrl = `https://liordark.com/renovar.html?code=${code}`;
     }
 
