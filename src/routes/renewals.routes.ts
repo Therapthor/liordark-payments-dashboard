@@ -124,11 +124,19 @@ function isValidSmsPhone(phone: string): boolean {
   return digits.length === 9 || (digits.length === 11 && digits.startsWith("51"));
 }
 
+// ClickLab/Infobip exige el código de país — un número de 9 dígitos
+// guardado sin el 51 siempre fallaba al mandar el SMS.
+function normalizeSmsPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length === 9 ? "51" + digits : digits;
+}
+
 function groupExpiringByPhone(clients: { profileId: number; clientPhone: string; platform: string; platformTag: string }[]) {
   const map = new Map<string, typeof clients>();
   for (const c of clients) {
-    if (!map.has(c.clientPhone)) map.set(c.clientPhone, []);
-    map.get(c.clientPhone)!.push(c);
+    const phone = normalizeSmsPhone(c.clientPhone);
+    if (!map.has(phone)) map.set(phone, []);
+    map.get(phone)!.push(c);
   }
   return [...map.entries()].map(([clientPhone, accounts]) => ({ clientPhone, accounts }));
 }
