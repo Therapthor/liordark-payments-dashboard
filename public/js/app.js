@@ -252,7 +252,6 @@
     document.getElementById("view-history").hidden       = view !== "history";
     document.getElementById("view-renewals").hidden      = view !== "renewals";
     document.getElementById("view-config").hidden        = view !== "config";
-    document.getElementById("view-support").hidden       = view !== "support";
     document.getElementById("view-support-chat").hidden  = view !== "support-chat";
 
     const isPagos = view === "history" || view === "renewals";
