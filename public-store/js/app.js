@@ -13,14 +13,25 @@
 
   async function api(path, opts) {
     opts = opts || {};
+    const method = opts.method || "GET";
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
+    // Cache-busting en GET — cualquier capa intermedia (proxy, CDN, el
+    // propio navegador) puede cachear una respuesta por URL sin importar
+    // los headers que mande el servidor. Un parámetro único por pedido
+    // garantiza una URL distinta cada vez, así nunca sirve algo viejo
+    // (ej. "ya tengo correo guardado" después de reiniciar el servidor).
+    const url = method === "GET"
+      ? API_BASE + path + (path.includes("?") ? "&" : "?") + "_=" + Date.now()
+      : API_BASE + path;
+
     let res;
     try {
-      res = await fetch(API_BASE + path, {
-        method: opts.method || "GET",
+      res = await fetch(url, {
+        method,
         credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: opts.body ? JSON.stringify(opts.body) : undefined,
         signal: controller.signal,
@@ -871,14 +882,6 @@
     // nuevo de esa plataforma (el bot revisa cada pocos minutos).
     document.getElementById("detail-reserve-note").hidden = !outOfStock;
 
-    // "Avisarme antes de vencer" — ya tiene correo guardado: no se pide
-    // nada, solo se informa. Si no tiene, el switch arranca apagado.
-    document.getElementById("detail-notify-done").hidden = !customerHasEmail;
-    document.getElementById("detail-notify").hidden = customerHasEmail;
-    setDetailNotifyOn(false);
-    document.getElementById("detail-notify-email-input").value = "";
-    setFormError("detail-notify-email-error", "");
-
     const buyBtn = document.getElementById("detail-buy-btn");
     buyBtn.disabled = false;
     buyBtn.textContent = outOfStock ? "Reservar" : "Comprar";
@@ -899,16 +902,8 @@
           return;
         }
       }
-      let notifyEmail;
-      if (!customerHasEmail && detailNotifyOn) {
-        notifyEmail = document.getElementById("detail-notify-email-input").value.trim();
-        if (!isValidEmail(notifyEmail)) {
-          setFormError("detail-notify-email-error", "Escribe un correo válido, o apaga el aviso.");
-          return;
-        }
-      }
       closeProductDetail();
-      startCheckout({ kind, id, clientEmail, clientPassword, notifyEmail, isReserve: outOfStock, platformLabel: title });
+      startCheckout({ kind, id, clientEmail, clientPassword, isReserve: outOfStock, platformLabel: title });
     };
 
     document.getElementById("product-detail-modal").hidden = false;
@@ -923,20 +918,11 @@
     }, 180);
   }
 
-  let detailNotifyOn = false;
-
-  function setDetailNotifyOn(on) {
-    detailNotifyOn = on;
-    document.getElementById("detail-notify-switch").classList.toggle("on", on);
-    document.getElementById("detail-notify-email-wrap").hidden = !on;
-  }
-
   function initProductDetailModal() {
     document.getElementById("detail-close").addEventListener("click", closeProductDetail);
     document.getElementById("product-detail-modal").addEventListener("click", (e) => {
       if (e.target.id === "product-detail-modal") closeProductDetail();
     });
-    document.getElementById("detail-notify-toggle").addEventListener("click", () => setDetailNotifyOn(!detailNotifyOn));
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1187,7 +1173,7 @@
     }
   }
 
-  async function startCheckout({ kind, id, clientEmail, clientPassword, notifyEmail, isReserve, platformLabel }) {
+  async function startCheckout({ kind, id, clientEmail, clientPassword, isReserve, platformLabel }) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -1201,12 +1187,7 @@
     let beforeAccounts = cachedDashboard;
     try {
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
-      const body = kind === "combo" ? { comboId: id, notifyEmail } : { platform: id, clientEmail, clientPassword, notifyEmail };
-      if (notifyEmail) {
-        customerHasEmail = true;
-        updateDashboardNotifyBtn();
-        updateEmailBanner();
-      }
+      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword };
       const order = await api("/checkout", { method: "POST", body });
 
       await ensureYapeInfo();

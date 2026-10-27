@@ -454,13 +454,6 @@ router.post("/checkout", async (req, res) => {
   const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
-  // "¿Avisarme antes de vencer?" en el checkout — solo si todavía no tiene
-  // correo guardado (no pisa uno ya confirmado desde "Mis cuentas").
-  const notifyEmail = req.body?.notifyEmail ? String(req.body.notifyEmail).trim() : undefined;
-  if (notifyEmail && !customer.email) {
-    setCustomerEmail(customer.id, notifyEmail);
-  }
-
   // Combo armado por el cliente ("¿Quieres armar tu combo? ¡Hazlo!") —
   // lista de plataformas elegidas, sin id de catálogo. Se valida y se
   // calcula el precio ACÁ (el panel es la fuente real de precios), nunca

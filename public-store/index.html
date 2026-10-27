@@ -180,25 +180,6 @@
         ⏳ Subiendo stock, sé uno de los primeros en tener acceso.
       </p>
 
-      <!-- "Avisarme antes de vencer" — apagado por defecto, el correo solo
-           se pide si lo prende. Si el cliente ya tiene correo guardado, no
-           se le vuelve a pedir nada (ver detail-notify-done). -->
-      <div class="detail-notify" id="detail-notify" hidden>
-        <div class="detail-notify-row" id="detail-notify-toggle" role="button" tabindex="0">
-          <span class="detail-notify-icon">🔔</span>
-          <span class="detail-notify-label">Avisarme antes de vencer</span>
-          <span class="detail-notify-switch" id="detail-notify-switch"><span class="detail-notify-knob"></span></span>
-        </div>
-        <div class="detail-notify-email" id="detail-notify-email-wrap" hidden>
-          <label for="detail-notify-email-input">Te escribimos cuando esté por vencer</label>
-          <input type="email" id="detail-notify-email-input" placeholder="tu@correo.com" autocomplete="email">
-          <p class="form-error" id="detail-notify-email-error" hidden></p>
-        </div>
-      </div>
-      <div class="detail-notify-done" id="detail-notify-done" hidden>
-        🔔 Te avisaremos a tu correo antes de que venza
-      </div>
-
       <div class="detail-footer">
         <span class="product-price" id="detail-price"></span>
         <button class="btn-primary" id="detail-buy-btn" type="button">Comprar</button>

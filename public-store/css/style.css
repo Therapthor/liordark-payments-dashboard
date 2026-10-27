@@ -396,28 +396,6 @@ a { color: var(--btn); }
 }
 .build-combo-manual-fields input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
 
-/* "Avisarme antes de vencer" en el detalle de producto — switch apagado
-   por defecto, el campo de correo solo aparece si lo prenden. */
-.detail-notify { margin-top: 14px; text-align: left; background: var(--chip-bg); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; }
-.detail-notify-row { display: flex; align-items: center; gap: 9px; cursor: pointer; }
-.detail-notify-icon { font-size: 16px; line-height: 1; }
-.detail-notify-label { flex-grow: 1; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); }
-.detail-notify-switch { width: 36px; height: 21px; border-radius: 999px; background: var(--border); position: relative; flex-shrink: 0; transition: background .15s; }
-.detail-notify-switch.on { background: var(--accent); }
-.detail-notify-knob { position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: left .15s; }
-.detail-notify-switch.on .detail-notify-knob { left: 17px; }
-.detail-notify-email { margin-top: 10px; }
-.detail-notify-email label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
-.detail-notify-email input {
-  width: 100%; padding: 10px 12px; border-radius: 10px;
-  border: 1px solid var(--border); background: #fff; color: var(--text);
-  font-size: 13.5px; font-family: inherit; box-sizing: border-box;
-}
-.detail-notify-email input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
-.detail-notify-done {
-  margin-top: 14px; background: var(--chip-bg); border: 1px solid var(--border); border-radius: 14px;
-  padding: 11px 14px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: left;
-}
 
 .detail-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
 .detail-footer .product-price { font-size: 19px; color: var(--accent); }
