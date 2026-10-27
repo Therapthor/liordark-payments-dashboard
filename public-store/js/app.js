@@ -1064,31 +1064,47 @@
     });
   }
 
-  // Banner "falta tu correo" — se puede cerrar, pero reaparece a las 12h
-  // (no en cada visita) hasta que agregue el correo. El propio navegador
-  // guarda cuándo lo cerró; el backend solo dice si ya tiene correo o no.
-  const EMAIL_BANNER_SNOOZE_MS = 12 * 60 * 60 * 1000;
-  const EMAIL_BANNER_SNOOZE_KEY = "emailBannerSnoozedAt";
+  // Banner "falta tu correo" — pocas veces al día (no clavado en pantalla
+  // todo el rato): hasta 3 apariciones por día, con al menos 4h entre una
+  // y la siguiente. El contador vive en este navegador y se reinicia solo
+  // al cambiar de día. Una vez que tiene correo, no se vuelve a mostrar
+  // nunca (ver customerHasEmail, con respaldo local en isEmailConfirmedLocally).
+  const EMAIL_BANNER_MAX_SHOWS_PER_DAY = 3;
+  const EMAIL_BANNER_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+  const EMAIL_BANNER_STATE_KEY = "ldp_email_banner_state";
 
-  function isEmailBannerSnoozed() {
+  function readEmailBannerState() {
+    const today = new Date().toISOString().slice(0, 10);
     try {
-      const at = Number(localStorage.getItem(EMAIL_BANNER_SNOOZE_KEY) || 0);
-      return Date.now() - at < EMAIL_BANNER_SNOOZE_MS;
-    } catch { return false; }
+      const raw = JSON.parse(localStorage.getItem(EMAIL_BANNER_STATE_KEY) || "{}");
+      if (raw.day === today) return { day: today, shows: raw.shows || 0, lastShownAt: raw.lastShownAt || 0 };
+    } catch { /* corrupto o localStorage bloqueado — arranca de cero */ }
+    return { day: today, shows: 0, lastShownAt: 0 };
   }
 
-  function snoozeEmailBanner() {
-    try { localStorage.setItem(EMAIL_BANNER_SNOOZE_KEY, String(Date.now())); } catch { /* localStorage bloqueado — no crítico */ }
-    document.getElementById("email-banner").hidden = true;
+  function writeEmailBannerState(state) {
+    try { localStorage.setItem(EMAIL_BANNER_STATE_KEY, JSON.stringify(state)); } catch { /* localStorage bloqueado */ }
   }
 
   function updateEmailBanner() {
-    document.getElementById("email-banner").hidden =
-      !isAuthenticated || customerHasEmail || isEmailBannerSnoozed();
+    const banner = document.getElementById("email-banner");
+    if (!isAuthenticated || customerHasEmail) { banner.hidden = true; return; }
+    if (!banner.hidden) return; // ya se está mostrando — no se re-evalúa ni se cuenta de nuevo
+
+    const state = readEmailBannerState();
+    const coolingDown = Date.now() - state.lastShownAt < EMAIL_BANNER_COOLDOWN_MS;
+    if (state.shows >= EMAIL_BANNER_MAX_SHOWS_PER_DAY || coolingDown) { banner.hidden = true; return; }
+
+    banner.hidden = false;
+    writeEmailBannerState({ day: state.day, shows: state.shows + 1, lastShownAt: Date.now() });
+  }
+
+  function closeEmailBanner() {
+    document.getElementById("email-banner").hidden = true;
   }
 
   function initEmailBanner() {
-    document.getElementById("email-banner-close").addEventListener("click", snoozeEmailBanner);
+    document.getElementById("email-banner-close").addEventListener("click", closeEmailBanner);
     document.getElementById("email-banner-add").addEventListener("click", openEmailReminderModal);
   }
 
