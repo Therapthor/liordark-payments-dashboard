@@ -47,6 +47,13 @@
     return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Convierte links sueltos en el texto del chat (ej. el link de código
+  // de Prime Video/Crunchyroll) en <a> clickeables — escapa primero, así
+  // que lo que arme la URL sigue siendo texto plano seguro.
+  function linkifyText(raw) {
+    return escapeHtml(raw).replace(/(https?:\/\/[^\s<]+)/g, url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+  }
+
   // Celulares de Perú son siempre 9 dígitos — si el proveedor quedó
   // guardado sin el prefijo "51", WhatsApp no abre el chat correcto.
   function waLink(phone, text) {
@@ -189,7 +196,7 @@
           ${acc.provider ? `<button class="btn-secondary btn-sm chat-send-to-provider-btn" type="button" data-account="${accAttr}">📤 Enviar a proveedor</button>` : ""}
         </div>`;
     } else if (m.type === "text") {
-      body = escapeHtml(m.text);
+      body = linkifyText(m.text);
     } else if (m.type === "sticker") {
       const s = CHAT_STICKER_MAP[m.text];
       return `

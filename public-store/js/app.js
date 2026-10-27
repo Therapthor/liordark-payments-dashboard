@@ -1596,6 +1596,13 @@
   ];
   const CHAT_STICKER_MAP = Object.fromEntries(CHAT_STICKERS.map(s => [s.id, s]));
 
+  // Convierte links sueltos en el texto del chat (ej. el link de código
+  // de Prime Video/Crunchyroll) en <a> clickeables — escapa primero, así
+  // que lo que arme la URL sigue siendo texto plano seguro.
+  function linkifyText(raw) {
+    return escapeHtml(raw).replace(/(https?:\/\/[^\s<]+)/g, url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+  }
+
   function fmtChatTime(sqliteUTC) {
     try {
       return new Date(sqliteUTC.replace(" ", "T") + "Z").toLocaleTimeString("es-PE", {
@@ -1629,7 +1636,7 @@
           <div><b>Vence:</b> ${fmtChatDateShort(acc.expiresAt)}</div>
         </div>`;
     } else if (m.type === "text") {
-      body = escapeHtml(m.text);
+      body = linkifyText(m.text);
     } else if (m.type === "sticker") {
       const s = CHAT_STICKER_MAP[m.text];
       return `

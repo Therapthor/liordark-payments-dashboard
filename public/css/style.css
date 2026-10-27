@@ -1104,8 +1104,10 @@ button, input {
 .chat-admin-bubble-row.from-admin    { justify-content: flex-end; }
 .chat-admin-bubble-row.from-customer { justify-content: flex-start; }
 .chat-admin-bubble {
-  max-width: 70%; padding: 9px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.4; word-break: break-word;
+  max-width: 70%; padding: 9px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.4;
+  word-break: break-word; white-space: pre-line;
 }
+.chat-admin-bubble a { color: inherit; text-decoration: underline; }
 .from-admin .chat-admin-bubble    { background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 3px; }
 .from-customer .chat-admin-bubble { background: var(--page); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
 .chat-admin-bubble-time { display: block; font-size: 10px; margin-top: 3px; opacity: .65; }
