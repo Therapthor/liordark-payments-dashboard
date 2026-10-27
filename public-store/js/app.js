@@ -161,6 +161,20 @@
 
   let currentPhone = "";
 
+  // Respaldo local de "ya tiene correo registrado" — una vez confirmado
+  // por el servidor, queda guardado por celular en este navegador. Así,
+  // si algún pedido puntual (reinicio del servidor, red, un proxy
+  // intermedio) devuelve un dato viejo o falla, el banner NUNCA vuelve a
+  // pedir el correo de alguien que ya lo registró — solo un POST real a
+  // /account/email (o el admin borrándolo) puede revertir esta marca.
+  function emailConfirmedKey(phone) { return "ldp_email_ok_" + phone; }
+  function markEmailConfirmedLocally(phone) {
+    try { localStorage.setItem(emailConfirmedKey(phone), "1"); } catch { /* localStorage bloqueado */ }
+  }
+  function isEmailConfirmedLocally(phone) {
+    try { return localStorage.getItem(emailConfirmedKey(phone)) === "1"; } catch { return false; }
+  }
+
   async function onAuthenticated() {
     isAuthenticated = true;
     closeAuthModal();
@@ -168,13 +182,14 @@
     try {
       const me = await api("/auth/me");
       currentPhone = me.phone || "";
-      customerHasEmail = !!me.hasEmail;
+      customerHasEmail = !!me.hasEmail || isEmailConfirmedLocally(currentPhone);
+      if (me.hasEmail) markEmailConfirmedLocally(currentPhone);
       // Códigos — apagado por ahora (el reenvío de Gmail resultó más
       // complicado de lo esperado); el botón queda oculto para todos.
     } catch (err) {
-      // Si /auth/me falla, customerHasEmail se queda en su default (false)
-      // y el banner pide el correo aunque ya lo tenga — refreshEmailStatus
-      // (abajo) reintenta por su cuenta con el endpoint dedicado.
+      // Si /auth/me falla, nos quedamos con lo último confirmado en este
+      // navegador (no hay forma de saber el teléfono todavía) — nunca
+      // false por default, para no mostrar el banner de más.
       console.error("No se pudo cargar /auth/me:", err);
     }
     updateDashboardNotifyBtn();
@@ -292,7 +307,15 @@
   async function refreshEmailStatus() {
     try {
       const { email } = await api("/account/email");
-      customerHasEmail = !!email;
+      if (email) {
+        markEmailConfirmedLocally(currentPhone);
+        customerHasEmail = true;
+      } else {
+        // Un "no tiene correo" del servidor NUNCA pisa una confirmación
+        // local previa — evita que un dato viejo/puntual haga reaparecer
+        // el banner de alguien que ya lo había registrado.
+        customerHasEmail = isEmailConfirmedLocally(currentPhone);
+      }
       updateDashboardNotifyBtn();
       updateEmailBanner();
     } catch { /* no crítico */ }
@@ -673,6 +696,21 @@
     return { items, sum, rate, total };
   }
 
+  // Paleta fija para la "ficha" de cada plataforma en Arma tu combo — el
+  // color se elige por hash del nombre, así cada plataforma mantiene
+  // siempre el mismo color aunque cambie el orden del catálogo.
+  const COMBO_BADGE_COLORS = ["#8e3bd9", "#1577c6", "#5b21b6", "#0ea968", "#d1373d", "#b08550", "#0f9bb5"];
+  function comboBadgeColor(platform) {
+    let hash = 0;
+    for (let i = 0; i < platform.length; i++) hash = (hash * 31 + platform.charCodeAt(i)) >>> 0;
+    return COMBO_BADGE_COLORS[hash % COMBO_BADGE_COLORS.length];
+  }
+  function comboBadgeLetters(title) {
+    const words = title.trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return title.trim().slice(0, 2).toUpperCase();
+  }
+
   function renderComboBuilderCatalog() {
     const container = document.getElementById("build-combo-catalog");
     const inStock = cachedProducts.filter(p => !isOutOfStock(p, "platform"));
@@ -680,10 +718,13 @@
       const added = comboBuilderCart.includes(p.platform);
       return `
         <div class="build-combo-item">
-          <span class="build-combo-item-name">${escapeHtml(p.title)}</span>
-          <span class="build-combo-item-price">S/ ${escapeHtml(p.price)}</span>
-          <button class="btn-secondary btn-sm build-combo-add-btn" data-platform="${escapeHtml(p.platform)}" type="button" ${added ? "disabled" : ""}>
-            ${added ? "✓ Agregado" : "+ Agregar"}
+          <div class="build-combo-item-badge" style="background:${comboBadgeColor(p.platform)}">${escapeHtml(comboBadgeLetters(p.title))}</div>
+          <div class="build-combo-item-info">
+            <span class="build-combo-item-name">${escapeHtml(p.title)}</span>
+            <span class="build-combo-item-price">S/ ${escapeHtml(p.price)}</span>
+          </div>
+          <button class="build-combo-add-btn" data-platform="${escapeHtml(p.platform)}" type="button" ${added ? "disabled" : ""} aria-label="${added ? "Agregado" : "Agregar"}">
+            ${added ? "✓" : "+"}
           </button>
         </div>
       `;
@@ -727,6 +768,13 @@
     }
 
     buyBtn.disabled = items.length < MIN_CUSTOM_COMBO_ITEMS;
+
+    // Barra de progreso del header — 1 seg prendido por cada producto
+    // agregado (tope 3, que ya es el tramo máximo de descuento).
+    const litSegs = Math.min(items.length, 3);
+    for (let i = 1; i <= 3; i++) {
+      document.getElementById("build-combo-seg-" + i).classList.toggle("on", i <= litSegs);
+    }
 
     // Canva / Gemini AI Pro (y YouTube Premium, que además pide contraseña)
     // se activan a mano con el correo del cliente — se pide una sola vez
@@ -1004,6 +1052,7 @@
       }
       try {
         await api("/account/email", { method: "POST", body: { email } });
+        markEmailConfirmedLocally(currentPhone);
         customerHasEmail = true;
         updateDashboardNotifyBtn();
         closeEmailReminderModal();
