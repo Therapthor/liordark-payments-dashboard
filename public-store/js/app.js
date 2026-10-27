@@ -290,7 +290,6 @@
   // Numerito en "💬 Soporte" — para que sepa que ya le respondieron sin
   // tener que abrir el chat. Mismo ciclo de polling que la campanita.
   async function loadChatUnread() {
-    if (!isSupportTestUser()) return;
     try {
       const { count } = await api("/chat/unread");
       const badge = document.getElementById("chat-unread-badge");
@@ -358,7 +357,6 @@
     });
     document.getElementById("topbar-support-link").href = "https://wa.me/" + SUPPORT_PHONE;
     document.getElementById("topbar-support-link").addEventListener("click", (e) => {
-      if (!isSupportTestUser()) return; // resto de clientes sigue yendo a WhatsApp
       e.preventDefault();
       openChatModal();
     });
@@ -881,20 +879,6 @@
   // ─────────────────────────────────────────────────────────────
 
   let cachedDashboard = [];
-
-  // ─────────────────────────────────────────────────────────────
-  // SOPORTE (botón en cada cuenta activa) — de prueba, solo para este
-  // celular. Para cualquier otro cliente el botón no hace nada al
-  // presionarlo (esto es solo para no ni abrir el modal — el backend
-  // también bloquea el único caso que todavía toca el servidor, "No
-  // tiene suscripción"). Se quita esta restricción cuando se dé por
-  // probado — ver SUPPORT_TEST_PHONE en store.routes.ts.
-  // ─────────────────────────────────────────────────────────────
-
-  const SUPPORT_TEST_PHONE = "977430941";
-  function isSupportTestUser() {
-    return currentPhone.replace(/\D/g, "").slice(-9) === SUPPORT_TEST_PHONE;
-  }
 
   // Colapsadas por defecto (hidden ya viene puesto en el HTML) — el cliente
   // casi nunca necesita ver sus cuentas vencidas, así que no ocupan espacio
@@ -1455,11 +1439,10 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // CHAT DE SOPORTE EN VIVO — de prueba, solo isSupportTestUser(). El
-  // botón "💬 Soporte" de la barra abre esto en vez de WhatsApp (ver
-  // initNav). Un solo chat por celular — lo crea solo el backend al
-  // pedir GET /chat; si el admin lo cierra, el siguiente mensaje abre
-  // uno nuevo de cero.
+  // CHAT DE SOPORTE EN VIVO — el botón "💬 Soporte" de la barra abre esto
+  // en vez de WhatsApp (ver initNav). Un solo chat por celular — lo crea
+  // solo el backend al pedir GET /chat; si el admin lo cierra, el
+  // siguiente mensaje abre uno nuevo de cero.
   // ─────────────────────────────────────────────────────────────
 
   let chatSource = null;

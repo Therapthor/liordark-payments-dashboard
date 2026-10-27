@@ -44,13 +44,6 @@ function isCodesTestUser(phone: string): boolean {
   return phone.replace(/\D/g, "").slice(-9) === CODES_TEST_PHONE;
 }
 
-// Botón "Soporte" (Mis cuentas) — mismo celular de prueba que Códigos,
-// a pedido explícito. Se quita esta restricción cuando se dé por probado.
-const SUPPORT_TEST_PHONE = "977430941";
-function isSupportTestUser(phone: string): boolean {
-  return phone.replace(/\D/g, "").slice(-9) === SUPPORT_TEST_PHONE;
-}
-
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
 // (GET /api/stock/catalog y /combos) — sellableCount ya excluye
 // perfiles libres pero a punto de vencer, no se vuelve a inventar acá.
@@ -559,21 +552,16 @@ router.post("/checkout", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// CHAT DE SOPORTE EN VIVO — de prueba, solo SUPPORT_TEST_PHONE (mismo
-// gate que los reportes de arriba). El botón "💬 Soporte" de la barra
-// abre esto en vez de WhatsApp SOLO para ese celular (ver app.js).
+// CHAT DE SOPORTE EN VIVO — ya abierto a todos los clientes. El botón
+// "💬 Soporte" de la barra abre esto en vez de WhatsApp (ver app.js).
 // ─────────────────────────────────────────────────────────────
 
 const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-function requireChatTestUser(req: any, res: any): { phone: string } | null {
+function requireChatUser(req: any, res: any): { phone: string } | null {
   const customerId = (req as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
   if (!customer) { res.status(401).json({ message: "Sesión inválida." }); return null; }
-  if (!isSupportTestUser(customer.phone)) {
-    res.status(403).json({ message: "El chat todavía no está disponible para tu cuenta." });
-    return null;
-  }
   return { phone: customer.phone };
 }
 
@@ -582,7 +570,7 @@ function mediaExpiresAtISO(): string {
 }
 
 router.get("/chat", (req, res) => {
-  const who = requireChatTestUser(req, res);
+  const who = requireChatUser(req, res);
   if (!who) return;
 
   const isNew = !findChatByPhone(who.phone);
@@ -595,13 +583,13 @@ router.get("/chat", (req, res) => {
 // GET /api/store/chat/unread — numerito en el botón "💬 Soporte" de la
 // barra, sin necesidad de abrir el chat (ver polling en app.js).
 router.get("/chat/unread", (req, res) => {
-  const who = requireChatTestUser(req, res);
+  const who = requireChatUser(req, res);
   if (!who) return;
   res.json({ count: countUnreadForCustomer(who.phone) });
 });
 
 router.post("/chat/messages", (req, res) => {
-  const who = requireChatTestUser(req, res);
+  const who = requireChatUser(req, res);
   if (!who) return;
 
   const type = req.body?.type === "account_reply" ? "account_reply" : "text";
@@ -644,7 +632,7 @@ router.post("/chat/messages", (req, res) => {
 });
 
 router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) => {
-  const who = requireChatTestUser(req, res);
+  const who = requireChatUser(req, res);
   if (!who) return;
 
   const file = (req as any).file as Express.Multer.File | undefined;
@@ -669,7 +657,7 @@ router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) 
 });
 
 router.post("/chat/typing", (req, res) => {
-  const who = requireChatTestUser(req, res);
+  const who = requireChatUser(req, res);
   if (!who) return;
 
   const chat = getOrCreateOpenChatForPhone(who.phone);
@@ -684,8 +672,8 @@ router.post("/chat/typing", (req, res) => {
 router.get("/chat/stream", (req, res) => {
   const customerId = (req as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
-  if (!customer || !isSupportTestUser(customer.phone)) {
-    return res.status(403).end();
+  if (!customer) {
+    return res.status(401).end();
   }
 
   const chat = getOrCreateOpenChatForPhone(customer.phone);

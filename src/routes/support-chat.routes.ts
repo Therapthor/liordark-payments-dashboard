@@ -9,9 +9,8 @@ import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
 
 // ─────────────────────────────────────────────────────────────
 // PANEL ADMIN > CHAT DE SOPORTE — requireAuth se aplica al montar en
-// index.ts. De momento solo puede existir el chat del celular de prueba
-// (ver SUPPORT_TEST_PHONE en store.routes.ts), así que el inbox siempre
-// va a tener a lo más una conversación — igual queda armado para varias.
+// index.ts. Abierto a todos los clientes (ver store.routes.ts), así que
+// el inbox puede tener varias conversaciones a la vez.
 // ─────────────────────────────────────────────────────────────
 
 const router = Router();
