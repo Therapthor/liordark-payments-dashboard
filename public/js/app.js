@@ -274,7 +274,6 @@
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
-    if (view === "support" && window.LiordarkSupport) window.LiordarkSupport.load();
     if (view === "support-chat" && window.LiordarkSupportChat) window.LiordarkSupportChat.load();
     if (view === "config") switchConfigSection("catalog");
   }
@@ -1493,7 +1492,6 @@
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();
     if (window.LiordarkSettings) window.LiordarkSettings.init();
     if (window.LiordarkWholesalers) window.LiordarkWholesalers.init();
-    if (window.LiordarkSupport) window.LiordarkSupport.init();
     if (window.LiordarkSupportChat) window.LiordarkSupportChat.init();
 
     const { payments, stats } = await api("/live/initial");
@@ -1540,7 +1538,6 @@
     loadPendingOrders();
     loadConnectorsStatus();
     loadStockAlert();
-    if (window.LiordarkSupport) window.LiordarkSupport.load();
     if (window.LiordarkSupportChat) window.LiordarkSupportChat.load();
     if (window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();

@@ -20,14 +20,9 @@ import {
   listUnnotifiedExpiringClientsForWholesaler,
   listAllUnnotifiedExpiringClientsForWholesalers,
   markExpiryNotified,
-  getActiveAccountForWholesalerClient,
   type RenewalStatus,
 } from "../db/access.repository";
 import { listManualOverridesForWholesaler } from "../db/manual-overrides.repository";
-import {
-  createSupportTicket,
-  listSupportTicketsForWholesaler,
-} from "../db/support-tickets.repository";
 import {
   createWholesalerNotification,
   listWholesalerNotifications,
@@ -457,39 +452,4 @@ router.post("/notifications/read", (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// SOPORTE — el mayorista reporta, a nombre de uno de sus clientes, un
-// problema con su cuenta (botón "Soporte" en cada tarjeta de Clientes).
-// Mismo flujo que liordark.com (ver store.routes.ts), pero sin el gate de
-// celular de prueba — acá el mayorista ya es una cuenta de confianza.
-// ─────────────────────────────────────────────────────────────
-
-router.get("/support/tickets", (req, res) => {
-  res.json({ tickets: listSupportTicketsForWholesaler(wid(req)) });
-});
-
-router.post("/support/tickets", (req, res) => {
-  const wholesalerId   = wid(req);
-  const clientPhone    = String(req.body?.clientPhone ?? "").trim();
-  const platform       = String(req.body?.platform ?? "").trim();
-  const accountEmail   = String(req.body?.accountEmail ?? "").trim();
-  const problem        = String(req.body?.problem ?? "").trim();
-  if (!clientPhone || !platform || !accountEmail) return res.status(400).json({ message: "Falta la cuenta." });
-  if (!problem) return res.status(400).json({ message: "Cuéntanos qué está pasando." });
-
-  // Nunca confía en lo que mande el mayorista para correo/contraseña/proveedor
-  // — se vuelve a buscar la cuenta activa real de ESE cliente suyo.
-  const account = getActiveAccountForWholesalerClient(wholesalerId, clientPhone, platform, accountEmail);
-  if (!account) return res.status(404).json({ message: "Esa cuenta no está activa en ese cliente." });
-
-  const ticket = createSupportTicket({
-    clientPhone, wholesalerId,
-    platform:        account.platform,
-    accountEmail:    account.email,
-    accountPassword: account.password,
-    provider:        account.provider,
-    problem,
-  });
-  res.status(201).json({ ticket });
-});
-
 export default router;
