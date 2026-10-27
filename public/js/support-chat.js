@@ -240,6 +240,12 @@
 
   const GREETING_TEXT = "¡Hola! 👋 Soy del equipo de soporte de Liordark. ¿En qué podemos ayudarte hoy?";
   const ACCOUNT_REQUEST_TEXT = "Selecciona la cuenta con el problema 👇";
+  // Mismo texto que la despedida automática al cerrar el chat (ver
+  // CLOSE_FAREWELL_TEXT en support-chat.routes.ts) — acá va como botón
+  // de respuesta rápida, para usarla sin tener que cerrar la conversación.
+  const FAREWELL_TEXT =
+    "🥭 Esperamos que haya sido de tu agrado la atención. Cualquier duda o pregunta, no dudes en hacérnosla — " +
+    "estamos felices de poder ayudarte 💛😊";
 
   async function sendQuick(type, text) {
     if (!selectedChatId) return;
@@ -392,6 +398,7 @@
     });
     document.getElementById("chat-quick-greeting").addEventListener("click", () => sendQuick("text", GREETING_TEXT));
     document.getElementById("chat-quick-account").addEventListener("click", () => sendQuick("account_request", ACCOUNT_REQUEST_TEXT));
+    document.getElementById("chat-quick-farewell").addEventListener("click", () => sendQuick("text", FAREWELL_TEXT));
 
     document.getElementById("chat-admin-sticker-btn").addEventListener("click", () => toggleStickerPopover());
     document.getElementById("chat-admin-sticker-popover").addEventListener("click", (e) => {

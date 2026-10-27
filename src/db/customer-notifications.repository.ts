@@ -10,7 +10,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed";
+export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed" | "account_replaced";
 
 export type CustomerNotification = {
   id:          number;
@@ -49,7 +49,11 @@ function buildSupportResolvedHeadline(platform: string, replaced: boolean): stri
 
 /** customMessage: el texto que escribió el admin al atender — en
  *  "support_resolved" va DESPUÉS del encabezado fijo (reemplazo o no),
- *  nunca lo reemplaza. En "password_changed" es la contraseña nueva.
+ *  nunca lo reemplaza. En "password_changed" es la contraseña nueva. En
+ *  "account_replaced" son los datos completos de la cuenta nueva (correo,
+ *  contraseña, perfil, días restantes) — ver notify-replacement en
+ *  access.routes.ts, que arma ese bloque; acá solo se le antepone el
+ *  mismo encabezado fijo de "reemplazo" que usa support_resolved.
  *  replaced: si Soporte usó "Reemplazar" antes de atender este reporte
  *  (ver support.routes.ts). */
 export function createCustomerNotification(
@@ -61,6 +65,8 @@ export function createCustomerNotification(
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
     : type === "password_changed"
     ? `🔑 Tu cuenta de ${platformTitle(platform)} tiene una contraseña nueva: ${customMessage}`
+    : type === "account_replaced"
+    ? `${buildSupportResolvedHeadline(platform, true)}\n\n${customMessage}`
     : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO customer_notifications (client_phone, type, platform, account_email, message)

@@ -70,10 +70,6 @@
     const perfilLine = p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "";
     return `✅ *${p.platform}*\n\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Vencimiento: *${fmtDateLong(p.expiresAt)}*`;
   }
-  function msgReemplazo(p) {
-    const perfilLine = p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "";
-    return `🔄 Reemplazo de cuenta\n\n✅ *${p.platform}*\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Días restantes: *${p.daysLeft}*\n\nCualquier inconveniente adicional, estoy atento. 😊`;
-  }
   function msgResumen(items) {
     const lines = items.map((it, i) => {
       const perfilLine = it.profileName ? `\n👤 Perfil: ${it.profileName}` : "";
@@ -444,7 +440,7 @@
     });
 
     target.querySelectorAll(".access-send-all").forEach(btn => {
-      btn.addEventListener("click", () => sendAllForAccount(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
+      btn.addEventListener("click", () => notifyReplacementAll(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
     target.querySelectorAll(".access-password-all").forEach(btn => {
@@ -613,48 +609,32 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // ENVÍO EN MASIVO — reemplazo y cambio de contraseña son SOLO
-  // masivos (uno por uno, con cooldown); "enviar cuenta" individual
-  // sigue estando por perfil, en la fila.
-  //
-  // Las ventanas se pre-abren TODAS en blanco durante el propio clic
-  // (gesto real del usuario) y recién después, una por una con el
-  // cooldown, se les asigna el link real — si se abrieran una por una
-  // tras cada espera, el navegador bloquearía como pop-up no
-  // solicitado todo lo que se abra fuera del clic original.
+  // REEMPLAZO — SOLO masivo (a todos los perfiles con cliente asignado),
+  // y SOLO por la campanita de notificaciones, nunca por WhatsApp (mismo
+  // criterio que notifyPasswordChangeAll). El correo/contraseña nuevos ya
+  // están guardados en la cuenta (se editan aparte, en "✏️ Editar
+  // cuenta") — acá solo se avisa.
   // ─────────────────────────────────────────────────────────────
 
-  const SEND_ALL_COOLDOWN_MS = 5000;
-
-  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-
-  async function bulkSendToOccupied(btn, account, buildMessage) {
-    const occupied = account.profiles.filter(p => p.clientPhone);
-    if (occupied.length === 0) return;
-
-    const windows = occupied.map(() => window.open("", "_blank"));
-    const somethingBlocked = windows.some(w => !w);
+  async function notifyReplacementAll(btn, account) {
+    const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
+    if (occupiedCount === 0) return;
+    if (!confirm(
+      `¿Avisar el reemplazo de ${account.platform} (${account.email}) a los ${occupiedCount} cliente(s) con esta cuenta?\n\n` +
+      `Se les llega por su campanita de notificaciones, no por WhatsApp.`
+    )) return;
 
     const originalLabel = btn.textContent;
     btn.disabled = true;
-
-    for (let i = 0; i < occupied.length; i++) {
-      const link = waLink(occupied[i].clientPhone, buildMessage(occupied[i]));
-      if (windows[i]) windows[i].location = link;
-      btn.textContent = `Enviando ${i + 1}/${occupied.length}…`;
-      if (i < occupied.length - 1) await sleep(SEND_ALL_COOLDOWN_MS);
+    btn.textContent = "Avisando…";
+    try {
+      await api("/accounts/" + account.id + "/notify-replacement", { method: "POST" });
+    } catch (err) {
+      alert(err.message || "No se pudo avisar el reemplazo.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     }
-
-    btn.disabled = false;
-    btn.textContent = originalLabel;
-
-    if (somethingBlocked) {
-      alert("El navegador bloqueó una o más ventanas. Permite las ventanas emergentes para este sitio e inténtalo de nuevo.");
-    }
-  }
-
-  function sendAllForAccount(btn, account) {
-    return bulkSendToOccupied(btn, account, p => msgReemplazo(profileCtx(account, p)));
   }
 
   // ─────────────────────────────────────────────────────────────

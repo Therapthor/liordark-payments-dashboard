@@ -12,7 +12,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // atendido (ver support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced";
 
 export type WholesalerNotification = {
   id:           number;
@@ -58,6 +58,8 @@ export function createWholesalerNotification(
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
     : type === "password_changed"
     ? `🔑 La cuenta de ${platformTitle(platform)} de tu cliente tiene una contraseña nueva: ${customMessage}`
+    : type === "account_replaced"
+    ? `${buildSupportResolvedHeadline(platform, true)}\n\n${customMessage}`
     : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO wholesaler_notifications (wholesaler_id, type, platform, account_email, message)

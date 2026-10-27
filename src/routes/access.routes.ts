@@ -206,6 +206,33 @@ router.post("/accounts/:id/notify-password-change", (req, res) => {
   res.json({ ok: true, notified: occupied.length });
 });
 
+// POST /accounts/:id/notify-replacement — "🔄 Enviar reemplazo a todos"
+// (Accesos). Mismo criterio que notify-password-change (nunca por
+// WhatsApp, solo por la campanita de notificaciones): la cuenta ya tiene
+// guardado el correo/contraseña nuevos (se edita aparte, en "✏️ Editar
+// cuenta"), acá solo se avisa a cada perfil ocupado con el detalle
+// completo — correo, contraseña, perfil y días restantes.
+router.post("/accounts/:id/notify-replacement", (req, res) => {
+  const account = getAccountById(Number(req.params.id));
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+
+  const left = daysLeft(account.expiresAt);
+  const occupied = account.profiles.filter(p => p.clientPhone);
+  for (const p of occupied) {
+    const profileLine = p.profileName ? `\n👤 Perfil: ${p.profileName}` : "";
+    const detail = `📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}${profileLine}` +
+      (left !== null ? `\n⏳ Días restantes: ${left}` : "") +
+      `\n\nCualquier inconveniente adicional, estamos atentos. 😊`;
+    if (p.wholesalerId != null) {
+      createWholesalerNotification(p.wholesalerId, "account_replaced", account.platform, account.email, detail);
+    } else {
+      createCustomerNotification(p.clientPhone, "account_replaced", account.platform, account.email, detail);
+    }
+  }
+
+  res.json({ ok: true, notified: occupied.length });
+});
+
 // ── PEDIDO (combo) — venta manual de varias plataformas a un solo
 // cliente de una vez, para armar combos por WhatsApp sin mandar los
 // perfiles uno por uno. Vende de verdad (ocupa perfiles reales). ──
