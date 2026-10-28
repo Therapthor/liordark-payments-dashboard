@@ -273,7 +273,10 @@
       loadReminderRuns();
       loadRenewalNotifications();
       loadSmsDays();
-      if (window.LiordarkAccess) window.LiordarkAccess.loadProviderRenewals();
+      if (window.LiordarkAccess) {
+        window.LiordarkAccess.loadProviderRenewals();
+        window.LiordarkAccess.loadPasswordChangePending();
+      }
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
@@ -866,17 +869,18 @@
     wireOrderActions("orders-pending-list");
     wireOrderActions("renewals-list");
 
-    const sweepBtn = document.getElementById("orders-sweep-btn");
-    sweepBtn.addEventListener("click", async () => {
-      sweepBtn.disabled = true;
+    const sweep = async (btn) => {
+      btn.disabled = true;
       try {
         await api("/orders/sweep", { method: "POST" });
         loadPendingOrders();
       } catch { /* silencioso — la lista sigue mostrando lo último que había */ }
       finally {
-        sweepBtn.disabled = false;
+        btn.disabled = false;
       }
-    });
+    };
+    document.getElementById("orders-sweep-btn").addEventListener("click", (e) => sweep(e.currentTarget));
+    document.getElementById("renewals-sweep-btn").addEventListener("click", (e) => sweep(e.currentTarget));
   }
 
   function renderApprovedOrder(o, isNew) {

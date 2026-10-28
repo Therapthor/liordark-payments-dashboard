@@ -34,6 +34,15 @@
       <div id="renew-picker-list" class="renew-picker-list"></div>
     </div>
 
+    <!-- El mismo día que vence (o ya vencida) el corte automático ya no alcanza
+         a sumar los 30 días — se ofrece comprar una cuenta nueva en vez de
+         dejar pagar una renovación que no se va a reflejar. -->
+    <div id="renew-blocked" class="checkout-state" hidden>
+      <h2 style="margin: 0 0 4px;">Ya no se puede renovar hoy</h2>
+      <p class="muted" style="margin: 0 0 14px;">Esta cuenta ya venció o vence hoy mismo — la renovación solo se puede hacer con 1 día de anticipación. Compra una cuenta nueva.</p>
+      <a class="btn-primary btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Comprar cuenta nueva</a>
+    </div>
+
     <!-- Datos del cliente para plataformas de activación manual (CANVA, GEMINI, YOUTUBE) -->
     <div id="renew-form" class="checkout-state" hidden>
       <div class="renew-form">

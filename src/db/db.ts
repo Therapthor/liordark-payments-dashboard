@@ -175,6 +175,16 @@ ensureColumn("access_accounts", "codes_enabled", "codes_enabled INTEGER NOT NULL
 // no mostraba nada y era fácil olvidar activarla.
 ensureColumn("access_accounts", "activation_pending", "activation_pending INTEGER NOT NULL DEFAULT 0");
 
+// Renovación automática por ciclo (ver access.service.ts runRenewalCutover):
+// renewal_cleanup_due_at = fecha en que toca borrar los perfiles que no
+// renovaron (se fija al extender la cuenta, 1 día antes de vencer, para no
+// depender de expires_at que ya se movió 30 días para adelante en ese
+// momento). password_change_pending = aviso para el admin de que hay que
+// cambiarle la contraseña a la cuenta (clientes borrados que no deben
+// poder volver a entrar con la contraseña vieja).
+ensureColumn("access_accounts", "renewal_cleanup_due_at", "renewal_cleanup_due_at TEXT");
+ensureColumn("access_accounts", "password_change_pending", "password_change_pending INTEGER NOT NULL DEFAULT 0");
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS account_codes (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

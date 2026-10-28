@@ -1,5 +1,9 @@
 import { db } from "./db";
-import { findAccountByClientPhone } from "./access.repository";
+import { findAccountByClientPhone, setProfileRenewal } from "./access.repository";
+
+function last9(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-9);
+}
 
 // ─────────────────────────────────────────────────────────────
 // BITÁCORA DE RENOVACIONES — reemplaza RENOVACIONES_CLIENTES de Sheets
@@ -24,10 +28,28 @@ export function createRenewalLog(params: {
   `).run(params.orderName, params.phone, params.platform, initialEmail);
 }
 
-/** Devuelve found=false si el order_name no existe. */
+/**
+ * Devuelve found=false si el order_name no existe. Además de marcar la
+ * bitácora, marca el checkbox "✅ Renueva" del perfil del cliente — antes
+ * esto solo quedaba en el registro y el cliente pagaba sin que se viera
+ * reflejado en ningún lado (ver runRenewalCutover en access.service.ts
+ * para dónde se aplican de verdad los 30 días extra, 1 día antes de que
+ * venza la cuenta).
+ */
 export function confirmRenewalLog(orderName: string): { found: boolean } {
+  const row = db.prepare(`
+    SELECT phone, platform FROM renewals_log WHERE order_name = ?
+  `).get(orderName) as { phone: string; platform: string } | undefined;
+
   const result = db.prepare(`
     UPDATE renewals_log SET status = 'Confirmado' WHERE order_name = ?
   `).run(orderName);
+
+  if (result.changes > 0 && row) {
+    const account = findAccountByClientPhone(row.platform, row.phone);
+    const profile = account?.profiles.find(p => last9(p.clientPhone) === last9(row.phone));
+    if (profile) setProfileRenewal(profile.id, "yes");
+  }
+
   return { found: result.changes > 0 };
 }

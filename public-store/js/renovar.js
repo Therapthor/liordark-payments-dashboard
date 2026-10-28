@@ -32,7 +32,7 @@
   }
 
   function showState(id) {
-    ["renew-loading", "renew-error", "renew-picker", "renew-form", "renew-ready", "renew-success"].forEach(s => {
+    ["renew-loading", "renew-error", "renew-blocked", "renew-picker", "renew-form", "renew-ready", "renew-success"].forEach(s => {
       document.getElementById(s).hidden = s !== id;
     });
   }
@@ -125,6 +125,11 @@
   // Ya se sabe qué cuenta renovar (la única del link, o la que el cliente
   // eligió en el picker) — pide correo/contraseña si hace falta y sigue.
   function proceedWithAccount(info) {
+    if (info.canRenew === false) {
+      showState("renew-blocked");
+      return;
+    }
+
     initialDaysLeft = info.daysLeft;
     document.getElementById("renew-platform-label").textContent = "Renovación — " + (info.platformTag || info.platform);
     document.getElementById("renew-form-label").textContent =
@@ -149,16 +154,24 @@
 
   function renderPicker(accounts) {
     const list = document.getElementById("renew-picker-list");
-    list.innerHTML = accounts.map((a, idx) => `
+    list.innerHTML = accounts.map((a, idx) => {
+      const blocked = a.canRenew === false;
+      const daysLabel = blocked
+        ? (a.daysLeft <= 0 ? "Ya venció / vence hoy" : `Vence en ${a.daysLeft} día(s)`)
+        : `Vence en ${a.daysLeft} día(s)`;
+      return `
       <div class="renew-picker-item">
         <div class="renew-picker-info">
           <span class="renew-picker-name">${escapeHtml(a.platformTag || a.platform)}</span>
-          <span class="renew-picker-days">Vence en ${a.daysLeft} día(s)</span>
+          <span class="renew-picker-days">${daysLabel}</span>
         </div>
-        <button class="renew-picker-btn" type="button" data-idx="${idx}">Renovar</button>
+        ${blocked
+          ? `<a class="renew-picker-btn" href="https://liordark.com" style="text-decoration:none;">Cuenta nueva</a>`
+          : `<button class="renew-picker-btn" type="button" data-idx="${idx}">Renovar</button>`}
       </div>
-    `).join("");
-    list.querySelectorAll(".renew-picker-btn").forEach(btn => {
+    `;
+    }).join("");
+    list.querySelectorAll(".renew-picker-btn[data-idx]").forEach(btn => {
       btn.addEventListener("click", () => {
         const account = accounts[Number(btn.dataset.idx)];
         selectedPlatform = account.platform;

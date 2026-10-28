@@ -1120,14 +1120,17 @@
   // nueva sin abrir cada plataforma por separado.
   // ─────────────────────────────────────────────────────────────
 
-  let cachedRenewingProfiles = [];
+  // Lista cuentas (no perfiles sueltos — esos ya se autogestionan solos,
+  // ver confirmRenewalLog). "x/y renovaron" muestra cuántos de los
+  // clientes ocupados ya marcaron renueva en este ciclo.
+  let cachedRenewingAccounts = [];
 
-  function renderRenewingItem(p, idx) {
+  function renderRenewingItem(a, idx) {
     return `
       <div class="access-history-item access-renewing-item">
-        <span class="access-history-platform">${escapeHtml(p.platformTag || p.platform)}</span>
-        <span class="text-muted">${escapeHtml(p.clientPhone)}</span>
-        <span class="text-muted">Vence: ${fmtDateLong(p.expiresAt)}</span>
+        <span class="access-history-platform">${escapeHtml(a.platform)}</span>
+        <span class="text-muted">${escapeHtml(a.email)}</span>
+        <span class="text-muted">${a.renewingCount}/${a.totalProfiles} renovaron · Vence: ${fmtDateLong(a.expiresAt)}</span>
         <button class="btn-secondary btn-sm renewing-view-btn" data-idx="${idx}" type="button">👁 Ver</button>
       </div>
     `;
@@ -1137,10 +1140,10 @@
     const body  = document.getElementById("access-renewing-body");
     const empty = document.getElementById("access-renewing-empty");
     try {
-      const { profiles } = await api("/profiles/renewing");
-      cachedRenewingProfiles = profiles;
-      body.innerHTML = profiles.map(renderRenewingItem).join("");
-      empty.hidden = profiles.length > 0;
+      const { accounts } = await api("/accounts/renewing");
+      cachedRenewingAccounts = accounts;
+      body.innerHTML = accounts.map(renderRenewingItem).join("");
+      empty.hidden = accounts.length > 0;
     } catch (err) {
       body.innerHTML = "";
       empty.hidden = false;
@@ -1150,16 +1153,16 @@
 
   // Cierra el modal, abre el detalle de la plataforma (todas sus cuentas
   // ya expandidas, como en la vista normal de Accesos) y resalta/lleva la
-  // vista hasta la cuenta puntual de este cliente.
-  async function viewRenewingAccount(p) {
+  // vista hasta esta cuenta puntual.
+  async function viewRenewingAccount(a) {
     document.getElementById("access-renewing-modal").hidden = true;
     document.getElementById("access-search-input").value = "";
     document.getElementById("access-search-clear").hidden = true;
     resetSearch();
-    await openPlatformDetail(p.platform);
+    await openPlatformDetail(a.platform);
 
     const el = document.querySelector(
-      `#access-platform-detail-accounts .access-account[data-account-id="${p.accountId}"]`
+      `#access-platform-detail-accounts .access-account[data-account-id="${a.id}"]`
     );
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1176,8 +1179,8 @@
     document.getElementById("access-renewing-body").addEventListener("click", (e) => {
       const btn = e.target.closest(".renewing-view-btn");
       if (!btn) return;
-      const p = cachedRenewingProfiles[Number(btn.dataset.idx)];
-      if (p) viewRenewingAccount(p);
+      const a = cachedRenewingAccounts[Number(btn.dataset.idx)];
+      if (a) viewRenewingAccount(a);
     });
     document.getElementById("access-renewing-export-txt").addEventListener("click", exportRenewingTxt);
     document.getElementById("access-renewing-export-pdf").addEventListener("click", exportRenewingPdf);
@@ -1238,23 +1241,23 @@
 
   function exportRenewingTxt() {
     const lines = [
-      "RESUMEN — Clientes marcados para renovar",
+      "RESUMEN — Cuentas con clientes marcados para renovar",
       "Generado: " + new Date().toLocaleString("es-PE"),
-      "Total: " + cachedRenewingProfiles.length,
+      "Total: " + cachedRenewingAccounts.length,
       "",
-      ...cachedRenewingProfiles.map(p =>
-        `${p.platformTag || p.platform} · ${p.clientPhone} · Vence: ${fmtDateLong(p.expiresAt)}`
+      ...cachedRenewingAccounts.map(a =>
+        `${a.platform} · ${a.email} · ${a.renewingCount}/${a.totalProfiles} renovaron · Vence: ${fmtDateLong(a.expiresAt)}`
       ),
     ];
-    downloadTextFile("clientes-a-renovar.txt", lines.join("\n"));
+    downloadTextFile("cuentas-a-renovar.txt", lines.join("\n"));
   }
 
   function exportRenewingPdf() {
-    const rows = cachedRenewingProfiles.map(p => `
-      <tr><td>${escapeHtml(p.platformTag || p.platform)}</td><td>${escapeHtml(p.clientPhone)}</td><td>${escapeHtml(fmtDateLong(p.expiresAt))}</td></tr>
+    const rows = cachedRenewingAccounts.map(a => `
+      <tr><td>${escapeHtml(a.platform)}</td><td>${escapeHtml(a.email)}</td><td>${a.renewingCount}/${a.totalProfiles}</td><td>${escapeHtml(fmtDateLong(a.expiresAt))}</td></tr>
     `).join("");
-    openPrintableSummary("Clientes marcados para renovar",
-      `<thead><tr><th>Plataforma</th><th>Celular</th><th>Vence</th></tr></thead><tbody>${rows}</tbody>`);
+    openPrintableSummary("Cuentas con clientes marcados para renovar",
+      `<thead><tr><th>Plataforma</th><th>Correo</th><th>Renovaron</th><th>Vence</th></tr></thead><tbody>${rows}</tbody>`);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1504,6 +1507,104 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // CUENTAS POR CAMBIAR CONTRASEÑA — se sacó a algún cliente que no
+  // renovó (ver runRenewalCutover en access.service.ts) y no debe poder
+  // volver a entrar con la contraseña vieja.
+  // ─────────────────────────────────────────────────────────────
+
+  let cachedPasswordChangeAccounts = [];
+
+  function renderPasswordChangeItem(a) {
+    const li = document.createElement("li");
+    li.className = "catalog-item";
+    li.dataset.id = a.id;
+    li.innerHTML = `
+      <div class="catalog-thumb catalog-thumb-empty">🔑</div>
+      <div class="catalog-main">
+        <div class="catalog-name">${escapeHtml(a.platform)} — ${escapeHtml(a.email)}</div>
+        <div class="catalog-desc">Contraseña actual: ${escapeHtml(a.password)}</div>
+      </div>
+      <div class="catalog-actions">
+        <button class="btn-secondary btn-sm password-change-edit-btn" type="button">✏️ Cambiar</button>
+        <button class="icon-btn-sm password-change-done-btn" title="Ya la cambié">✅</button>
+      </div>
+    `;
+    return li;
+  }
+
+  function renderPasswordChangeList() {
+    const list  = document.getElementById("password-change-list");
+    const empty = document.getElementById("password-change-empty");
+    const badge = document.getElementById("password-change-count");
+    if (!list) return;
+    list.innerHTML = "";
+    badge.textContent = String(cachedPasswordChangeAccounts.length);
+    if (cachedPasswordChangeAccounts.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const a of cachedPasswordChangeAccounts) list.appendChild(renderPasswordChangeItem(a));
+  }
+
+  async function loadPasswordChangePending() {
+    try {
+      const { accounts } = await api("/password-change-pending");
+      cachedPasswordChangeAccounts = accounts;
+      renderPasswordChangeList();
+    } catch { /* se reintenta en el próximo ciclo */ }
+  }
+
+  function initPasswordChangeListActions() {
+    const list = document.getElementById("password-change-list");
+    if (!list) return;
+    list.addEventListener("click", async (e) => {
+      const li = e.target.closest(".catalog-item");
+      if (!li) return;
+      const id = Number(li.dataset.id);
+
+      if (e.target.closest(".password-change-edit-btn")) {
+        openEditModal(id);
+        return;
+      }
+      if (e.target.closest(".password-change-done-btn")) {
+        if (!confirm("¿Ya cambiaste la contraseña de esta cuenta?")) return;
+        try {
+          await api("/accounts/" + id + "/password-changed", { method: "POST" });
+          await loadPasswordChangePending();
+        } catch (err) { alert(err.message || "No se pudo marcar."); }
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // DISPARO MANUAL DEL CORTE DE RENOVACIÓN — automático a las 6am, esto
+  // es para una gestión puntual sin esperar a la corrida diaria. Es
+  // idempotente (ver runRenewalCutover), no pasa nada si se usa de más.
+  // ─────────────────────────────────────────────────────────────
+
+  function initRenewalCutoverButton() {
+    const btn = document.getElementById("renewal-cutover-run-btn");
+    const status = document.getElementById("renewal-cutover-status");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      status.hidden = true;
+      try {
+        const result = await api("/renewal-cutover/run", { method: "POST" });
+        status.hidden = false;
+        status.textContent =
+          `✅ Procesado: ${result.extended.length} cuenta(s) extendida(s) 30 días, ` +
+          `${result.cleaned.length} cuenta(s) con perfiles liberados.`;
+        await loadPasswordChangePending();
+        await loadProviderRenewals();
+      } catch (err) {
+        status.hidden = false;
+        status.textContent = "⚠️ " + (err.message || "No se pudo procesar.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
   let initialized = false;
   function init() {
     if (initialized) return;
@@ -1519,11 +1620,13 @@
     initClientSummarySend();
     initClientSummaryActions();
     initProviderRenewalListActions();
+    initPasswordChangeListActions();
+    initRenewalCutoverButton();
     initComboOrderModal();
     document.getElementById("access-platform-back").addEventListener("click", closePlatformDetail);
     document.getElementById("access-platform-compact-toggle").addEventListener("click", togglePlatformCompact);
     document.getElementById("access-platform-sort-toggle").addEventListener("click", togglePlatformSort);
   }
 
-  window.LiordarkAccess = { init, load, loadProviderRenewals, openComboOrderModal };
+  window.LiordarkAccess = { init, load, loadProviderRenewals, loadPasswordChangePending, openComboOrderModal };
 })();

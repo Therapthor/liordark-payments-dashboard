@@ -17,6 +17,9 @@ import {
   setRenewalPending,
   sellProfile,
   listRenewingProfiles,
+  listAccountsWithPendingRenewal,
+  listAccountsNeedingPasswordChange,
+  markPasswordChanged,
   listPendingActivations,
   markActivationDone,
   type AccessAccountWithProfiles,
@@ -24,7 +27,7 @@ import {
   type RenewalStatus,
   type SoldProfile,
 } from "../db/access.repository";
-import { renewAccount, accountStatus, daysLeft } from "../services/access.service";
+import { renewAccount, accountStatus, daysLeft, runRenewalCutover } from "../services/access.service";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
@@ -379,6 +382,35 @@ router.post("/profiles/:id/renewal", (req, res) => {
 // cualquier cuenta, en un solo lugar (en vez de revisar cuenta por cuenta).
 router.get("/profiles/renewing", (_req, res) => {
   res.json({ profiles: listRenewingProfiles() });
+});
+
+// GET /accounts/renewing — reemplaza el listado de arriba en el panel:
+// la CUENTA completa es lo que se renueva (los perfiles sueltos se
+// autogestionan solos, ver confirmRenewalLog en renewal-log.repository.ts).
+router.get("/accounts/renewing", (_req, res) => {
+  res.json({ accounts: listAccountsWithPendingRenewal() });
+});
+
+// ── CORTE AUTOMÁTICO DE CICLO (ver runRenewalCutover en access.service.ts) ──
+// Corre solo una vez al día (index.ts), pero este endpoint deja dispararlo
+// a mano desde el panel para una gestión puntual — es idempotente, no pasa
+// nada si se llama varias veces.
+router.post("/renewal-cutover/run", (_req, res) => {
+  const result = runRenewalCutover();
+  res.json({ ok: true, ...result });
+});
+
+// Cuentas a las que el admin todavía tiene que cambiarles la contraseña —
+// se sacó a algún cliente que no renovó y no debe poder volver a entrar.
+router.get("/password-change-pending", (_req, res) => {
+  res.json({ accounts: listAccountsNeedingPasswordChange() });
+});
+
+router.post("/accounts/:id/password-changed", (req, res) => {
+  const id = Number(req.params.id);
+  if (!getAccountById(id)) return res.status(404).json({ message: "Cuenta no encontrada." });
+  markPasswordChanged(id);
+  res.json({ ok: true });
 });
 
 // GET /renewal-history — registro permanente de renovaciones ya hechas

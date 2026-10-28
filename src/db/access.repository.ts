@@ -48,6 +48,9 @@ export type AccessAccount = {
   // "🔑 Código" — si esta cuenta puede recibir código (Netflix, ChatGPT,
   // etc.) para que el cliente lo pida desde liordark.com. Ver codes.repository.ts.
   codesEnabled: boolean;
+  // Corte automático del ciclo — ver runRenewalCutover en access.service.ts.
+  renewalCleanupDueAt:   string | null;
+  passwordChangePending: boolean;
   createdAt:   string;
   updatedAt:   string;
 };
@@ -404,6 +407,92 @@ export function listRenewingProfiles(): RenewingProfile[] {
     WHERE p.renewal_status = 'yes' AND p.client_phone != '' AND p.wholesaler_id IS NULL
     ORDER BY a.expires_at ASC
   `).all() as RenewingProfile[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// CORTE AUTOMÁTICO DE CICLO — ver runRenewalCutover en access.service.ts.
+// Los clientes se autogestionan su renovación (pagan desde liordark.com,
+// eso marca su perfil "✅ Renueva"); esto es lo que de verdad extiende la
+// cuenta y saca a los que no pagaron, sin que el admin tenga que entrar
+// cuenta por cuenta.
+// ─────────────────────────────────────────────────────────────
+
+export type AccountWithRenewalCount = AccessAccount & { renewingCount: number; totalProfiles: number };
+
+/** Cuentas con al menos un cliente marcado "✅ Renueva" — reemplaza el
+ *  listado por PERFIL de "Renovados" (ver listRenewingProfiles arriba,
+ *  que queda para otros usos): acá se ve la cuenta completa, que es la
+ *  unidad real que se renueva. */
+export function listAccountsWithPendingRenewal(): AccountWithRenewalCount[] {
+  const rows = db.prepare(`
+    SELECT a.*,
+      (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND p.renewal_status = 'yes') AS renewingCount,
+      (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND p.client_phone != '') AS totalProfiles
+    FROM access_accounts a
+    WHERE a.has_profiles = 1
+      AND EXISTS (SELECT 1 FROM access_profiles p WHERE p.account_id = a.id AND p.renewal_status = 'yes')
+    ORDER BY a.expires_at ASC
+  `).all() as any[];
+  return rows.map(row => ({ ...toAccount(row), renewingCount: row.renewingCount, totalProfiles: row.totalProfiles }));
+}
+
+/** Universo del corte automático — cuentas con perfiles y fecha de vencimiento. */
+export function listRenewableAccountsWithProfiles(): AccessAccountWithProfiles[] {
+  const rows = db.prepare(`
+    SELECT * FROM access_accounts WHERE has_profiles = 1 AND expires_at IS NOT NULL
+  `).all() as any[];
+  return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
+}
+
+/** Extiende la cuenta 30 días (1 día antes de vencer, ver runRenewalCutover)
+ *  y anota la fecha original de vencimiento como "limpieza pendiente" —
+ *  ese día hay que sacar a quien no renovó. No usa expires_at para la
+ *  limpieza porque ya se movió 30 días para adelante acá mismo. */
+export function applyRenewalExtension(accountId: number, newExpiresAt: string, cleanupDueAt: string): void {
+  db.prepare(`
+    UPDATE access_accounts SET expires_at = ?, renewal_cleanup_due_at = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(newExpiresAt, cleanupDueAt, accountId);
+}
+
+/** Cuentas con una limpieza de ciclo pendiente para hoy (o atrasada). */
+export function listAccountsDueForRenewalCleanup(todayISO: string): AccessAccountWithProfiles[] {
+  const rows = db.prepare(`
+    SELECT * FROM access_accounts WHERE renewal_cleanup_due_at IS NOT NULL AND renewal_cleanup_due_at <= ?
+  `).all(todayISO) as any[];
+  return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
+}
+
+/** Saca de la cuenta a quien no renovó — vacía su cupo (no lo borra, así
+ *  queda disponible para venderlo de nuevo) y deja aviso de que hay que
+ *  cambiar la contraseña si se sacó a alguien (para que no pueda volver a
+ *  entrar con la contraseña vieja). */
+export function applyRenewalCleanup(accountId: number): { freedCount: number } {
+  const profiles = getProfilesByAccount(accountId);
+  const toFree = profiles.filter(p => p.clientPhone && p.renewalStatus !== "yes");
+  for (const p of toFree) releaseProfile(p.id);
+
+  // Quien sí renovó se queda, pero su checkbox se reinicia para el ciclo
+  // nuevo: si no, el próximo vencimiento se extendería solo sin que pague.
+  const toReset = profiles.filter(p => p.clientPhone && p.renewalStatus === "yes");
+  for (const p of toReset) setProfileRenewal(p.id, "");
+
+  db.prepare(`UPDATE access_accounts SET renewal_cleanup_due_at = NULL WHERE id = ?`).run(accountId);
+  if (toFree.length > 0) {
+    db.prepare(`UPDATE access_accounts SET password_change_pending = 1, updated_at = datetime('now') WHERE id = ?`).run(accountId);
+  }
+  return { freedCount: toFree.length };
+}
+
+/** Cuentas a las que el admin todavía tiene que cambiarles la contraseña
+ *  (se sacó a algún cliente que no renovó). */
+export function listAccountsNeedingPasswordChange(): AccessAccount[] {
+  return (db.prepare(`
+    SELECT * FROM access_accounts WHERE password_change_pending = 1 ORDER BY updated_at DESC
+  `).all() as any[]).map(toAccount);
+}
+
+export function markPasswordChanged(accountId: number): void {
+  db.prepare(`UPDATE access_accounts SET password_change_pending = 0, updated_at = datetime('now') WHERE id = ?`).run(accountId);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1367,6 +1456,8 @@ function toAccount(row: any): AccessAccount {
     providerRenewalNextDate: row.provider_renewal_next_date ?? null,
     renewalPendingAt: row.renewal_pending_at ?? null,
     codesEnabled: row.codes_enabled === 1,
+    renewalCleanupDueAt:   row.renewal_cleanup_due_at ?? null,
+    passwordChangePending: row.password_change_pending === 1,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };

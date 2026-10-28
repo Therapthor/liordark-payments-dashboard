@@ -109,6 +109,7 @@
             <div class="panel-header">
               <h2>Renovaciones pendientes</h2>
               <span class="badge orders-count-badge" id="renewals-count">0</span>
+              <button id="renewals-sweep-btn" class="icon-btn-sm" type="button" title="Barrido: borra rechazados, confirmados pegados, y pendientes sin pago emparejado por Yape. Nunca toca comprobantes, sin stock, ni pendientes con pago ya emparejado.">🧹</button>
             </div>
             <ul id="renewals-list" class="feed-list"></ul>
             <p id="renewals-empty" class="feed-empty">No hay renovaciones pendientes.</p>
@@ -357,6 +358,26 @@
 
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
+
+        <!-- Corte automático de ciclo (ver runRenewalCutover en
+             access.service.ts) — corre solo 1 vez al día (6am), pero
+             queda el disparo manual para una gestión puntual. El aviso de
+             "cambiar contraseña" es lo más urgente: salió un cliente que
+             no renovó y no debe poder volver a entrar con la vieja. -->
+        <div class="panel-header standalone">
+          <h2>Corte de renovación</h2>
+          <button id="renewal-cutover-run-btn" class="btn-secondary btn-sm" type="button">🔁 Procesar ahora</button>
+        </div>
+        <p class="panel-hint">Automático a las 6am: extiende 30 días a quien ya pagó (1 día antes de vencer) y saca a quien no renovó. El botón de arriba lo dispara a mano para un caso puntual.</p>
+        <p id="renewal-cutover-status" class="panel-hint" hidden></p>
+
+        <div class="panel-header standalone">
+          <h2>⚠️ Cuentas por cambiar contraseña</h2>
+          <span class="badge orders-count-badge" id="password-change-count">0</span>
+        </div>
+        <p class="panel-hint">Se sacó a algún cliente que no renovó — cambia la contraseña para que no pueda volver a entrar.</p>
+        <ul id="password-change-list" class="catalog-list"></ul>
+        <p id="password-change-empty" class="feed-empty" hidden>Ninguna cuenta pendiente de cambiar contraseña.</p>
 
         <!-- SMS automático (ClickLab/Infobip). Corridas pendientes/hechas
              por día — Hoy (quedaron colgados sin mandar) y Mañana (tanda
@@ -876,16 +897,16 @@
   <div id="access-renewing-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">
       <div class="modal-head">
-        <h3>Clientes marcados "✅ Renueva"</h3>
+        <h3>Cuentas con clientes marcados "✅ Renueva"</h3>
         <button type="button" class="modal-x" data-close-modal="access-renewing-modal">✕</button>
       </div>
-      <p class="panel-hint">De todas las cuentas, en un solo lugar — para no tener que revisar una por una.</p>
+      <p class="panel-hint">La cuenta completa es lo que se renueva — los perfiles sueltos ya se autogestionan solos.</p>
       <div class="modal-export-actions">
         <button type="button" class="btn-secondary btn-sm" id="access-renewing-export-txt">⬇️ Guardar .txt</button>
         <button type="button" class="btn-secondary btn-sm" id="access-renewing-export-pdf">🖨️ Guardar PDF</button>
       </div>
       <div id="access-renewing-body" class="modal-scroll-body"></div>
-      <p id="access-renewing-empty" class="feed-empty" hidden>Nadie marcado "Renueva" todavía.</p>
+      <p id="access-renewing-empty" class="feed-empty" hidden>Ninguna cuenta con clientes marcados "Renueva" todavía.</p>
     </div>
   </div>
 

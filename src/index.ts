@@ -32,7 +32,7 @@ import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
 import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
 import { archiveExpiredAccounts } from "./db/access-history.repository";
-import { limaTodayISO } from "./services/access.service";
+import { limaTodayISO, runRenewalCutover } from "./services/access.service";
 import { disableInactiveWholesalers } from "./db/wholesaler.repository";
 import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
 import { runExpireChatMedia } from "./jobs/expiry-chat-media.job";
@@ -134,6 +134,7 @@ const server = app.listen(env.PORT, () => {
   setInterval(runGenerateExpiryNotifications, EXPIRY_NOTIFY_INTERVAL_MS);
 
   scheduleEmailRemindersDaily();
+  scheduleRenewalCutoverDaily();
 
   runExpireChatMediaJob();
   setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);
@@ -211,6 +212,35 @@ function scheduleEmailRemindersDaily(): void {
   setTimeout(() => {
     runEmailReminders();
     setInterval(runEmailReminders, ONE_DAY_MS);
+  }, delay);
+}
+
+// Corte automático de ciclo de renovación (ver runRenewalCutover en
+// access.service.ts) — 1 vez al día, 6am Lima (antes de que arranque el
+// día comercial y antes del recordatorio por correo de las 8am).
+const RENEWAL_CUTOVER_HOUR_LIMA   = 6;
+const RENEWAL_CUTOVER_MINUTE_LIMA = 0;
+
+function runRenewalCutoverJob(): void {
+  try {
+    const result = runRenewalCutover();
+    if (result.extended.length > 0 || result.cleaned.length > 0) {
+      console.log(
+        `🔁 Corte de renovación: ${result.extended.length} cuenta(s) extendida(s) 30 días, ` +
+        `${result.cleaned.length} cuenta(s) con perfiles sin renovar liberados`
+      );
+    }
+  } catch (err: any) {
+    console.error("⚠️ Error en el corte automático de renovación:", err?.message);
+  }
+}
+
+function scheduleRenewalCutoverDaily(): void {
+  const delay = msUntilNextLimaTime(RENEWAL_CUTOVER_HOUR_LIMA, RENEWAL_CUTOVER_MINUTE_LIMA);
+  console.log(`🔁 Corte de renovación: próxima corrida en ${Math.round(delay / 60000)} min (6am Lima)`);
+  setTimeout(() => {
+    runRenewalCutoverJob();
+    setInterval(runRenewalCutoverJob, ONE_DAY_MS);
   }, delay);
 }
 

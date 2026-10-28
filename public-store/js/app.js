@@ -1360,12 +1360,18 @@
   }
 
   function successAccountHtml(a, idx) {
-    // Renovar solo aparece acá cuando falta 1 día o menos (o ya venció pero
-    // sigue activa) — antes no tiene sentido ofrecerlo.
-    const canRenew = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 1;
+    // La ventana de renovación es el día antes de vencer — ahí el corte
+    // automático (ver access.service.ts) alcanza a sumar los 30 días. El
+    // mismo día de vencer (o ya vencida) ya no da tiempo: se ofrece
+    // comprar una cuenta nueva en vez de dejar pagar una renovación que no
+    // se va a aplicar.
+    const dueSoon = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 1;
+    const expired = a.daysLeft !== null && a.daysLeft !== undefined && a.daysLeft <= 0;
     const nonRenewable = isNonRenewablePlatform(a.platform);
-    const needsCanvaEmail = canRenew && !nonRenewable && isManualActivationPlatform(a.platform);
-    const needsRenewPassword = canRenew && !nonRenewable && requiresPasswordPlatform(a.platform);
+    const canRenew = dueSoon && !expired && !nonRenewable;
+    const needsNewAccount = dueSoon && (expired || nonRenewable);
+    const needsCanvaEmail = canRenew && isManualActivationPlatform(a.platform);
+    const needsRenewPassword = canRenew && requiresPasswordPlatform(a.platform);
     // Siempre visible — antes solo se mostraba el vencimiento cuando faltaba
     // 1 día o menos (dentro del cuadro de Renovar), así que una cuenta recién
     // comprada no mostraba en ningún lado cuánto tiempo le quedaba.
@@ -1375,7 +1381,7 @@
     // Franja del header en color — naranja normal, o rojo/naranja "urgente"
     // cuando ya se puede renovar (mismo umbral que canRenew), para que el
     // estado se note de un vistazo sin tener que leer el texto.
-    const headClass = canRenew ? "urgent" : "ok";
+    const headClass = dueSoon ? "urgent" : "ok";
     return `
       <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head ${headClass}">
@@ -1391,13 +1397,20 @@
           <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
           ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
           ${a.link ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
-          ${canRenew && nonRenewable ? `
+          ${needsNewAccount && nonRenewable ? `
             <div class="success-account-renew-box">
               <span class="badge-no-renewable">🚫 No Renovable</span>
             </div>
           ` : ""}
-          ${canRenew && !nonRenewable ? `
+          ${needsNewAccount && !nonRenewable ? `
             <div class="success-account-renew-box">
+              <p class="muted" style="margin:0;">${expired ? "Esta cuenta ya venció." : "Esta cuenta vence hoy."} Ya no se puede renovar el mismo día — compra una cuenta nueva.</p>
+              <button class="btn-primary btn-sm success-newaccount-btn" type="button">Comprar cuenta nueva</button>
+            </div>
+          ` : ""}
+          ${canRenew ? `
+            <div class="success-account-renew-box">
+              <p class="muted" style="margin:0;">Renueva con 1 día de anticipación para que tu cuenta no sea reemplazada.</p>
               ${needsCanvaEmail ? `
                 <input type="email" class="renewal-canva-email-input" data-idx="${idx}" placeholder="Correo para activar ${escapeHtml(a.platform)}">
                 <p class="form-error renewal-canva-email-error" data-idx="${idx}" hidden></p>
@@ -1415,6 +1428,11 @@
 
   function initDashboardRenewals() {
     document.getElementById("dashboard-active-list").addEventListener("click", (e) => {
+      if (e.target.closest(".success-newaccount-btn")) {
+        switchPage("catalog");
+        return;
+      }
+
       const btn = e.target.closest(".success-renew-btn");
       if (!btn) return;
       const idx = Number(btn.dataset.idx);

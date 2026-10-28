@@ -155,9 +155,18 @@ router.post("/renewals/checkout", async (req, res) => {
 
   // Nunca renovar algo que ese celular no tiene — evita que cualquiera
   // arme una orden de renovación con un platform inventado.
-  const owns = listRenewalAccountsByPhone(phone).some(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
-  if (!owns) {
+  const account = listRenewalAccountsByPhone(phone).find(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
+  if (!account) {
     return res.status(404).json({ message: "No encontramos esa cuenta para este celular." });
+  }
+
+  // El corte automático (runRenewalCutover) solo suma los 30 días cuando
+  // falta exactamente 1 día — el mismo día que vence (o ya vencida) ya no
+  // da tiempo de aplicarlo, así que no se acepta el pago: toca comprar de
+  // nuevo en vez de cobrar una "renovación" que nunca se iba a reflejar.
+  const accountDaysLeft = daysLeft(account.expiresAt);
+  if (accountDaysLeft === null || accountDaysLeft <= 0) {
+    return res.status(400).json({ message: "Esta cuenta ya no se puede renovar el mismo día — compra una cuenta nueva." });
   }
 
   try {
@@ -186,13 +195,18 @@ function renewalAccountInfo(phone: string, platform: string): any {
     .find(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
   if (!account) return null;
 
+  const left = daysLeft(account.expiresAt);
   return {
     platform:    account.platform,
     platformTag: account.platformTag,
     price:       account.price,
-    daysLeft:    daysLeft(account.expiresAt),
+    daysLeft:    left,
     needsEmail:    isManualActivationPlatform(account.platform),
     needsPassword: requiresPasswordPlatform(account.platform),
+    // Mismo umbral que el checkout: el día que vence (o ya vencida) ya no
+    // se puede renovar — el frontend muestra "comprar cuenta nueva" en vez
+    // del formulario de renovación.
+    canRenew: left !== null && left > 0,
   };
 }
 
@@ -209,9 +223,16 @@ async function renewalCheckout(
     return { status: 400, body: { message: "Falta la contraseña para activar " + platform + "." } };
   }
 
-  const owns = listRenewalAccountsByPhone(phone).some(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
-  if (!owns) {
+  const account = listRenewalAccountsByPhone(phone).find(a => a.platform.trim().toUpperCase() === platform.trim().toUpperCase());
+  if (!account) {
     return { status: 404, body: { message: "Esa cuenta ya no está pendiente de renovar." } };
+  }
+
+  // Mismo criterio que /renewals/checkout: el mismo día que vence (o ya
+  // vencida) el corte automático ya no alcanza a aplicar la extensión.
+  const accountDaysLeft = daysLeft(account.expiresAt);
+  if (accountDaysLeft === null || accountDaysLeft <= 0) {
+    return { status: 400, body: { message: "Esta cuenta ya no se puede renovar el mismo día — compra una cuenta nueva." } };
   }
 
   try {
