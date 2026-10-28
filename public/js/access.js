@@ -1441,6 +1441,9 @@
         </div>
       </div>
       <div class="catalog-actions">
+        <button class="btn-secondary btn-sm provider-renewal-support-btn" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte</button>
+        <button class="btn-secondary btn-sm provider-renewal-renew-btn" title="Pedir al proveedor que renueve esta cuenta">🔁 Renovar</button>
+        <button class="btn-secondary btn-sm provider-renewal-edit-btn" title="Editar cuenta (correo/contraseña)">✏️ Editar</button>
         <button class="icon-btn-sm provider-renewal-done-btn" title="Marcar como renovado (+1 mes)">✅</button>
       </div>
     `;
@@ -1467,16 +1470,37 @@
     const list = document.getElementById("provider-renewal-list");
     if (!list) return;
     list.addEventListener("click", async (e) => {
-      if (!e.target.closest(".provider-renewal-done-btn")) return;
       const li = e.target.closest(".catalog-item");
+      if (!li) return;
       const id = Number(li.dataset.id);
       const account = cachedProviderRenewals.find(a => a.id === id);
       if (!account) return;
-      if (!confirm(`¿Marcar "${account.platform} — ${account.email}" como renovado? La próxima fecha se adelanta un mes.`)) return;
-      try {
-        await api("/accounts/" + id + "/provider-renewal/mark-renewed", { method: "POST" });
-        await loadProviderRenewals();
-      } catch (err) { alert(err.message || "No se pudo marcar como renovado."); }
+
+      if (e.target.closest(".provider-renewal-support-btn") || e.target.closest(".provider-renewal-renew-btn")) {
+        await loadProviderCatalog();
+        if (!account.provider) return alert("Esta cuenta no tiene proveedor asignado. Edítala y elige uno primero.");
+        const phone = providerWhatsapp(account.provider);
+        if (!phone) return alert(`No hay WhatsApp guardado para "${account.provider}". Agrégalo en Configuración > Proveedores.`);
+        const isRenew = !!e.target.closest(".provider-renewal-renew-btn");
+        const msg = isRenew
+          ? `Hola! Necesito que renueves esta cuenta de *${account.platform}*.\n📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}`
+          : `Hola! Necesito soporte con una cuenta de *${account.platform}*.\n📧 Correo: ${account.email}`;
+        window.open(waLink(phone, msg), "_blank");
+        return;
+      }
+
+      if (e.target.closest(".provider-renewal-edit-btn")) {
+        openEditModal(id);
+        return;
+      }
+
+      if (e.target.closest(".provider-renewal-done-btn")) {
+        if (!confirm(`¿Marcar "${account.platform} — ${account.email}" como renovado? La próxima fecha se adelanta un mes.`)) return;
+        try {
+          await api("/accounts/" + id + "/provider-renewal/mark-renewed", { method: "POST" });
+          await loadProviderRenewals();
+        } catch (err) { alert(err.message || "No se pudo marcar como renovado."); }
+      }
     });
   }
 

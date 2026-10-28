@@ -558,6 +558,13 @@
     return /canva|gemini|youtube/i.test(platform || "");
   }
 
+  async function loadProviderRenewalsCount() {
+    try {
+      const { accounts } = await api("/access/provider-renewals");
+      document.getElementById("stat-provider-renewals-count").textContent = String(accounts.length);
+    } catch { /* no crítico — se reintenta en el próximo poll */ }
+  }
+
   async function loadStockAlert() {
     const list = document.getElementById("stock-alert-list");
     const ok   = document.getElementById("stock-alert-ok");
@@ -1545,6 +1552,12 @@
 
     document.getElementById("resumen-quick-assign-btn").addEventListener("click", () => {
       if (window.LiordarkAccess) window.LiordarkAccess.openComboOrderModal();
+    });
+
+    loadProviderRenewalsCount();
+    setInterval(loadProviderRenewalsCount, CONNECTORS_POLL_MS);
+    document.getElementById("resumen-provider-renewals-btn").addEventListener("click", () => {
+      switchView("renewals");
     });
 
     initLiveResync();
