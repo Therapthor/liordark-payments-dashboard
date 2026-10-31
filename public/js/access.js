@@ -1024,6 +1024,7 @@
           <div class="access-client-item-actions">
             <button class="btn-secondary btn-sm client-view-account" data-idx="${idx}">👁 Ver cuenta</button>
             <button class="btn-secondary btn-sm client-send-account" data-idx="${idx}">📧 Enviar cuenta</button>
+            <button class="btn-secondary btn-sm client-renew-manual" data-idx="${idx}">💬 Reno-manual</button>
             ${renderRenewalButton(p)}
             <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
           </div>
@@ -1058,6 +1059,7 @@
     document.getElementById("access-client-list").addEventListener("click", async (e) => {
       const viewBtn    = e.target.closest(".client-view-account");
       const sendBtn    = e.target.closest(".client-send-account");
+      const renewBtn   = e.target.closest(".client-renew-manual");
       const renewalBtn = e.target.closest(".row-renewal");
       const releaseBtn = e.target.closest(".client-release-profile");
 
@@ -1069,6 +1071,11 @@
       if (sendBtn) {
         const p = lastClientProfiles[Number(sendBtn.dataset.idx)];
         if (p) window.open(waLink(p.clientPhone, msgEntrega(p)), "_blank");
+        return;
+      }
+      if (renewBtn) {
+        const p = lastClientProfiles[Number(renewBtn.dataset.idx)];
+        if (p) sendRenewalManual(p);
         return;
       }
       // Solo marca el check (renewal_status) — NO toca el vencimiento de
