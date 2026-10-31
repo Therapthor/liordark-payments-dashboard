@@ -142,7 +142,12 @@ export function runRenewalCutover(): RenewalCutoverResult {
   for (const account of accounts) {
     if (account.renewalCleanupDueAt) continue; // ya se procesó este ciclo (evita duplicar si el job corre 2 veces el mismo día)
     const left = daysLeft(account.expiresAt);
-    if (left !== 1) continue;
+    // Antes era "=== 1" exacto — si el admin marca el check un poco tarde
+    // (mismo día que vence, o ya vencida, por ejemplo al confirmar pagos a
+    // mano sin la API de WhatsApp) el corte nunca lo agarraba y la cuenta
+    // se quedaba sin extender. Con "<= 1" cualquier marca tardía se procesa
+    // en la siguiente corrida del corte, sin perder la renovación.
+    if (left === null || left > 1) continue;
 
     const renewing = account.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes");
     if (renewing.length === 0) continue;

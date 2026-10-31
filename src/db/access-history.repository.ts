@@ -146,8 +146,18 @@ export function searchArchivedAccounts(term: string): ArchivedAccount[] {
  * NULL) nunca se toca.
  */
 export function archiveExpiredAccounts(todayISO: string): number {
+  // Si hay un perfil marcado "renueva" sin procesar todavía, no se archiva
+  // — se le da tiempo al corte (runRenewalCutover, corre a las 6am o a
+  // mano) de extenderla antes. Sin este filtro, una renovación marcada un
+  // poco tarde se puede borrar entera en la próxima pasada de este job
+  // (corre cada hora) antes de que el corte alcance a procesarla.
   const expired = db.prepare(`
-    SELECT * FROM access_accounts WHERE expires_at IS NOT NULL AND expires_at < ?
+    SELECT * FROM access_accounts
+    WHERE expires_at IS NOT NULL AND expires_at < ?
+      AND NOT EXISTS (
+        SELECT 1 FROM access_profiles p
+        WHERE p.account_id = access_accounts.id AND p.renewal_status = 'yes'
+      )
   `).all(todayISO) as any[];
 
   if (expired.length === 0) return 0;

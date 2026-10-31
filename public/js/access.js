@@ -78,9 +78,11 @@
     return `📋 *Resumen de tus cuentas*\n\n${lines}`;
   }
 
-  // Mismo criterio que renderInfoRows de app.js/renovar.js — la descripción
-  // del método de pago viene como texto libre "Yape: 999\nTitular: Nombre",
-  // acá se separa en pares etiqueta/valor para armar el mensaje de renovación.
+  // Misma lógica de corte que renderInfoRows (app.js/renovar.js) — el texto
+  // libre del método de pago puede venir en varias líneas o separado por
+  // 2+ espacios en una sola línea. Acá NO se intenta adivinar cuál fila es
+  // "Yape" o "Titular" (la etiqueta puede traer emoji, mayúsculas, etc.) —
+  // se muestran las filas tal cual, igual que ya se ven en renovar.html.
   let yapeInfoCache = null;
   async function loadYapeInfo() {
     if (yapeInfoCache) return yapeInfoCache;
@@ -89,13 +91,9 @@
       const { methods } = await res.json();
       const yape = (methods || []).find(m => m.name.toLowerCase().includes("yape"));
       if (!yape) { yapeInfoCache = null; return null; }
-      const pairs = {};
-      (yape.description || "").split(/\r?\n/).forEach(line => {
-        const i = line.indexOf(":");
-        if (i === -1) return;
-        pairs[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
-      });
-      yapeInfoCache = { numero: pairs["yape"] || "", titular: pairs["titular"] || "" };
+      const lines = (yape.description || "")
+        .split(/\r?\n|(?<=\S) {2,}(?=\S)/).map(l => l.trim()).filter(Boolean);
+      yapeInfoCache = lines.length ? { lines } : null;
     } catch {
       yapeInfoCache = null;
     }
@@ -114,7 +112,7 @@
     const perfilLine = ctx.profileName ? ` · Perfil: *${ctx.profileName}*` : "";
     const tag = extra.platformTag || ctx.platform;
     const payLine = yape
-      ? `💳 Yape\n${yape.numero} — ${yape.titular}`
+      ? `💳 ${yape.lines.join("\n")}`
       : `💳 Pídele al admin el método de pago.`;
     return `🥭 *Liordark* — Renovación\n\n` +
       `📺 *${tag}*${perfilLine}\n📧 Correo: *${ctx.email}*\n\n` +
