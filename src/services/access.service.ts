@@ -167,9 +167,18 @@ export function runRenewalCutover(): RenewalCutoverResult {
     })));
 
     result.extended.push({ accountId: account.id, platform: account.platform, email: account.email, renewedCount: renewing.length });
+
+    // Se saca a quien no renovó EN LA MISMA corrida (no al día siguiente)
+    // — el admin necesita saber esa misma noche qué cupos quedaron libres
+    // para renovar solo esos con su proveedor antes del día siguiente.
+    const { freedCount } = applyRenewalCleanup(account.id);
+    if (freedCount > 0) {
+      result.cleaned.push({ accountId: account.id, platform: account.platform, email: account.email, freedCount });
+    }
   }
 
-  // Paso 2 — sacar a quien no renovó, en la fecha que le tocaba a ese ciclo.
+  // Respaldo — cuentas que quedaron con una limpieza pendiente de un ciclo
+  // anterior (ej. el job no corrió ese día) y todavía no se procesaron.
   const due = listAccountsDueForRenewalCleanup(today);
   for (const account of due) {
     const { freedCount } = applyRenewalCleanup(account.id);

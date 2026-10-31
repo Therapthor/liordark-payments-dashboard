@@ -216,9 +216,11 @@ function scheduleEmailRemindersDaily(): void {
 }
 
 // Corte automático de ciclo de renovación (ver runRenewalCutover en
-// access.service.ts) — 1 vez al día, 6am Lima (antes de que arranque el
-// día comercial y antes del recordatorio por correo de las 8am).
-const RENEWAL_CUTOVER_HOUR_LIMA   = 6;
+// access.service.ts) — 1 vez al día, 10pm Lima. A esa hora ya se sabe
+// quién marcó que renueva ese día, y deja la cuenta lista (extendida o
+// con los cupos liberados) antes de que el admin tenga que ir a renovar
+// con su propio proveedor a la mañana siguiente.
+const RENEWAL_CUTOVER_HOUR_LIMA   = 22;
 const RENEWAL_CUTOVER_MINUTE_LIMA = 0;
 
 function runRenewalCutoverJob(): void {
@@ -237,7 +239,7 @@ function runRenewalCutoverJob(): void {
 
 function scheduleRenewalCutoverDaily(): void {
   const delay = msUntilNextLimaTime(RENEWAL_CUTOVER_HOUR_LIMA, RENEWAL_CUTOVER_MINUTE_LIMA);
-  console.log(`🔁 Corte de renovación: próxima corrida en ${Math.round(delay / 60000)} min (6am Lima)`);
+  console.log(`🔁 Corte de renovación: próxima corrida en ${Math.round(delay / 60000)} min (10pm Lima)`);
   setTimeout(() => {
     runRenewalCutoverJob();
     setInterval(runRenewalCutoverJob, ONE_DAY_MS);
