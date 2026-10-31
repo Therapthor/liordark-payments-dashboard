@@ -78,6 +78,51 @@
     return `📋 *Resumen de tus cuentas*\n\n${lines}`;
   }
 
+  // Mismo criterio que renderInfoRows de app.js/renovar.js — la descripción
+  // del método de pago viene como texto libre "Yape: 999\nTitular: Nombre",
+  // acá se separa en pares etiqueta/valor para armar el mensaje de renovación.
+  let yapeInfoCache = null;
+  async function loadYapeInfo() {
+    if (yapeInfoCache) return yapeInfoCache;
+    try {
+      const res = await fetch("/api/store/payment-methods");
+      const { methods } = await res.json();
+      const yape = (methods || []).find(m => m.name.toLowerCase().includes("yape"));
+      if (!yape) { yapeInfoCache = null; return null; }
+      const pairs = {};
+      (yape.description || "").split(/\r?\n/).forEach(line => {
+        const i = line.indexOf(":");
+        if (i === -1) return;
+        pairs[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+      });
+      yapeInfoCache = { numero: pairs["yape"] || "", titular: pairs["titular"] || "" };
+    } catch {
+      yapeInfoCache = null;
+    }
+    return yapeInfoCache;
+  }
+
+  function daysPhrase(daysLeft) {
+    if (daysLeft == null) return "pronto";
+    if (daysLeft === 1) return "mañana";
+    if (daysLeft === 0) return "hoy";
+    if (daysLeft < 0) return "ya venció";
+    return "en " + daysLeft + " días";
+  }
+
+  function msgRenovacion(ctx, extra, yape) {
+    const perfilLine = ctx.profileName ? ` · Perfil: *${ctx.profileName}*` : "";
+    const tag = extra.platformTag || ctx.platform;
+    const payLine = yape
+      ? `💳 Yape\n${yape.numero} — ${yape.titular}`
+      : `💳 Pídele al admin el método de pago.`;
+    return `🥭 *Liordark* — Renovación\n\n` +
+      `📺 *${tag}*${perfilLine}\n📧 Correo: *${ctx.email}*\n\n` +
+      `⏰ Tu cuenta vence ${daysPhrase(ctx.daysLeft)}. Renueva ahora y no pierdas el acceso.\n\n` +
+      `*Monto a pagar: S/ ${extra.price}*\n${payLine}\n\n` +
+      `Cuando pagues, mándame la captura del comprobante y te confirmo al toque ✅`;
+  }
+
   /** Datos de perfil + cuenta combinados, tal como los necesitan los mensajes de WhatsApp. */
   function profileCtx(account, p) {
     return {
@@ -407,6 +452,7 @@
     if (occupied) {
       actions = `
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
+        <button class="row-action" data-act="renew-manual" data-ctx="${ctx}" title="Reno-manual — armar mensaje de renovación por WhatsApp">💬</button>
         <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Cambiar teléfono">✏️</button>
         <button class="row-action" data-act="release" data-ctx="${ctx}" title="Liberar perfil">🗑</button>
       `;
@@ -563,9 +609,25 @@
   }
 
   function handleRowAction(act, ctx) {
-    if (act === "send")    return window.open(waLink(ctx.clientPhone, msgEntrega(ctx)), "_blank");
-    if (act === "edit")    return openProfileModal(ctx);
-    if (act === "release") return releaseProfile(ctx.id, ctx.accountId);
+    if (act === "send")         return window.open(waLink(ctx.clientPhone, msgEntrega(ctx)), "_blank");
+    if (act === "renew-manual") return sendRenewalManual(ctx);
+    if (act === "edit")         return openProfileModal(ctx);
+    if (act === "release")      return releaseProfile(ctx.id, ctx.accountId);
+  }
+
+  // Botón 💬 Reno-manual — arma el mensaje con el precio real del catálogo
+  // y el Yape vigente, y abre WhatsApp con todo ya escrito (no hay API
+  // para mandarlo solo, ver msgRenovacion).
+  async function sendRenewalManual(ctx) {
+    try {
+      const [extra, yape] = await Promise.all([
+        api("/profiles/" + ctx.id + "/renewal-message"),
+        loadYapeInfo(),
+      ]);
+      window.open(waLink(ctx.clientPhone, msgRenovacion(ctx, extra, yape)), "_blank");
+    } catch (err) {
+      alert(err.message || "No se pudo armar el mensaje.");
+    }
   }
 
   async function releaseProfile(profileId, accountId) {

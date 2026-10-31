@@ -22,6 +22,7 @@ import {
   markPasswordChanged,
   listPendingActivations,
   markActivationDone,
+  getProfileForRenewalMessage,
   type AccessAccountWithProfiles,
   type ProfileWithAccount,
   type RenewalStatus,
@@ -376,6 +377,15 @@ router.post("/profiles/:id/renewal", (req, res) => {
   const profile = setProfileRenewal(Number(req.params.id), status);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   res.json({ profile });
+});
+
+// GET /profiles/:id/renewal-message — datos para armar a mano el mensaje
+// de renovación (botón 💬 del panel) mientras no hay API de WhatsApp para
+// mandarlo solo: el panel arma el texto y abre wa.me con todo ya escrito.
+router.get("/profiles/:id/renewal-message", (req, res) => {
+  const data = getProfileForRenewalMessage(Number(req.params.id));
+  if (!data) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
+  res.json(data);
 });
 
 // GET /profiles/renewing — todos los clientes marcados "✅ Renueva", de

@@ -1049,6 +1049,30 @@ export function listRenewalAccountsByPhone(clientPhone: string): RenewalAccountV
   `).all(last9(digits)) as RenewalAccountView[];
 }
 
+export type RenewalMessageData = {
+  profileName:  string;
+  clientPhone:  string;
+  platform:     string;
+  platformTag:  string;
+  email:        string;
+  expiresAt:    string | null;
+  price:        string;
+};
+
+/** Datos de un perfil puntual para armar el mensaje manual de renovación (botón 💬 del panel). */
+export function getProfileForRenewalMessage(profileId: number): RenewalMessageData | null {
+  const row = db.prepare(`
+    SELECT p.profile_name AS profileName, p.client_phone AS clientPhone,
+           a.platform AS platform, COALESCE(c.title, '') AS platformTag,
+           a.email AS email, a.expires_at AS expiresAt, COALESCE(c.price, '') AS price
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
+    WHERE p.id = ?
+  `).get(profileId) as RenewalMessageData | undefined;
+  return row || null;
+}
+
 export type ExpiringClient = {
   profileId:      number;
   clientPhone:    string;
