@@ -1633,7 +1633,7 @@
         return;
       }
       if (e.target.closest(".password-change-done-btn")) {
-        if (!confirm("¿Ya cambiaste la contraseña de esta cuenta?")) return;
+        if (!confirm("¿Ya cambiaste la contraseña de esta cuenta?\n\nSe le avisa la nueva contraseña a quien se quedó (por su campanita, no por WhatsApp).")) return;
         try {
           await api("/accounts/" + id + "/password-changed", { method: "POST" });
           await loadPasswordChangePending();

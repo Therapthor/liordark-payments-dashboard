@@ -416,11 +416,26 @@ router.get("/password-change-pending", (_req, res) => {
   res.json({ accounts: listAccountsNeedingPasswordChange() });
 });
 
+// Al confirmar "✅ Ya la cambié" (Pagos > Renovaciones > Cuentas por
+// cambiar contraseña) también se avisa de una vez a quien se quedó con la
+// cuenta — mismo aviso que "🔑 Cambiar contraseña a todos" en Accesos,
+// para no tener que ir a hacerlo aparte a mano cada vez.
 router.post("/accounts/:id/password-changed", (req, res) => {
   const id = Number(req.params.id);
-  if (!getAccountById(id)) return res.status(404).json({ message: "Cuenta no encontrada." });
+  const account = getAccountById(id);
+  if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
   markPasswordChanged(id);
-  res.json({ ok: true });
+
+  const occupied = account.profiles.filter(p => p.clientPhone);
+  for (const p of occupied) {
+    if (p.wholesalerId != null) {
+      createWholesalerNotification(p.wholesalerId, "password_changed", account.platform, account.email, account.password);
+    } else {
+      createCustomerNotification(p.clientPhone, "password_changed", account.platform, account.email, account.password);
+    }
+  }
+
+  res.json({ ok: true, notified: occupied.length });
 });
 
 // GET /renewal-history — registro permanente de renovaciones ya hechas
