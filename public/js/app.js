@@ -1272,6 +1272,12 @@
     pending: "badge-run-pending", sending: "badge-run-sending", incomplete: "badge-run-incomplete", complete: "badge-run-complete",
   };
 
+  // El envío automático por SMS queda en pausa por ahora — el admin
+  // maneja los recordatorios a mano por difusión de WhatsApp Business,
+  // con el CSV que arma /sms/days/:date/csv. Cambiar a true reactiva el
+  // botón "Enviar" de siempre (sendSmsForDay sigue intacto, solo oculto).
+  const SMS_SEND_ENABLED = false;
+
   // Día por día: "Hoy" (colgados de ayer, si falló algo) y "Mañana"
   // (tanda nueva) — cada fila manda SOLO ese día, no los dos juntos.
   function renderSmsDays(days) {
@@ -1282,9 +1288,11 @@
           ${escapeHtml(d.label)}
           <span class="sms-day-count">${d.pendingCount > 0 ? `${d.pendingCount} pendiente${d.pendingCount === 1 ? "" : "s"}` : "sin pendientes"}</span>
         </div>
-        ${d.pendingCount > 0
-          ? `<button class="btn-primary btn-sm sms-day-send-btn" data-date="${d.date}">Enviar</button>`
-          : `<span class="badge badge-run-complete">✅ Hecho</span>`}
+        ${d.pendingCount === 0
+          ? `<span class="badge badge-run-complete">✅ Hecho</span>`
+          : SMS_SEND_ENABLED
+            ? `<button class="btn-primary btn-sm sms-day-send-btn" data-date="${d.date}">Enviar</button>`
+            : `<a class="btn-secondary btn-sm" href="/api/renewals/sms/days/${d.date}/csv" download>⬇ Descargar CSV</a>`}
       </div>
     `).join("");
   }
@@ -1399,6 +1407,9 @@
   }
 
   function initSmsReminders() {
+    document.getElementById("sms-section-hint").textContent = SMS_SEND_ENABLED
+      ? "Automático — manda un SMS a cada cliente con cuenta por vencer. Cuesta créditos por mensaje."
+      : "SMS en pausa — descarga el CSV de cada día e impórtalo como público en una difusión de WhatsApp Business.";
     initSmsDays();
     document.getElementById("sms-history-btn").addEventListener("click", openSmsHistory);
   }

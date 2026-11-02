@@ -159,6 +159,36 @@ router.get("/sms/days", (_req, res) => {
   res.json({ days });
 });
 
+// GET /sms/days/:date/csv — mismo filtro que /sms/send, pero en vez de
+// mandar nada arma el CSV listo para importar como público en una
+// difusión de WhatsApp Business. El envío por SMS está en pausa (ver
+// SMS_SEND_ENABLED en public/js/app.js) — esto es lo que lo reemplaza
+// mientras tanto, sin tocar esa capacidad para cuando se vuelva a usar.
+router.get("/sms/days/:date/csv", (req, res) => {
+  const date = String(req.params.date || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: "Fecha inválida." });
+  }
+
+  const clients = listUnSmsRemindedExpiringClientsForDate(date);
+  const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
+
+  const lines = [
+    "Ingresa el nombre completo y el número de teléfono de cada destinatario en una fila separada. Puedes añadir hasta 500 destinatarios a un público.",
+    "",
+    "Nombre completo,Número de teléfono",
+    "",
+    ...groups.map(g => {
+      const tags = [...new Set(g.accounts.map(a => a.platformTag || a.platform))].join(" + ");
+      return `"${tags}",+${g.clientPhone}`;
+    }),
+  ];
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="recordatorios-${date}.csv"`);
+  res.send(lines.join("\n") + "\n");
+});
+
 router.post("/sms/send", async (req, res) => {
   const date = String(req.body?.date || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
