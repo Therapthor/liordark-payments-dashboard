@@ -1532,6 +1532,7 @@
           <div class="codes-status" data-role="status"></div>
           <div class="codes-status-sub" data-role="status-sub"></div>
           <div class="codes-otp" data-role="otp"></div>
+          <button class="btn-primary btn-sm codes-copy-btn" data-role="copy" type="button" hidden>📋 Copiar código</button>
           <p class="codes-fail-msg" data-role="fail-msg" hidden>No encontramos ningún código nuevo.</p>
           <button class="codes-retry-btn" data-role="retry" type="button" hidden>🔄 Volver a intentar</button>
           <a class="codes-whatsapp-btn" data-role="whatsapp" href="#" target="_blank" rel="noopener" hidden>💬 No llegó — avisar por WhatsApp</a>
@@ -1576,6 +1577,7 @@
     const status    = card.querySelector("[data-role='status']");
     const statusSub = card.querySelector("[data-role='status-sub']");
     const otp       = card.querySelector("[data-role='otp']");
+    const copyBtn   = card.querySelector("[data-role='copy']");
     const failMsg   = card.querySelector("[data-role='fail-msg']");
     const retryBtn  = card.querySelector("[data-role='retry']");
     const waBtn     = card.querySelector("[data-role='whatsapp']");
@@ -1584,6 +1586,8 @@
     badge.className = "codes-radar-badge";
     badge.textContent = "";
     otp.innerHTML = "";
+    copyBtn.hidden = true;
+    copyBtn.textContent = "📋 Copiar código";
     failMsg.hidden = true;
     retryBtn.hidden = true;
     waBtn.hidden = true;
@@ -1624,9 +1628,15 @@
         const span = document.createElement("span");
         span.textContent = d;
         span.style.animationDelay = (i * 0.07) + "s";
-        span.addEventListener("click", () => copyText(result.code, span));
         otp.appendChild(span);
       });
+      copyBtn.hidden = false;
+      copyBtn.onclick = () => {
+        navigator.clipboard?.writeText(result.code).then(() => {
+          copyBtn.textContent = "✅ Copiado";
+          setTimeout(() => { copyBtn.textContent = "📋 Copiar código"; }, 1300);
+        }).catch(() => alert("No se pudo copiar. Código: " + result.code));
+      };
     } else {
       radar.classList.add("failed");
       badge.textContent = "✕";
@@ -1637,14 +1647,6 @@
       retryBtn.hidden = false;
       waBtn.hidden = false;
     }
-  }
-
-  function copyText(text, el) {
-    navigator.clipboard?.writeText(text).then(() => {
-      const original = el.style.borderColor;
-      el.style.borderColor = "var(--ok)";
-      setTimeout(() => { el.style.borderColor = original; }, 600);
-    }).catch(() => {});
   }
 
   function initCodesView() {
