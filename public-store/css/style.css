@@ -1042,6 +1042,12 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
 }
 
+.codes-close-btn {
+  background: none; border: none; color: var(--muted); font-size: 12px;
+  cursor: pointer; width: 100%; margin-top: 10px; padding: 4px; text-align: center;
+}
+.codes-close-btn:hover { color: var(--text); }
+
 /* ─── Arma tu combo (carrito interactivo) ────────────────────── */
 
 .build-combo-prompt {

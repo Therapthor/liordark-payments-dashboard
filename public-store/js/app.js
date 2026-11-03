@@ -1535,6 +1535,7 @@
           <p class="codes-fail-msg" data-role="fail-msg" hidden>No encontramos ningún código nuevo.</p>
           <button class="codes-retry-btn" data-role="retry" type="button" hidden>🔄 Volver a intentar</button>
           <a class="codes-whatsapp-btn" data-role="whatsapp" href="#" target="_blank" rel="noopener" hidden>💬 No llegó — avisar por WhatsApp</a>
+          <button class="codes-close-btn" data-role="close" type="button" hidden>✕ Cerrar</button>
         </div>
 
         <div class="renewal-account-footer" data-role="footer">
@@ -1579,6 +1580,7 @@
     const failMsg   = card.querySelector("[data-role='fail-msg']");
     const retryBtn  = card.querySelector("[data-role='retry']");
     const waBtn     = card.querySelector("[data-role='whatsapp']");
+    const closeBtn  = card.querySelector("[data-role='close']");
 
     radar.className = "codes-radar";
     badge.className = "codes-radar-badge";
@@ -1589,6 +1591,7 @@
     failMsg.hidden = true;
     retryBtn.hidden = true;
     waBtn.hidden = true;
+    closeBtn.hidden = true;
 
     let step = 1;
     status.innerHTML = `Buscando tu código<span class="codes-dots"><span></span><span></span><span></span></span>`;
@@ -1612,6 +1615,7 @@
       failMsg.hidden = false;
       retryBtn.hidden = false;
       waBtn.hidden = false;
+      closeBtn.hidden = false;
       return;
     }
     clearInterval(ticker);
@@ -1635,6 +1639,7 @@
           setTimeout(() => { copyBtn.textContent = "📋 Copiar código"; }, 1300);
         }).catch(() => alert("No se pudo copiar. Código: " + result.code));
       };
+      closeBtn.hidden = false;
     } else {
       radar.classList.add("failed");
       badge.textContent = "✕";
@@ -1644,11 +1649,18 @@
       failMsg.hidden = false;
       retryBtn.hidden = false;
       waBtn.hidden = false;
+      closeBtn.hidden = false;
     }
   }
 
   function initCodesView() {
     document.getElementById("codes-list").addEventListener("click", async (e) => {
+      const closeBtn = e.target.closest("[data-role='close']");
+      if (closeBtn) {
+        closeBtn.closest(".renewal-account-card").querySelector("[data-role='search']").hidden = true;
+        return;
+      }
+
       const requestBtn = e.target.closest(".codes-request-btn");
       const retryBtn    = e.target.closest("[data-role='retry']");
       if (!requestBtn && !retryBtn) return;
