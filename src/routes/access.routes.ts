@@ -40,7 +40,7 @@ import {
   getLatestCodeForAccount,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeAction, lookupAnySource, listCodeSources, listSourceActions, codeSourceLabel } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel } from "../services/codes-lookup.service";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
@@ -325,23 +325,25 @@ router.get("/codes", (_req, res) => {
 
 // Buscador libre del tab "🔑 Códigos" — solo el correo, no hace falta
 // elegir plataforma ni que esté dado de alta como cuenta en Accesos:
-// prueba todas las fuentes configuradas y se queda con la primera que
-// encuentre algo. Un intento por fuente, sin reintentos: el admin ve todo.
+// prueba todas las fuentes configuradas, reintentando hasta ~1 minuto
+// (el correo puede tardar en llegar), sin filtrar por dígitos: el admin
+// ve todo.
 router.post("/codes/lookup", async (req, res) => {
   const email = String(req.body?.email || "").trim();
   if (!email) { res.status(400).json({ message: "Falta el correo." }); return; }
 
-  const found = await lookupAnySource(email);
+  const found = await lookupAnySourceWithRetries(email);
   if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null }); return; }
 
   res.json({ found: true, kind: found.result.kind, value: found.result.value, sourceLabel: found.label });
 });
 
-// "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) — un
-// solo intento, sin reintentos (no hace esperar), y sin filtrar por
-// cantidad de dígitos: el admin ve todo. Si la fuente tiene sub-acciones
-// (ver listSourceActions), body.actionId dice cuál puntual consultar —
-// si no se manda, cae a la consulta normal (prueba todas).
+// "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) —
+// reintenta hasta ~1 minuto (no basta un solo intento, el correo puede
+// tardar en llegar), sin filtrar por cantidad de dígitos: el admin ve
+// todo. Si la fuente tiene sub-acciones (ver listSourceActions),
+// body.actionId dice cuál puntual consultar — si no se manda, cae a la
+// consulta normal (prueba todas).
 router.post("/codes/:accountId/lookup-now", async (req, res) => {
   const accountId = Number(req.params.accountId);
   const account = getAccountById(accountId);
@@ -349,7 +351,7 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   if (!account.codeSource) { res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." }); return; }
 
   const actionId = typeof req.body?.actionId === "string" ? req.body.actionId : undefined;
-  const result = await lookupCodeAction(account.codeSource, account.email, actionId);
+  const result = await lookupCodeActionWithRetries(account.codeSource, account.email, actionId);
   if (result.found && result.value) {
     saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }

@@ -374,10 +374,12 @@ router.get("/codes", (req, res) => {
   res.json({ accounts: listClientCodesAccounts(customer.phone) });
 });
 
-// Consulta en vivo (con reintentos) a la página del proveedor — no lee
-// caché, porque esa página es la fuente de verdad del momento. Los
-// códigos de 6 dígitos quedan guardados para el admin pero nunca se le
-// entregan al cliente acá (ver codes-lookup.service.ts).
+// Consulta en vivo (con reintentos, hasta ~1 minuto) a la página del
+// proveedor — no lee caché, porque esa página es la fuente de verdad del
+// momento. El código de 6 dígitos de Netflix (cambio de datos de la
+// cuenta) y las sub-acciones sensibles de "con opciones" quedan
+// guardados para el admin pero nunca se le entregan al cliente acá (ver
+// codes-lookup.service.ts).
 router.post("/codes/:accountId/request", async (req, res) => {
   const customerId = (req as unknown as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
@@ -404,11 +406,13 @@ router.post("/codes/:accountId/request", async (req, res) => {
     saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }
 
-  // Los de 6 dígitos (y, en "PallyStore con opciones", las 3 sub-acciones
-  // sensibles) son más delicados — quedan guardados arriba para que el
-  // admin los vea, pero acá se responde como si no se hubiera encontrado
-  // nada.
-  if (result.found && ((result.kind === "code" && result.value?.length === 6) || isSensitiveResult(result))) {
+  // El de 6 dígitos de Netflix "sin opciones" es el de cambio de datos de
+  // la cuenta — más delicado, nunca se entrega al cliente. En Disney+ (y
+  // en las sub-acciones sensibles de "con opciones") el filtro es
+  // distinto, ya cubierto por isSensitiveResult. Queda guardado arriba
+  // para que el admin lo vea igual.
+  const isNetflixSensitive6Digits = sourceId === "netflix_sin_opciones" && result.kind === "code" && result.value?.length === 6;
+  if (result.found && (isNetflixSensitive6Digits || isSensitiveResult(result))) {
     return res.json({ code: null, link: null, receivedAt: null });
   }
 

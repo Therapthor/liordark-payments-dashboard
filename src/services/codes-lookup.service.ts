@@ -238,16 +238,20 @@ export async function lookupAnySource(
 }
 
 /**
- * El correo puede tardar hasta ~30s en aparecer en la página del
- * proveedor — reintenta unas veces espaciadas antes de darse por vencido,
- * en vez de hacer esperar al cliente con un solo intento que casi
- * siempre sale vacío.
+ * El correo puede tardar hasta ~1 minuto en aparecer en la página del
+ * proveedor (confirmado con Disney+) — reintenta espaciado antes de darse
+ * por vencido, en vez de un solo intento que casi siempre sale vacío.
+ * Aplica tanto al cliente como al admin (ver lookupCodeActionWithRetries
+ * / lookupAnySourceWithRetries más abajo).
  */
+const RETRY_ATTEMPTS = 6;
+const RETRY_DELAY_MS = 12000; // 5 esperas de 12s ≈ 60s en total
+
 export async function lookupCodeWithRetries(
   sourceId: string,
   email: string,
-  attempts = 3,
-  delayMs = 9000
+  attempts = RETRY_ATTEMPTS,
+  delayMs = RETRY_DELAY_MS
 ): Promise<CodeLookupResult> {
   let last: CodeLookupResult = { found: false, kind: null, value: null };
   for (let i = 0; i < attempts; i++) {
@@ -260,4 +264,41 @@ export async function lookupCodeWithRetries(
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
   return last;
+}
+
+/** Igual que lookupCodeWithRetries, pero para una sub-acción puntual
+ *  (botón "Consultar" del admin cuando la fuente tiene sub-acciones). */
+export async function lookupCodeActionWithRetries(
+  sourceId: string,
+  email: string,
+  actionId?: string,
+  attempts = RETRY_ATTEMPTS,
+  delayMs = RETRY_DELAY_MS
+): Promise<CodeLookupResult> {
+  let last: CodeLookupResult = { found: false, kind: null, value: null };
+  for (let i = 0; i < attempts; i++) {
+    try {
+      last = await lookupCodeAction(sourceId, email, actionId);
+    } catch {
+      last = { found: false, kind: null, value: null };
+    }
+    if (last.found) return last;
+    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  return last;
+}
+
+/** Igual que lookupAnySource, pero reintenta antes de darse por vencido
+ *  (buscador libre del admin). */
+export async function lookupAnySourceWithRetries(
+  email: string,
+  attempts = RETRY_ATTEMPTS,
+  delayMs = RETRY_DELAY_MS
+): Promise<{ sourceId: string; label: string; result: CodeLookupResult } | null> {
+  for (let i = 0; i < attempts; i++) {
+    const found = await lookupAnySource(email);
+    if (found) return found;
+    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  return null;
 }
