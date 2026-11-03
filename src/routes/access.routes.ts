@@ -41,7 +41,7 @@ import {
   getLatestCodeForAccount,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, TOTP_SOURCE_ID } from "../services/codes-lookup.service";
 import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -369,6 +369,7 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   const account = getAccountById(accountId);
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   if (!account.codeSource) { res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." }); return; }
+  if (account.codeSource === TOTP_SOURCE_ID) { res.status(409).json({ message: "Esta cuenta usa 2FA: falta pegar la clave secreta en Accesos > Editar cuenta." }); return; }
 
   const actionId = typeof req.body?.actionId === "string" ? req.body.actionId : undefined;
   const result = await lookupCodeActionWithRetries(account.codeSource, account.email, actionId);

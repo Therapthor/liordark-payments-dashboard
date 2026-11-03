@@ -774,14 +774,24 @@
     await loadCodeSources();
     document.getElementById("account-edit-codes-enabled").checked = !!account.codesEnabled;
     document.getElementById("account-edit-codes-fields").hidden = !account.codesEnabled;
-    document.getElementById("account-edit-code-source").value = account.codeSource || "";
+    document.getElementById("account-edit-code-source").value = account.totpSecret ? TOTP_SOURCE_ID : (account.codeSource || "");
     document.getElementById("account-edit-totp-secret").value = account.totpSecret || "";
+    syncTotpField();
 
     document.getElementById("account-edit-modal").hidden = false;
   }
 
   // ── "🔑 Código" — fuentes disponibles para sacar el código (ver
   // codes-lookup.service.ts) y guardado de los dos campos del modal. ──
+  // "Streaming Market — código 2FA": no consulta ninguna página, el código
+  // sale de una clave TOTP — el campo para pegarla solo aparece con esta opción.
+  const TOTP_SOURCE_ID = "streaming_market_2fa";
+
+  function syncTotpField() {
+    const isTotp = document.getElementById("account-edit-code-source").value === TOTP_SOURCE_ID;
+    document.getElementById("account-edit-totp-fields").hidden = !isTotp;
+  }
+
   let codeSources = null;
   async function loadCodeSources() {
     if (codeSources) return codeSources;
@@ -808,6 +818,8 @@
       document.getElementById("account-edit-codes-fields").hidden = !e.target.checked;
     });
 
+    document.getElementById("account-edit-code-source").addEventListener("change", syncTotpField);
+
     document.getElementById("account-edit-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const renewalEnabled = document.getElementById("account-edit-renewal-enabled").checked;
@@ -825,7 +837,9 @@
       };
       const codesEnabled = document.getElementById("account-edit-codes-enabled").checked;
       const codeSource   = document.getElementById("account-edit-code-source").value || null;
-      const totpSecret   = document.getElementById("account-edit-totp-secret").value.trim() || null;
+      const totpSecret   = codeSource === TOTP_SOURCE_ID
+        ? (document.getElementById("account-edit-totp-secret").value.trim() || null)
+        : null;
 
       const errorEl = document.getElementById("account-edit-error");
       errorEl.hidden = true;

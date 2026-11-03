@@ -200,12 +200,23 @@ const SOURCES: Record<string, Source> = {
   disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
 };
 
+// 2FA por TOTP — no consulta ninguna página: el código sale de la clave
+// guardada en access_accounts.totp_secret (ver utils/totp.util.ts). Va en
+// el mismo desplegable que las fuentes de arriba, pero no tiene lookup
+// por correo, por eso no vive en SOURCES.
+export const TOTP_SOURCE_ID = "streaming_market_2fa";
+const TOTP_SOURCE_LABEL = "Streaming Market — código 2FA";
+
 export function listCodeSources(): { id: string; label: string }[] {
-  return Object.entries(SOURCES).map(([id, s]) => ({ id, label: s.label }));
+  return [
+    ...Object.entries(SOURCES).map(([id, s]) => ({ id, label: s.label })),
+    { id: TOTP_SOURCE_ID, label: TOTP_SOURCE_LABEL },
+  ];
 }
 
 export function codeSourceLabel(sourceId: string | null): string {
   if (!sourceId) return "";
+  if (sourceId === TOTP_SOURCE_ID) return TOTP_SOURCE_LABEL;
   return SOURCES[sourceId]?.label || sourceId;
 }
 
