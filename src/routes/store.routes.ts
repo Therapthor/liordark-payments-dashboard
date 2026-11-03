@@ -17,9 +17,10 @@ import { normalizePeruPhone } from "../utils/phone.util";
 import {
   listClientCodesAccounts,
   getAccountCodeSource,
+  getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeWithRetries, isSensitiveResult } from "../services/codes-lookup.service";
+import { lookupCodeWithRetries, isSensitiveResult, skipsRepeatedCodes } from "../services/codes-lookup.service";
 import { getCurrentTotp } from "../utils/totp.util";
 import {
   createCustomerNotification,
@@ -408,7 +409,8 @@ router.post("/codes/:accountId/request", async (req, res) => {
     return res.status(409).json({ message: "Esta cuenta todavía no tiene configurada de dónde sacar el código. Avísanos por soporte." });
   }
 
-  const result = await lookupCodeWithRetries(sourceId, account.email);
+  const exclude = skipsRepeatedCodes(sourceId) ? getLastSeenCodeForEmail(account.email) : null;
+  const result = await lookupCodeWithRetries(sourceId, account.email, exclude);
 
   if (result.found && result.value) {
     const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";

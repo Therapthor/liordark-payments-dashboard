@@ -370,23 +370,52 @@ export async function lookupAnySource(
 const RETRY_ATTEMPTS = 6;
 const RETRY_DELAY_MS = 12000; // 5 esperas de 12s ≈ 60s en total
 
+// ── Códigos repetidos ──
+// Streaming Market muestra siempre el ÚLTIMO código que llegó, aunque ya
+// se haya entregado — "Consultar" de nuevo devolvía el mismo, que ya se
+// sabe que no sirve. Para esas fuentes, un código igual al último ya
+// entregado (mismo valor y misma hora de "Recibido") cuenta como "todavía
+// no llegó uno nuevo" y se sigue esperando.
+export type SeenCode = { value: string; providerReceivedAt?: string };
+
+export function skipsRepeatedCodes(sourceId: string | null): boolean {
+  return sourceId === "streaming_market_web";
+}
+
+function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {
+  if (!seen || !result.found || result.value !== seen.value) return false;
+  return !result.providerReceivedAt || !seen.providerReceivedAt || result.providerReceivedAt === seen.providerReceivedAt;
+}
+
+const NOT_FOUND: CodeLookupResult = { found: false, kind: null, value: null };
+
+async function retryUntilNewCode(
+  attemptLookup: () => Promise<CodeLookupResult>,
+  exclude: SeenCode | null,
+  attempts: number,
+  delayMs: number
+): Promise<CodeLookupResult> {
+  for (let i = 0; i < attempts; i++) {
+    let result = NOT_FOUND;
+    try {
+      result = await attemptLookup();
+    } catch { /* se reintenta igual */ }
+    if (result.found && !isSameCode(result, exclude)) return result;
+    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+  return NOT_FOUND;
+}
+
+/** `exclude`: último código ya entregado — si vuelve a salir el mismo, se
+ *  sigue esperando uno nuevo (solo se pasa para skipsRepeatedCodes). */
 export async function lookupCodeWithRetries(
   sourceId: string,
   email: string,
+  exclude: SeenCode | null = null,
   attempts = RETRY_ATTEMPTS,
   delayMs = RETRY_DELAY_MS
 ): Promise<CodeLookupResult> {
-  let last: CodeLookupResult = { found: false, kind: null, value: null };
-  for (let i = 0; i < attempts; i++) {
-    try {
-      last = await lookupCode(sourceId, email);
-    } catch {
-      last = { found: false, kind: null, value: null };
-    }
-    if (last.found) return last;
-    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
-  }
-  return last;
+  return retryUntilNewCode(() => lookupCode(sourceId, email), exclude, attempts, delayMs);
 }
 
 /** Igual que lookupCodeWithRetries, pero para una sub-acción puntual
@@ -395,32 +424,25 @@ export async function lookupCodeActionWithRetries(
   sourceId: string,
   email: string,
   actionId?: string,
+  exclude: SeenCode | null = null,
   attempts = RETRY_ATTEMPTS,
   delayMs = RETRY_DELAY_MS
 ): Promise<CodeLookupResult> {
-  let last: CodeLookupResult = { found: false, kind: null, value: null };
-  for (let i = 0; i < attempts; i++) {
-    try {
-      last = await lookupCodeAction(sourceId, email, actionId);
-    } catch {
-      last = { found: false, kind: null, value: null };
-    }
-    if (last.found) return last;
-    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
-  }
-  return last;
+  return retryUntilNewCode(() => lookupCodeAction(sourceId, email, actionId), exclude, attempts, delayMs);
 }
 
 /** Igual que lookupAnySource, pero reintenta antes de darse por vencido
- *  (buscador libre del admin). */
+ *  (buscador libre del admin). `exclude` solo aplica a las fuentes que
+ *  saltan códigos repetidos. */
 export async function lookupAnySourceWithRetries(
   email: string,
+  exclude: SeenCode | null = null,
   attempts = RETRY_ATTEMPTS,
   delayMs = RETRY_DELAY_MS
 ): Promise<{ sourceId: string; label: string; result: CodeLookupResult } | null> {
   for (let i = 0; i < attempts; i++) {
     const found = await lookupAnySource(email);
-    if (found) return found;
+    if (found && !(skipsRepeatedCodes(found.sourceId) && isSameCode(found.result, exclude))) return found;
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
   return null;

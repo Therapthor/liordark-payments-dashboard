@@ -39,9 +39,10 @@ import {
   setAccountTotpSecret,
   listCodesEnabledAccounts,
   getLatestCodeForAccount,
+  getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, TOTP_SOURCE_ID } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID } from "../services/codes-lookup.service";
 import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -369,7 +370,7 @@ router.post("/codes/lookup", async (req, res) => {
   const email = String(req.body?.email || "").trim();
   if (!email) { res.status(400).json({ message: "Falta el correo." }); return; }
 
-  const found = await lookupAnySourceWithRetries(email);
+  const found = await lookupAnySourceWithRetries(email, getLastSeenCodeForEmail(email));
   if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null }); return; }
 
   res.json({
@@ -392,7 +393,8 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   if (account.codeSource === TOTP_SOURCE_ID) { res.status(409).json({ message: "Esta cuenta usa 2FA: falta pegar la clave secreta en Accesos > Editar cuenta." }); return; }
 
   const actionId = typeof req.body?.actionId === "string" ? req.body.actionId : undefined;
-  const result = await lookupCodeActionWithRetries(account.codeSource, account.email, actionId);
+  const exclude = skipsRepeatedCodes(account.codeSource) ? getLastSeenCodeForEmail(account.email) : null;
+  const result = await lookupCodeActionWithRetries(account.codeSource, account.email, actionId, exclude);
   if (result.found && result.value) {
     const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
     saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });

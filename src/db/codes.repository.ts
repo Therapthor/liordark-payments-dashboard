@@ -137,6 +137,23 @@ export function getLatestCodeForAccount(accountId: number): AccountCode | null {
   return row ?? null;
 }
 
+/** El último código ya entregado para este correo, en cualquiera de las
+ *  cuentas que lo comparten — para no volver a entregarlo como "nuevo"
+ *  (ver skipsRepeatedCodes en codes-lookup.service.ts). */
+export function getLastSeenCodeForEmail(email: string): { value: string; providerReceivedAt?: string } | null {
+  const row = db.prepare(`
+    SELECT c.code AS code, c.snippet AS snippet
+    FROM account_codes c
+    JOIN access_accounts a ON a.id = c.account_id
+    WHERE lower(a.email) = lower(?)
+    ORDER BY c.received_at DESC, c.id DESC
+    LIMIT 1
+  `).get(email.trim()) as { code: string; snippet: string } | undefined;
+  if (!row) return null;
+  const received = row.snippet.replace(/^Recibido:\s*/, "").trim();
+  return received ? { value: row.code, providerReceivedAt: received } : { value: row.code };
+}
+
 /** Borra códigos con más de CODE_MAX_AGE_HOURS — corrida periódica. */
 export function cleanupOldCodes(): number {
   const result = db.prepare(`
