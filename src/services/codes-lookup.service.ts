@@ -343,8 +343,14 @@ function emailHtmlToText(html: string): string {
     .split("\n").map(l => l.replace(/[\s\u200a]+/g, " ").trim()).filter(Boolean).join("\n");
 }
 
-const VG_CONFIRM_LINK = /(confirm|verif|activ|validar|validate)/i;
-const VG_IGNORE_LINK = /(deny|deneg|unsubscribe|desuscrib|privacy|privacidad|help|ayuda|support|soporte|reset|password|contrase|terms|t[eé]rminos)/i;
+// Texto típico del botón que hay que tocar (Crunchyroll: confirmar correo
+// / dispositivo). Si ninguno calza, se usa el primer enlace con forma de
+// botón que no sea de los de abajo (ayuda, redes, darse de baja…).
+const VG_CONFIRM_LINK = /(confirm|verif|activ|validar|validate|aprob|approve|autoriz|authoriz|s[ií],? (fui|soy) yo|it was me|this was me|yes,? it|continu)/i;
+const VG_IGNORE_LINK = /(deny|deneg|no fui yo|not me|wasn.t me|unsubscribe|desuscrib|darte de baja|preferenc|privacy|privacidad|help|ayuda|support|soporte|centro de|reset|password|contrase|terms|t[eé]rminos|facebook|twitter|instagram|youtube|tiktok|discord|app store|google play|view in browser|ver en (el )?navegador)/i;
+const VG_BUTTON_TAG = /(background|bgcolor|padding|border-radius|class="[^"]*(button|btn|cta)|role="button")/i;
+// Años (ej. "© 2026") no son códigos.
+const isYear = (d: string) => /^(19|20)\d\d$/.test(d);
 
 export function parseVegamigPage(page: string): CodeLookupResult {
   if (!/class="success-text"/.test(page)) return VG_NOT_FOUND;
@@ -357,20 +363,29 @@ export function parseVegamigPage(page: string): CodeLookupResult {
   // Lo que muestra esta página es para el cliente, sin restricciones.
   const extra = received ? { providerReceivedAt: received } : {};
 
-  const code =
-    text.match(/(?:code|c[oó]digo)[^\d]{0,80}?\b(\d{4,8})\b/i)?.[1] ??
-    emailHtml.match(/>\s*(\d{4,8})\s*</)?.[1];
-  if (code) return { found: true, kind: "code", value: code, ...extra };
+  // 1) Código explícito ("your verification code is: 123456").
+  const code = text.match(/(?:code|c[oó]digo)[^\d]{0,80}?\b(\d{4,8})\b/i)?.[1];
+  if (code && !isYear(code)) return { found: true, kind: "code", value: code, ...extra };
 
-  for (const m of emailHtml.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = decodeHtmlEntities(m[1] ?? "");
-    const label = emailHtmlToText(m[2] ?? "");
-    if (!/^https?:\/\//i.test(href)) continue;
-    if (VG_IGNORE_LINK.test(label)) continue;
-    if (VG_CONFIRM_LINK.test(label) || VG_CONFIRM_LINK.test(href)) {
-      return { found: true, kind: "link", value: href, ...extra };
-    }
-  }
+  // 2) Botón / enlace de confirmar.
+  const links = [...emailHtml.matchAll(/<a\b([^>]*)href="([^"]+)"([^>]*)>([\s\S]*?)<\/a>/gi)]
+    .map(m => ({
+      href:  decodeHtmlEntities(m[2] ?? ""),
+      label: emailHtmlToText(m[4] ?? ""),
+      isButton: VG_BUTTON_TAG.test((m[1] ?? "") + (m[3] ?? "")),
+    }))
+    .filter(l => /^https?:\/\//i.test(l.href) && !VG_IGNORE_LINK.test(l.label) && !VG_IGNORE_LINK.test(l.href));
+  const confirm = links.find(l => VG_CONFIRM_LINK.test(l.label)) ?? links.find(l => VG_CONFIRM_LINK.test(l.href));
+  if (confirm) return { found: true, kind: "link", value: confirm.href, ...extra };
+
+  // 3) Número suelto en su propia caja (código sin la palabra "code").
+  const loose = [...emailHtml.matchAll(/>\s*(\d{4,8})\s*</g)].map(m => m[1] ?? "").find(d => !isYear(d));
+  if (loose) return { found: true, kind: "code", value: loose, ...extra };
+
+  // 4) Cualquier otro botón (con texto) del correo.
+  const button = links.find(l => l.isButton && l.label);
+  if (button) return { found: true, kind: "link", value: button.href, ...extra };
+
   return VG_NOT_FOUND;
 }
 
