@@ -146,6 +146,12 @@
 
   const TOTP_PERIOD_SECONDS = 30;
 
+  // "correo · 13 cuentas" cuando varias cuentas comparten el mismo login.
+  function accountSubHtml(a) {
+    const count = a.accountCount > 1 ? ` · ${a.accountCount} cuentas` : "";
+    return `<span class="codes-account-sub">${escapeHtml(a.email)}${count}</span>`;
+  }
+
   function renderAccountRow(a) {
     const row = document.createElement("div");
     row.className = "codes-account-row";
@@ -158,7 +164,7 @@
         <span class="codes-account-icon">🔑</span>
         <span class="codes-account-info">
           <span class="codes-account-name">${escapeHtml(a.platform)}</span>
-          <span class="codes-account-sub">${escapeHtml(a.email)}</span>
+          ${accountSubHtml(a)}
         </span>
         <span class="codes-account-result">
           <span class="codes-code" data-code="${escapeHtml(a.totp.code)}" title="Clic para copiar">${escapeHtml(a.totp.code)}</span>
@@ -184,7 +190,7 @@
       <span class="codes-account-icon">🔑</span>
       <span class="codes-account-info">
         <span class="codes-account-name">${escapeHtml(a.platform)}</span>
-        <span class="codes-account-sub">${escapeHtml(a.email)}</span>
+        ${accountSubHtml(a)}
       </span>
       <span class="codes-account-result">
         ${latest}

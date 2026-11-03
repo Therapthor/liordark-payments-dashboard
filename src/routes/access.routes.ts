@@ -324,12 +324,29 @@ router.get("/code-sources", (_req, res) => {
 });
 
 router.get("/codes", async (_req, res) => {
-  const accounts = await Promise.all(listCodesEnabledAccounts().map(async a => {
+  // Varias cuentas suelen compartir el mismo login (ej. ChatGPT, una por
+  // cliente) — el código es el mismo para todas, así que se muestra una
+  // fila por correo+fuente en vez de repetirla. La fila usa la primera
+  // cuenta del grupo para "Consultar", y el código más reciente de todas.
+  const groups = new Map<string, ReturnType<typeof listCodesEnabledAccounts>>();
+  for (const a of listCodesEnabledAccounts()) {
+    const key = [a.email.trim().toLowerCase(), a.codeSource ?? "", a.totpSecret ?? ""].join("|");
+    const group = groups.get(key);
+    if (group) group.push(a); else groups.set(key, [a]);
+  }
+
+  const accounts = await Promise.all([...groups.values()].map(async group => {
+    const a = group[0]!;
     const { totpSecret, ...rest } = a;
+    const latestCode = group
+      .map(g => getLatestCodeForAccount(g.id))
+      .filter(c => c !== null)
+      .sort((x, y) => y.receivedAt.localeCompare(x.receivedAt))[0] ?? null;
     return {
       ...rest,
+      accountCount: group.length,
       codeSourceLabel: codeSourceLabel(a.codeSource),
-      latestCode: getLatestCodeForAccount(a.id),
+      latestCode,
       // Si la fuente tiene sub-acciones (ej. "PallyStore con opciones"),
       // el admin elige puntualmente cuál consultar en vez de probarlas
       // todas a ciegas — null si la fuente no las tiene.
