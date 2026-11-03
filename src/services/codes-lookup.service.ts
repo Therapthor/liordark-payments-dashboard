@@ -17,7 +17,7 @@ export type CodeLookupResult = {
   // "code" = dígitos (4 o 6); "link" = enlace de inicio de sesión.
   kind:  "code" | "link" | null;
   value: string | null;
-  // Para "PallyStore con opciones": cuál de las 6 sub-acciones respondió
+  // Para "PallyStore con opciones": cuál sub-acción respondió
   // esto — algunas son sensibles aunque la cuenta esté configurada con
   // la fuente "normal" (ver CON_OPCIONES_ACTIONS / isSensitiveResult).
   sourceAction?: string;
@@ -66,15 +66,16 @@ function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
 
 // ─────────────────────────────────────────────────────────────
 // "PallyStore con opciones" — mismo sitio, pero el correo acá hace que
-// la página muestre un menú de 6 botones ("¿Qué necesitas?") en vez de
+// la página muestre un menú de botones ("¿Qué necesitas?") en vez de
 // entregar un solo resultado. Cada botón manda su propio accion_codigo
-// (tg_1..tg_6, confirmado por orden de aparición en el menú) sobre el
-// mismo correo+clave. Es UNA sola fuente (no 6 separadas): al consultar
-// se prueban las 6 en orden y se usa la primera que responda algo. 3 de
-// las 6 (Definir Hogar, Link Contraseña, Código 6 dígitos) son sensibles
-// — si la que respondió es una de esas, nunca se entrega al cliente
-// (igual que ya pasa con los códigos de 6 dígitos de "sin opciones"),
-// pero el admin sí las ve todas desde el mismo lugar.
+// (tg_N, confirmado por orden de aparición en el menú — "Link
+// Contraseña"/tg_3 se descartó porque nunca se usa) sobre el mismo
+// correo+clave. Es UNA sola fuente (no una por sub-acción): al consultar
+// se prueban todas en orden y se usa la primera que responda algo.
+// Definir Hogar y Código 6 dígitos son sensibles — si la que respondió
+// es una de esas, nunca se entrega al cliente (igual que ya pasa con los
+// códigos de 6 dígitos de "sin opciones"), pero el admin sí las ve todas
+// desde el mismo lugar.
 //
 // El HTML de "no encontrado" acá es distinto al de "sin opciones" (texto
 // confirmado por captura real). El de encontrado todavía no se vio en
@@ -135,13 +136,12 @@ type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion
 const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
   { id: "definir_hogar",    label: "Definir Hogar",         adminOnly: true,  accion: "tg_1" },
   { id: "codigo_hogar",     label: "Código Hogar",          adminOnly: false, accion: "tg_2" },
-  { id: "link_contrasena",  label: "Link Contraseña",       adminOnly: true,  accion: "tg_3" },
   { id: "codigo_login",     label: "Código Inicio Sesión",  adminOnly: false, accion: "tg_4" },
   { id: "codigo_6_digitos", label: "Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
   { id: "link_login",       label: "Link Inicio Sesión",    adminOnly: false, accion: "tg_6" },
 ];
 
-/** Prueba las 6 sub-acciones en orden sobre el mismo correo y se queda
+/** Prueba las sub-acciones en orden sobre el mismo correo y se queda
  *  con la primera que responda algo — una sola llamada sirve tanto para
  *  el cliente (más abajo se filtran las sensibles) como para el admin. */
 async function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult> {
