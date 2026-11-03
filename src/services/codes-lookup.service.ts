@@ -1,4 +1,5 @@
 import axios from "axios";
+import { env } from "../config/env";
 
 // ─────────────────────────────────────────────────────────────
 // CÓDIGOS — fuentes externas. El proveedor comparte páginas donde se
@@ -21,6 +22,9 @@ export type CodeLookupResult = {
   // esto — algunas son sensibles aunque la cuenta esté configurada con
   // la fuente "normal" (ver CON_OPCIONES_ACTIONS / isSensitiveResult).
   sourceAction?: string;
+  // Hora en que le llegó el correo al proveedor, tal como la muestra su
+  // página (ej. "2026-11-02 23:04:51") — solo las fuentes que la dan.
+  providerReceivedAt?: string;
 };
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
@@ -192,12 +196,100 @@ export async function lookupCodeAction(sourceId: string, email: string, actionId
   return lookupCode(sourceId, email);
 }
 
+// ─────────────────────────────────────────────────────────────
+// "Streaming Market — página de códigos" (bot2.nexbolstore.com) — a
+// diferencia de PallyStore pide iniciar sesión (cookie PHPSESSID). Flujo,
+// igual al de su propia página: /visor/verificar responde
+// {"encontrado":true|false}; si llegó, POST /visor/buscar redirige a
+// /visor con el código y la hora de "Recibido" en el HTML. Por ahora
+// solo ChatGPT (plataforma_id=1).
+// ─────────────────────────────────────────────────────────────
+
+const SM_BASE = "https://bot2.nexbolstore.com";
+const SM_CHATGPT_PLATFORM_ID = "1";
+const SM_NOT_FOUND: CodeLookupResult = { found: false, kind: null, value: null };
+
+let smCookie: string | null = null;
+// La página guarda el último resultado en la sesión (buscar → visor), así
+// que dos búsquedas a la vez con la misma sesión podrían cruzarse — se
+// atienden de a una.
+let smQueue: Promise<unknown> = Promise.resolve();
+
+function smSessionCookie(setCookie: string[] | undefined): string | null {
+  const raw = setCookie?.find(c => c.startsWith("PHPSESSID="));
+  return raw ? raw.split(";")[0] : null;
+}
+
+async function smLogin(): Promise<string> {
+  if (!env.STREAMING_MARKET_USER || !env.STREAMING_MARKET_PASSWORD) {
+    throw new Error("Faltan STREAMING_MARKET_USER / STREAMING_MARKET_PASSWORD en el servidor.");
+  }
+  const page = await axios.get(`${SM_BASE}/auth/login`, { timeout: 15_000, maxRedirects: 0, validateStatus: () => true });
+  let cookie = smSessionCookie(page.headers["set-cookie"]);
+  if (!cookie) throw new Error("Streaming Market no devolvió cookie de sesión.");
+
+  const body = new URLSearchParams({ nombre_usuario: env.STREAMING_MARKET_USER, password: env.STREAMING_MARKET_PASSWORD });
+  const res = await axios.post(`${SM_BASE}/auth/login`, body.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie },
+    timeout: 15_000, maxRedirects: 0, validateStatus: () => true,
+  });
+  // Un login correcto redirige al visor; uno rechazado vuelve al login.
+  const location = String(res.headers.location ?? "");
+  if (res.status < 300 || res.status >= 400 || location.includes("/auth/login")) {
+    throw new Error("Streaming Market rechazó el usuario/contraseña.");
+  }
+  cookie = smSessionCookie(res.headers["set-cookie"]) ?? cookie;
+  return cookie;
+}
+
+function smParseVisor(html: string): CodeLookupResult {
+  const code = html.match(/class="codigo mono">\s*([^<]+?)\s*</)?.[1];
+  if (!code) return SM_NOT_FOUND;
+  const received = html.match(/Recibido:<\/strong>\s*([^<]+?)\s*</)?.[1];
+  const link = code.match(/https?:\/\/\S+/)?.[0];
+  return {
+    found: true,
+    kind: link ? "link" : "code",
+    value: link ?? code,
+    ...(received ? { providerReceivedAt: received } : {}),
+  };
+}
+
+async function smLookupOnce(email: string, allowRelogin: boolean): Promise<CodeLookupResult> {
+  if (!smCookie) smCookie = await smLogin();
+  const cookie = smCookie;
+  const query = new URLSearchParams({ plataforma_id: SM_CHATGPT_PLATFORM_ID, correo_remitente: email });
+
+  const check = await axios.get(`${SM_BASE}/visor/verificar?${query}`, {
+    headers: { Cookie: cookie }, timeout: 15_000, maxRedirects: 0, validateStatus: () => true,
+  });
+  // Sesión vencida: el sitio redirige al login en vez de responder JSON.
+  if (check.status !== 200 || typeof check.data !== "object" || check.data === null) {
+    smCookie = null;
+    if (allowRelogin) return smLookupOnce(email, false);
+    throw new Error("Streaming Market no aceptó la sesión.");
+  }
+  if (!check.data.encontrado) return SM_NOT_FOUND;
+
+  const res = await axios.post(`${SM_BASE}/visor/buscar`, query.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie }, timeout: 15_000,
+  });
+  return smParseVisor(String(res.data));
+}
+
+function lookupStreamingMarket(email: string): Promise<CodeLookupResult> {
+  const run = smQueue.then(() => smLookupOnce(email, true));
+  smQueue = run.catch(() => undefined);
+  return run;
+}
+
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
 const SOURCES: Record<string, Source> = {
   netflix_sin_opciones: { label: "PallyStore sin opciones (Netflix)", lookup: lookupNetflixSinOpciones },
   netflix_con_opciones: { label: "PallyStore con opciones (Netflix)", lookup: lookupNetflixConOpciones },
   disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
+  streaming_market_web: { label: "Streaming Market — página de códigos", lookup: lookupStreamingMarket },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave

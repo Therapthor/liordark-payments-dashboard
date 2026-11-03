@@ -411,7 +411,8 @@ router.post("/codes/:accountId/request", async (req, res) => {
   const result = await lookupCodeWithRetries(sourceId, account.email);
 
   if (result.found && result.value) {
-    saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
+    const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
+    saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });
   }
 
   // El de 6 dígitos de Netflix "sin opciones" es el de cambio de datos de
@@ -428,6 +429,8 @@ router.post("/codes/:accountId/request", async (req, res) => {
     code:       result.found && result.kind === "code" ? result.value : null,
     link:       result.found && result.kind === "link" ? result.value : null,
     receivedAt: result.found ? new Date().toISOString() : null,
+    // Hora en que le llegó el correo al proveedor, si la fuente la da.
+    received:   result.found ? (result.providerReceivedAt ?? null) : null,
   });
 });
 

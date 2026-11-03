@@ -37,6 +37,12 @@ export const env = {
   CODES_GMAIL_USER:         getEnv("CODES_GMAIL_USER", false),
   CODES_GMAIL_APP_PASSWORD: getEnv("CODES_GMAIL_APP_PASSWORD", false),
 
+  // Códigos — "Streaming Market — página de códigos" (bot2.nexbolstore.com),
+  // que pide iniciar sesión. Sin esto configurado, esa fuente responde
+  // "no encontrado" siempre (no rompe nada).
+  STREAMING_MARKET_USER:     getEnv("STREAMING_MARKET_USER", false),
+  STREAMING_MARKET_PASSWORD: getEnv("STREAMING_MARKET_PASSWORD", false),
+
   // SMS de recordatorio de vencimiento (ClickLab/Infobip) — panel >
   // Renovaciones > SMS. Sin esto configurado, ese botón queda inactivo
   // (no rompe nada, solo no se puede mandar SMS).

@@ -1677,7 +1677,7 @@
       badge.textContent = "✓";
       badge.className = "codes-radar-badge ok show";
       status.textContent = "¡Enlace encontrado!";
-      statusSub.textContent = "";
+      statusSub.textContent = result.received ? "Recibido: " + result.received : "";
       openLinkBtn.href = result.link;
       openLinkBtn.hidden = false;
       closeBtn.hidden = false;
@@ -1686,7 +1686,7 @@
       badge.textContent = "✓";
       badge.className = "codes-radar-badge ok show";
       status.textContent = "¡Código encontrado!";
-      statusSub.textContent = "";
+      statusSub.textContent = result.received ? "Recibido: " + result.received : "";
       String(result.code).split("").forEach((d, i) => {
         const span = document.createElement("span");
         span.textContent = d;

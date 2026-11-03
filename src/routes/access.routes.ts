@@ -355,7 +355,10 @@ router.post("/codes/lookup", async (req, res) => {
   const found = await lookupAnySourceWithRetries(email);
   if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null }); return; }
 
-  res.json({ found: true, kind: found.result.kind, value: found.result.value, sourceLabel: found.label });
+  res.json({
+    found: true, kind: found.result.kind, value: found.result.value, sourceLabel: found.label,
+    receivedAt: found.result.providerReceivedAt ?? null,
+  });
 });
 
 // "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) —
@@ -374,7 +377,8 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   const actionId = typeof req.body?.actionId === "string" ? req.body.actionId : undefined;
   const result = await lookupCodeActionWithRetries(account.codeSource, account.email, actionId);
   if (result.found && result.value) {
-    saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
+    const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
+    saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });
   }
   res.json({ found: result.found, kind: result.kind, value: result.value });
 });

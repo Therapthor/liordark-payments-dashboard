@@ -116,7 +116,7 @@
           <span class="codes-banner-icon">${result.kind === "link" ? "🔗" : "✓"}</span>
           <span class="codes-banner-info">
             <span class="codes-banner-email">${escapeHtml(email)}</span>
-            <span class="codes-banner-source">${escapeHtml(result.sourceLabel || "")}</span>
+            <span class="codes-banner-source">${escapeHtml(result.sourceLabel || "")}${result.receivedAt ? " · Recibido: " + escapeHtml(result.receivedAt) : ""}</span>
           </span>
           <span class="codes-banner-result">${resultHtml(result.kind, result.value)}</span>
         `;
@@ -171,7 +171,7 @@
 
     const latest = a.latestCode
       ? resultHtml(a.latestCode.code.startsWith("http") ? "link" : "code", a.latestCode.code) +
-        `<span class="codes-account-received">${fmtDateTime(a.latestCode.receivedAt)}</span>`
+        `<span class="codes-account-received">${a.latestCode.snippet ? escapeHtml(a.latestCode.snippet) : fmtDateTime(a.latestCode.receivedAt)}</span>`
       : "";
 
     // Fuentes con sub-acciones (ej. "PallyStore con opciones") — el admin

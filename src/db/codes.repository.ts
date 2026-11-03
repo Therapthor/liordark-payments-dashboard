@@ -119,13 +119,16 @@ export type AccountCode = {
   code:       string;
   source:     string;
   receivedAt: string;
+  // Ej. "Recibido: 2026-11-02 23:04:51" — la hora que da el proveedor,
+  // cuando la da (receivedAt es cuándo lo consultamos nosotros).
+  snippet:    string;
 };
 
 /** El código más reciente para una cuenta, sin importar antigüedad (la
  *  limpieza de 24h ya se encarga de que nunca haya nada viejo). */
 export function getLatestCodeForAccount(accountId: number): AccountCode | null {
   const row = db.prepare(`
-    SELECT id, code, source, received_at AS receivedAt
+    SELECT id, code, source, received_at AS receivedAt, snippet
     FROM account_codes
     WHERE account_id = ?
     ORDER BY received_at DESC
