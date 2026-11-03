@@ -117,24 +117,29 @@ export function getOrCreateOpenChatForPhone(phone: string): Chat {
 }
 
 /** Inbox del panel — todos los chats abiertos (de momento, a lo más uno,
- *  el del celular de prueba), más nuevo primero. */
+ *  el del celular de prueba), más nuevo primero. Un chat recién creado por
+ *  el cliente al simplemente abrir el widget (GET /chat, SSE) todavía no
+ *  tiene ningún mensaje — no debe aparecer acá como "nuevo" hasta que de
+ *  verdad escriba algo. */
 export function listChatsForAdmin(): ChatSummary[] {
   const rows = db.prepare(`SELECT * FROM support_chats ORDER BY updated_at DESC`).all() as any[];
-  return rows.map(row => {
-    const chat = toChat(row);
+  return rows.flatMap(row => {
     const last = db.prepare(`
       SELECT type, text, created_at FROM support_chat_messages WHERE chat_id = ? ORDER BY id DESC LIMIT 1
     `).get(row.id) as any;
+    if (!last) return [];
+
+    const chat = toChat(row);
     const unread = db.prepare(`
       SELECT COUNT(*) AS n FROM support_chat_messages
       WHERE chat_id = ? AND sender = 'customer' AND (? IS NULL OR created_at > ?)
     `).get(row.id, row.admin_seen_at, row.admin_seen_at) as { n: number };
-    return {
+    return [{
       ...chat,
-      lastMessage:   last ? (last.type === "text" ? last.text : (last.type === "image" ? "📷 Foto" : "🎥 Video")) : "",
-      lastMessageAt: last ? last.created_at : row.created_at,
+      lastMessage:   last.type === "text" ? last.text : (last.type === "image" ? "📷 Foto" : "🎥 Video"),
+      lastMessageAt: last.created_at,
       unreadForAdmin: unread.n,
-    };
+    }];
   });
 }
 

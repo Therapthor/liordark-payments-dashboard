@@ -969,12 +969,16 @@ a { color: var(--btn); }
 .codes-meta { font-size: 12px; color: var(--muted); }
 
 /* Solo esta página va siempre en oscuro, sin importar el tema del resto
-   del sitio — le pisa sus propias variables de color nada más acá adentro. */
+   del sitio — el fondo oscuro cubre toda la pantalla (no solo una tarjeta
+   adentro), la barra de arriba se queda con su propio fondo claro porque
+   tiene su color de fondo fijo (var(--card) del tema normal). */
+body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
+
 #page-codes {
   --bg: #1c140c; --card: #271c12; --text: #f5ece0; --muted: #b29b85;
   --border: #3a2c1c; --chip-bg: #352512; --danger: #ef6b6b; --ok: #49c97e;
-  background: var(--bg); color: var(--text);
-  padding: 18px 14px 24px; border-radius: 16px;
+  color: var(--text);
+  padding: 4px 0 24px;
 }
 
 .codes-search { text-align: center; background: var(--card); border-radius: 14px; padding: 18px 14px 16px; margin: 2px 0 8px; }

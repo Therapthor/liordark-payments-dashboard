@@ -454,6 +454,7 @@
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
     document.getElementById("page-codes").hidden = view !== "codes";
+    document.body.classList.toggle("theme-codes-dark", view === "codes");
     if (view === "dashboard") { loadDashboardAccounts(); refreshEmailStatus(); }
     if (view === "codes") loadCodesAccounts();
   }
