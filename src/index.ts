@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import compression from "compression";
 import path from "path";
 import { env } from "./config/env";
 import { db } from "./db/db";
@@ -40,6 +41,15 @@ import { runSupportBotSweep } from "./services/support-bot.service";
 
 const app = express();
 
+// Comprime (gzip) todo lo que sale — JS/CSS/HTML/JSON pesan ~4 veces menos.
+// Nunca los streams en vivo (SSE): comprimirlos los retiene en el buffer y
+// dejarían de llegar al instante.
+app.use(compression({
+  filter: (req, res) => {
+    if (String(req.headers.accept ?? "").includes("text/event-stream") || req.path.endsWith("/stream")) return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
@@ -99,7 +109,14 @@ app.get("/api/health", (_req, res) => {
 // de distribuidores (public-wholesale/), y cualquier otro host (panel.
 // liordark.com, IP directa, localhost) sigue siendo el panel de admin
 // (public/) — no cambia nada de cómo ya se accede a los dos primeros.
-const noCacheHeaders = { setHeaders: (res: any) => res.setHeader("Cache-Control", "no-cache") };
+// HTML/JS/CSS: "no-cache" (el navegador confirma con el servidor si cambió,
+// así cada deploy se ve al toque). Imágenes y fuentes casi nunca cambian:
+// se guardan 7 días en el navegador y no se vuelven a pedir en cada visita.
+const LONG_CACHE_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf)$/i;
+const noCacheHeaders = {
+  setHeaders: (res: any, filePath: string) =>
+    res.setHeader("Cache-Control", LONG_CACHE_EXT.test(filePath) ? "public, max-age=604800" : "no-cache"),
+};
 const storeStatic     = express.static(path.resolve(process.cwd(), "public-store"), noCacheHeaders);
 const panelStatic      = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
 const wholesaleStatic  = express.static(path.resolve(process.cwd(), "public-wholesale"), noCacheHeaders);
