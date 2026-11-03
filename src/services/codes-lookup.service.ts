@@ -54,14 +54,14 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
   return { found: true, kind: "code", value: digitsOnly };
 }
 
-// "Netflix - Cuenta sin opciones" — primera fuente configurada (ver
+// "PallyStore sin opciones" — primera fuente configurada (ver
 // access_accounts.code_source = "netflix_sin_opciones").
 function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
   return fetchFromPallyDigital("netflix", email, "gustavo");
 }
 
 const SOURCES: Record<string, { label: string; lookup: (email: string) => Promise<CodeLookupResult> }> = {
-  netflix_sin_opciones: { label: "Netflix - Cuenta sin opciones", lookup: lookupNetflixSinOpciones },
+  netflix_sin_opciones: { label: "PallyStore sin opciones", lookup: lookupNetflixSinOpciones },
 };
 
 export function listCodeSources(): { id: string; label: string }[] {
