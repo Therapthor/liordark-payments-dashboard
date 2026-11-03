@@ -195,8 +195,8 @@ export async function lookupCodeAction(sourceId: string, email: string, actionId
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
 const SOURCES: Record<string, Source> = {
-  netflix_sin_opciones: { label: "PallyStore sin opciones", lookup: lookupNetflixSinOpciones },
-  netflix_con_opciones: { label: "PallyStore con opciones", lookup: lookupNetflixConOpciones },
+  netflix_sin_opciones: { label: "PallyStore sin opciones (Netflix)", lookup: lookupNetflixSinOpciones },
+  netflix_con_opciones: { label: "PallyStore con opciones (Netflix)", lookup: lookupNetflixConOpciones },
   disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
 };
 
