@@ -172,6 +172,7 @@
           <button id="access-renewing-btn" class="btn-secondary">🔁 Renovados</button>
           <button id="access-renewal-history-btn" class="btn-secondary">📋 Registro</button>
           <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
+          <button id="access-codes-btn" class="btn-secondary">🔑 Códigos</button>
           <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
         </div>
 
@@ -413,16 +414,6 @@
         </div>
 
         <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
-
-        <!-- Cuentas con "🔑 Código" habilitado (se activa en Accesos, al
-             editar la cuenta) — acá el admin ve el código tal cual viene,
-             sin el filtro de 6 dígitos que sí aplica para el cliente. -->
-        <div class="panel-header standalone">
-          <h2>🔑 Códigos (admin)</h2>
-        </div>
-        <p class="panel-hint">Cuentas con código habilitado. Acá se ve cualquier código, sin restricciones — el cliente en liordark.com no ve los de 6 dígitos.</p>
-        <ul id="codes-admin-list" class="catalog-list"></ul>
-        <p id="codes-admin-empty" class="feed-empty" hidden>Ninguna cuenta tiene el código habilitado todavía — actívalo en Accesos, al editar la cuenta.</p>
 
       </section>
 
@@ -946,6 +937,31 @@
       </div>
       <div id="access-renewal-history-body" class="modal-scroll-body"></div>
       <p id="access-renewal-history-empty" class="feed-empty" hidden>Todavía no se renovó ninguna cuenta.</p>
+    </div>
+  </div>
+
+  <!-- ───────────── MODAL: Códigos (admin, sin restricciones) ───────────── -->
+  <div id="access-codes-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>🔑 Códigos</h3>
+        <button type="button" class="modal-x" data-close-modal="access-codes-modal">✕</button>
+      </div>
+
+      <p class="panel-hint">Busca el código de cualquier correo, sin que esté dado de alta en Accesos — útil para probar rápido.</p>
+      <form id="codes-lookup-form" class="codes-lookup-form">
+        <select id="codes-lookup-source" required></select>
+        <input id="codes-lookup-email" type="email" placeholder="correo@ejemplo.com" required />
+        <button type="submit" class="btn-primary btn-sm">🔎 Buscar</button>
+      </form>
+      <p id="codes-lookup-result" class="panel-hint" hidden></p>
+
+      <div class="panel-header standalone" style="margin-top: 18px;">
+        <h2>Cuentas con código habilitado</h2>
+      </div>
+      <p class="panel-hint">Se ve cualquier código, sin el filtro de 6 dígitos que sí aplica para el cliente. Se activa en Accesos, al editar la cuenta.</p>
+      <ul id="codes-admin-list" class="catalog-list"></ul>
+      <p id="codes-admin-empty" class="feed-empty" hidden>Ninguna cuenta tiene el código habilitado todavía.</p>
     </div>
   </div>
 

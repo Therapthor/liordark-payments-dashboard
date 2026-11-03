@@ -321,6 +321,18 @@ router.get("/codes", (_req, res) => {
   res.json({ accounts });
 });
 
+// Buscador libre — cualquier correo, no hace falta que esté dado de alta
+// como cuenta en Accesos. Un solo intento, sin reintentos, sin filtrar
+// por dígitos: el admin ve todo.
+router.post("/codes/lookup", async (req, res) => {
+  const sourceId = String(req.body?.sourceId || "");
+  const email    = String(req.body?.email || "").trim();
+  if (!sourceId || !email) { res.status(400).json({ message: "Falta la fuente o el correo." }); return; }
+
+  const result = await lookupCode(sourceId, email);
+  res.json({ found: result.found, code: result.code, digits: result.digits });
+});
+
 // "Consultar ahora" del admin — un solo intento, sin reintentos (no hace
 // esperar), y sin filtrar por cantidad de dígitos: el admin ve todo.
 router.post("/codes/:accountId/lookup-now", async (req, res) => {

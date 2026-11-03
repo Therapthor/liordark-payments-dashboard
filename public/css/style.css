@@ -704,6 +704,11 @@ button, input {
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 
+.codes-lookup-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.codes-lookup-form select { padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-primary); font-size: 13px; }
+.codes-lookup-form input { flex: 1; min-width: 200px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-primary); font-size: 14px; }
+.codes-lookup-form input:focus, .codes-lookup-form select:focus { outline: none; border-color: var(--accent); }
+
 /* Cuadrícula de tarjetas — una por plataforma, en vez del acordeón
    anterior. Clic en una tarjeta abre el detalle de esa plataforma sola. */
 .access-platforms {
