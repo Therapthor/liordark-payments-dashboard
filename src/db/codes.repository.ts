@@ -24,6 +24,18 @@ export function getAccountCodeSource(accountId: number): string | null {
   return row?.code_source ?? null;
 }
 
+/** Clave secreta de 2FA (TOTP) de esta cuenta — null = no usa TOTP (ver
+ *  utils/totp.util.ts). Independiente de code_source: una cuenta usa UNO
+ *  de los dos mecanismos, nunca ambos a la vez. */
+export function setAccountTotpSecret(accountId: number, secret: string | null): void {
+  db.prepare(`UPDATE access_accounts SET totp_secret = ? WHERE id = ?`).run(secret, accountId);
+}
+
+export function getAccountTotpSecret(accountId: number): string | null {
+  const row = db.prepare(`SELECT totp_secret FROM access_accounts WHERE id = ?`).get(accountId) as { totp_secret: string | null } | undefined;
+  return row?.totp_secret ?? null;
+}
+
 /** Todas las cuentas con "código" habilitado — para el panel admin. */
 export type CodesEnabledAccount = {
   id:         number;
@@ -31,11 +43,12 @@ export type CodesEnabledAccount = {
   email:      string;
   expiresAt:  string | null;
   codeSource: string | null;
+  totpSecret: string | null;
 };
 
 export function listCodesEnabledAccounts(): CodesEnabledAccount[] {
   return db.prepare(`
-    SELECT id, platform, email, expires_at AS expiresAt, code_source AS codeSource
+    SELECT id, platform, email, expires_at AS expiresAt, code_source AS codeSource, totp_secret AS totpSecret
     FROM access_accounts
     WHERE codes_enabled = 1
     ORDER BY platform ASC
@@ -57,6 +70,7 @@ export type ClientCodesAccount = {
   email:       string;
   profileName: string;
   expiresAt:   string | null;
+  totpSecret:  string | null;
 };
 
 /**
@@ -71,7 +85,7 @@ export function listClientCodesAccounts(clientPhone: string): ClientCodesAccount
 
   return db.prepare(`
     SELECT a.id AS accountId, a.platform AS platform, a.email AS email,
-           p.profile_name AS profileName, a.expires_at AS expiresAt
+           p.profile_name AS profileName, a.expires_at AS expiresAt, a.totp_secret AS totpSecret
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE a.codes_enabled = 1

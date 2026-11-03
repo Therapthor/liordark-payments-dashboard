@@ -20,6 +20,7 @@ import {
   saveIncomingCode,
 } from "../db/codes.repository";
 import { lookupCodeWithRetries, isSensitiveResult } from "../services/codes-lookup.service";
+import { getCurrentTotp } from "../utils/totp.util";
 import {
   createCustomerNotification,
   listCustomerNotifications,
@@ -362,7 +363,7 @@ router.use(requireCustomerSession);
 // por WhatsApp, pero eso no bloquea volver a intentar después.
 // ─────────────────────────────────────────────────────────────
 
-router.get("/codes", (req, res) => {
+router.get("/codes", async (req, res) => {
   const customerId = (req as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
@@ -371,7 +372,14 @@ router.get("/codes", (req, res) => {
     return res.status(403).json({ message: "Códigos todavía está en pruebas." });
   }
 
-  res.json({ accounts: listClientCodesAccounts(customer.phone) });
+  // Cuentas con 2FA (TOTP) no piden código — se calcula al vuelo, sin
+  // consultar nada externo, y rota solo cada 30s (ver totp.util.ts).
+  const accounts = await Promise.all(listClientCodesAccounts(customer.phone).map(async a => {
+    const { totpSecret, ...rest } = a;
+    return { ...rest, totp: totpSecret ? await getCurrentTotp(totpSecret) : null };
+  }));
+
+  res.json({ accounts });
 });
 
 // Consulta en vivo (con reintentos, hasta ~1 minuto) a la página del

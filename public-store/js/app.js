@@ -1513,7 +1513,26 @@
   // CÓDIGOS — en pruebas, solo CODES_TEST_PHONE (ver onAuthenticated)
   // ─────────────────────────────────────────────────────────────
 
+  // 2FA por TOTP — no hace falta "Pedir código": siempre hay uno vigente,
+  // solo rota cada 30s (ver utils/totp.util.ts en el backend).
+  function totpCardHtml(a) {
+    return `
+      <div class="renewal-account-card" data-account-id="${a.accountId}">
+        <div class="renewal-account-head">
+          <span class="renewal-account-platform">${escapeHtml(a.platform)}</span>
+          <span class="renewal-account-status">${escapeHtml(a.expiresAt ? "Vence: " + a.expiresAt : "")}</span>
+        </div>
+        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
+        <div class="codes-totp-row">
+          <span class="codes-code" data-code="${escapeHtml(a.totp.code)}" data-seconds-remaining="${a.totp.secondsRemaining}" title="Clic para copiar">${escapeHtml(a.totp.code)}</span>
+          <span class="codes-timer" data-role="totp-ring"><span class="codes-timer-num"></span></span>
+        </div>
+      </div>
+    `;
+  }
+
   function codesCardHtml(a) {
+    if (a.totp) return totpCardHtml(a);
     return `
       <div class="renewal-account-card" data-account-id="${a.accountId}">
         <div class="renewal-account-head">
@@ -1546,9 +1565,30 @@
     `;
   }
 
+  const TOTP_PERIOD_SECONDS = 30;
+  let totpRefreshTimeout = null;
+
+  // Cuenta regresiva circular del código TOTP (ver codes.js del panel,
+  // mismo patrón) — cuando el más próximo rota, recarga sola la lista.
+  function startTotpTimer(el, remainingSeconds, totalSeconds) {
+    let remaining = remainingSeconds;
+    const numEl = el.querySelector(".codes-timer-num");
+    const tick = () => {
+      el.style.setProperty("--pct", String(Math.max(0, (remaining / totalSeconds) * 100)));
+      numEl.textContent = remaining + "s";
+    };
+    tick();
+    const interval = setInterval(() => {
+      remaining = Math.max(0, remaining - 1);
+      tick();
+      if (remaining <= 0) clearInterval(interval);
+    }, 1000);
+  }
+
   async function loadCodesAccounts() {
     const list  = document.getElementById("codes-list");
     const empty = document.getElementById("codes-empty");
+    if (totpRefreshTimeout) { clearTimeout(totpRefreshTimeout); totpRefreshTimeout = null; }
     try {
       const { accounts } = await api("/codes");
       if (!accounts || accounts.length === 0) {
@@ -1557,6 +1597,15 @@
       } else {
         empty.hidden = true;
         list.innerHTML = accounts.map(codesCardHtml).join("");
+        list.querySelectorAll("[data-role='totp-ring']").forEach(el => {
+          const seconds = Number(el.closest(".renewal-account-card")?.querySelector(".codes-code")?.dataset.secondsRemaining) || TOTP_PERIOD_SECONDS;
+          startTotpTimer(el, seconds, TOTP_PERIOD_SECONDS);
+        });
+        const totpAccounts = accounts.filter(a => a.totp);
+        if (totpAccounts.length > 0) {
+          const soonest = Math.min(...totpAccounts.map(a => a.totp.secondsRemaining));
+          totpRefreshTimeout = setTimeout(loadCodesAccounts, (soonest + 1) * 1000);
+        }
       }
     } catch (err) {
       list.innerHTML = "";
@@ -1667,6 +1716,17 @@
 
   function initCodesView() {
     document.getElementById("codes-list").addEventListener("click", async (e) => {
+      const totpCode = e.target.closest(".codes-code");
+      if (totpCode) {
+        navigator.clipboard?.writeText(totpCode.dataset.code).then(() => {
+          const original = totpCode.textContent;
+          totpCode.classList.add("copied");
+          totpCode.textContent = "¡Copiado!";
+          setTimeout(() => { totpCode.textContent = original; totpCode.classList.remove("copied"); }, 1200);
+        }).catch(() => {});
+        return;
+      }
+
       const closeBtn = e.target.closest("[data-role='close']");
       if (closeBtn) {
         closeBtn.closest(".renewal-account-card").querySelector("[data-role='search']").hidden = true;

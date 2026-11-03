@@ -62,8 +62,8 @@
     return el;
   }
 
-  function startTimer(el, totalSeconds = RETRY_TOTAL_SECONDS) {
-    let remaining = totalSeconds;
+  function startTimer(el, remainingSeconds = RETRY_TOTAL_SECONDS, totalSeconds = remainingSeconds) {
+    let remaining = remainingSeconds;
     const numEl = el.querySelector(".codes-timer-num");
     const tick = () => {
       el.style.setProperty("--pct", String(Math.max(0, (remaining / totalSeconds) * 100)));
@@ -144,10 +144,30 @@
 
   let cachedAccounts = [];
 
+  const TOTP_PERIOD_SECONDS = 30;
+
   function renderAccountRow(a) {
     const row = document.createElement("div");
     row.className = "codes-account-row";
     row.dataset.id = a.id;
+
+    // 2FA por TOTP — se calcula solo, sin "Consultar": siempre hay un
+    // código vigente, solo rota cada 30s (ver utils/totp.util.ts).
+    if (a.totp) {
+      row.innerHTML = `
+        <span class="codes-account-icon">🔑</span>
+        <span class="codes-account-info">
+          <span class="codes-account-name">${escapeHtml(a.platform)}</span>
+          <span class="codes-account-sub">${escapeHtml(a.email)}</span>
+        </span>
+        <span class="codes-account-result">
+          <span class="codes-code" data-code="${escapeHtml(a.totp.code)}" title="Clic para copiar">${escapeHtml(a.totp.code)}</span>
+          <span class="codes-timer" data-role="totp-ring"><span class="codes-timer-num"></span></span>
+        </span>
+      `;
+      startTimer(row.querySelector("[data-role='totp-ring']"), a.totp.secondsRemaining, TOTP_PERIOD_SECONDS);
+      return row;
+    }
 
     const latest = a.latestCode
       ? resultHtml(a.latestCode.code.startsWith("http") ? "link" : "code", a.latestCode.code) +
@@ -175,6 +195,18 @@
     return row;
   }
 
+  // Cuando el TOTP más próximo rote, recarga sola la lista para mostrar
+  // el código nuevo — sin esto se quedaría pegada en el código viejo.
+  let totpRefreshTimeout = null;
+
+  function scheduleTotpRefresh() {
+    if (totpRefreshTimeout) { clearTimeout(totpRefreshTimeout); totpRefreshTimeout = null; }
+    const totpAccounts = cachedAccounts.filter(a => a.totp);
+    if (totpAccounts.length === 0) return;
+    const soonest = Math.min(...totpAccounts.map(a => a.totp.secondsRemaining));
+    totpRefreshTimeout = setTimeout(load, (soonest + 1) * 1000);
+  }
+
   function renderAccountsList() {
     const list  = document.getElementById("codes-accounts-list");
     const empty = document.getElementById("codes-accounts-empty");
@@ -182,6 +214,7 @@
     if (cachedAccounts.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
     for (const a of cachedAccounts) list.appendChild(renderAccountRow(a));
+    scheduleTotpRefresh();
   }
 
   async function load() {

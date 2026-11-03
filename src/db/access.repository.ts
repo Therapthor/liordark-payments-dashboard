@@ -49,6 +49,7 @@ export type AccessAccount = {
   // etc.) para que el cliente lo pida desde liordark.com. Ver codes.repository.ts.
   codesEnabled: boolean;
   codeSource:   string | null;
+  totpSecret:   string | null;
   // Corte automático del ciclo — ver runRenewalCutover en access.service.ts.
   renewalCleanupDueAt:   string | null;
   passwordChangePending: boolean;
@@ -1482,6 +1483,7 @@ function toAccount(row: any): AccessAccount {
     renewalPendingAt: row.renewal_pending_at ?? null,
     codesEnabled: row.codes_enabled === 1,
     codeSource:   row.code_source ?? null,
+    totpSecret:   row.totp_secret ?? null,
     renewalCleanupDueAt:   row.renewal_cleanup_due_at ?? null,
     passwordChangePending: row.password_change_pending === 1,
     createdAt:   row.created_at,

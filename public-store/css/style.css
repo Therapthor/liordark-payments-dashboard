@@ -983,6 +983,29 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 
 .codes-search { text-align: center; background: var(--card); border-radius: 14px; padding: 18px 14px 16px; margin: 2px 0 8px; }
 
+/* 2FA por TOTP — fila con el código vigente + temporizador circular que
+   muestra cuánto falta para que rote (cada 30s). Sin botón "Pedir
+   código": siempre hay uno disponible. */
+.codes-totp-row {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  background: var(--card); border-radius: 14px; padding: 16px 14px; margin: 2px 0 8px;
+}
+.codes-totp-row .codes-code {
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: 3px;
+  color: var(--btn); cursor: pointer; padding: 4px 10px; border-radius: 9px; transition: background .15s;
+}
+.codes-totp-row .codes-code:hover { background: var(--chip-bg); }
+.codes-totp-row .codes-code.copied { color: var(--ok); }
+
+.codes-timer {
+  --pct: 100;
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; position: relative;
+  background: conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--border) 0);
+  display: flex; align-items: center; justify-content: center;
+}
+.codes-timer::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--bg); }
+.codes-timer-num { position: relative; font-size: 10px; font-weight: 700; color: var(--muted); font-family: inherit; }
+
 .codes-radar { width: 72px; height: 72px; margin: 4px auto 14px; border-radius: 50%; position: relative; display: flex; align-items: center; justify-content: center; overflow: visible; }
 .codes-radar-ring { position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--chip-bg); }
 .codes-radar-ring::before {

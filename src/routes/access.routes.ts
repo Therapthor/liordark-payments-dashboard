@@ -36,11 +36,13 @@ import { listRenewalHistory } from "../db/renewal-history.repository";
 import {
   setAccountCodesEnabled,
   setAccountCodeSource,
+  setAccountTotpSecret,
   listCodesEnabledAccounts,
   getLatestCodeForAccount,
   saveIncomingCode,
 } from "../db/codes.repository";
 import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel } from "../services/codes-lookup.service";
+import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
@@ -306,19 +308,37 @@ router.post("/accounts/:id/code-source", (req, res) => {
   res.json({ account: withStatus(getAccountById(accountId)!) });
 });
 
+// Clave secreta de 2FA (TOTP) de esta cuenta (ver utils/totp.util.ts).
+// null = la quita. Independiente de code-source — una cuenta usa UNO de
+// los dos mecanismos.
+router.post("/accounts/:id/totp-secret", (req, res) => {
+  const accountId = Number(req.params.id);
+  const secret = typeof req.body?.totpSecret === "string" && req.body.totpSecret.trim() ? req.body.totpSecret.trim() : null;
+  if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  setAccountTotpSecret(accountId, secret);
+  res.json({ account: withStatus(getAccountById(accountId)!) });
+});
+
 router.get("/code-sources", (_req, res) => {
   res.json({ sources: listCodeSources() });
 });
 
-router.get("/codes", (_req, res) => {
-  const accounts = listCodesEnabledAccounts().map(a => ({
-    ...a,
-    codeSourceLabel: codeSourceLabel(a.codeSource),
-    latestCode: getLatestCodeForAccount(a.id),
-    // Si la fuente tiene sub-acciones (ej. "PallyStore con opciones"),
-    // el admin elige puntualmente cuál consultar en vez de probarlas
-    // todas a ciegas — null si la fuente no las tiene.
-    sourceActions: listSourceActions(a.codeSource),
+router.get("/codes", async (_req, res) => {
+  const accounts = await Promise.all(listCodesEnabledAccounts().map(async a => {
+    const { totpSecret, ...rest } = a;
+    return {
+      ...rest,
+      codeSourceLabel: codeSourceLabel(a.codeSource),
+      latestCode: getLatestCodeForAccount(a.id),
+      // Si la fuente tiene sub-acciones (ej. "PallyStore con opciones"),
+      // el admin elige puntualmente cuál consultar en vez de probarlas
+      // todas a ciegas — null si la fuente no las tiene.
+      sourceActions: listSourceActions(a.codeSource),
+      // 2FA por TOTP — se calcula al vuelo, sin consultar nada externo.
+      // No se manda la clave en sí, solo el código ya calculado.
+      hasTotp: !!totpSecret,
+      totp: totpSecret ? await getCurrentTotp(totpSecret) : null,
+    };
   }));
   res.json({ accounts });
 });

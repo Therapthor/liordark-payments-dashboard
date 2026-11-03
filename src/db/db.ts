@@ -173,6 +173,11 @@ ensureColumn("access_accounts", "codes_enabled", "codes_enabled INTEGER NOT NULL
 // services/codes-lookup.service.ts). NULL = todavía sin configurar.
 ensureColumn("access_accounts", "code_source", "code_source TEXT");
 
+// Clave secreta de 2FA (TOTP, RFC 6238) — cuando está puesta, el código
+// se calcula al vuelo (ver utils/totp.util.ts), sin consultar ninguna
+// página externa. NULL = esta cuenta no usa 2FA por TOTP.
+ensureColumn("access_accounts", "totp_secret", "totp_secret TEXT");
+
 // Activación manual (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM) — queda en 1
 // al crear/renovar la cuenta, hasta que el admin confirme que ya hizo la
 // activación real en la plataforma (invitar el correo, loguearse, etc.).

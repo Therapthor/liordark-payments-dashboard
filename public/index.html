@@ -812,6 +812,9 @@
             <option value="">— Sin configurar —</option>
           </select>
         </label>
+        <label>Clave secreta 2FA (TOTP) — si la tiene, se usa esta en vez de la fuente de arriba
+          <input id="account-edit-totp-secret" type="text" placeholder="Clave Base32 de 2FA (la que da el proveedor)" autocomplete="off" />
+        </label>
       </div>
 
       <p id="account-edit-error" class="login-error" hidden></p>

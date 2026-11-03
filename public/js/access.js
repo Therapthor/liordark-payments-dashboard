@@ -775,6 +775,7 @@
     document.getElementById("account-edit-codes-enabled").checked = !!account.codesEnabled;
     document.getElementById("account-edit-codes-fields").hidden = !account.codesEnabled;
     document.getElementById("account-edit-code-source").value = account.codeSource || "";
+    document.getElementById("account-edit-totp-secret").value = account.totpSecret || "";
 
     document.getElementById("account-edit-modal").hidden = false;
   }
@@ -824,6 +825,7 @@
       };
       const codesEnabled = document.getElementById("account-edit-codes-enabled").checked;
       const codeSource   = document.getElementById("account-edit-code-source").value || null;
+      const totpSecret   = document.getElementById("account-edit-totp-secret").value.trim() || null;
 
       const errorEl = document.getElementById("account-edit-error");
       errorEl.hidden = true;
@@ -831,6 +833,7 @@
         await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
         await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
         await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
+        await api("/accounts/" + editingAccountId + "/totp-secret", { method: "POST", body: JSON.stringify({ totpSecret: codesEnabled ? totpSecret : null }) });
         document.getElementById("account-edit-modal").hidden = true;
         // Si cambió de plataforma, la tarjeta se mueve de acordeón — ahí sí
         // hace falta recargar todo. Si no, se actualiza sin cerrar nada.
