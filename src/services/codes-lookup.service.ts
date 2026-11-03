@@ -64,6 +64,12 @@ function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
   return fetchFromPallyDigital("netflix", email, "gustavo");
 }
 
+// Disney+ — mismo sitio (tipo=disney), sin menú de opciones, igual que
+// Netflix "sin opciones".
+function lookupDisneySinOpciones(email: string): Promise<CodeLookupResult> {
+  return fetchFromPallyDigital("disney", email, "gustavo");
+}
+
 // ─────────────────────────────────────────────────────────────
 // "PallyStore con opciones" — mismo sitio, pero el correo acá hace que
 // la página muestre un menú de botones ("¿Qué necesitas?") en vez de
@@ -191,6 +197,7 @@ type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResu
 const SOURCES: Record<string, Source> = {
   netflix_sin_opciones: { label: "PallyStore sin opciones", lookup: lookupNetflixSinOpciones },
   netflix_con_opciones: { label: "PallyStore con opciones", lookup: lookupNetflixConOpciones },
+  disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
 };
 
 export function listCodeSources(): { id: string; label: string }[] {
