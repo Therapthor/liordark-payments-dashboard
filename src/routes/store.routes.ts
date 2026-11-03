@@ -19,7 +19,7 @@ import {
   getAccountCodeSource,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeWithRetries } from "../services/codes-lookup.service";
+import { lookupCodeWithRetries, isAdminOnlySource } from "../services/codes-lookup.service";
 import {
   createCustomerNotification,
   listCustomerNotifications,
@@ -394,7 +394,7 @@ router.post("/codes/:accountId/request", async (req, res) => {
   }
 
   const sourceId = getAccountCodeSource(accountId);
-  if (!sourceId) {
+  if (!sourceId || isAdminOnlySource(sourceId)) {
     return res.status(409).json({ message: "Esta cuenta todavía no tiene configurada de dónde sacar el código. Avísanos por soporte." });
   }
 

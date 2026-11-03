@@ -60,17 +60,109 @@ function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
   return fetchFromPallyDigital("netflix", email, "gustavo");
 }
 
-const SOURCES: Record<string, { label: string; lookup: (email: string) => Promise<CodeLookupResult> }> = {
-  netflix_sin_opciones: { label: "PallyStore sin opciones", lookup: lookupNetflixSinOpciones },
+// ─────────────────────────────────────────────────────────────
+// "PallyStore con opciones" — mismo sitio, pero el correo acá hace que
+// la página muestre un menú de 6 botones ("¿Qué necesitas?") en vez de
+// entregar un solo resultado. Cada botón manda su propio accion_codigo
+// (tg_1..tg_6, confirmado por orden de aparición en el menú) sobre el
+// mismo correo+clave. 3 de los 6 quedan solo para el admin (Definir
+// Hogar, Link Contraseña, Código 6 dígitos — más sensibles/menos
+// relevantes para el cliente), el resto sí puede asignarse a cuentas de
+// clientes (ver adminOnly más abajo / listCodeSources).
+//
+// El HTML de "no encontrado" acá es distinto al de "sin opciones" (texto
+// confirmado por captura real). El de encontrado todavía no se vio en
+// vivo — el extractor de abajo es best-effort (busca un enlace, si no
+// dígitos de 4-6 en una etiqueta destacada) y se afina en cuanto se vea
+// fallar con un caso real.
+// ─────────────────────────────────────────────────────────────
+
+const NOT_FOUND_MARKERS_CON_OPCIONES = [
+  "No llegó ningún código para este correo",
+  "Aún no hay códigos recientes",
+];
+
+async function fetchFromPallyDigitalConOpciones(email: string, accessCode: string, accion: string): Promise<CodeLookupResult> {
+  const url = `https://codes.pally.digital/index.php?tipo=netflix`;
+  const body = new URLSearchParams({
+    plataforma: "netflix",
+    email,
+    codigo: accessCode,
+    accion_codigo: accion,
+  });
+
+  const res = await axios.post(url, body.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    timeout: 15_000,
+  });
+
+  const html: string = String(res.data);
+  if (NOT_FOUND_MARKERS_CON_OPCIONES.some(marker => html.includes(marker))) {
+    return { found: false, kind: null, value: null };
+  }
+
+  // 1) etiquetas de énfasis (<strong>/<b>) — mismo lugar que usa la
+  // variante "sin opciones" para el valor real.
+  const emphasisTexts = [...html.matchAll(/<(?:strong|b)[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi)]
+    .map(m => m[1].replace(/<[^>]+>/g, "").trim())
+    .filter(Boolean);
+
+  for (const text of emphasisTexts) {
+    const link = text.match(/https?:\/\/\S+/i);
+    if (link) return { found: true, kind: "link", value: link[0] };
+    const digits = text.replace(/\D/g, "");
+    if (digits.length >= 4 && digits.length <= 6) return { found: true, kind: "code", value: digits };
+  }
+
+  // 2) de respaldo: cualquier enlace visible en el cuerpo que no sea un
+  // recurso propio de la página (CDN de bootstrap, íconos, etc.).
+  const bodyHtml = (html.match(/<body[\s\S]*<\/body>/i)?.[0] ?? html)
+    .replace(/<(script|style|link)[\s\S]*?(<\/\1>|\/?>)/gi, "");
+  const bodyLink = bodyHtml.match(/https?:\/\/(?![^"'\s<>]*(?:pally\.digital|cdn\.|bootstrap))\S+/i);
+  if (bodyLink) return { found: true, kind: "link", value: bodyLink[0].replace(/["'<>].*$/, "") };
+
+  return { found: false, kind: null, value: null };
+}
+
+type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion: string };
+
+const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
+  { id: "definir_hogar",    label: "PallyStore con opciones — Definir Hogar",         adminOnly: true,  accion: "tg_1" },
+  { id: "codigo_hogar",     label: "PallyStore con opciones — Código Hogar",          adminOnly: false, accion: "tg_2" },
+  { id: "link_contrasena",  label: "PallyStore con opciones — Link Contraseña",       adminOnly: true,  accion: "tg_3" },
+  { id: "codigo_login",     label: "PallyStore con opciones — Código Inicio Sesión",  adminOnly: false, accion: "tg_4" },
+  { id: "codigo_6_digitos", label: "PallyStore con opciones — Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
+  { id: "link_login",       label: "PallyStore con opciones — Link Inicio Sesión",    adminOnly: false, accion: "tg_6" },
+];
+
+type Source = { label: string; adminOnly: boolean; lookup: (email: string) => Promise<CodeLookupResult> };
+
+const SOURCES: Record<string, Source> = {
+  netflix_sin_opciones: { label: "PallyStore sin opciones", adminOnly: false, lookup: lookupNetflixSinOpciones },
+  ...Object.fromEntries(CON_OPCIONES_ACTIONS.map(a => [
+    `netflix_con_opciones_${a.id}`,
+    { label: a.label, adminOnly: a.adminOnly, lookup: (email: string) => fetchFromPallyDigitalConOpciones(email, "gustavo", a.accion) },
+  ])),
 };
 
+/** Fuentes que se le pueden asignar a una cuenta de cliente — las
+ *  admin-only (más sensibles) solo salen en el buscador libre del admin
+ *  (ver lookupAnySource), nunca en este desplegable. */
 export function listCodeSources(): { id: string; label: string }[] {
-  return Object.entries(SOURCES).map(([id, s]) => ({ id, label: s.label }));
+  return Object.entries(SOURCES).filter(([, s]) => !s.adminOnly).map(([id, s]) => ({ id, label: s.label }));
 }
 
 export function codeSourceLabel(sourceId: string | null): string {
   if (!sourceId) return "";
   return SOURCES[sourceId]?.label || sourceId;
+}
+
+/** true si esta fuente es sensible y nunca debe entregarse a un cliente
+ *  (ver listCodeSources) — defensa aparte, por si una cuenta quedó con
+ *  este código a mano en la base de datos. */
+export function isAdminOnlySource(sourceId: string | null): boolean {
+  if (!sourceId) return false;
+  return SOURCES[sourceId]?.adminOnly ?? false;
 }
 
 /** Una sola consulta puntual, sin reintentos — para el botón admin "Consultar ahora". */
