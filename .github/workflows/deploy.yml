@@ -1,0 +1,41 @@
+name: Deploy al VPS
+
+# Cada push a main entra por SSH al VPS y corre lo mismo que se hacía a
+# mano: git pull + npm install + build + pm2 restart del panel (id 1).
+# También se puede lanzar a mano desde la pestaña Actions de GitHub.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Si llegan dos pushes seguidos, no corre dos deploys encimados.
+concurrency:
+  group: deploy-vps-panel
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HAS_SSH_KEY: ${{ secrets.VPS_SSH_KEY != '' }}
+    steps:
+      - name: Avisar si falta la llave
+        if: env.HAS_SSH_KEY != 'true'
+        run: echo "Falta el secreto VPS_SSH_KEY en Settings > Secrets and variables > Actions. No se despliega."
+
+      - name: Desplegar por SSH
+        if: env.HAS_SSH_KEY == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: 161.132.53.122
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd ~/liordark-payments-dashboard
+            git pull
+            npm install
+            npm run build
+            pm2 restart 1
