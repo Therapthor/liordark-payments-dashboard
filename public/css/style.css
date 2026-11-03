@@ -778,6 +778,11 @@ button, input {
 }
 .codes-consult-btn:disabled { opacity: .4; cursor: default; }
 
+.codes-action-select {
+  background: var(--cchip); border: 1px solid var(--cborder); color: var(--ctext); border-radius: 7px;
+  padding: 6px 9px; font-size: 11px; max-width: 170px;
+}
+
 /* Cuadrícula de tarjetas — una por plataforma, en vez del acordeón
    anterior. Clic en una tarjeta abre el detalle de esa plataforma sola. */
 .access-platforms {

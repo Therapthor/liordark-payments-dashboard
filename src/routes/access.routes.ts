@@ -40,7 +40,7 @@ import {
   getLatestCodeForAccount,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCode, lookupAnySource, listCodeSources, codeSourceLabel } from "../services/codes-lookup.service";
+import { lookupCodeAction, lookupAnySource, listCodeSources, listSourceActions, codeSourceLabel } from "../services/codes-lookup.service";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
@@ -315,6 +315,10 @@ router.get("/codes", (_req, res) => {
     ...a,
     codeSourceLabel: codeSourceLabel(a.codeSource),
     latestCode: getLatestCodeForAccount(a.id),
+    // Si la fuente tiene sub-acciones (ej. "PallyStore con opciones"),
+    // el admin elige puntualmente cuál consultar en vez de probarlas
+    // todas a ciegas — null si la fuente no las tiene.
+    sourceActions: listSourceActions(a.codeSource),
   }));
   res.json({ accounts });
 });
@@ -335,14 +339,17 @@ router.post("/codes/lookup", async (req, res) => {
 
 // "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) — un
 // solo intento, sin reintentos (no hace esperar), y sin filtrar por
-// cantidad de dígitos: el admin ve todo.
+// cantidad de dígitos: el admin ve todo. Si la fuente tiene sub-acciones
+// (ver listSourceActions), body.actionId dice cuál puntual consultar —
+// si no se manda, cae a la consulta normal (prueba todas).
 router.post("/codes/:accountId/lookup-now", async (req, res) => {
   const accountId = Number(req.params.accountId);
   const account = getAccountById(accountId);
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   if (!account.codeSource) { res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." }); return; }
 
-  const result = await lookupCode(account.codeSource, account.email);
+  const actionId = typeof req.body?.actionId === "string" ? req.body.actionId : undefined;
+  const result = await lookupCodeAction(account.codeSource, account.email, actionId);
   if (result.found && result.value) {
     saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }

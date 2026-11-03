@@ -120,6 +120,12 @@
         `<span class="codes-account-received">${fmtDateTime(a.latestCode.receivedAt)}</span>`
       : "";
 
+    // Fuentes con sub-acciones (ej. "PallyStore con opciones") — el admin
+    // elige puntualmente qué consultar en vez de probarlas todas a ciegas.
+    const actionSelect = a.sourceActions
+      ? `<select class="codes-action-select">${a.sourceActions.map(act => `<option value="${escapeHtml(act.id)}">${escapeHtml(act.label)}</option>`).join("")}</select>`
+      : "";
+
     row.innerHTML = `
       <span class="codes-account-icon">🔑</span>
       <span class="codes-account-info">
@@ -128,6 +134,7 @@
       </span>
       <span class="codes-account-result">
         ${latest}
+        ${actionSelect}
         <button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>
       </span>
     `;
@@ -162,12 +169,18 @@
 
       const btn = e.target.closest(".codes-consult-btn");
       if (!btn || btn.disabled) return;
-      const id = Number(btn.closest(".codes-account-row").dataset.id);
+      const row = btn.closest(".codes-account-row");
+      const id = Number(row.dataset.id);
+      const actionSelect = row.querySelector(".codes-action-select");
+      const actionId = actionSelect ? actionSelect.value : undefined;
       const original = btn.textContent;
       btn.disabled = true;
       btn.textContent = "Consultando…";
       try {
-        const result = await api("/codes/" + id + "/lookup-now", { method: "POST" });
+        const result = await api("/codes/" + id + "/lookup-now", {
+          method: "POST",
+          body: JSON.stringify(actionId ? { actionId } : {}),
+        });
         if (!result.found) alert("Todavía no hay código nuevo para esa cuenta.");
         await load();
       } catch (err) {

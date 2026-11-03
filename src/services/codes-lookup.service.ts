@@ -166,6 +166,26 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
   return CON_OPCIONES_ACTIONS.find(a => a.id === result.sourceAction)?.adminOnly ?? false;
 }
 
+/** Sub-acciones de una fuente, para que el admin elija puntualmente qué
+ *  consultar (ej. "solo el código de 6 dígitos") en vez de probarlas
+ *  todas a ciegas — null si la fuente no tiene sub-acciones. */
+export function listSourceActions(sourceId: string | null): { id: string; label: string }[] | null {
+  if (sourceId !== "netflix_con_opciones") return null;
+  return CON_OPCIONES_ACTIONS.map(a => ({ id: a.id, label: a.label }));
+}
+
+/** Consulta puntual de UNA sub-acción específica — para fuentes sin
+ *  sub-acciones (actionId ausente o no aplica), cae a la consulta normal. */
+export async function lookupCodeAction(sourceId: string, email: string, actionId?: string): Promise<CodeLookupResult> {
+  if (sourceId === "netflix_con_opciones" && actionId) {
+    const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);
+    if (!action) return { found: false, kind: null, value: null };
+    const result = await fetchFromPallyDigitalConOpciones(email, "gustavo", action.accion);
+    return result.found ? { ...result, sourceAction: action.id } : result;
+  }
+  return lookupCode(sourceId, email);
+}
+
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
 const SOURCES: Record<string, Source> = {
