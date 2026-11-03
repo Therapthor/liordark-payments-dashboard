@@ -25,9 +25,6 @@ export type CodeLookupResult = {
   // Hora en que le llegó el correo al proveedor, tal como la muestra su
   // página (ej. "2026-11-02 23:04:51") — solo las fuentes que la dan.
   providerReceivedAt?: string;
-  // true = el correo era de algo delicado (ej. restablecer contraseña):
-  // el código se guarda para el admin pero nunca se le entrega al cliente.
-  adminOnly?: boolean;
 };
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
@@ -185,7 +182,7 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
 export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
   if (!result.found) return false;
   const netflix6 = sourceId === "netflix_sin_opciones" && result.kind === "code" && result.value?.length === 6;
-  return netflix6 || !!result.adminOnly || isSensitiveResult(result);
+  return netflix6 || isSensitiveResult(result);
 }
 
 /** Sub-acciones de una fuente, para que el admin elija puntualmente qué
@@ -346,9 +343,6 @@ function emailHtmlToText(html: string): string {
     .split("\n").map(l => l.replace(/[\s\u200a]+/g, " ").trim()).filter(Boolean).join("\n");
 }
 
-// Correos de cambio/recuperación de contraseña: el código serviría para
-// quitarnos la cuenta — solo para el admin.
-const VG_SENSITIVE = /(reset|restablec|recuper|forgot|olvidaste|password assistance|asistencia (de|con la) contrase|change (your )?password|cambi(ar|o) (de |tu |la )?contrase|nueva contrase|new password)/i;
 const VG_CONFIRM_LINK = /(confirm|verif|activ|validar|validate)/i;
 const VG_IGNORE_LINK = /(deny|deneg|unsubscribe|desuscrib|privacy|privacidad|help|ayuda|support|soporte|reset|password|contrase|terms|t[eé]rminos)/i;
 
@@ -359,9 +353,9 @@ export function parseVegamigPage(page: string): CodeLookupResult {
 
   const emailHtml = decodeHtmlEntities(srcdoc);
   const text = emailHtmlToText(emailHtml);
-  const adminOnly = VG_SENSITIVE.test(text);
   const received = text.match(/(?:When|Cu[aá]ndo|Fecha)\s*:\s*([^\n]+)/i)?.[1]?.trim();
-  const extra = { ...(received ? { providerReceivedAt: received } : {}), ...(adminOnly ? { adminOnly } : {}) };
+  // Lo que muestra esta página es para el cliente, sin restricciones.
+  const extra = received ? { providerReceivedAt: received } : {};
 
   const code =
     text.match(/(?:code|c[oó]digo)[^\d]{0,80}?\b(\d{4,8})\b/i)?.[1] ??
