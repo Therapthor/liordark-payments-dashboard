@@ -25,6 +25,9 @@ export type CodeLookupResult = {
   // Hora en que le llegó el correo al proveedor, tal como la muestra su
   // página (ej. "2026-11-02 23:04:51") — solo las fuentes que la dan.
   providerReceivedAt?: string;
+  // true = el correo era de algo delicado (ej. restablecer contraseña):
+  // el código se guarda para el admin pero nunca se le entrega al cliente.
+  adminOnly?: boolean;
 };
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
@@ -182,7 +185,7 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
 export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
   if (!result.found) return false;
   const netflix6 = sourceId === "netflix_sin_opciones" && result.kind === "code" && result.value?.length === 6;
-  return netflix6 || isSensitiveResult(result);
+  return netflix6 || !!result.adminOnly || isSensitiveResult(result);
 }
 
 /** Sub-acciones de una fuente, para que el admin elija puntualmente qué
@@ -312,6 +315,84 @@ function lookupStreamingMarket(email: string): Promise<CodeLookupResult> {
   return run;
 }
 
+// ── Vegamig (Prime Video / Crunchyroll) ──
+// Página pública, sin usuario: se manda el correo (POST email_cliente) y
+// devuelve la misma página con el último correo que le llegó, incrustado
+// en un <iframe srcdoc="..."> (HTML escapado). Si no hay nada, no trae
+// el recuadro "success-text". Del correo se saca el código (Amazon: "your
+// verification code is: 123456") o, si no hay código, el enlace de
+// confirmación (Crunchyroll: "confirmar correo").
+
+const VG_URL = "https://vegamig.com/solicitud%20codigo/index.php";
+const VG_NOT_FOUND: CodeLookupResult = { found: false, kind: null, value: null };
+
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, " ")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&amp;/g, "&");
+}
+
+function emailHtmlToText(html: string): string {
+  return decodeHtmlEntities(
+    html
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<br\b[^>]*>|<\/(p|div|tr|li|h\d)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+  )
+    .split("\n").map(l => l.replace(/[\s\u200a]+/g, " ").trim()).filter(Boolean).join("\n");
+}
+
+// Correos de cambio/recuperación de contraseña: el código serviría para
+// quitarnos la cuenta — solo para el admin.
+const VG_SENSITIVE = /(reset|restablec|recuper|forgot|olvidaste|password assistance|asistencia (de|con la) contrase|change (your )?password|cambi(ar|o) (de |tu |la )?contrase|nueva contrase|new password)/i;
+const VG_CONFIRM_LINK = /(confirm|verif|activ|validar|validate)/i;
+const VG_IGNORE_LINK = /(deny|deneg|unsubscribe|desuscrib|privacy|privacidad|help|ayuda|support|soporte|reset|password|contrase|terms|t[eé]rminos)/i;
+
+export function parseVegamigPage(page: string): CodeLookupResult {
+  if (!/class="success-text"/.test(page)) return VG_NOT_FOUND;
+  const srcdoc = page.match(/srcdoc="([^"]*)"/)?.[1];
+  if (!srcdoc) return VG_NOT_FOUND;
+
+  const emailHtml = decodeHtmlEntities(srcdoc);
+  const text = emailHtmlToText(emailHtml);
+  const adminOnly = VG_SENSITIVE.test(text);
+  const received = text.match(/(?:When|Cu[aá]ndo|Fecha)\s*:\s*([^\n]+)/i)?.[1]?.trim();
+  const extra = { ...(received ? { providerReceivedAt: received } : {}), ...(adminOnly ? { adminOnly } : {}) };
+
+  const code =
+    text.match(/(?:code|c[oó]digo)[^\d]{0,80}?\b(\d{4,8})\b/i)?.[1] ??
+    emailHtml.match(/>\s*(\d{4,8})\s*</)?.[1];
+  if (code) return { found: true, kind: "code", value: code, ...extra };
+
+  for (const m of emailHtml.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = decodeHtmlEntities(m[1] ?? "");
+    const label = emailHtmlToText(m[2] ?? "");
+    if (!/^https?:\/\//i.test(href)) continue;
+    if (VG_IGNORE_LINK.test(label)) continue;
+    if (VG_CONFIRM_LINK.test(label) || VG_CONFIRM_LINK.test(href)) {
+      return { found: true, kind: "link", value: href, ...extra };
+    }
+  }
+  return VG_NOT_FOUND;
+}
+
+async function lookupVegamig(email: string): Promise<CodeLookupResult> {
+  const res = await axios.post(VG_URL, new URLSearchParams({ email_cliente: email }).toString(), {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      Referer: VG_URL,
+    },
+    timeout: 20_000,
+    responseType: "text",
+  });
+  return parseVegamigPage(String(res.data));
+}
+
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
 const SOURCES: Record<string, Source> = {
@@ -319,6 +400,7 @@ const SOURCES: Record<string, Source> = {
   netflix_con_opciones: { label: "PallyStore con opciones (Netflix)", lookup: lookupNetflixConOpciones },
   disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
   streaming_market_web: { label: "Streaming Market — página de códigos", lookup: lookupStreamingMarket },
+  vegamig_web:          { label: "Vegamig — Prime Video / Crunchyroll", lookup: lookupVegamig },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -388,7 +470,7 @@ const RETRY_DELAY_MS = 12000; // 5 esperas de 12s ≈ 60s en total
 export type SeenCode = { value: string; providerReceivedAt?: string };
 
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
-  return sourceId === "streaming_market_web";
+  return sourceId === "streaming_market_web" || sourceId === "vegamig_web";
 }
 
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {

@@ -1887,7 +1887,8 @@
         <div class="chat-bot-code-card">
           <div class="chat-bot-code-title">🔑 ${escapeHtml(p.platform || "")}</div>
           ${isLink
-            ? `<a class="chat-bot-code-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">🔗 Abrir enlace</a>`
+            ? `<a class="chat-bot-code-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">✅ Confirmar ingreso</a>
+               <div class="chat-bot-code-hint">Solo confirma tu inicio de sesión; luego vuelve a la app.</div>`
             : `<button type="button" class="chat-bot-code" data-code="${escapeHtml(value)}">${escapeHtml(value)}</button>
                <div class="chat-bot-code-hint">Toca el código para copiarlo</div>`}
           ${p.received ? `<div class="chat-bot-code-received">Recibido: ${escapeHtml(p.received)}</div>` : ""}

@@ -274,7 +274,9 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
     }),
   });
   emitChatEvent({ type: "message", chatId: chat.id, message });
-  say(chat.id, "¿Te funcionó el código?", [
+  say(chat.id, result.kind === "link"
+    ? "Toca «✅ Confirmar ingreso» y luego vuelve a la app. ¿Funcionó?"
+    : "¿Te funcionó el código?", [
     DONE_OPTION,
     { id: `retry:${accountId}`, label: "🔄 No sirvió, buscar otro" },
     HUMAN_OPTION,
