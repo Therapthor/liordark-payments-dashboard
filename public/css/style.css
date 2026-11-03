@@ -783,6 +783,18 @@ button, input {
   padding: 6px 9px; font-size: 11px; max-width: 170px;
 }
 
+/* Temporizador circular — cuenta regresiva mientras se consulta (la
+   página del proveedor puede tardar hasta ~1 minuto). Si el resultado
+   llega antes, el que lo llama lo corta y lo saca del DOM solo. */
+.codes-timer {
+  --pct: 100;
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; position: relative;
+  background: conic-gradient(#ff8c3a calc(var(--pct) * 1%), var(--cborder) 0);
+  display: flex; align-items: center; justify-content: center;
+}
+.codes-timer::before { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--cpg); }
+.codes-timer-num { position: relative; font-size: 9px; font-weight: 700; color: #ffc059; font-family: inherit; }
+
 /* Cuadrícula de tarjetas — una por plataforma, en vez del acordeón
    anterior. Clic en una tarjeta abre el detalle de esa plataforma sola. */
 .access-platforms {

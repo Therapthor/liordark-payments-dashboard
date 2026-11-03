@@ -49,6 +49,35 @@
     }, 1200);
   }
 
+  // ── Temporizador circular — cuenta regresiva mientras se consulta
+  // (la página del proveedor puede tardar hasta ~1 minuto, ver
+  // RETRY_ATTEMPTS/RETRY_DELAY_MS en codes-lookup.service.ts). Si el
+  // resultado llega antes, se corta solo — nunca espera el minuto entero.
+  const RETRY_TOTAL_SECONDS = 60;
+
+  function createTimerEl() {
+    const el = document.createElement("span");
+    el.className = "codes-timer";
+    el.innerHTML = `<span class="codes-timer-num"></span>`;
+    return el;
+  }
+
+  function startTimer(el, totalSeconds = RETRY_TOTAL_SECONDS) {
+    let remaining = totalSeconds;
+    const numEl = el.querySelector(".codes-timer-num");
+    const tick = () => {
+      el.style.setProperty("--pct", String(Math.max(0, (remaining / totalSeconds) * 100)));
+      numEl.textContent = remaining + "s";
+    };
+    tick();
+    const interval = setInterval(() => {
+      remaining = Math.max(0, remaining - 1);
+      tick();
+      if (remaining <= 0) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }
+
   // Un resultado (código o enlace) listo para mostrar, con su acción.
   function resultHtml(kind, value) {
     if (kind === "link") {
@@ -71,6 +100,9 @@
       btn.disabled = true;
       const original = btn.textContent;
       btn.textContent = "Buscando…";
+      const timerEl = createTimerEl();
+      btn.insertAdjacentElement("beforebegin", timerEl);
+      const stopTimer = startTimer(timerEl);
       try {
         const result = await api("/codes/lookup", { method: "POST", body: JSON.stringify({ email }) });
         banner.hidden = false;
@@ -93,6 +125,8 @@
         banner.className = "codes-banner not-found";
         banner.textContent = err.message || "No se pudo buscar.";
       } finally {
+        stopTimer();
+        timerEl.remove();
         btn.disabled = false;
         btn.textContent = original;
       }
@@ -176,6 +210,9 @@
       const original = btn.textContent;
       btn.disabled = true;
       btn.textContent = "Consultando…";
+      const timerEl = createTimerEl();
+      btn.insertAdjacentElement("beforebegin", timerEl);
+      const stopTimer = startTimer(timerEl);
       try {
         const result = await api("/codes/" + id + "/lookup-now", {
           method: "POST",
@@ -186,6 +223,8 @@
       } catch (err) {
         alert(err.message || "No se pudo consultar.");
       } finally {
+        stopTimer();
+        timerEl.remove();
         btn.disabled = false;
         btn.textContent = original;
       }
