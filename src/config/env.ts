@@ -15,6 +15,19 @@ function getEnv(key: string, required = true): string {
   return value as string;
 }
 
+// Streaming Market puede tener varios usuarios (cada uno ve sus propios
+// correos): STREAMING_MARKET_USER/_PASSWORD, y _2, _3... para los demás.
+function streamingMarketLogins(): { user: string; password: string }[] {
+  const logins: { user: string; password: string }[] = [];
+  for (let i = 1; i <= 10; i++) {
+    const suffix   = i === 1 ? "" : `_${i}`;
+    const user     = process.env[`STREAMING_MARKET_USER${suffix}`];
+    const password = process.env[`STREAMING_MARKET_PASSWORD${suffix}`];
+    if (user && password) logins.push({ user, password });
+  }
+  return logins;
+}
+
 export const env = {
   PORT: Number(process.env.PORT) || 4000,
   NODE_ENV,
@@ -38,10 +51,9 @@ export const env = {
   CODES_GMAIL_APP_PASSWORD: getEnv("CODES_GMAIL_APP_PASSWORD", false),
 
   // Códigos — "Streaming Market — página de códigos" (bot2.nexbolstore.com),
-  // que pide iniciar sesión. Sin esto configurado, esa fuente responde
-  // "no encontrado" siempre (no rompe nada).
-  STREAMING_MARKET_USER:     getEnv("STREAMING_MARKET_USER", false),
-  STREAMING_MARKET_PASSWORD: getEnv("STREAMING_MARKET_PASSWORD", false),
+  // que pide iniciar sesión. Sin ningún usuario configurado, esa fuente
+  // responde "no encontrado" siempre (no rompe nada).
+  STREAMING_MARKET_LOGINS: streamingMarketLogins(),
 
   // SMS de recordatorio de vencimiento (ClickLab/Infobip) — panel >
   // Renovaciones > SMS. Sin esto configurado, ese botón queda inactivo

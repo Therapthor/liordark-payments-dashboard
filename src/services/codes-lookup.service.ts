@@ -209,7 +209,10 @@ const SM_BASE = "https://bot2.nexbolstore.com";
 const SM_CHATGPT_PLATFORM_ID = "1";
 const SM_NOT_FOUND: CodeLookupResult = { found: false, kind: null, value: null };
 
-let smCookie: string | null = null;
+type SmLogin = { user: string; password: string };
+
+// Una sesión (cookie) por usuario — cada usuario solo ve sus propios correos.
+const smCookies = new Map<string, string>();
 // La página guarda el último resultado en la sesión (buscar → visor), así
 // que dos búsquedas a la vez con la misma sesión podrían cruzarse — se
 // atienden de a una.
@@ -220,15 +223,12 @@ function smSessionCookie(setCookie: string[] | undefined): string | null {
   return raw ? raw.split(";")[0] : null;
 }
 
-async function smLogin(): Promise<string> {
-  if (!env.STREAMING_MARKET_USER || !env.STREAMING_MARKET_PASSWORD) {
-    throw new Error("Faltan STREAMING_MARKET_USER / STREAMING_MARKET_PASSWORD en el servidor.");
-  }
+async function smLogin(login: SmLogin): Promise<string> {
   const page = await axios.get(`${SM_BASE}/auth/login`, { timeout: 15_000, maxRedirects: 0, validateStatus: () => true });
   let cookie = smSessionCookie(page.headers["set-cookie"]);
   if (!cookie) throw new Error("Streaming Market no devolvió cookie de sesión.");
 
-  const body = new URLSearchParams({ nombre_usuario: env.STREAMING_MARKET_USER, password: env.STREAMING_MARKET_PASSWORD });
+  const body = new URLSearchParams({ nombre_usuario: login.user, password: login.password });
   const res = await axios.post(`${SM_BASE}/auth/login`, body.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie },
     timeout: 15_000, maxRedirects: 0, validateStatus: () => true,
@@ -236,7 +236,7 @@ async function smLogin(): Promise<string> {
   // Un login correcto redirige al visor; uno rechazado vuelve al login.
   const location = String(res.headers.location ?? "");
   if (res.status < 300 || res.status >= 400 || location.includes("/auth/login")) {
-    throw new Error("Streaming Market rechazó el usuario/contraseña.");
+    throw new Error(`Streaming Market rechazó el usuario ${login.user}.`);
   }
   cookie = smSessionCookie(res.headers["set-cookie"]) ?? cookie;
   return cookie;
@@ -255,9 +255,12 @@ function smParseVisor(html: string): CodeLookupResult {
   };
 }
 
-async function smLookupOnce(email: string, allowRelogin: boolean): Promise<CodeLookupResult> {
-  if (!smCookie) smCookie = await smLogin();
-  const cookie = smCookie;
+async function smLookupOnce(email: string, login: SmLogin, allowRelogin: boolean): Promise<CodeLookupResult> {
+  let cookie = smCookies.get(login.user);
+  if (!cookie) {
+    cookie = await smLogin(login);
+    smCookies.set(login.user, cookie);
+  }
   const query = new URLSearchParams({ plataforma_id: SM_CHATGPT_PLATFORM_ID, correo_remitente: email });
 
   const check = await axios.get(`${SM_BASE}/visor/verificar?${query}`, {
@@ -265,8 +268,8 @@ async function smLookupOnce(email: string, allowRelogin: boolean): Promise<CodeL
   });
   // Sesión vencida: el sitio redirige al login en vez de responder JSON.
   if (check.status !== 200 || typeof check.data !== "object" || check.data === null) {
-    smCookie = null;
-    if (allowRelogin) return smLookupOnce(email, false);
+    smCookies.delete(login.user);
+    if (allowRelogin) return smLookupOnce(email, login, false);
     throw new Error("Streaming Market no aceptó la sesión.");
   }
   if (!check.data.encontrado) return SM_NOT_FOUND;
@@ -277,8 +280,25 @@ async function smLookupOnce(email: string, allowRelogin: boolean): Promise<CodeL
   return smParseVisor(String(res.data));
 }
 
+// Prueba con cada usuario configurado hasta que alguno tenga el correo —
+// así no hace falta elegir a mano con qué usuario va cada cuenta.
+async function smLookupAnyLogin(email: string): Promise<CodeLookupResult> {
+  if (env.STREAMING_MARKET_LOGINS.length === 0) {
+    throw new Error("No hay usuarios de Streaming Market configurados en el servidor.");
+  }
+  for (const login of env.STREAMING_MARKET_LOGINS) {
+    try {
+      const result = await smLookupOnce(email, login, true);
+      if (result.found) return result;
+    } catch {
+      // Un usuario caído o rechazado no frena a los demás.
+    }
+  }
+  return SM_NOT_FOUND;
+}
+
 function lookupStreamingMarket(email: string): Promise<CodeLookupResult> {
-  const run = smQueue.then(() => smLookupOnce(email, true));
+  const run = smQueue.then(() => smLookupAnyLogin(email));
   smQueue = run.catch(() => undefined);
   return run;
 }
