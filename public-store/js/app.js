@@ -1929,6 +1929,16 @@
         method: "POST", body: { type: "bot_choice", messageId: Number(group.dataset.msgid), optionId: btn.dataset.opt },
       });
       appendChatMessage(message);
+      // Cierre de venta: abre la compra en la tienda (el asistente deja su
+      // mensaje en el chat por si el cliente vuelve).
+      const opt = btn.dataset.opt || "";
+      if (opt.startsWith("buynow:") || opt === "buycombo") {
+        setTimeout(() => {
+          closeChatModal();
+          if (opt === "buycombo") openComboBuilder();
+          else openProductDetail({ kind: "platform", id: opt.slice("buynow:".length) });
+        }, 600);
+      }
     } catch (err) {
       btn.classList.remove("is-picked");
       alert(err.message || "No se pudo enviar tu opción.");

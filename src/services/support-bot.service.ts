@@ -38,8 +38,10 @@ import { emitChatEvent } from "../utils/chat-events.util";
 // asistente lleva la conversación, se despide y cierra el chat solo.
 // ─────────────────────────────────────────────────────────────
 
-// De momento, solo este celular tiene el asistente (últimos 9 dígitos).
-const BOT_PHONES = ["977430941"];
+// En producción para todos los clientes. Para volver a limitarlo, poner
+// BOT_FOR_EVERYONE = false y llenar BOT_PHONES (últimos 9 dígitos).
+const BOT_FOR_EVERYONE = true;
+const BOT_PHONES: string[] = [];
 
 const INACTIVITY_MS      = 5 * 60 * 1000;
 const TOTP_WINDOW_MS     = 2 * 60 * 1000;
@@ -48,29 +50,48 @@ const MAX_LOOKUPS        = 3;     // búsquedas de código por cuenta, por chat
 const MAX_MISUNDERSTOOD  = 2;     // mensajes sin entender antes de pasar a una persona
 
 export function isSupportBotEnabledFor(phone: string): boolean {
-  return BOT_PHONES.includes(phone.replace(/\D/g, "").slice(-9));
+  return BOT_FOR_EVERYONE || BOT_PHONES.includes(phone.replace(/\D/g, "").slice(-9));
 }
 
 type BotOption = { id: string; label: string };
 
-const MENU_OPTIONS: BotOption[] = [
-  { id: "code",     label: "🔑 Necesito un código" },
-  { id: "issue",    label: "⚠️ Problema con una cuenta" },
-  { id: "products", label: "🛒 Productos y cómo comprar" },
-  { id: "human",    label: "👤 Hablar con un asesor" },
-];
+// Variedad: el asistente no repite siempre la misma frase.
+function pick<T>(options: readonly T[]): T {
+  return options[Math.floor(Math.random() * options.length)]!;
+}
+
+/** "Recibir mi código" solo aparece si el cliente tiene alguna cuenta
+ *  con códigos automáticos — si no, no hay nada que entregarle. */
+function menuOptions(phone: string): BotOption[] {
+  return [
+    ...(listClientCodesAccounts(phone).length ? [{ id: "code", label: "🔑 Recibir mi código" }] : []),
+    { id: "issue",    label: "⚠️ Tengo un problema con mi cuenta" },
+    { id: "products", label: "🛒 Quiero comprar" },
+    { id: "human",    label: "👤 Hablar con un asesor" },
+  ];
+}
 const BACK_OPTION: BotOption  = { id: "menu",  label: "⬅️ Volver al menú" };
 const HUMAN_OPTION: BotOption = { id: "human", label: "👤 Hablar con un asesor" };
 const DONE_OPTION: BotOption  = { id: "done",  label: "✅ Listo, gracias" };
 
-const GREETING_TEXT =
-  "¡Hola! 👋 Soy el asistente de Liordark 🥭\n¿En qué te puedo ayudar hoy? Elige una opción o escríbeme tu consulta.";
-const THANKS_TEXT =
-  "¡Gracias por escribirnos! 🥭 Esperamos haberte ayudado. Cerramos este chat; si necesitas algo más, vuelve a escribirnos cuando quieras.";
+const GREETINGS = [
+  "¡Hola, qué gusto saludarte! 👋 Soy Manguito, el asistente de Liordark 🥭\nEstoy aquí para ayudarte en lo que necesites. ¿Qué te trae por aquí hoy?",
+  "¡Hola! 😊 Bienvenido(a) a Liordark 🥭, soy Manguito, tu asistente.\nCuéntame, ¿en qué te puedo dar una mano?",
+  "¡Hey, hola! 👋 Qué bueno tenerte por aquí. Soy Manguito 🥭 y con gusto te ayudo.\n¿Qué necesitas hoy?",
+];
+const THANKS = [
+  "¡Fue un gusto ayudarte! 🥭 Gracias por confiar en Liordark. Cierro este chat por ahora; cuando necesites algo, aquí estaremos para ti 💛",
+  "¡Muchas gracias por escribirnos! 😊 Espero haberte ayudado. Cierro este chat, pero puedes volver a escribirnos cuando quieras 🥭",
+  "¡Genial, me alegra haberte ayudado! 🙌 Gracias por preferir Liordark 🥭. Cierro este chat; cualquier cosa, aquí estamos.",
+];
 const INACTIVITY_TEXT =
-  "Como no recibimos respuesta, cerramos este chat. ¡Gracias por escribirnos! 🥭 Esperamos haberte ayudado; si necesitas algo más, vuelve a escribirnos cuando quieras.";
+  "Parece que ya no estás por aquí 🙂. Cierro este chat por ahora, ¡gracias por escribirnos! 🥭 Espero haberte ayudado; si necesitas algo más, vuelve a escribirnos cuando quieras.";
 const TOTP_DONE_TEXT =
-  "⏱️ El código 2FA ya expiró. ¡Gracias por confiar en Liordark! 🥭 Esperamos haberte ayudado; cerramos este chat. Si necesitas otro código, vuelve a escribirnos.";
+  "⏱️ Tu código 2FA ya expiró. ¡Gracias por confiar en Liordark! 🥭 Espero haberte ayudado; cierro este chat. Si necesitas otro código, escríbenos cuando quieras.";
+const HANDOFF_TEXTS = [
+  "👤 ¡Claro que sí! Ya le aviso a un asesor para que te atienda personalmente. Escribe tu consulta con confianza y te responderemos por aquí mismo lo antes posible 🙌",
+  "👤 ¡Con gusto! Te comunico con una persona de nuestro equipo. Déjanos tu consulta aquí y en breve te responden 😊",
+];
 
 // ── Mensajes del asistente ──
 
@@ -161,8 +182,8 @@ function accountLabel(platform: string, email: string): string {
 
 // ── Pasos ──
 
-function showMenu(chat: Chat, text = "¿En qué más te puedo ayudar? 👇"): void {
-  say(chat.id, text, MENU_OPTIONS);
+function showMenu(chat: Chat, text = pick(["¿En qué más te puedo ayudar? 😊", "¿Qué más necesitas? Aquí sigo para ayudarte 👇", "Cuéntame, ¿en qué más te ayudo? 🥭"])): void {
+  say(chat.id, text, menuOptions(chat.clientPhone));
   setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
 }
 
@@ -175,18 +196,18 @@ function showCodeAccounts(chat: Chat, phone: string): void {
     autoIds.add(a.accountId);
     options.push({ id: `code:${a.accountId}`, label: accountLabel(a.platform, a.email) });
   }
-  const autoKeys = new Set(codesAccounts.map(a => a.platform.toUpperCase() + "|" + a.email.toLowerCase()));
-  for (const a of activeAccounts(phone)) {
-    if (autoKeys.has(a.platform.toUpperCase() + "|" + a.email.toLowerCase())) continue;
-    options.push({ id: `codeh:${a.platform}|${a.email}`, label: accountLabel(a.platform, a.email) });
-  }
-
+  // Solo cuentas con códigos automáticos: las demás no se atienden por acá.
   if (options.length === 0) {
-    say(chat.id, "No encontré cuentas activas en tu perfil 🤔. ¿Quieres que te atienda un asesor?", [HUMAN_OPTION, BACK_OPTION]);
+    say(chat.id,
+      "Por ahora tus cuentas no tienen entrega automática de códigos 🙏. Si necesitas ayuda con algo más, con gusto te atiendo.",
+      [HUMAN_OPTION, BACK_OPTION]);
     setBotState(chat.id, "menu", chat.botContext);
     return;
   }
-  say(chat.id, "¿De cuál de tus cuentas necesitas el código? 👇", [...options, BACK_OPTION]);
+  say(chat.id, pick([
+    "¡Claro, te ayudo con eso! 🔑 ¿De cuál de tus cuentas necesitas el código?",
+    "¡Por supuesto! 😊 Elige la cuenta para la que necesitas el código 👇",
+  ]), [...options, BACK_OPTION]);
   setBotState(chat.id, "code_pick", chat.botContext);
 }
 
@@ -309,22 +330,99 @@ function registerIssue(chat: Chat, description: string): void {
     "Un asesor lo revisará y te responderá por aquí mismo lo antes posible 🙌");
 }
 
-function showProducts(chat: Chat): void {
-  const seen = new Set<string>();
-  const lines = listCatalogProducts(true)
-    .filter(p => { if (seen.has(p.title)) return false; seen.add(p.title); return true; })
-    .sort((a, b) => parseFloat(a.price) - parseFloat(b.price))
-    .slice(0, 25)
-    .map(p => `• ${p.title} — S/ ${p.price}`);
+// ── Ventas: primero qué servicio quiere, luego una sola propuesta con sus
+// beneficios y un botón que abre la compra en la tienda (sin listas
+// largas de golpe). ──
 
-  const text =
-    (lines.length ? "🛒 Esto es lo que tenemos:\n" + lines.join("\n") + "\n\n" : "") +
-    "¿Cómo comprar?\n" +
-    "1️⃣ Entra a «Catálogo» y toca el producto (o arma tu combo con descuento).\n" +
-    "2️⃣ Paga por Yape el monto exacto que te indica.\n" +
-    "3️⃣ Tu cuenta aparece sola en «Mis cuentas» apenas se confirma el pago ✅";
-  say(chat.id, text, [DONE_OPTION, HUMAN_OPTION, BACK_OPTION]);
+const PRODUCTS_PER_PAGE = 8;
+
+const PLATFORM_EMOJI: [RegExp, string][] = [
+  [/netflix/i, "🎬"], [/disney/i, "🏰"], [/prime|amazon/i, "📦"], [/hbo|max/i, "🎞️"],
+  [/spotify/i, "🎵"], [/youtube/i, "▶️"], [/crunchy/i, "🍥"], [/chatgpt|gpt/i, "🤖"],
+  [/canva/i, "🎨"], [/paramount/i, "⛰️"], [/apple/i, "🍎"], [/gemini/i, "✨"],
+];
+function platformEmoji(platform: string): string {
+  return PLATFORM_EMOJI.find(([re]) => re.test(platform))?.[1] ?? "⭐";
+}
+
+function catalogProducts() {
+  const seen = new Set<string>();
+  return listCatalogProducts(true)
+    .filter(p => { if (seen.has(p.platform)) return false; seen.add(p.platform); return true; })
+    .sort((a, b) => a.title.localeCompare(b.title, "es"));
+}
+
+function showProducts(chat: Chat, page = 1): void {
+  const products = catalogProducts();
+  if (products.length === 0) {
+    handoff(chat, "En este momento estamos actualizando nuestro catálogo 🙏. Te comunico con un asesor para ayudarte con tu compra 👤");
+    return;
+  }
+  const from = (page - 1) * PRODUCTS_PER_PAGE;
+  const pageItems = products.slice(from, from + PRODUCTS_PER_PAGE);
+  const options: BotOption[] = pageItems.map(p => ({ id: `buy:${p.platform}`, label: `${platformEmoji(p.platform)} ${p.title}` }));
+  if (from + PRODUCTS_PER_PAGE < products.length) options.push({ id: `products:${page + 1}`, label: "➕ Ver más servicios" });
+  if (products.length >= 2) options.push({ id: "buycombo", label: "🎁 Armar mi combo (con descuento)" });
+  options.push(HUMAN_OPTION);
+
+  say(chat.id, page > 1 ? "Aquí tienes más opciones 👇" : pick([
+    "¡Qué bueno que quieras unirte! 🎉 ¿Qué servicio te gustaría tener?",
+    "¡Me encanta! 😍 Cuéntame, ¿qué servicio te interesa?",
+    "¡Genial! 🙌 ¿Cuál de nuestros servicios te gustaría disfrutar?",
+  ]), options);
   setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+}
+
+function showPitch(chat: Chat, platform: string): void {
+  const product = catalogProducts().find(p => p.platform === platform);
+  if (!product) return showProducts(chat);
+
+  const opener = pick(["¡Excelente elección! 😍", "¡Buenísima opción! 🙌", "¡Gran elección! ✨"]);
+  say(chat.id,
+    `${opener} ${platformEmoji(product.platform)} ${product.title}\n` +
+    `💰 Solo S/ ${product.price}${product.hasProfiles ? " — con tu propio perfil" : ""}\n` +
+    "⚡ Activación inmediata apenas se confirma tu pago\n" +
+    "🛡️ Garantía incluida durante todo tu servicio\n" +
+    "💬 Soporte directo por este mismo chat\n" +
+    "¿Te lo activamos ahora? 👇",
+    [
+      { id: `buynow:${product.platform}`, label: "🛒 ¡Sí, quiero comprarlo!" },
+      { id: "products", label: "🔙 Ver otros servicios" },
+      { id: "human", label: "👤 Tengo una duda" },
+    ]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+}
+
+function confirmPurchase(chat: Chat, platform: string): void {
+  const product = catalogProducts().find(p => p.platform === platform);
+  say(chat.id,
+    `¡Perfecto, gran decisión! 🎉 Te abrí la compra de ${product ? product.title : "tu servicio"}.\n` +
+    `Solo paga${product ? ` S/ ${product.price}` : ""} por Yape (el monto exacto) y tu cuenta aparecerá al instante en «Mis cuentas» ✅\n` +
+    "Si te surge cualquier duda, aquí estoy para ayudarte 😊",
+    [DONE_OPTION, HUMAN_OPTION]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+}
+
+function confirmCombo(chat: Chat): void {
+  say(chat.id,
+    "¡Genial! 🎁 Te abrí el armador de combos: elige 2 o más servicios y el descuento se aplica solito.\n" +
+    "Pagas por Yape y tus cuentas aparecen al instante en «Mis cuentas» ✅, todas con garantía incluida 🛡️",
+    [DONE_OPTION, HUMAN_OPTION]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+}
+
+/** "quiero netflix" → el producto de esa plataforma, si es el único que calza. */
+function matchProductByText(text: string): string | null {
+  const n = normalize(text);
+  const words = new Set(n.split(" "));
+  const squashed = n.replace(/\s+/g, "");
+  const generic = new Set(["video", "plus", "premium", "perfil", "cuenta", "cuentas", "plan", "music", "basic", "standard"]);
+  const hits = catalogProducts().filter(p => {
+    const plat = normalize(p.platform);
+    if (squashed.includes(plat.replace(/\s+/g, ""))) return true;
+    return plat.split(" ").some(w => w.length >= 3 && !generic.has(w) && words.has(w));
+  });
+  return hits.length === 1 ? hits[0]!.platform : null;
 }
 
 async function handleOption(chat: Chat, phone: string, optionId: string): Promise<void> {
@@ -332,13 +430,17 @@ async function handleOption(chat: Chat, phone: string, optionId: string): Promis
   if (optionId === "code")     return showCodeAccounts(chat, phone);
   if (optionId === "issue")    return startIssue(chat, phone);
   if (optionId === "products") return showProducts(chat);
+  if (optionId === "buycombo") return confirmCombo(chat);
   if (optionId === "human") {
-    return handoff(chat, "👤 Listo, te paso con un asesor. Escribe tu consulta y te responderemos por aquí mismo lo antes posible 🙌");
+    return handoff(chat, pick(HANDOFF_TEXTS));
   }
-  if (optionId === "done") return closeWithThanks(chat.id, THANKS_TEXT);
+  if (optionId === "done") return closeWithThanks(chat.id, pick(THANKS));
 
   const [kind, rest = ""] = splitOnce(optionId, ":");
   if (kind === "code" || kind === "retry") return startCodeLookup(chat, phone, Number(rest));
+  if (kind === "products") return showProducts(chat, Math.max(1, Number(rest) || 1));
+  if (kind === "buy")      return showPitch(chat, rest);
+  if (kind === "buynow")   return confirmPurchase(chat, rest);
   if (kind === "codeh") {
     const [platform = ""] = rest.split("|");
     return handoff(chat, `Para tu cuenta de ${platform} el código lo envía un asesor 👤. Ya le avisé, te escribirá por aquí en breve 🙌`);
@@ -384,6 +486,14 @@ async function handleText(chat: Chat, phone: string, text: string): Promise<void
     if (match) return handleOption(chat, phone, match.id);
   }
 
+  // "quiero netflix" / "cuánto cuesta disney" → directo a esa propuesta.
+  if (intent === "products" || intent === null || intent === "menu") {
+    const platform = matchProductByText(text);
+    if (platform && (intent === "products" || /\b(quiero|comprar|precio|cuanto|cuesta|tienen|venden)\b/.test(normalize(text)))) {
+      return showPitch(chat, platform);
+    }
+  }
+
   if (intent) {
     // En code_result, "gracias"/"listo" = funcionó.
     return handleOption(chat, phone, intent);
@@ -391,9 +501,12 @@ async function handleText(chat: Chat, phone: string, text: string): Promise<void
 
   const misses = Number(chat.botContext.misses ?? 0) + 1;
   if (misses > MAX_MISUNDERSTOOD) {
-    return handoff(chat, "No logré entenderte bien 😅. Te paso con un asesor, te responderá por aquí mismo 👤");
+    return handoff(chat, "Disculpa, no quiero hacerte perder tiempo 😅. Te comunico con un asesor para que te atienda personalmente; te responderá por aquí mismo 👤");
   }
-  say(chat.id, "No te entendí bien 🤔. Elige una de estas opciones:", MENU_OPTIONS);
+  say(chat.id, pick([
+    "Disculpa, no logré entenderte del todo 🤔. ¿Me ayudas eligiendo una de estas opciones?",
+    "Uy, creo que no te entendí bien 😅. Toca una de estas opciones y te ayudo al toque:",
+  ]), menuOptions(phone));
   setBotState(chat.id, "menu", { ...chat.botContext, misses });
 }
 
@@ -407,7 +520,8 @@ type BotInput =
 /** Saluda en un chat recién abierto (sin mensajes todavía). */
 export function startSupportBot(chatId: number): void {
   setBotState(chatId, "menu", {});
-  say(chatId, GREETING_TEXT, MENU_OPTIONS);
+  const chat = getChatById(chatId);
+  say(chatId, pick(GREETINGS), chat ? menuOptions(chat.clientPhone) : []);
 }
 
 /** El cliente escribió algo (o tocó un botón): responde tras una pausa
