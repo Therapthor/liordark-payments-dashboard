@@ -16,11 +16,8 @@ import { daysLeft } from "../services/access.service";
 import { normalizePeruPhone } from "../utils/phone.util";
 import {
   listClientCodesAccounts,
-  getCodeRequestState,
-  registerCodeRequest,
   getAccountCodeSource,
   saveIncomingCode,
-  MAX_CODE_REQUESTS_PER_ACCOUNT,
 } from "../db/codes.repository";
 import { lookupCodeWithRetries } from "../services/codes-lookup.service";
 import {
@@ -360,8 +357,9 @@ router.use(requireCustomerSession);
 // ─────────────────────────────────────────────────────────────
 // CÓDIGOS — en pruebas, solo para CODES_TEST_PHONE. El cliente ve sus
 // cuentas con "🔑 Código" habilitado (Accesos) mientras sigan activas, y
-// puede pedir el código hasta MAX_CODE_REQUESTS_PER_ACCOUNT veces por
-// cuenta (para siempre, sin reset automático — solo el admin resetea).
+// puede pedir el código las veces que quiera — sin tope: si en 3
+// intentos (ver lookupCodeWithRetries) no llega, se le ofrece avisar
+// por WhatsApp, pero eso no bloquea volver a intentar después.
 // ─────────────────────────────────────────────────────────────
 
 router.get("/codes", (req, res) => {
@@ -373,12 +371,7 @@ router.get("/codes", (req, res) => {
     return res.status(403).json({ message: "Códigos todavía está en pruebas." });
   }
 
-  const accounts = listClientCodesAccounts(customer.phone).map(a => {
-    const state = getCodeRequestState(customer.phone, a.accountId);
-    return { ...a, requestsUsed: state.requestCount, requestsMax: MAX_CODE_REQUESTS_PER_ACCOUNT };
-  });
-
-  res.json({ accounts });
+  res.json({ accounts: listClientCodesAccounts(customer.phone) });
 });
 
 // Consulta en vivo (con reintentos) a la página del proveedor — no lee
@@ -403,13 +396,6 @@ router.post("/codes/:accountId/request", async (req, res) => {
   const sourceId = getAccountCodeSource(accountId);
   if (!sourceId) {
     return res.status(409).json({ message: "Esta cuenta todavía no tiene configurada de dónde sacar el código. Avísanos por soporte." });
-  }
-
-  const allowed = registerCodeRequest(customer.phone, accountId);
-  if (!allowed) {
-    return res.status(429).json({
-      message: `Ya usaste tus ${MAX_CODE_REQUESTS_PER_ACCOUNT} pedidos de código para esta cuenta. Escríbenos por soporte si necesitas otro.`,
-    });
   }
 
   const result = await lookupCodeWithRetries(sourceId, account.email);

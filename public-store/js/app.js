@@ -1513,8 +1513,6 @@
   // ─────────────────────────────────────────────────────────────
 
   function codesCardHtml(a) {
-    const remaining = a.requestsMax - a.requestsUsed;
-    const canRequest = remaining > 0;
     return `
       <div class="renewal-account-card" data-account-id="${a.accountId}">
         <div class="renewal-account-head">
@@ -1539,8 +1537,7 @@
         </div>
 
         <div class="renewal-account-footer" data-role="footer">
-          <span class="codes-remaining" data-role="remaining">${remaining} de ${a.requestsMax} pedido(s) disponibles</span>
-          <button class="btn-primary btn-sm codes-request-btn" type="button" ${canRequest ? "" : "disabled"}>Pedir código</button>
+          <button class="btn-primary btn-sm codes-request-btn" type="button">Pedir código</button>
         </div>
       </div>
     `;
@@ -1659,7 +1656,6 @@
       const accountId = card.dataset.accountId;
       const searchEl  = card.querySelector("[data-role='search']");
       const footerEl  = card.querySelector("[data-role='footer']");
-      const remainingEl = card.querySelector("[data-role='remaining']");
 
       searchEl.hidden = false;
       footerEl.hidden = true;
@@ -1667,16 +1663,7 @@
 
       await runCodesSearch(card, accountId);
 
-      const match = remainingEl.textContent.match(/^(\d+) de (\d+)/);
-      if (match) {
-        const left = Math.max(0, Number(match[1]) - 1);
-        remainingEl.textContent = `${left} de ${match[2]} pedido(s) disponibles`;
-        footerEl.hidden = false;
-        if (left <= 0) {
-          card.querySelector(".codes-request-btn").disabled = true;
-          card.querySelector("[data-role='retry']").hidden = true;
-        }
-      }
+      footerEl.hidden = false;
     });
   }
 

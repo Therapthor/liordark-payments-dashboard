@@ -7,7 +7,6 @@ import { limaTodayISO } from "../services/access.service";
 // por cliente vive acá.
 // ─────────────────────────────────────────────────────────────
 
-export const MAX_CODE_REQUESTS_PER_ACCOUNT = 2;
 export const CODE_MAX_AGE_HOURS = 24;
 
 export function setAccountCodesEnabled(accountId: number, enabled: boolean): void {
@@ -129,38 +128,3 @@ export function cleanupOldCodes(): number {
   return result.changes;
 }
 
-// ── LÍMITE DE PEDIDOS POR CLIENTE/CUENTA — 2 para siempre, sin reset
-// automático (a pedido); solo el admin lo resetea a mano desde el panel. ──
-
-export type CodeRequestState = {
-  requestCount:    number;
-  lastRequestedAt: string | null;
-};
-
-export function getCodeRequestState(clientPhone: string, accountId: number): CodeRequestState {
-  const row = db.prepare(`
-    SELECT request_count AS requestCount, last_requested_at AS lastRequestedAt
-    FROM code_requests WHERE client_phone = ? AND account_id = ?
-  `).get(clientPhone, accountId) as CodeRequestState | undefined;
-  return row ?? { requestCount: 0, lastRequestedAt: null };
-}
-
-/** Suma un pedido — falla (devuelve false) si ya llegó al límite, sin sumar. */
-export function registerCodeRequest(clientPhone: string, accountId: number): boolean {
-  const current = getCodeRequestState(clientPhone, accountId);
-  if (current.requestCount >= MAX_CODE_REQUESTS_PER_ACCOUNT) return false;
-
-  db.prepare(`
-    INSERT INTO code_requests (client_phone, account_id, request_count, last_requested_at)
-    VALUES (?, ?, 1, datetime('now'))
-    ON CONFLICT(client_phone, account_id) DO UPDATE SET
-      request_count = request_count + 1,
-      last_requested_at = datetime('now')
-  `).run(clientPhone, accountId);
-  return true;
-}
-
-/** Resetea manualmente el contador de un cliente para una cuenta — botón admin. */
-export function resetCodeRequests(clientPhone: string, accountId: number): void {
-  db.prepare(`DELETE FROM code_requests WHERE client_phone = ? AND account_id = ?`).run(clientPhone, accountId);
-}

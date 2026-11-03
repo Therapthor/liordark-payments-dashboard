@@ -39,8 +39,6 @@ import {
   listCodesEnabledAccounts,
   getLatestCodeForAccount,
   saveIncomingCode,
-  resetCodeRequests,
-  getCodeRequestState,
 } from "../db/codes.repository";
 import { lookupCode, lookupAnySource, listCodeSources, codeSourceLabel } from "../services/codes-lookup.service";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
@@ -349,17 +347,6 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
     saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }
   res.json({ found: result.found, kind: result.kind, value: result.value });
-});
-
-router.post("/codes/reset", (req, res) => {
-  const clientPhone = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
-  const accountId   = Number(req.body?.accountId);
-  if (!clientPhone || !accountId) {
-    res.status(400).json({ message: "Falta clientPhone o accountId." });
-    return;
-  }
-  resetCodeRequests(clientPhone, accountId);
-  res.json({ ok: true, state: getCodeRequestState(clientPhone, accountId) });
 });
 
 // Renovar en dos pasos: "Renovar" solo marca pendiente de pago (no toca el
