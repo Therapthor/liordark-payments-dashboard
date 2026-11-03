@@ -770,7 +770,30 @@
     document.getElementById("account-edit-renewal-cost").value = account.providerRenewalCost || "";
     document.getElementById("account-edit-renewal-currency").value = account.providerRenewalCurrency || "USDT";
     document.getElementById("account-edit-renewal-next-date").value = account.providerRenewalNextDate || "";
+
+    await loadCodeSources();
+    document.getElementById("account-edit-codes-enabled").checked = !!account.codesEnabled;
+    document.getElementById("account-edit-codes-fields").hidden = !account.codesEnabled;
+    document.getElementById("account-edit-code-source").value = account.codeSource || "";
+
     document.getElementById("account-edit-modal").hidden = false;
+  }
+
+  // ── "🔑 Código" — fuentes disponibles para sacar el código (ver
+  // codes-lookup.service.ts) y guardado de los dos campos del modal. ──
+  let codeSources = null;
+  async function loadCodeSources() {
+    if (codeSources) return codeSources;
+    try {
+      const { sources } = await api("/code-sources");
+      codeSources = sources;
+    } catch {
+      codeSources = [];
+    }
+    const select = document.getElementById("account-edit-code-source");
+    select.innerHTML = `<option value="">— Sin configurar —</option>` +
+      codeSources.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join("");
+    return codeSources;
   }
 
   function initEditModal() {
@@ -778,6 +801,10 @@
 
     document.getElementById("account-edit-renewal-enabled").addEventListener("change", (e) => {
       document.getElementById("account-edit-renewal-fields").hidden = !e.target.checked;
+    });
+
+    document.getElementById("account-edit-codes-enabled").addEventListener("change", (e) => {
+      document.getElementById("account-edit-codes-fields").hidden = !e.target.checked;
     });
 
     document.getElementById("account-edit-form").addEventListener("submit", async (e) => {
@@ -795,10 +822,15 @@
         providerRenewalCurrency: document.getElementById("account-edit-renewal-currency").value,
         providerRenewalNextDate: renewalEnabled ? document.getElementById("account-edit-renewal-next-date").value : null,
       };
+      const codesEnabled = document.getElementById("account-edit-codes-enabled").checked;
+      const codeSource   = document.getElementById("account-edit-code-source").value || null;
+
       const errorEl = document.getElementById("account-edit-error");
       errorEl.hidden = true;
       try {
         await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
+        await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
+        await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
         document.getElementById("account-edit-modal").hidden = true;
         // Si cambió de plataforma, la tarjeta se mueve de acordeón — ahí sí
         // hace falta recargar todo. Si no, se actualiza sin cerrar nada.
@@ -1620,6 +1652,76 @@
     } catch { /* se reintenta en el próximo ciclo */ }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // "🔑 Códigos" — vista admin, sin filtros (ver codes-lookup.service.ts
+  // para el filtro de 6 dígitos que sí aplica del lado del cliente).
+  // ─────────────────────────────────────────────────────────────
+
+  function renderCodeItem(a) {
+    const li = document.createElement("li");
+    li.className = "catalog-item";
+    li.dataset.id = a.id;
+    const latest = a.latestCode
+      ? `<b>${escapeHtml(a.latestCode.code)}</b> (${a.latestCode.code.length} dígitos) · ${fmtDateTime(a.latestCode.receivedAt)}`
+      : "sin código todavía";
+    li.innerHTML = `
+      <div class="catalog-thumb catalog-thumb-empty">🔑</div>
+      <div class="catalog-main">
+        <div class="catalog-name">${escapeHtml(a.platform)} — ${escapeHtml(a.email)}</div>
+        <div class="catalog-desc">${escapeHtml(a.codeSourceLabel || "sin fuente configurada")} · ${latest}</div>
+      </div>
+      <div class="catalog-actions">
+        <button class="btn-secondary btn-sm codes-admin-lookup-btn" type="button">🔎 Consultar ahora</button>
+      </div>
+    `;
+    return li;
+  }
+
+  let cachedCodesAdminAccounts = [];
+
+  function renderCodesAdminList() {
+    const list  = document.getElementById("codes-admin-list");
+    const empty = document.getElementById("codes-admin-empty");
+    if (!list) return;
+    list.innerHTML = "";
+    if (cachedCodesAdminAccounts.length === 0) { empty.hidden = false; return; }
+    empty.hidden = true;
+    for (const a of cachedCodesAdminAccounts) list.appendChild(renderCodeItem(a));
+  }
+
+  async function loadCodesAdmin() {
+    try {
+      const { accounts } = await api("/codes");
+      cachedCodesAdminAccounts = accounts;
+      renderCodesAdminList();
+    } catch { /* se reintenta en el próximo ciclo */ }
+  }
+
+  function initCodesAdminActions() {
+    const list = document.getElementById("codes-admin-list");
+    if (!list) return;
+    list.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".codes-admin-lookup-btn");
+      if (!btn) return;
+      const id = Number(btn.closest(".catalog-item").dataset.id);
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Consultando…";
+      try {
+        const result = await api("/codes/" + id + "/lookup-now", { method: "POST" });
+        if (!result.found) {
+          alert("Todavía no hay código nuevo para esa cuenta.");
+        }
+        await loadCodesAdmin();
+      } catch (err) {
+        alert(err.message || "No se pudo consultar.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    });
+  }
+
   function initPasswordChangeListActions() {
     const list = document.getElementById("password-change-list");
     if (!list) return;
@@ -1688,6 +1790,7 @@
     initClientSummaryActions();
     initProviderRenewalListActions();
     initPasswordChangeListActions();
+    initCodesAdminActions();
     initRenewalCutoverButton();
     initComboOrderModal();
     document.getElementById("access-platform-back").addEventListener("click", closePlatformDetail);
@@ -1695,5 +1798,5 @@
     document.getElementById("access-platform-sort-toggle").addEventListener("click", togglePlatformSort);
   }
 
-  window.LiordarkAccess = { init, load, loadProviderRenewals, loadPasswordChangePending, openComboOrderModal };
+  window.LiordarkAccess = { init, load, loadProviderRenewals, loadPasswordChangePending, loadCodesAdmin, openComboOrderModal };
 })();

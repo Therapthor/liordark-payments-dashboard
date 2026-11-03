@@ -16,12 +16,13 @@ import { daysLeft } from "../services/access.service";
 import { normalizePeruPhone } from "../utils/phone.util";
 import {
   listClientCodesAccounts,
-  clientOwnsCodesAccount,
   getCodeRequestState,
   registerCodeRequest,
-  getLatestCodeForAccount,
+  getAccountCodeSource,
+  saveIncomingCode,
   MAX_CODE_REQUESTS_PER_ACCOUNT,
 } from "../db/codes.repository";
+import { lookupCodeWithRetries } from "../services/codes-lookup.service";
 import {
   createCustomerNotification,
   listCustomerNotifications,
@@ -380,7 +381,11 @@ router.get("/codes", (req, res) => {
   res.json({ accounts });
 });
 
-router.post("/codes/:accountId/request", (req, res) => {
+// Consulta en vivo (con reintentos) a la página del proveedor — no lee
+// caché, porque esa página es la fuente de verdad del momento. Los
+// códigos de 6 dígitos quedan guardados para el admin pero nunca se le
+// entregan al cliente acá (ver codes-lookup.service.ts).
+router.post("/codes/:accountId/request", async (req, res) => {
   const customerId = (req as unknown as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
@@ -390,8 +395,14 @@ router.post("/codes/:accountId/request", (req, res) => {
   }
 
   const accountId = Number(req.params.accountId);
-  if (!clientOwnsCodesAccount(customer.phone, accountId)) {
+  const account   = listClientCodesAccounts(customer.phone).find(a => a.accountId === accountId);
+  if (!account) {
     return res.status(404).json({ message: "No encontramos esa cuenta activa para tu celular." });
+  }
+
+  const sourceId = getAccountCodeSource(accountId);
+  if (!sourceId) {
+    return res.status(409).json({ message: "Esta cuenta todavía no tiene configurada de dónde sacar el código. Avísanos por soporte." });
   }
 
   const allowed = registerCodeRequest(customer.phone, accountId);
@@ -401,10 +412,22 @@ router.post("/codes/:accountId/request", (req, res) => {
     });
   }
 
-  const latest = getLatestCodeForAccount(accountId);
+  const result = await lookupCodeWithRetries(sourceId, account.email);
+
+  if (result.found && result.code) {
+    saveIncomingCode({ accountId, code: result.code, snippet: "", source: "external" });
+  }
+
+  // Los de 6 dígitos son más sensibles (cambio de datos de la cuenta) —
+  // quedan guardados arriba para que el admin los vea, pero acá se
+  // responde como si no se hubiera encontrado nada.
+  if (result.found && result.digits === 6) {
+    return res.json({ code: null, receivedAt: null });
+  }
+
   res.json({
-    code:       latest?.code ?? null,
-    receivedAt: latest?.receivedAt ?? null,
+    code:       result.found ? result.code : null,
+    receivedAt: result.found ? new Date().toISOString() : null,
   });
 });
 

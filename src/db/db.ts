@@ -168,6 +168,11 @@ ensureColumn("customers", "password_plain", "password_plain TEXT NOT NULL DEFAUL
 // ─────────────────────────────────────────────────────────────
 ensureColumn("access_accounts", "codes_enabled", "codes_enabled INTEGER NOT NULL DEFAULT 0");
 
+// Qué página externa consultar para sacarle el código a esta cuenta en
+// particular — cada correo/proveedor puede tener su propio mecanismo (ver
+// services/codes-lookup.service.ts). NULL = todavía sin configurar.
+ensureColumn("access_accounts", "code_source", "code_source TEXT");
+
 // Activación manual (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM) — queda en 1
 // al crear/renovar la cuenta, hasta que el admin confirme que ya hizo la
 // activación real en la plataforma (invitar el correo, loguearse, etc.).

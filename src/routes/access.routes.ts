@@ -35,11 +35,14 @@ import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-histo
 import { listRenewalHistory } from "../db/renewal-history.repository";
 import {
   setAccountCodesEnabled,
+  setAccountCodeSource,
   listCodesEnabledAccounts,
   getLatestCodeForAccount,
+  saveIncomingCode,
   resetCodeRequests,
   getCodeRequestState,
 } from "../db/codes.repository";
+import { lookupCode, listCodeSources, codeSourceLabel } from "../services/codes-lookup.service";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
@@ -295,12 +298,42 @@ router.post("/accounts/:id/codes-enabled", (req, res) => {
   res.json({ account: withStatus(getAccountById(accountId)!) });
 });
 
+// Cuál página externa usar para sacar el código de esta cuenta (ver
+// services/codes-lookup.service.ts). null = la quita.
+router.post("/accounts/:id/code-source", (req, res) => {
+  const accountId = Number(req.params.id);
+  const sourceId   = req.body?.codeSource ? String(req.body.codeSource) : null;
+  if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  setAccountCodeSource(accountId, sourceId);
+  res.json({ account: withStatus(getAccountById(accountId)!) });
+});
+
+router.get("/code-sources", (_req, res) => {
+  res.json({ sources: listCodeSources() });
+});
+
 router.get("/codes", (_req, res) => {
   const accounts = listCodesEnabledAccounts().map(a => ({
     ...a,
+    codeSourceLabel: codeSourceLabel(a.codeSource),
     latestCode: getLatestCodeForAccount(a.id),
   }));
   res.json({ accounts });
+});
+
+// "Consultar ahora" del admin — un solo intento, sin reintentos (no hace
+// esperar), y sin filtrar por cantidad de dígitos: el admin ve todo.
+router.post("/codes/:accountId/lookup-now", async (req, res) => {
+  const accountId = Number(req.params.accountId);
+  const account = getAccountById(accountId);
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  if (!account.codeSource) { res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." }); return; }
+
+  const result = await lookupCode(account.codeSource, account.email);
+  if (result.found && result.code) {
+    saveIncomingCode({ accountId, code: result.code, snippet: "", source: "external" });
+  }
+  res.json({ found: result.found, code: result.code, digits: result.digits });
 });
 
 router.post("/codes/reset", (req, res) => {

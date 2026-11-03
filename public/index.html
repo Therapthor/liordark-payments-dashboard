@@ -414,6 +414,16 @@
 
         <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
 
+        <!-- Cuentas con "🔑 Código" habilitado (se activa en Accesos, al
+             editar la cuenta) — acá el admin ve el código tal cual viene,
+             sin el filtro de 6 dígitos que sí aplica para el cliente. -->
+        <div class="panel-header standalone">
+          <h2>🔑 Códigos (admin)</h2>
+        </div>
+        <p class="panel-hint">Cuentas con código habilitado. Acá se ve cualquier código, sin restricciones — el cliente en liordark.com no ve los de 6 dígitos.</p>
+        <ul id="codes-admin-list" class="catalog-list"></ul>
+        <p id="codes-admin-empty" class="feed-empty" hidden>Ninguna cuenta tiene el código habilitado todavía — actívalo en Accesos, al editar la cuenta.</p>
+
       </section>
 
       <!-- ═══════════ VISTA: CONFIGURACIÓN ═══════════ -->
@@ -780,6 +790,18 @@
         </label>
         <label>Próxima renovación con el proveedor
           <input id="account-edit-renewal-next-date" type="date" />
+        </label>
+      </div>
+
+      <label class="catalog-checkbox-label">
+        <input id="account-edit-codes-enabled" type="checkbox" />
+        🔑 Código — el cliente puede pedir el código de esta cuenta desde liordark.com
+      </label>
+      <div id="account-edit-codes-fields" hidden>
+        <label>De dónde sacarlo
+          <select id="account-edit-code-source">
+            <option value="">— Sin configurar —</option>
+          </select>
         </label>
       </div>
 

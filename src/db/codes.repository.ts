@@ -14,18 +14,29 @@ export function setAccountCodesEnabled(accountId: number, enabled: boolean): voi
   db.prepare(`UPDATE access_accounts SET codes_enabled = ? WHERE id = ?`).run(enabled ? 1 : 0, accountId);
 }
 
-/** Todas las cuentas activas con "código" habilitado — para el poller de Gmail
- *  (saber a qué email atribuir un código que llega) y para el panel admin. */
+/** Cuál página externa consultar para esta cuenta — null = sin configurar
+ *  (ver services/codes-lookup.service.ts para los ids válidos). */
+export function setAccountCodeSource(accountId: number, sourceId: string | null): void {
+  db.prepare(`UPDATE access_accounts SET code_source = ? WHERE id = ?`).run(sourceId, accountId);
+}
+
+export function getAccountCodeSource(accountId: number): string | null {
+  const row = db.prepare(`SELECT code_source FROM access_accounts WHERE id = ?`).get(accountId) as { code_source: string | null } | undefined;
+  return row?.code_source ?? null;
+}
+
+/** Todas las cuentas con "código" habilitado — para el panel admin. */
 export type CodesEnabledAccount = {
-  id:        number;
-  platform:  string;
-  email:     string;
-  expiresAt: string | null;
+  id:         number;
+  platform:   string;
+  email:      string;
+  expiresAt:  string | null;
+  codeSource: string | null;
 };
 
 export function listCodesEnabledAccounts(): CodesEnabledAccount[] {
   return db.prepare(`
-    SELECT id, platform, email, expires_at AS expiresAt
+    SELECT id, platform, email, expires_at AS expiresAt, code_source AS codeSource
     FROM access_accounts
     WHERE codes_enabled = 1
     ORDER BY platform ASC

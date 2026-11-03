@@ -184,8 +184,16 @@
       currentPhone = me.phone || "";
       customerHasEmail = !!me.hasEmail || isEmailConfirmedLocally(currentPhone);
       if (me.hasEmail) markEmailConfirmedLocally(currentPhone);
-      // Códigos — apagado por ahora (el reenvío de Gmail resultó más
-      // complicado de lo esperado); el botón queda oculto para todos.
+      // Códigos — ya no depende de Gmail (ver codes-lookup.service.ts),
+      // pero sigue en pruebas: el botón solo se muestra si este celular
+      // tiene alguna cuenta con "Código" habilitado (GET /codes ya filtra
+      // por CODES_TEST_PHONE del lado del servidor).
+      try {
+        const { accounts } = await api("/codes");
+        document.getElementById("topbar-codes-btn").hidden = !accounts || accounts.length === 0;
+      } catch {
+        document.getElementById("topbar-codes-btn").hidden = true;
+      }
     } catch (err) {
       // Si /auth/me falla, nos quedamos con lo último confirmado en este
       // navegador (no hay forma de saber el teléfono todavía) — nunca
@@ -1514,8 +1522,22 @@
           <span class="renewal-account-status">${escapeHtml(a.expiresAt ? "Vence: " + a.expiresAt : "")}</span>
         </div>
         <div class="renewal-account-email">${escapeHtml(a.email)}</div>
-        <div class="codes-result" data-role="result" hidden></div>
-        <div class="renewal-account-footer">
+
+        <div class="codes-search" data-role="search" hidden>
+          <div class="codes-radar" data-role="radar">
+            <div class="codes-radar-ring"></div>
+            <span class="codes-radar-icon">🔑</span>
+            <span class="codes-radar-badge" data-role="badge"></span>
+          </div>
+          <div class="codes-status" data-role="status"></div>
+          <div class="codes-status-sub" data-role="status-sub"></div>
+          <div class="codes-otp" data-role="otp"></div>
+          <p class="codes-fail-msg" data-role="fail-msg" hidden>No encontramos ningún código nuevo.</p>
+          <button class="codes-retry-btn" data-role="retry" type="button" hidden>🔄 Volver a intentar</button>
+          <a class="codes-whatsapp-btn" data-role="whatsapp" href="#" target="_blank" rel="noopener" hidden>💬 No llegó — avisar por WhatsApp</a>
+        </div>
+
+        <div class="renewal-account-footer" data-role="footer">
           <span class="codes-remaining" data-role="remaining">${remaining} de ${a.requestsMax} pedido(s) disponibles</span>
           <button class="btn-primary btn-sm codes-request-btn" type="button" ${canRequest ? "" : "disabled"}>Pedir código</button>
         </div>
@@ -1542,37 +1564,125 @@
     }
   }
 
+  // El backend ya reintenta solo hasta 3 veces (~27s) antes de responder —
+  // acá solo se simula el avance "Intento 1/2/3" mientras se espera esa
+  // única respuesta, para que no se sienta una barra de carga ciega.
+  const CODES_SIMULATED_ATTEMPTS = 3;
+  const CODES_SIMULATED_STEP_MS = 9000;
+
+  async function runCodesSearch(card, accountId) {
+    const radar     = card.querySelector("[data-role='radar']");
+    const badge     = card.querySelector("[data-role='badge']");
+    const status    = card.querySelector("[data-role='status']");
+    const statusSub = card.querySelector("[data-role='status-sub']");
+    const otp       = card.querySelector("[data-role='otp']");
+    const failMsg   = card.querySelector("[data-role='fail-msg']");
+    const retryBtn  = card.querySelector("[data-role='retry']");
+    const waBtn     = card.querySelector("[data-role='whatsapp']");
+
+    radar.className = "codes-radar";
+    badge.className = "codes-radar-badge";
+    badge.textContent = "";
+    otp.innerHTML = "";
+    failMsg.hidden = true;
+    retryBtn.hidden = true;
+    waBtn.hidden = true;
+
+    let step = 1;
+    status.innerHTML = `Buscando tu código<span class="codes-dots"><span></span><span></span><span></span></span>`;
+    statusSub.textContent = `Intento ${step} de ${CODES_SIMULATED_ATTEMPTS}`;
+    const ticker = setInterval(() => {
+      step = Math.min(step + 1, CODES_SIMULATED_ATTEMPTS);
+      statusSub.textContent = `Intento ${step} de ${CODES_SIMULATED_ATTEMPTS}`;
+    }, CODES_SIMULATED_STEP_MS);
+
+    let result;
+    try {
+      result = await api("/codes/" + accountId + "/request", { method: "POST" });
+    } catch (err) {
+      clearInterval(ticker);
+      radar.classList.add("failed");
+      badge.textContent = "✕";
+      badge.className = "codes-radar-badge error show";
+      status.textContent = "No se pudo consultar";
+      statusSub.textContent = "";
+      failMsg.textContent = err.message || "Intenta de nuevo en un rato.";
+      failMsg.hidden = false;
+      retryBtn.hidden = false;
+      waBtn.hidden = false;
+      return;
+    }
+    clearInterval(ticker);
+
+    if (result.code) {
+      radar.classList.add("done");
+      badge.textContent = "✓";
+      badge.className = "codes-radar-badge ok show";
+      status.textContent = "¡Código encontrado!";
+      statusSub.textContent = "";
+      String(result.code).split("").forEach((d, i) => {
+        const span = document.createElement("span");
+        span.textContent = d;
+        span.style.animationDelay = (i * 0.07) + "s";
+        span.addEventListener("click", () => copyText(result.code, span));
+        otp.appendChild(span);
+      });
+    } else {
+      radar.classList.add("failed");
+      badge.textContent = "✕";
+      badge.className = "codes-radar-badge error show";
+      status.textContent = "No encontramos tu código";
+      statusSub.textContent = "";
+      failMsg.hidden = false;
+      retryBtn.hidden = false;
+      waBtn.hidden = false;
+    }
+  }
+
+  function copyText(text, el) {
+    navigator.clipboard?.writeText(text).then(() => {
+      const original = el.style.borderColor;
+      el.style.borderColor = "var(--ok)";
+      setTimeout(() => { el.style.borderColor = original; }, 600);
+    }).catch(() => {});
+  }
+
   function initCodesView() {
     document.getElementById("codes-list").addEventListener("click", async (e) => {
-      const btn = e.target.closest(".codes-request-btn");
-      if (!btn) return;
-      const card = btn.closest(".renewal-account-card");
+      const requestBtn = e.target.closest(".codes-request-btn");
+      const retryBtn    = e.target.closest("[data-role='retry']");
+      if (!requestBtn && !retryBtn) return;
+
+      const card = (requestBtn || retryBtn).closest(".renewal-account-card");
       const accountId = card.dataset.accountId;
-      const resultEl = card.querySelector("[data-role='result']");
+      const searchEl  = card.querySelector("[data-role='search']");
+      const footerEl  = card.querySelector("[data-role='footer']");
       const remainingEl = card.querySelector("[data-role='remaining']");
 
-      btn.disabled = true;
-      resultEl.hidden = true;
-      try {
-        const { code, receivedAt } = await api("/codes/" + accountId + "/request", { method: "POST" });
-        resultEl.hidden = false;
-        if (code) {
-          resultEl.innerHTML = `<div class="codes-value">${escapeHtml(code)}</div><div class="codes-meta">Llegó: ${escapeHtml(receivedAt)}</div>`;
-        } else {
-          resultEl.innerHTML = `<div class="codes-meta">Todavía no llegó ningún código. Intenta de nuevo en un rato.</div>`;
+      searchEl.hidden = false;
+      footerEl.hidden = true;
+      waBtnSetPlatform(card);
+
+      await runCodesSearch(card, accountId);
+
+      const match = remainingEl.textContent.match(/^(\d+) de (\d+)/);
+      if (match) {
+        const left = Math.max(0, Number(match[1]) - 1);
+        remainingEl.textContent = `${left} de ${match[2]} pedido(s) disponibles`;
+        footerEl.hidden = false;
+        if (left <= 0) {
+          card.querySelector(".codes-request-btn").disabled = true;
+          card.querySelector("[data-role='retry']").hidden = true;
         }
-        const match = remainingEl.textContent.match(/^(\d+) de (\d+)/);
-        if (match) {
-          const left = Math.max(0, Number(match[1]) - 1);
-          remainingEl.textContent = `${left} de ${match[2]} pedido(s) disponibles`;
-          btn.disabled = left <= 0;
-        }
-      } catch (err) {
-        resultEl.hidden = false;
-        resultEl.innerHTML = `<div class="codes-meta">${escapeHtml(err.message)}</div>`;
-        btn.disabled = false;
       }
     });
+  }
+
+  function waBtnSetPlatform(card) {
+    const waBtn = card.querySelector("[data-role='whatsapp']");
+    const platform = card.querySelector(".renewal-account-platform")?.textContent || "";
+    const text = encodeURIComponent(`Hola, no me llegó el código de mi cuenta de ${platform}. ¿Me ayudas?`);
+    waBtn.href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + text;
   }
 
   function initCheckoutModal() {

@@ -48,6 +48,7 @@ export type AccessAccount = {
   // "🔑 Código" — si esta cuenta puede recibir código (Netflix, ChatGPT,
   // etc.) para que el cliente lo pida desde liordark.com. Ver codes.repository.ts.
   codesEnabled: boolean;
+  codeSource:   string | null;
   // Corte automático del ciclo — ver runRenewalCutover en access.service.ts.
   renewalCleanupDueAt:   string | null;
   passwordChangePending: boolean;
@@ -1480,6 +1481,7 @@ function toAccount(row: any): AccessAccount {
     providerRenewalNextDate: row.provider_renewal_next_date ?? null,
     renewalPendingAt: row.renewal_pending_at ?? null,
     codesEnabled: row.codes_enabled === 1,
+    codeSource:   row.code_source ?? null,
     renewalCleanupDueAt:   row.renewal_cleanup_due_at ?? null,
     passwordChangePending: row.password_change_pending === 1,
     createdAt:   row.created_at,

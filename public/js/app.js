@@ -276,6 +276,7 @@
       if (window.LiordarkAccess) {
         window.LiordarkAccess.loadProviderRenewals();
         window.LiordarkAccess.loadPasswordChangePending();
+        window.LiordarkAccess.loadCodesAdmin();
       }
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
