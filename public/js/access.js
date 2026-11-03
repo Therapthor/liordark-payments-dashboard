@@ -1422,10 +1422,6 @@
     document.getElementById("access-renewal-history-export-pdf").addEventListener("click", exportRenewalHistoryPdf);
   }
 
-  function initCodesModalButton() {
-    document.getElementById("access-codes-btn").addEventListener("click", openCodesModal);
-  }
-
   // ─────────────────────────────────────────────────────────────
   // PEDIDO (combo) — vender varias plataformas de una vez al mismo
   // cliente y armar un solo mensaje de WhatsApp con todo, para no tener
@@ -1656,125 +1652,6 @@
     } catch { /* se reintenta en el próximo ciclo */ }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // "🔑 Códigos" — vista admin, sin filtros (ver codes-lookup.service.ts
-  // para el filtro de 6 dígitos que sí aplica del lado del cliente).
-  // ─────────────────────────────────────────────────────────────
-
-  function renderCodeItem(a) {
-    const li = document.createElement("li");
-    li.className = "catalog-item";
-    li.dataset.id = a.id;
-    const latest = a.latestCode
-      ? `<b>${escapeHtml(a.latestCode.code)}</b> (${a.latestCode.code.length} dígitos) · ${fmtDateTime(a.latestCode.receivedAt)}`
-      : "sin código todavía";
-    li.innerHTML = `
-      <div class="catalog-thumb catalog-thumb-empty">🔑</div>
-      <div class="catalog-main">
-        <div class="catalog-name">${escapeHtml(a.platform)} — ${escapeHtml(a.email)}</div>
-        <div class="catalog-desc">${escapeHtml(a.codeSourceLabel || "sin fuente configurada")} · ${latest}</div>
-      </div>
-      <div class="catalog-actions">
-        <button class="btn-secondary btn-sm codes-admin-lookup-btn" type="button">🔎 Consultar ahora</button>
-      </div>
-    `;
-    return li;
-  }
-
-  let cachedCodesAdminAccounts = [];
-
-  function renderCodesAdminList() {
-    const list  = document.getElementById("codes-admin-list");
-    const empty = document.getElementById("codes-admin-empty");
-    if (!list) return;
-    list.innerHTML = "";
-    if (cachedCodesAdminAccounts.length === 0) { empty.hidden = false; return; }
-    empty.hidden = true;
-    for (const a of cachedCodesAdminAccounts) list.appendChild(renderCodeItem(a));
-  }
-
-  async function loadCodesAdmin() {
-    try {
-      const { accounts } = await api("/codes");
-      cachedCodesAdminAccounts = accounts;
-      renderCodesAdminList();
-    } catch { /* se reintenta en el próximo ciclo */ }
-  }
-
-  function initCodesAdminActions() {
-    const list = document.getElementById("codes-admin-list");
-    if (!list) return;
-    list.addEventListener("click", async (e) => {
-      const btn = e.target.closest(".codes-admin-lookup-btn");
-      if (!btn) return;
-      const id = Number(btn.closest(".catalog-item").dataset.id);
-      const original = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "Consultando…";
-      try {
-        const result = await api("/codes/" + id + "/lookup-now", { method: "POST" });
-        if (!result.found) {
-          alert("Todavía no hay código nuevo para esa cuenta.");
-        }
-        await loadCodesAdmin();
-      } catch (err) {
-        alert(err.message || "No se pudo consultar.");
-      } finally {
-        btn.disabled = false;
-        btn.textContent = original;
-      }
-    });
-  }
-
-  // Buscador libre — cualquier correo, no hace falta que esté dado de
-  // alta como cuenta en Accesos (ver POST /codes/lookup).
-  let codesLookupSourcesLoaded = false;
-  async function loadCodesLookupSources() {
-    if (codesLookupSourcesLoaded) return;
-    const select = document.getElementById("codes-lookup-source");
-    const sources = await loadCodeSources();
-    select.innerHTML = sources.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join("")
-      || `<option value="">— Sin fuentes configuradas —</option>`;
-    codesLookupSourcesLoaded = true;
-  }
-
-  function initCodesLookupForm() {
-    const form = document.getElementById("codes-lookup-form");
-    if (!form) return;
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const sourceId = document.getElementById("codes-lookup-source").value;
-      const email    = document.getElementById("codes-lookup-email").value.trim();
-      const resultEl = document.getElementById("codes-lookup-result");
-      const btn      = form.querySelector("button[type='submit']");
-
-      resultEl.hidden = true;
-      btn.disabled = true;
-      const original = btn.textContent;
-      btn.textContent = "Buscando…";
-      try {
-        const result = await api("/codes/lookup", { method: "POST", body: JSON.stringify({ sourceId, email }) });
-        resultEl.hidden = false;
-        resultEl.innerHTML = result.found
-          ? `✅ Código: <b>${escapeHtml(result.code)}</b> (${result.digits} dígitos)`
-          : "⚠️ No se encontró ningún código reciente para ese correo.";
-      } catch (err) {
-        resultEl.hidden = false;
-        resultEl.textContent = err.message || "No se pudo buscar.";
-      } finally {
-        btn.disabled = false;
-        btn.textContent = original;
-      }
-    });
-  }
-
-  function openCodesModal() {
-    document.getElementById("access-codes-modal").hidden = false;
-    document.getElementById("codes-lookup-result").hidden = true;
-    loadCodesLookupSources();
-    loadCodesAdmin();
-  }
-
   function initPasswordChangeListActions() {
     const list = document.getElementById("password-change-list");
     if (!list) return;
@@ -1843,9 +1720,6 @@
     initClientSummaryActions();
     initProviderRenewalListActions();
     initPasswordChangeListActions();
-    initCodesAdminActions();
-    initCodesLookupForm();
-    initCodesModalButton();
     initRenewalCutoverButton();
     initComboOrderModal();
     document.getElementById("access-platform-back").addEventListener("click", closePlatformDetail);

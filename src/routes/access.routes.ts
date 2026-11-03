@@ -42,7 +42,7 @@ import {
   resetCodeRequests,
   getCodeRequestState,
 } from "../db/codes.repository";
-import { lookupCode, listCodeSources, codeSourceLabel } from "../services/codes-lookup.service";
+import { lookupCode, lookupAnySource, listCodeSources, codeSourceLabel } from "../services/codes-lookup.service";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
@@ -321,20 +321,23 @@ router.get("/codes", (_req, res) => {
   res.json({ accounts });
 });
 
-// Buscador libre — cualquier correo, no hace falta que esté dado de alta
-// como cuenta en Accesos. Un solo intento, sin reintentos, sin filtrar
-// por dígitos: el admin ve todo.
+// Buscador libre del tab "🔑 Códigos" — solo el correo, no hace falta
+// elegir plataforma ni que esté dado de alta como cuenta en Accesos:
+// prueba todas las fuentes configuradas y se queda con la primera que
+// encuentre algo. Un intento por fuente, sin reintentos: el admin ve todo.
 router.post("/codes/lookup", async (req, res) => {
-  const sourceId = String(req.body?.sourceId || "");
-  const email    = String(req.body?.email || "").trim();
-  if (!sourceId || !email) { res.status(400).json({ message: "Falta la fuente o el correo." }); return; }
+  const email = String(req.body?.email || "").trim();
+  if (!email) { res.status(400).json({ message: "Falta el correo." }); return; }
 
-  const result = await lookupCode(sourceId, email);
-  res.json({ found: result.found, code: result.code, digits: result.digits });
+  const found = await lookupAnySource(email);
+  if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null }); return; }
+
+  res.json({ found: true, kind: found.result.kind, value: found.result.value, sourceLabel: found.label });
 });
 
-// "Consultar ahora" del admin — un solo intento, sin reintentos (no hace
-// esperar), y sin filtrar por cantidad de dígitos: el admin ve todo.
+// "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) — un
+// solo intento, sin reintentos (no hace esperar), y sin filtrar por
+// cantidad de dígitos: el admin ve todo.
 router.post("/codes/:accountId/lookup-now", async (req, res) => {
   const accountId = Number(req.params.accountId);
   const account = getAccountById(accountId);
@@ -342,10 +345,10 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   if (!account.codeSource) { res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." }); return; }
 
   const result = await lookupCode(account.codeSource, account.email);
-  if (result.found && result.code) {
-    saveIncomingCode({ accountId, code: result.code, snippet: "", source: "external" });
+  if (result.found && result.value) {
+    saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }
-  res.json({ found: result.found, code: result.code, digits: result.digits });
+  res.json({ found: result.found, kind: result.kind, value: result.value });
 });
 
 router.post("/codes/reset", (req, res) => {

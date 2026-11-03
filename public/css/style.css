@@ -704,10 +704,79 @@ button, input {
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 
-.codes-lookup-form { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-.codes-lookup-form select { padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-primary); font-size: 13px; }
-.codes-lookup-form input { flex: 1; min-width: 200px; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-raised); color: var(--text-primary); font-size: 14px; }
-.codes-lookup-form input:focus, .codes-lookup-form select:focus { outline: none; border-color: var(--accent); }
+/* ─────────────────────────────────────────────────────────────
+   "🔑 Códigos" — pestaña propia, siempre oscura ("mango" oscuro),
+   sin importar el tema del resto del panel (que es claro). Buscador
+   libre por correo (sin elegir plataforma) + lista de cuentas debajo.
+   ───────────────────────────────────────────────────────────── */
+
+.codes-page {
+  --cpg: #1c140c; --csurf: #271c12; --cborder: #3a2c1c; --ctext: #f5ece0;
+  --cmuted: #b29b85; --cchip: #352512; --cok: #49c97e; --clink: #5aa8e0;
+  background: var(--cpg); color: var(--ctext);
+  border-radius: 16px; padding: 20px 18px 26px; max-width: 760px;
+  font-family: inherit;
+}
+.codes-page-title { font-size: 18px; margin: 0 0 14px; color: var(--ctext); }
+
+.codes-search-form { display: flex; gap: 8px; margin-bottom: 16px; }
+.codes-search-form input {
+  flex: 1; min-width: 0; padding: 11px 14px; border-radius: 10px;
+  border: 1px solid var(--cborder); background: var(--csurf); color: var(--ctext); font-size: 13.5px;
+}
+.codes-search-form input::placeholder { color: #8a7560; }
+.codes-search-form input:focus { outline: none; border-color: #ff8c3a; }
+.codes-search-btn {
+  border: none; border-radius: 10px; padding: 11px 18px; font-size: 13px; font-weight: 700;
+  background: linear-gradient(135deg, #ff8c3a, #ffc059); color: #1c140c; cursor: pointer;
+}
+.codes-search-btn:disabled { opacity: .6; cursor: default; }
+
+.codes-banner {
+  display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px;
+  margin-bottom: 16px; background: linear-gradient(120deg, #2a3f2f, var(--cpg)); border: 1px solid #3a5a44;
+}
+.codes-banner.link { background: linear-gradient(120deg, #253a4a, var(--cpg)); border-color: #37546a; }
+.codes-banner.not-found { background: #2a1414; border: 1px solid #5a3a3a; color: #e8a0a0; }
+.codes-banner-icon {
+  width: 28px; height: 28px; border-radius: 50%; background: var(--cok); color: var(--cpg);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;
+}
+.codes-banner.link .codes-banner-icon { background: var(--clink); }
+.codes-banner.not-found .codes-banner-icon { background: #d1373d; color: #fff; }
+.codes-banner-info { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.codes-banner-email { font-weight: 700; }
+.codes-banner-source { color: var(--cmuted); font-size: 11px; }
+.codes-banner-result { margin-left: auto; }
+
+.codes-list-title { font-size: 11px; color: var(--cmuted); text-transform: uppercase; letter-spacing: .05em; margin: 6px 0 10px; }
+
+.codes-accounts-list { display: flex; flex-direction: column; gap: 8px; }
+.codes-account-row { display: flex; align-items: center; gap: 12px; background: var(--csurf); border-radius: 12px; padding: 12px; flex-wrap: wrap; }
+.codes-account-icon { font-size: 16px; }
+.codes-account-info { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.codes-account-sub { color: var(--cmuted); font-size: 11px; }
+.codes-account-result { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.codes-account-received { font-size: 10px; color: var(--cmuted); }
+.codes-accounts-empty { color: var(--cmuted); font-size: 12.5px; }
+
+.codes-code {
+  font-family: "Space Grotesk", system-ui, sans-serif; font-weight: 700; letter-spacing: 1.5px;
+  color: #ffc059; cursor: pointer; padding: 4px 8px; border-radius: 7px; transition: background .15s;
+}
+.codes-code:hover { background: var(--cchip); }
+.codes-code.copied { color: var(--cok); }
+
+.codes-open-btn {
+  border: none; border-radius: 8px; padding: 7px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: linear-gradient(135deg, var(--clink), #8fd0f0); color: var(--cpg);
+}
+
+.codes-consult-btn {
+  background: transparent; border: 1px solid var(--cborder); color: #ff8c3a; border-radius: 7px;
+  padding: 6px 11px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.codes-consult-btn:disabled { opacity: .4; cursor: default; }
 
 /* Cuadrícula de tarjetas — una por plataforma, en vez del acordeón
    anterior. Clic en una tarjeta abre el detalle de esa plataforma sola. */

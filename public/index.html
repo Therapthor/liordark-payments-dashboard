@@ -42,6 +42,7 @@
           </div>
         </div>
         <button class="tab-btn" data-view="access">Accesos</button>
+        <button class="tab-btn" data-view="codes">🔑 Códigos</button>
         <button class="tab-btn" data-view="wholesalers">Mayoristas <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
         <button class="tab-btn" data-view="web-customers">Clientes</button>
         <button class="tab-btn" data-view="config">Configuración</button>
@@ -172,7 +173,6 @@
           <button id="access-renewing-btn" class="btn-secondary">🔁 Renovados</button>
           <button id="access-renewal-history-btn" class="btn-secondary">📋 Registro</button>
           <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
-          <button id="access-codes-btn" class="btn-secondary">🔑 Códigos</button>
           <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
         </div>
 
@@ -204,6 +204,24 @@
           <div id="access-platform-detail-accounts" class="access-accounts"></div>
         </div>
 
+      </section>
+
+      <!-- ═══════════ VISTA: CÓDIGOS ═══════════ -->
+      <section id="view-codes" class="view" hidden>
+        <div class="codes-page">
+          <h2 class="codes-page-title">🔑 Códigos</h2>
+
+          <form id="codes-search-form" class="codes-search-form">
+            <input id="codes-search-email" type="email" placeholder="correo@ejemplo.com" required />
+            <button type="submit" class="codes-search-btn">Buscar</button>
+          </form>
+
+          <div id="codes-search-banner" class="codes-banner" hidden></div>
+
+          <p class="codes-list-title">Todas las cuentas · toca el código para copiarlo</p>
+          <div id="codes-accounts-list" class="codes-accounts-list"></div>
+          <p id="codes-accounts-empty" class="codes-accounts-empty" hidden>Ninguna cuenta tiene el código habilitado todavía. Se activa en Accesos, al editar la cuenta.</p>
+        </div>
       </section>
 
       <!-- ═══════════ VISTA: MAYORISTAS ═══════════ -->
@@ -940,31 +958,6 @@
     </div>
   </div>
 
-  <!-- ───────────── MODAL: Códigos (admin, sin restricciones) ───────────── -->
-  <div id="access-codes-modal" class="modal-backdrop" hidden>
-    <div class="modal-card modal-card--wide">
-      <div class="modal-head">
-        <h3>🔑 Códigos</h3>
-        <button type="button" class="modal-x" data-close-modal="access-codes-modal">✕</button>
-      </div>
-
-      <p class="panel-hint">Busca el código de cualquier correo, sin que esté dado de alta en Accesos — útil para probar rápido.</p>
-      <form id="codes-lookup-form" class="codes-lookup-form">
-        <select id="codes-lookup-source" required></select>
-        <input id="codes-lookup-email" type="email" placeholder="correo@ejemplo.com" required />
-        <button type="submit" class="btn-primary btn-sm">🔎 Buscar</button>
-      </form>
-      <p id="codes-lookup-result" class="panel-hint" hidden></p>
-
-      <div class="panel-header standalone" style="margin-top: 18px;">
-        <h2>Cuentas con código habilitado</h2>
-      </div>
-      <p class="panel-hint">Se ve cualquier código, sin el filtro de 6 dígitos que sí aplica para el cliente. Se activa en Accesos, al editar la cuenta.</p>
-      <ul id="codes-admin-list" class="catalog-list"></ul>
-      <p id="codes-admin-empty" class="feed-empty" hidden>Ninguna cuenta tiene el código habilitado todavía.</p>
-    </div>
-  </div>
-
   <div id="renewals-notif-history-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--xwide">
       <div class="modal-head">
@@ -1281,6 +1274,7 @@
   </div>
 
   <script src="js/access.js"></script>
+  <script src="js/codes.js"></script>
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>

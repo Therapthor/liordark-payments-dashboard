@@ -245,13 +245,14 @@
   // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
   // Renovaciones); "Accesos" es un botón directo aparte.
   const ADMIN_VIEW_KEY = "ldp_admin_view";
-  const VALID_VIEWS = ["resumen", "access", "wholesalers", "web-customers", "history", "renewals", "config", "support-chat"];
+  const VALID_VIEWS = ["resumen", "access", "codes", "wholesalers", "web-customers", "history", "renewals", "config", "support-chat"];
 
   function switchView(view) {
     try { localStorage.setItem(ADMIN_VIEW_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
 
     document.getElementById("view-live").hidden          = view !== "resumen";
     document.getElementById("view-access").hidden        = view !== "access";
+    document.getElementById("view-codes").hidden         = view !== "codes";
     document.getElementById("view-wholesalers").hidden   = view !== "wholesalers";
     document.getElementById("view-web-customers").hidden = view !== "web-customers";
     document.getElementById("view-history").hidden       = view !== "history";
@@ -279,6 +280,7 @@
       }
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
+    if (view === "codes" && window.LiordarkCodes) window.LiordarkCodes.load();
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "support-chat" && window.LiordarkSupportChat) window.LiordarkSupportChat.load();
@@ -1536,6 +1538,7 @@
     initMoneyToggle();
     initCodeSearch();
     if (window.LiordarkAccess) window.LiordarkAccess.init();
+    if (window.LiordarkCodes) window.LiordarkCodes.init();
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();
     if (window.LiordarkSettings) window.LiordarkSettings.init();
     if (window.LiordarkWholesalers) window.LiordarkWholesalers.init();

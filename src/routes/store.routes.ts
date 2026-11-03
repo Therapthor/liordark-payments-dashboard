@@ -414,19 +414,19 @@ router.post("/codes/:accountId/request", async (req, res) => {
 
   const result = await lookupCodeWithRetries(sourceId, account.email);
 
-  if (result.found && result.code) {
-    saveIncomingCode({ accountId, code: result.code, snippet: "", source: "external" });
+  if (result.found && result.value) {
+    saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }
 
   // Los de 6 dígitos son más sensibles (cambio de datos de la cuenta) —
   // quedan guardados arriba para que el admin los vea, pero acá se
   // responde como si no se hubiera encontrado nada.
-  if (result.found && result.digits === 6) {
+  if (result.found && result.kind === "code" && result.value?.length === 6) {
     return res.json({ code: null, receivedAt: null });
   }
 
   res.json({
-    code:       result.found ? result.code : null,
+    code:       result.found && result.kind === "code" ? result.value : null,
     receivedAt: result.found ? new Date().toISOString() : null,
   });
 });

@@ -13,9 +13,10 @@ import axios from "axios";
 // ─────────────────────────────────────────────────────────────
 
 export type CodeLookupResult = {
-  found:  boolean;
-  code:   string | null;
-  digits: number | null;
+  found: boolean;
+  // "code" = dígitos (4 o 6); "link" = enlace de inicio de sesión.
+  kind:  "code" | "link" | null;
+  value: string | null;
 };
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
@@ -36,15 +37,21 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
 
   const html: string = String(res.data);
   if (html.includes(NOT_FOUND_MARKER)) {
-    return { found: false, code: null, digits: null };
+    return { found: false, kind: null, value: null };
   }
 
-  // El código viene dentro del primer <strong> dentro de .email-body-wrapper.
+  // El código (o enlace) viene dentro del primer <strong> dentro de .email-body-wrapper.
   const match = html.match(/<strong[^>]*>([\s\S]*?)<\/strong>/i);
-  const digitsOnly = match ? match[1].replace(/\D/g, "") : "";
-  if (!digitsOnly) return { found: false, code: null, digits: null };
+  const raw = match ? match[1].replace(/<[^>]+>/g, "").trim() : "";
+  if (!raw) return { found: false, kind: null, value: null };
 
-  return { found: true, code: digitsOnly, digits: digitsOnly.length };
+  const linkMatch = raw.match(/https?:\/\/\S+/i);
+  if (linkMatch) return { found: true, kind: "link", value: linkMatch[0] };
+
+  const digitsOnly = raw.replace(/\D/g, "");
+  if (!digitsOnly) return { found: false, kind: null, value: null };
+
+  return { found: true, kind: "code", value: digitsOnly };
 }
 
 // "Netflix - Cuenta sin opciones" — primera fuente configurada (ver
@@ -69,8 +76,29 @@ export function codeSourceLabel(sourceId: string | null): string {
 /** Una sola consulta puntual, sin reintentos — para el botón admin "Consultar ahora". */
 export async function lookupCode(sourceId: string, email: string): Promise<CodeLookupResult> {
   const source = SOURCES[sourceId];
-  if (!source) return { found: false, code: null, digits: null };
+  if (!source) return { found: false, kind: null, value: null };
   return source.lookup(email);
+}
+
+/**
+ * Buscador libre del admin (Códigos): prueba el correo en TODAS las
+ * fuentes configuradas, sin que haga falta elegir plataforma — un
+ * intento por fuente, sin reintentos, se queda con la primera que
+ * encuentre algo.
+ */
+export async function lookupAnySource(
+  email: string
+): Promise<{ sourceId: string; label: string; result: CodeLookupResult } | null> {
+  for (const [id, source] of Object.entries(SOURCES)) {
+    let result: CodeLookupResult;
+    try {
+      result = await source.lookup(email);
+    } catch {
+      continue;
+    }
+    if (result.found) return { sourceId: id, label: source.label, result };
+  }
+  return null;
 }
 
 /**
@@ -85,12 +113,12 @@ export async function lookupCodeWithRetries(
   attempts = 3,
   delayMs = 9000
 ): Promise<CodeLookupResult> {
-  let last: CodeLookupResult = { found: false, code: null, digits: null };
+  let last: CodeLookupResult = { found: false, kind: null, value: null };
   for (let i = 0; i < attempts; i++) {
     try {
       last = await lookupCode(sourceId, email);
     } catch {
-      last = { found: false, code: null, digits: null };
+      last = { found: false, kind: null, value: null };
     }
     if (last.found) return last;
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
