@@ -33,13 +33,18 @@ import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
 import {
   getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
-  countUnreadForCustomer, isValidStickerId,
+  countUnreadForCustomer, isValidStickerId, chatHasNoMessages,
 } from "../db/support-chat.repository";
 import { uploadChatMedia } from "../services/cloudinary.service";
 import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
+import {
+  isSupportBotEnabledFor, startSupportBot, notifyCustomerMessage, recordCustomerChoice, getBotTotpForCustomer,
+} from "../services/support-bot.service";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
 // quita esta restricción cuando se dé por probado.
+// Página "Códigos" de autoservicio — apagada por ahora (abusaban de ella).
+const CLIENT_CODES_PAGE_ENABLED = false;
 const CODES_TEST_PHONE = "977430941";
 function isCodesTestUser(phone: string): boolean {
   return phone.replace(/\D/g, "").slice(-9) === CODES_TEST_PHONE;
@@ -369,8 +374,10 @@ router.get("/codes", async (req, res) => {
   const customer   = findCustomerById(customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
 
-  if (!isCodesTestUser(customer.phone)) {
-    return res.status(403).json({ message: "Códigos todavía está en pruebas." });
+  // Retirado por ahora: los códigos solo se piden por el chat de soporte
+  // (el asistente decide qué entregar, ver support-bot.service.ts).
+  if (!CLIENT_CODES_PAGE_ENABLED || !isCodesTestUser(customer.phone)) {
+    return res.status(403).json({ message: "Los códigos ahora se piden por el chat de soporte 💬" });
   }
 
   // Cuentas con 2FA (TOTP) no piden código — se calcula al vuelo, sin
@@ -394,8 +401,10 @@ router.post("/codes/:accountId/request", async (req, res) => {
   const customer   = findCustomerById(customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
 
-  if (!isCodesTestUser(customer.phone)) {
-    return res.status(403).json({ message: "Códigos todavía está en pruebas." });
+  // Retirado por ahora: los códigos solo se piden por el chat de soporte
+  // (el asistente decide qué entregar, ver support-bot.service.ts).
+  if (!CLIENT_CODES_PAGE_ENABLED || !isCodesTestUser(customer.phone)) {
+    return res.status(403).json({ message: "Los códigos ahora se piden por el chat de soporte 💬" });
   }
 
   const accountId = Number(req.params.accountId);
@@ -691,6 +700,10 @@ router.get("/chat", (req, res) => {
 
   const isNew = !findChatByPhone(who.phone);
   const chat = getOrCreateOpenChatForPhone(who.phone);
+  // Asistente automático: saluda solo en un chat vacío (ver support-bot.service.ts).
+  if (isSupportBotEnabledFor(who.phone) && chat.botState === null && chatHasNoMessages(chat.id)) {
+    startSupportBot(chat.id);
+  }
   markSeen(chat.id, "customer");
   if (isNew) emitChatEvent({ type: "chat_created", chatId: chat.id, clientPhone: who.phone });
   res.json({ chatId: chat.id, adminTyping: chat.adminTyping, messages: listMessages(chat.id) });
@@ -708,8 +721,17 @@ router.post("/chat/messages", (req, res) => {
   const who = requireChatUser(req, res);
   if (!who) return;
 
+  // Botón del asistente — se valida y guarda en support-bot.service.ts.
+  if (req.body?.type === "bot_choice") {
+    getOrCreateOpenChatForPhone(who.phone);
+    const result = recordCustomerChoice(who.phone, Number(req.body?.messageId), String(req.body?.optionId ?? ""));
+    if (!result.ok) return res.status(409).json({ message: result.error });
+    return res.status(201).json({ message: result.message });
+  }
+
   const type = req.body?.type === "account_reply" ? "account_reply" : "text";
   const chat = getOrCreateOpenChatForPhone(who.phone);
+  const wasFirstMessage = chatHasNoMessages(chat.id);
 
   if (req.body?.type === "sticker") {
     const stickerId = String(req.body?.stickerId ?? "");
@@ -744,7 +766,18 @@ router.post("/chat/messages", (req, res) => {
 
   const message = addMessage(chat.id, "customer", { type: "text", text });
   emitChatEvent({ type: "message", chatId: chat.id, message });
+  notifyCustomerMessage(chat.id, who.phone, { kind: "text", text }, wasFirstMessage);
   res.status(201).json({ message });
+});
+
+// 2FA en vivo para la burbuja del asistente — se pide cada vez que rota
+// (cada 30s) mientras no venza; nunca queda guardado en el chat.
+router.get("/chat/totp/:messageId", async (req, res) => {
+  const who = requireChatUser(req, res);
+  if (!who) return;
+  const totp = await getBotTotpForCustomer(who.phone, Number(req.params.messageId));
+  if (!totp) return res.status(410).json({ message: "Este código ya expiró." });
+  res.json(totp);
 });
 
 router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) => {
@@ -760,12 +793,14 @@ router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) 
 
   try {
     const chat = getOrCreateOpenChatForPhone(who.phone);
+    const wasFirstMessage = chatHasNoMessages(chat.id);
     const { url, publicId } = await uploadChatMedia(file.buffer, isImage ? "image" : "video");
     const message = addMessage(chat.id, "customer", {
       type: isImage ? "image" : "video", mediaUrl: url, mediaPublicId: publicId,
       mediaResourceType: isImage ? "image" : "video", mediaExpiresAt: mediaExpiresAtISO(),
     });
     emitChatEvent({ type: "message", chatId: chat.id, message });
+    notifyCustomerMessage(chat.id, who.phone, { kind: "media" }, wasFirstMessage);
     res.status(201).json({ message });
   } catch (err: any) {
     res.status(502).json({ message: err?.message || "No se pudo subir el archivo." });

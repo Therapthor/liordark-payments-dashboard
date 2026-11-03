@@ -1335,6 +1335,39 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 }
 .chat-picker-send-btn:disabled { opacity: .6; cursor: default; }
 
+/* ─── Chat: asistente automático (botones, código, 2FA) ──────── */
+.chat-bot-tag { display: block; font-size: 10.5px; font-weight: 700; color: var(--btn); margin-bottom: 3px; }
+.chat-bot-text { white-space: pre-line; }
+.chat-bot-options { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.chat-bot-option {
+  text-align: left; border: 1.5px solid var(--accent); background: var(--chip-bg); color: var(--text);
+  border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.chat-bot-option:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.chat-bot-option:disabled { cursor: default; opacity: .45; border-color: var(--border); }
+.chat-bot-option.is-picked { opacity: 1; background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.chat-bot-code-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 6px;
+  background: var(--chip-bg); border-radius: 12px; padding: 10px 12px; min-width: 190px;
+}
+.chat-bot-code-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; overflow-wrap: anywhere; }
+.chat-bot-code {
+  font-family: 'Space Grotesk', ui-monospace, monospace; font-size: 26px; font-weight: 700; letter-spacing: 4px;
+  color: var(--btn); background: #fff; border: 1.5px dashed var(--accent); border-radius: 10px;
+  padding: 4px 12px; cursor: pointer;
+}
+.chat-bot-code.copied { color: var(--ok); border-color: var(--ok); }
+.chat-bot-code-hint, .chat-bot-code-received, .chat-bot-totp-meta { font-size: 11px; color: var(--muted); }
+.chat-bot-totp-meta { display: flex; gap: 10px; flex-wrap: wrap; }
+.chat-bot-totp-expire { font-weight: 700; color: var(--btn); }
+.chat-bot-totp.is-expired .chat-bot-code { color: var(--muted); border-color: var(--border); cursor: default; letter-spacing: 0; font-size: 14px; }
+.chat-bot-code-link {
+  display: inline-block; background: var(--btn); color: #fff !important; text-decoration: none !important;
+  border-radius: 999px; padding: 7px 14px; font-weight: 700; font-size: 13px;
+}
+
 /* ─── Numerito de no leídos en el botón "💬 Soporte" ─────────── */
 .nav-support-btn { position: relative; }
 .nav-support-badge {

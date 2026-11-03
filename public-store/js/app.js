@@ -184,16 +184,10 @@
       currentPhone = me.phone || "";
       customerHasEmail = !!me.hasEmail || isEmailConfirmedLocally(currentPhone);
       if (me.hasEmail) markEmailConfirmedLocally(currentPhone);
-      // Códigos — ya no depende de Gmail (ver codes-lookup.service.ts),
-      // pero sigue en pruebas: el botón solo se muestra si este celular
-      // tiene alguna cuenta con "Código" habilitado (GET /codes ya filtra
-      // por CODES_TEST_PHONE del lado del servidor).
-      try {
-        const { accounts } = await api("/codes");
-        document.getElementById("topbar-codes-btn").hidden = !accounts || accounts.length === 0;
-      } catch {
-        document.getElementById("topbar-codes-btn").hidden = true;
-      }
+      // Códigos — página de autoservicio retirada por ahora: los códigos
+      // solo se piden por el chat de soporte (asistente automático, ver
+      // support-bot.service.ts). GET /codes responde 403.
+      document.getElementById("topbar-codes-btn").hidden = true;
     } catch (err) {
       // Si /auth/me falla, nos quedamos con lo último confirmado en este
       // navegador (no hay forma de saber el teléfono todavía) — nunca
@@ -1782,6 +1776,11 @@
   let chatTypingTimer = null;
   let chatIsTyping = false;
   let chatRenderedIds = new Set();
+  const chatTotpTimers = new Map();
+  // El chat se cerró (soporte o asistente) con el modal abierto: el próximo
+  // mensaje abre uno nuevo, así que antes se recarga (y se reconecta el
+  // stream, que quedó apuntando al chat viejo).
+  let chatClosed = false;
 
   // Catálogo cerrado de stickers — el id es lo único que viaja al server
   // (ver isValidStickerId en support-chat.repository.ts); "anim" es puro
@@ -1839,6 +1838,11 @@
         </div>`;
     } else if (m.type === "text") {
       body = linkifyText(m.text);
+    } else if (m.type === "bot_options" || m.type === "bot_code" || m.type === "bot_totp") {
+      return `
+      <div class="chat-bubble-row ${who}"${m.type === "bot_options" ? ` data-bot-options="${m.id}"` : ""}>
+        <div class="chat-bubble">${botBubbleBody(m).replace(/>\s+</g, "><").trim()}<span class="chat-bubble-time">${fmtChatTime(m.createdAt)}</span></div>
+      </div>`;
     } else if (m.type === "sticker") {
       const s = CHAT_STICKER_MAP[m.text];
       return `
@@ -1856,6 +1860,138 @@
       <div class="chat-bubble-row ${who}">
         <div class="chat-bubble">${body}<span class="chat-bubble-time">${fmtChatTime(m.createdAt)}</span></div>
       </div>`;
+  }
+
+  // ── Asistente automático (ver support-bot.service.ts) ──
+
+  function parseBotPayload(text) {
+    try { const v = JSON.parse(text); return v && typeof v === "object" ? v : {}; } catch { return {}; }
+  }
+
+  function botBubbleBody(m) {
+    const p = parseBotPayload(m.text);
+    const tag = `<span class="chat-bot-tag">🤖 Asistente</span>`;
+    if (m.type === "bot_options") {
+      const options = Array.isArray(p.options) ? p.options : [];
+      return tag + `<div class="chat-bot-text">${linkifyText(p.text || "")}</div>` +
+        (options.length
+          ? `<div class="chat-bot-options" data-msgid="${m.id}">` +
+            options.map(o => `<button type="button" class="chat-bot-option" data-opt="${escapeHtml(o.id)}">${escapeHtml(o.label)}</button>`).join("") +
+            `</div>`
+          : "");
+    }
+    if (m.type === "bot_code") {
+      const value = String(p.value || "");
+      const isLink = p.kind === "link" && /^https?:\/\//i.test(value);
+      return tag + `
+        <div class="chat-bot-code-card">
+          <div class="chat-bot-code-title">🔑 ${escapeHtml(p.platform || "")}</div>
+          ${isLink
+            ? `<a class="chat-bot-code-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">🔗 Abrir enlace</a>`
+            : `<button type="button" class="chat-bot-code" data-code="${escapeHtml(value)}">${escapeHtml(value)}</button>
+               <div class="chat-bot-code-hint">Toca el código para copiarlo</div>`}
+          ${p.received ? `<div class="chat-bot-code-received">Recibido: ${escapeHtml(p.received)}</div>` : ""}
+        </div>`;
+    }
+    // bot_totp — el código se pide en vivo (startBotTotp), nunca viene en el mensaje.
+    return tag + `<div class="chat-bot-text">${linkifyText(p.text || "")}</div>
+      <div class="chat-bot-code-card chat-bot-totp" id="chat-totp-${m.id}">
+        <div class="chat-bot-code-title">🔐 ${escapeHtml(p.platform || "")}</div>
+        <button type="button" class="chat-bot-code" data-code="">······</button>
+        <div class="chat-bot-totp-meta">
+          <span class="chat-bot-totp-rotate"></span>
+          <span class="chat-bot-totp-expire"></span>
+        </div>
+      </div>`;
+  }
+
+  // Solo los botones del ÚLTIMO mensaje del asistente, y solo si el
+  // cliente todavía no respondió, siguen activos (el server valida igual).
+  function refreshBotOptions(forceAllOff) {
+    const list = document.getElementById("chat-messages");
+    const rows = [...list.querySelectorAll(".chat-bubble-row")];
+    let lastIdx = -1;
+    rows.forEach((r, i) => { if (r.dataset.botOptions) lastIdx = i; });
+    const answered = lastIdx === -1 || rows.slice(lastIdx + 1).some(r => r.classList.contains("from-customer"));
+    list.querySelectorAll(".chat-bot-options").forEach(group => {
+      const active = !forceAllOff && !answered && group.closest(".chat-bubble-row") === rows[lastIdx];
+      group.querySelectorAll(".chat-bot-option").forEach(b => { b.disabled = !active; });
+    });
+  }
+
+  async function sendBotChoice(btn) {
+    const group = btn.closest(".chat-bot-options");
+    group.querySelectorAll(".chat-bot-option").forEach(b => { b.disabled = true; });
+    btn.classList.add("is-picked");
+    try {
+      const { message } = await api("/chat/messages", {
+        method: "POST", body: { type: "bot_choice", messageId: Number(group.dataset.msgid), optionId: btn.dataset.opt },
+      });
+      appendChatMessage(message);
+    } catch (err) {
+      btn.classList.remove("is-picked");
+      alert(err.message || "No se pudo enviar tu opción.");
+      refreshBotOptions();
+    }
+  }
+
+  function stopBotTotp(id) {
+    clearInterval(chatTotpTimers.get(id));
+    chatTotpTimers.delete(id);
+  }
+
+  function stopAllBotTotps() {
+    for (const id of [...chatTotpTimers.keys()]) stopBotTotp(id);
+  }
+
+  function expireBotTotpCard(card) {
+    card.classList.add("is-expired");
+    const codeEl = card.querySelector(".chat-bot-code");
+    codeEl.textContent = "⏱️ Código expirado";
+    codeEl.dataset.code = "";
+    card.querySelector(".chat-bot-totp-rotate").textContent = "";
+    card.querySelector(".chat-bot-totp-expire").textContent = "";
+  }
+
+  // Pide el 2FA vigente; vuelve a pedirlo cuando rota (cada 30s) hasta
+  // que vence la ventana de ~2 minutos.
+  async function startBotTotp(id) {
+    stopBotTotp(id);
+    const card = document.getElementById("chat-totp-" + id);
+    if (!card) return;
+    let data;
+    try {
+      data = await api("/chat/totp/" + id);
+    } catch {
+      expireBotTotpCard(card);
+      return;
+    }
+    const codeEl = card.querySelector(".chat-bot-code");
+    codeEl.textContent = data.code;
+    codeEl.dataset.code = data.code;
+    let rotate = data.secondsRemaining;
+    let expire = data.expiresInSeconds;
+    const tick = () => {
+      card.querySelector(".chat-bot-totp-rotate").textContent = `Cambia en ${rotate}s`;
+      const mm = Math.floor(expire / 60), ss = String(expire % 60).padStart(2, "0");
+      card.querySelector(".chat-bot-totp-expire").textContent = `Expira en ${mm}:${ss}`;
+    };
+    tick();
+    chatTotpTimers.set(id, setInterval(() => {
+      rotate -= 1;
+      expire -= 1;
+      if (expire <= 0) { stopBotTotp(id); expireBotTotpCard(card); return; }
+      if (rotate <= 0) { startBotTotp(id); return; }
+      tick();
+    }, 1000));
+  }
+
+  async function copyBotCode(el) {
+    const code = el.dataset.code;
+    if (!code) return;
+    try { await navigator.clipboard.writeText(code); } catch { return; }
+    el.classList.add("copied");
+    setTimeout(() => el.classList.remove("copied"), 1200);
   }
 
   async function renderAccountPicker(messageId) {
@@ -1908,9 +2044,12 @@
     chatRenderedIds.add(m.id);
     const el = document.getElementById("chat-messages");
     const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    el.querySelector(".chat-empty")?.remove();
     el.insertAdjacentHTML("beforeend", chatBubbleHtml(m));
-    if (wasAtBottom) el.scrollTop = el.scrollHeight;
+    if (wasAtBottom || m.sender === "customer") el.scrollTop = el.scrollHeight;
     if (m.type === "account_request") renderAccountPicker(m.id);
+    if (m.type === "bot_totp") startBotTotp(m.id);
+    refreshBotOptions();
   }
 
   function showChatTyping(show) {
@@ -1934,8 +2073,13 @@
         if (evt.sender === "admin") showChatTyping(evt.typing);
       } else if (evt.type === "closed") {
         showChatTyping(false);
-        document.getElementById("chat-messages").insertAdjacentHTML("beforeend",
-          `<div class="chat-empty">— Este chat fue cerrado por soporte —</div>`);
+        chatClosed = true;
+        stopAllBotTotps();
+        refreshBotOptions(true);
+        document.querySelectorAll("#chat-messages .chat-bot-totp:not(.is-expired)").forEach(expireBotTotpCard);
+        const list = document.getElementById("chat-messages");
+        list.insertAdjacentHTML("beforeend", `<div class="chat-empty">— Chat finalizado —</div>`);
+        list.scrollTop = list.scrollHeight;
         if (chatSource) { chatSource.close(); chatSource = null; }
       }
     };
@@ -1948,6 +2092,8 @@
     showChatTyping(false);
     chatLastId = 0;
     chatRenderedIds = new Set();
+    stopAllBotTotps();
+    chatClosed = false;
     try {
       const { messages, adminTyping } = await api("/chat");
       list.innerHTML = messages.length
@@ -1955,6 +2101,8 @@
         : `<div class="chat-empty">Cuéntanos qué necesitas 🥭</div>`;
       list.scrollTop = list.scrollHeight;
       messages.filter(m => m.type === "account_request").forEach(m => renderAccountPicker(m.id));
+      messages.filter(m => m.type === "bot_totp").forEach(m => startBotTotp(m.id));
+      refreshBotOptions();
       showChatTyping(adminTyping);
       connectChatStream();
       document.getElementById("chat-unread-badge").hidden = true; // ya se vio — markSeen corrió en el server
@@ -1967,6 +2115,7 @@
     document.getElementById("chat-modal").hidden = true;
     document.getElementById("chat-sticker-popover").hidden = true;
     if (chatSource) { chatSource.close(); chatSource = null; }
+    stopAllBotTotps();
     sendChatTyping(false);
   }
 
@@ -1983,6 +2132,7 @@
     input.value = "";
     clearTimeout(chatTypingTimer);
     sendChatTyping(false);
+    if (chatClosed) await openChatModal();
     try {
       const { message } = await api("/chat/messages", { method: "POST", body: { text } });
       appendChatMessage(message); // optimista — no espera a que vuelva por SSE
@@ -1996,6 +2146,7 @@
     const original = btn.textContent;
     btn.textContent = "⏳";
     btn.disabled = true;
+    if (chatClosed) await openChatModal();
     try {
       const form = new FormData();
       form.append("file", file);
@@ -2013,6 +2164,7 @@
 
   async function sendChatSticker(stickerId) {
     toggleStickerPopover(false);
+    if (chatClosed) await openChatModal();
     try {
       const { message } = await api("/chat/messages", { method: "POST", body: { type: "sticker", stickerId } });
       appendChatMessage(message);
@@ -2084,7 +2236,11 @@
 
     document.getElementById("chat-messages").addEventListener("click", (e) => {
       const btn = e.target.closest(".chat-picker-send-btn");
-      if (btn) sendAccountPickerReply(btn.dataset.msgid);
+      if (btn) { sendAccountPickerReply(btn.dataset.msgid); return; }
+      const opt = e.target.closest(".chat-bot-option");
+      if (opt && !opt.disabled) { sendBotChoice(opt); return; }
+      const code = e.target.closest(".chat-bot-code");
+      if (code) copyBotCode(code);
     });
   }
 

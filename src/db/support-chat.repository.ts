@@ -14,7 +14,14 @@ export type ChatSender = "customer" | "admin";
 // ya verificado contra SU cuenta real (ver /chat/messages en store.routes.ts).
 // sticker: text guarda el id del catálogo (ver CHAT_STICKER_IDS más abajo) —
 // cliente y admin lo renderizan cada uno con su propio mapa emoji/animación.
-export type ChatMessageType = "text" | "image" | "video" | "account_request" | "account_reply" | "sticker";
+// bot_options / bot_code / bot_totp: mensajes del asistente automático
+// (ver services/support-bot.service.ts) — text guarda JSON. bot_options =
+// texto + botones de respuesta; bot_code = código ya encontrado;
+// bot_totp = 2FA vigente por unos minutos (el código NUNCA se guarda acá,
+// el cliente lo pide en vivo a /chat/totp/:id mientras no venza).
+export type ChatMessageType =
+  | "text" | "image" | "video" | "account_request" | "account_reply" | "sticker"
+  | "bot_options" | "bot_code" | "bot_totp";
 
 // Catálogo cerrado — ambos lados (cliente y admin) solo pueden mandar un id
 // de esta lista, nunca texto libre, para no abrir una puerta de contenido
@@ -47,6 +54,8 @@ export type Chat = {
   adminTyping:      boolean;
   customerTyping:   boolean;
   tag:              ChatTag;
+  botState:         string | null;
+  botContext:       Record<string, any>;
   createdAt:        string;
   updatedAt:        string;
 };
@@ -72,6 +81,13 @@ function isTypingNow(typingAt: string | null): boolean {
   return Date.now() - at < TYPING_TTL_MS;
 }
 
+function parseJsonObject(raw: unknown): Record<string, any> {
+  try {
+    const v = JSON.parse(String(raw ?? "{}"));
+    return v && typeof v === "object" ? v : {};
+  } catch { return {}; }
+}
+
 function toChat(row: any): Chat {
   return {
     id:             row.id,
@@ -79,6 +95,8 @@ function toChat(row: any): Chat {
     adminTyping:    isTypingNow(row.admin_typing_at),
     customerTyping: isTypingNow(row.customer_typing_at),
     tag:            row.tag === "cerrado" ? "cerrado" : "pendiente",
+    botState:       row.bot_state ?? null,
+    botContext:     parseJsonObject(row.bot_context),
     createdAt:      row.created_at,
     updatedAt:      row.updated_at,
   };
@@ -124,6 +142,12 @@ export function getOrCreateOpenChatForPhone(phone: string): Chat {
 export function listChatsForAdmin(): ChatSummary[] {
   const rows = db.prepare(`SELECT * FROM support_chats ORDER BY updated_at DESC`).all() as any[];
   return rows.flatMap(row => {
+    // Solo el saludo del asistente (el cliente abrió el chat pero no
+    // escribió nada) tampoco cuenta como conversación.
+    const hasCustomer = db.prepare(`
+      SELECT 1 FROM support_chat_messages WHERE chat_id = ? AND sender = 'customer' LIMIT 1
+    `).get(row.id);
+    if (!hasCustomer) return [];
     const last = db.prepare(`
       SELECT type, text, created_at FROM support_chat_messages WHERE chat_id = ? ORDER BY id DESC LIMIT 1
     `).get(row.id) as any;
@@ -136,11 +160,71 @@ export function listChatsForAdmin(): ChatSummary[] {
     `).get(row.id, row.admin_seen_at, row.admin_seen_at) as { n: number };
     return [{
       ...chat,
-      lastMessage:   last.type === "text" ? last.text : (last.type === "image" ? "📷 Foto" : "🎥 Video"),
+      lastMessage:   messagePreview(last.type, last.text),
       lastMessageAt: last.created_at,
       unreadForAdmin: unread.n,
     }];
   });
+}
+
+function messagePreview(type: string, text: string): string {
+  switch (type) {
+    case "text":            return text;
+    case "image":           return "📷 Foto";
+    case "video":           return "🎥 Video";
+    case "sticker":         return "🥭 Sticker";
+    case "account_request": return "📋 Pedido de cuenta";
+    case "account_reply":   return "📋 Cuenta enviada";
+    case "bot_code":        return "🤖 Código enviado";
+    case "bot_totp":        return "🤖 Código 2FA enviado";
+    case "bot_options":     return "🤖 " + String(parseJsonObject(text).text ?? "").split("\n")[0];
+    default:                return "";
+  }
+}
+
+export function getMessageById(id: number): ChatMessage | null {
+  const row = db.prepare(`SELECT * FROM support_chat_messages WHERE id = ?`).get(id);
+  return row ? toMessage(row) : null;
+}
+
+/** true si este chat todavía no tiene ningún mensaje. */
+export function chatHasNoMessages(chatId: number): boolean {
+  return !db.prepare(`SELECT 1 FROM support_chat_messages WHERE chat_id = ? LIMIT 1`).get(chatId);
+}
+
+/** Último mensaje del chat (el más nuevo), si hay. */
+export function getLastMessage(chatId: number): ChatMessage | null {
+  const row = db.prepare(`SELECT * FROM support_chat_messages WHERE chat_id = ? ORDER BY id DESC LIMIT 1`).get(chatId);
+  return row ? toMessage(row) : null;
+}
+
+/** Último mensaje de este tipo en el chat (ej. los últimos botones del asistente). */
+export function getLastMessageOfType(chatId: number, type: ChatMessageType): ChatMessage | null {
+  const row = db.prepare(`
+    SELECT * FROM support_chat_messages WHERE chat_id = ? AND type = ? ORDER BY id DESC LIMIT 1
+  `).get(chatId, type);
+  return row ? toMessage(row) : null;
+}
+
+/** true si el cliente ya escribió algo después de este mensaje — así un
+ *  botón viejo del asistente no se puede volver a tocar. */
+export function hasCustomerMessageAfter(chatId: number, messageId: number): boolean {
+  return !!db.prepare(`
+    SELECT 1 FROM support_chat_messages WHERE chat_id = ? AND sender = 'customer' AND id > ? LIMIT 1
+  `).get(chatId, messageId);
+}
+
+export function setBotState(chatId: number, state: string | null, context: Record<string, any> = {}): void {
+  db.prepare(`UPDATE support_chats SET bot_state = ?, bot_context = ? WHERE id = ?`)
+    .run(state, JSON.stringify(context), chatId);
+}
+
+/** Chats donde el asistente lleva la conversación (no "human") — para el
+ *  barrido de inactividad / 2FA vencido (ver support-bot.service.ts). */
+export function listBotChats(): Chat[] {
+  return (db.prepare(`
+    SELECT * FROM support_chats WHERE bot_state IS NOT NULL AND bot_state != 'human'
+  `).all() as any[]).map(toChat);
 }
 
 export function listMessages(chatId: number, afterId = 0): ChatMessage[] {

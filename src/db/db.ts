@@ -300,6 +300,13 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_support_chats_phone ON support_chats(cli
 // distinto del botón "Cerrar chat", que sí borra todo).
 ensureColumn("support_chats", "tag", "tag TEXT NOT NULL DEFAULT 'pendiente'");
 
+// Asistente automático del chat (ver services/support-bot.service.ts):
+// bot_state = en qué paso va la conversación (NULL = sin asistente,
+// "human" = ya lo atiende una persona); bot_context = JSON con lo que el
+// asistente necesita recordar entre mensajes (ej. cuándo vence el 2FA).
+ensureColumn("support_chats", "bot_state", "bot_state TEXT");
+ensureColumn("support_chats", "bot_context", "bot_context TEXT NOT NULL DEFAULT '{}'");
+
 // type: "text" | "image" | "video". media_url/media_public_id quedan vacíos
 // una vez que el archivo se autodestruye (1 día, ver expiry-chat-media.job.ts)
 // — el mensaje se queda como marcador de que hubo una foto/video ahí.

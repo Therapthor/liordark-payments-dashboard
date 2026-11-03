@@ -6,6 +6,7 @@ import {
 } from "../db/support-chat.repository";
 import { uploadChatMedia, deleteChatMedia } from "../services/cloudinary.service";
 import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
+import { botStepAside } from "../services/support-bot.service";
 
 // ─────────────────────────────────────────────────────────────
 // PANEL ADMIN > CHAT DE SOPORTE — requireAuth se aplica al montar en
@@ -43,6 +44,9 @@ router.post("/:id/messages", (req, res) => {
   const chat = getChatById(chatId);
   if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
 
+  // Escribe una persona: el asistente automático se hace a un lado.
+  botStepAside(chatId);
+
   if (req.body?.type === "sticker") {
     const stickerId = String(req.body?.stickerId ?? "");
     if (!isValidStickerId(stickerId)) return res.status(400).json({ message: "Sticker no válido." });
@@ -68,6 +72,7 @@ router.post("/:id/messages/code-reference", (req, res) => {
   const chat = getChatById(chatId);
   if (!chat) return res.status(404).json({ message: "Chat no encontrado." });
 
+  botStepAside(chatId);
   const message = addMessage(chatId, "admin", {
     type: "image", mediaUrl: "/assets/codigo-referencia-1.png", mediaResourceType: "image",
   });
@@ -88,6 +93,7 @@ router.post("/:id/messages/media", upload.single("file"), async (req, res) => {
   if (!isImage && !isVideo) return res.status(400).json({ message: "Solo se pueden enviar fotos o videos." });
 
   try {
+    botStepAside(chatId);
     const { url, publicId } = await uploadChatMedia(file.buffer, isImage ? "image" : "video");
     const message = addMessage(chatId, "admin", {
       type: isImage ? "image" : "video", mediaUrl: url, mediaPublicId: publicId,

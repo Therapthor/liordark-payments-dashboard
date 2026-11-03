@@ -1297,6 +1297,9 @@ button, input {
 
 .chat-quick-tag { display: block; font-size: 11px; font-weight: 700; color: var(--accent-dim); margin-bottom: 4px; }
 .chat-account-card { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 180px; }
+.chat-bot-text { white-space: pre-line; }
+.chat-bot-options { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chat-bot-option { font-size: 11px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; opacity: .8; }
 .chat-account-card-title { font-weight: 700; margin-bottom: 2px; }
 .chat-send-to-provider-btn { margin-top: 6px; align-self: flex-start; }
 

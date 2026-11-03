@@ -176,6 +176,15 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
   return CON_OPCIONES_ACTIONS.find(a => a.id === result.sourceAction)?.adminOnly ?? false;
 }
 
+/** true si este resultado NO se le puede entregar al cliente: el de 6
+ *  dígitos de Netflix "sin opciones" (cambio de datos de la cuenta) y las
+ *  sub-acciones sensibles de "con opciones". Lo ve solo el admin. */
+export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
+  if (!result.found) return false;
+  const netflix6 = sourceId === "netflix_sin_opciones" && result.kind === "code" && result.value?.length === 6;
+  return netflix6 || isSensitiveResult(result);
+}
+
 /** Sub-acciones de una fuente, para que el admin elija puntualmente qué
  *  consultar (ej. "solo el código de 6 dígitos") en vez de probarlas
  *  todas a ciegas — null si la fuente no tiene sub-acciones. */

@@ -197,6 +197,30 @@
         </div>`;
     } else if (m.type === "text") {
       body = linkifyText(m.text);
+    } else if (m.type === "bot_options" || m.type === "bot_code" || m.type === "bot_totp") {
+      // Asistente automático (ver support-bot.service.ts) — solo lectura acá.
+      let p = {};
+      try { p = JSON.parse(m.text) || {}; } catch { /* texto raro — se ignora */ }
+      const tag = `<span class="chat-quick-tag">🤖 Asistente</span>`;
+      if (m.type === "bot_options") {
+        const opts = Array.isArray(p.options) ? p.options : [];
+        body = tag + `<div class="chat-bot-text">${linkifyText(p.text || "")}</div>` +
+          (opts.length ? `<div class="chat-bot-options">${opts.map(o => `<span class="chat-bot-option">${escapeHtml(o.label)}</span>`).join("")}</div>` : "");
+      } else if (m.type === "bot_code") {
+        body = tag + `<div class="chat-account-card">
+          <div class="chat-account-card-title">🔑 ${escapeHtml(p.platform || "")}</div>
+          <div><b>Correo:</b> ${escapeHtml(p.email || "")}</div>
+          <div><b>${p.kind === "link" ? "Enlace" : "Código"}:</b> ${p.kind === "link" ? linkifyText(p.value || "") : escapeHtml(p.value || "")}</div>
+          ${p.received ? `<div><b>Recibido:</b> ${escapeHtml(p.received)}</div>` : ""}
+        </div>`;
+      } else {
+        body = tag + `<div class="chat-account-card">
+          <div class="chat-account-card-title">🔐 2FA entregado · ${escapeHtml(p.platform || "")}</div>
+          <div><b>Correo:</b> ${escapeHtml(p.email || "")}</div>
+          <div>Visible para el cliente por 2 minutos.</div>
+        </div>`;
+      }
+      body = body.replace(/>\s+</g, "><").trim(); // la burbuja usa white-space: pre-line
     } else if (m.type === "sticker") {
       const s = CHAT_STICKER_MAP[m.text];
       return `

@@ -36,6 +36,7 @@ import { limaTodayISO, runRenewalCutover } from "./services/access.service";
 import { disableInactiveWholesalers } from "./db/wholesaler.repository";
 import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
 import { runExpireChatMedia } from "./jobs/expiry-chat-media.job";
+import { runSupportBotSweep } from "./services/support-bot.service";
 
 const app = express();
 
@@ -138,6 +139,9 @@ const server = app.listen(env.PORT, () => {
 
   runExpireChatMediaJob();
   setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);
+
+  // Asistente del chat: cierra solo por inactividad (5 min) o al vencer el 2FA.
+  setInterval(runSupportBotSweepJob, SUPPORT_BOT_SWEEP_INTERVAL_MS);
 
   // Códigos apagado por ahora (el reenvío de Gmail resultó más complicado
   // de lo esperado) — no se arranca el poller ni la limpieza periódica.
@@ -249,6 +253,17 @@ function scheduleRenewalCutoverDaily(): void {
 // Fotos/videos del chat de soporte autodestruidos al día — cada 15 min
 // alcanza de sobra (no hace falta borrarlos al segundo exacto).
 const CHAT_MEDIA_EXPIRY_INTERVAL_MS = 15 * 60 * 1000;
+
+const SUPPORT_BOT_SWEEP_INTERVAL_MS = 10 * 1000;
+
+let supportBotSweepRunning = false;
+function runSupportBotSweepJob(): void {
+  if (supportBotSweepRunning) return;
+  supportBotSweepRunning = true;
+  runSupportBotSweep()
+    .catch((err: any) => console.error("⚠️ Error en el barrido del asistente del chat:", err?.message))
+    .finally(() => { supportBotSweepRunning = false; });
+}
 
 function runExpireChatMediaJob(): void {
   runExpireChatMedia().catch((err: any) => {
