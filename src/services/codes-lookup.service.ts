@@ -17,6 +17,10 @@ export type CodeLookupResult = {
   // "code" = dígitos (4 o 6); "link" = enlace de inicio de sesión.
   kind:  "code" | "link" | null;
   value: string | null;
+  // Para "PallyStore con opciones": cuál de las 6 sub-acciones respondió
+  // esto — algunas son sensibles aunque la cuenta esté configurada con
+  // la fuente "normal" (ver CON_OPCIONES_ACTIONS / isSensitiveResult).
+  sourceAction?: string;
 };
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
@@ -65,10 +69,12 @@ function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
 // la página muestre un menú de 6 botones ("¿Qué necesitas?") en vez de
 // entregar un solo resultado. Cada botón manda su propio accion_codigo
 // (tg_1..tg_6, confirmado por orden de aparición en el menú) sobre el
-// mismo correo+clave. 3 de los 6 quedan solo para el admin (Definir
-// Hogar, Link Contraseña, Código 6 dígitos — más sensibles/menos
-// relevantes para el cliente), el resto sí puede asignarse a cuentas de
-// clientes (ver adminOnly más abajo / listCodeSources).
+// mismo correo+clave. Es UNA sola fuente (no 6 separadas): al consultar
+// se prueban las 6 en orden y se usa la primera que responda algo. 3 de
+// las 6 (Definir Hogar, Link Contraseña, Código 6 dígitos) son sensibles
+// — si la que respondió es una de esas, nunca se entrega al cliente
+// (igual que ya pasa con los códigos de 6 dígitos de "sin opciones"),
+// pero el admin sí las ve todas desde el mismo lugar.
 //
 // El HTML de "no encontrado" acá es distinto al de "sin opciones" (texto
 // confirmado por captura real). El de encontrado todavía no se vio en
@@ -127,42 +133,53 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
 type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion: string };
 
 const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
-  { id: "definir_hogar",    label: "PallyStore con opciones — Definir Hogar",         adminOnly: true,  accion: "tg_1" },
-  { id: "codigo_hogar",     label: "PallyStore con opciones — Código Hogar",          adminOnly: false, accion: "tg_2" },
-  { id: "link_contrasena",  label: "PallyStore con opciones — Link Contraseña",       adminOnly: true,  accion: "tg_3" },
-  { id: "codigo_login",     label: "PallyStore con opciones — Código Inicio Sesión",  adminOnly: false, accion: "tg_4" },
-  { id: "codigo_6_digitos", label: "PallyStore con opciones — Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
-  { id: "link_login",       label: "PallyStore con opciones — Link Inicio Sesión",    adminOnly: false, accion: "tg_6" },
+  { id: "definir_hogar",    label: "Definir Hogar",         adminOnly: true,  accion: "tg_1" },
+  { id: "codigo_hogar",     label: "Código Hogar",          adminOnly: false, accion: "tg_2" },
+  { id: "link_contrasena",  label: "Link Contraseña",       adminOnly: true,  accion: "tg_3" },
+  { id: "codigo_login",     label: "Código Inicio Sesión",  adminOnly: false, accion: "tg_4" },
+  { id: "codigo_6_digitos", label: "Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
+  { id: "link_login",       label: "Link Inicio Sesión",    adminOnly: false, accion: "tg_6" },
 ];
 
-type Source = { label: string; adminOnly: boolean; lookup: (email: string) => Promise<CodeLookupResult> };
+/** Prueba las 6 sub-acciones en orden sobre el mismo correo y se queda
+ *  con la primera que responda algo — una sola llamada sirve tanto para
+ *  el cliente (más abajo se filtran las sensibles) como para el admin. */
+async function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult> {
+  for (const action of CON_OPCIONES_ACTIONS) {
+    let result: CodeLookupResult;
+    try {
+      result = await fetchFromPallyDigitalConOpciones(email, "gustavo", action.accion);
+    } catch {
+      continue;
+    }
+    if (result.found) return { ...result, sourceAction: action.id };
+  }
+  return { found: false, kind: null, value: null };
+}
+
+/** true si el resultado vino de una de las 3 sub-acciones sensibles de
+ *  "con opciones" — nunca se entrega al cliente aunque la cuenta esté
+ *  configurada con esta fuente (igual criterio que el de 6 dígitos de
+ *  "sin opciones", ver store.routes.ts). */
+export function isSensitiveResult(result: CodeLookupResult): boolean {
+  if (!result.sourceAction) return false;
+  return CON_OPCIONES_ACTIONS.find(a => a.id === result.sourceAction)?.adminOnly ?? false;
+}
+
+type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
 const SOURCES: Record<string, Source> = {
-  netflix_sin_opciones: { label: "PallyStore sin opciones", adminOnly: false, lookup: lookupNetflixSinOpciones },
-  ...Object.fromEntries(CON_OPCIONES_ACTIONS.map(a => [
-    `netflix_con_opciones_${a.id}`,
-    { label: a.label, adminOnly: a.adminOnly, lookup: (email: string) => fetchFromPallyDigitalConOpciones(email, "gustavo", a.accion) },
-  ])),
+  netflix_sin_opciones: { label: "PallyStore sin opciones", lookup: lookupNetflixSinOpciones },
+  netflix_con_opciones: { label: "PallyStore con opciones", lookup: lookupNetflixConOpciones },
 };
 
-/** Fuentes que se le pueden asignar a una cuenta de cliente — las
- *  admin-only (más sensibles) solo salen en el buscador libre del admin
- *  (ver lookupAnySource), nunca en este desplegable. */
 export function listCodeSources(): { id: string; label: string }[] {
-  return Object.entries(SOURCES).filter(([, s]) => !s.adminOnly).map(([id, s]) => ({ id, label: s.label }));
+  return Object.entries(SOURCES).map(([id, s]) => ({ id, label: s.label }));
 }
 
 export function codeSourceLabel(sourceId: string | null): string {
   if (!sourceId) return "";
   return SOURCES[sourceId]?.label || sourceId;
-}
-
-/** true si esta fuente es sensible y nunca debe entregarse a un cliente
- *  (ver listCodeSources) — defensa aparte, por si una cuenta quedó con
- *  este código a mano en la base de datos. */
-export function isAdminOnlySource(sourceId: string | null): boolean {
-  if (!sourceId) return false;
-  return SOURCES[sourceId]?.adminOnly ?? false;
 }
 
 /** Una sola consulta puntual, sin reintentos — para el botón admin "Consultar ahora". */

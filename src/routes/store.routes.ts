@@ -19,7 +19,7 @@ import {
   getAccountCodeSource,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeWithRetries, isAdminOnlySource } from "../services/codes-lookup.service";
+import { lookupCodeWithRetries, isSensitiveResult } from "../services/codes-lookup.service";
 import {
   createCustomerNotification,
   listCustomerNotifications,
@@ -394,7 +394,7 @@ router.post("/codes/:accountId/request", async (req, res) => {
   }
 
   const sourceId = getAccountCodeSource(accountId);
-  if (!sourceId || isAdminOnlySource(sourceId)) {
+  if (!sourceId) {
     return res.status(409).json({ message: "Esta cuenta todavía no tiene configurada de dónde sacar el código. Avísanos por soporte." });
   }
 
@@ -404,15 +404,17 @@ router.post("/codes/:accountId/request", async (req, res) => {
     saveIncomingCode({ accountId, code: result.value, snippet: "", source: "external" });
   }
 
-  // Los de 6 dígitos son más sensibles (cambio de datos de la cuenta) —
-  // quedan guardados arriba para que el admin los vea, pero acá se
-  // responde como si no se hubiera encontrado nada.
-  if (result.found && result.kind === "code" && result.value?.length === 6) {
-    return res.json({ code: null, receivedAt: null });
+  // Los de 6 dígitos (y, en "PallyStore con opciones", las 3 sub-acciones
+  // sensibles) son más delicados — quedan guardados arriba para que el
+  // admin los vea, pero acá se responde como si no se hubiera encontrado
+  // nada.
+  if (result.found && ((result.kind === "code" && result.value?.length === 6) || isSensitiveResult(result))) {
+    return res.json({ code: null, link: null, receivedAt: null });
   }
 
   res.json({
     code:       result.found && result.kind === "code" ? result.value : null,
+    link:       result.found && result.kind === "link" ? result.value : null,
     receivedAt: result.found ? new Date().toISOString() : null,
   });
 });

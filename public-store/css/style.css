@@ -1028,6 +1028,8 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 }
 @keyframes codesPop { to { opacity: 1; transform: scale(1); } }
 
+.codes-open-link-btn { display: inline-block; text-decoration: none; margin-bottom: 4px; }
+
 .codes-fail-msg { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
 
 .codes-retry-btn {
