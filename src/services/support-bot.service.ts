@@ -26,6 +26,7 @@ import { emitChatEvent } from "../utils/chat-events.util";
 // Estados (support_chats.bot_state):
 //   menu            → saludó / espera que elija qué necesita
 //   code_pick       → eligiendo de qué cuenta quiere el código
+//   code_device     → Netflix: eligiendo dispositivo / guiado para pedir el código
 //   code_searching  → buscando el código en la página del proveedor
 //   code_result     → ya entregó (o no encontró) el código
 //   totp_active     → mostrando un 2FA que vence en TOTP_WINDOW_MS
@@ -211,6 +212,65 @@ function showCodeAccounts(chat: Chat, phone: string): void {
   setBotState(chat.id, "code_pick", chat.botContext);
 }
 
+// ─────────────────────────────────────────────────────────────
+// NETFLIX — antes de buscar el código se pregunta en qué dispositivo va a
+// iniciar sesión, para guiarlo bien: en celular/PC se pide «Usar un código
+// de inicio de sesión» (4 dígitos); en la TV no se puede pedir directo —
+// primero inicia sesión en el celular o PC y luego escanea el QR de la TV.
+// Recién cuando el cliente toca «✅ Ya lo pedí» se consulta al proveedor
+// (así no se busca antes de que el código exista).
+// ─────────────────────────────────────────────────────────────
+
+function findCodesAccount(phone: string, accountId: number) {
+  return listClientCodesAccounts(phone).find(a => a.accountId === accountId) ?? null;
+}
+
+function askLoginDevice(chat: Chat, phone: string, accountId: number): Promise<void> | void {
+  const account = findCodesAccount(phone, accountId);
+  if (!account || account.totpSecret || !/netflix/i.test(account.platform)) {
+    return startCodeLookup(chat, phone, accountId);
+  }
+  say(chat.id, "¿En qué dispositivo vas a iniciar sesión? 👇", [
+    { id: `dev:${accountId}|movil`, label: "📱 Celular o tablet" },
+    { id: `dev:${accountId}|pc`,    label: "💻 Laptop o PC" },
+    { id: `dev:${accountId}|tv`,    label: "📺 TV" },
+    BACK_OPTION,
+  ]);
+  setBotState(chat.id, "code_device", { ...chat.botContext, accountId });
+}
+
+function guideLoginDevice(chat: Chat, phone: string, accountId: number, device: string): void {
+  const account = findCodesAccount(phone, accountId);
+  if (!account) {
+    showMenu(chat, "Esa cuenta ya no figura como activa en tu perfil 🤔. ¿Te ayudo con otra cosa?");
+    return;
+  }
+  const ready = { id: `go:${accountId}`, label: "✅ Ya lo pedí" };
+
+  if (device === "tv") {
+    say(chat.id,
+      "📺 En la TV no se puede pedir el código directamente. Hazlo así:\n" +
+      "1️⃣ Primero inicia sesión en tu celular (app de Netflix) o en tu laptop/PC con el código de 4 dígitos que te doy aquí.\n" +
+      "2️⃣ Luego, en la TV elige «Iniciar sesión con el celular» y escanea el código QR con ese celular ✅\n\n" +
+      "¿Dónde vas a iniciar sesión primero?", [
+        { id: `dev:${accountId}|movil`, label: "📱 En mi celular" },
+        { id: `dev:${accountId}|pc`,    label: "💻 En mi laptop o PC" },
+        BACK_OPTION,
+      ]);
+    setBotState(chat.id, "code_device", { ...chat.botContext, accountId });
+    return;
+  }
+
+  const where = device === "pc"
+    ? "Entra a netflix.com en tu navegador"
+    : "Abre la app de Netflix";
+  say(chat.id,
+    `${device === "pc" ? "💻" : "📱"} ${where} → toca «Iniciar sesión» → escribe el correo ${account.email} → ` +
+    "elige «Usar un código de inicio de sesión».\n" +
+    "Cuando Netflix te diga que envió el código, toca «✅ Ya lo pedí» y te paso el código de 4 dígitos 🔢", [ready, BACK_OPTION]);
+  setBotState(chat.id, "code_device", { ...chat.botContext, accountId, device });
+}
+
 async function deliverTotp(chat: Chat, accountId: number, platform: string, email: string): Promise<void> {
   const expiresAt = new Date(Date.now() + TOTP_WINDOW_MS).toISOString();
   const message = addMessage(chat.id, "admin", {
@@ -253,17 +313,10 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
   // Netflix: solo se entrega el código de inicio de sesión de 4 dígitos.
   // En la TV no se puede pedir directo — se recuerda el paso previo.
   const isNetflix = /netflix/i.test(account.platform);
-  if (isNetflix) {
-    say(chat.id,
-      "📺 ¿Vas a entrar en tu TV? Primero inicia sesión en tu celular, laptop o PC con el código que te doy aquí. " +
-      "Luego, desde ese celular, escanea el código QR que aparece en la TV y listo ✅\n" +
-      "(Desde la TV directamente no se puede.)");
-  }
-  say(chat.id,
-    `🔎 Buscando tu código de ${account.platform}…\n` +
-    (isNetflix
-      ? "Si aún no lo pediste: en la app toca «Iniciar sesión» → «Usar un código de inicio de sesión». Te llega un código de 4 dígitos. Puede tardar hasta 1 minuto ⏳"
-      : "Si aún no lo pediste, solicítalo ahora en la app o página (botón «Enviar código» al iniciar sesión). Puede tardar hasta 1 minuto ⏳"));
+  say(chat.id, isNetflix
+    ? "🔎 Buscando tu código de inicio de sesión de 4 dígitos… Puede tardar hasta 1 minuto ⏳"
+    : `🔎 Buscando tu código de ${account.platform}…\n` +
+      "Si aún no lo pediste, solicítalo ahora en la app o página (botón «Enviar código» al iniciar sesión). Puede tardar hasta 1 minuto ⏳");
   setBotState(chat.id, "code_searching", { ...chat.botContext, lookups, accountId });
   typing(chat.id, true);
 
@@ -450,7 +503,12 @@ async function handleOption(chat: Chat, phone: string, optionId: string): Promis
   if (optionId === "done") return closeWithThanks(chat.id, pick(THANKS));
 
   const [kind, rest = ""] = splitOnce(optionId, ":");
-  if (kind === "code" || kind === "retry") return startCodeLookup(chat, phone, Number(rest));
+  if (kind === "code")  return askLoginDevice(chat, phone, Number(rest));
+  if (kind === "dev") {
+    const [id = "", device = ""] = rest.split("|");
+    return guideLoginDevice(chat, phone, Number(id), device);
+  }
+  if (kind === "go" || kind === "retry") return startCodeLookup(chat, phone, Number(rest));
   if (kind === "products") return showProducts(chat, Math.max(1, Number(rest) || 1));
   if (kind === "buy")      return showPitch(chat, rest);
   if (kind === "buynow")   return confirmPurchase(chat, rest);
@@ -492,6 +550,17 @@ async function handleText(chat: Chat, phone: string, text: string): Promise<void
   if (state === "totp_active") {
     say(chat.id, "👆 Tu código 2FA está arriba y se actualiza solo. Cópialo antes de que expire.");
     return;
+  }
+
+  if (state === "code_device") {
+    const id = Number(chat.botContext.accountId);
+    const t = normalize(text);
+    if (/\b(ya|listo|lo pedi|pedido|enviado|me llego)\b/.test(t) && chat.botContext.device) return handleOption(chat, phone, `go:${id}`);
+    if (/\b(tv|tele|televisor|television|smart)\b/.test(t)) return handleOption(chat, phone, `dev:${id}|tv`);
+    if (/\b(laptop|pc|computadora|compu|navegador|notebook)\b/.test(t)) return handleOption(chat, phone, `dev:${id}|pc`);
+    if (/\b(celular|cel|telefono|movil|tablet|ipad|iphone|android)\b/.test(t)) return handleOption(chat, phone, `dev:${id}|movil`);
+    const match = matchOptionByText(text, lastOptions(chat.id));
+    if (match) return handleOption(chat, phone, match.id);
   }
 
   if (state === "code_pick" || state === "issue_pick") {
