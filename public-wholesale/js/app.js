@@ -526,12 +526,12 @@
   async function handleRenew(client) {
     const product   = catalogItem(client.platform);
     const priceLine = product ? `Se descontará S/ ${product.wholesalePrice} de tu saldo.` : "Se descontará el precio mayorista de tu saldo.";
-    if (!confirm(`¿Renovar "${client.platform}" de ${client.clientPhone}?\n${priceLine}\nLa cuenta se extiende 30 días.`)) return;
+    if (!confirm(`¿Renovar "${client.platform}" de ${client.clientPhone}?\n${priceLine}\nLa renovación se activa cuando confirmemos la cuenta con el proveedor.`)) return;
     try {
       const { account, pending, message } = await api(`/clients/${client.id}/renew`, { method: "POST" });
-      // Cuenta completa: el pago queda registrado pero la fecha recién se
-      // extiende cuando confirmamos con el proveedor (ver "Renovados").
-      if (pending) alert(message || "✅ Pago recibido. Tu renovación se activa apenas confirmemos con el proveedor.");
+      // Cuenta con perfiles: el pago queda registrado y los días se suman
+      // cuando confirmamos la cuenta con el proveedor (ver "Renovados").
+      if (pending) { alert(message || "✅ Pago recibido. La renovación se activa apenas confirmemos con el proveedor."); client.renewalStatus = "yes"; }
       else client.expiresAt = account ? account.expiresAt : client.expiresAt;
       renderClients();
       await refreshBalance();

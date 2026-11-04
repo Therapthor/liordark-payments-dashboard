@@ -2,11 +2,11 @@
   "use strict";
 
   // ─────────────────────────────────────────────────────────────
-  // RENOVADOS (Pagos > Renovaciones) — cuentas completas que el cliente
-  // (web o mayorista) ya pagó para renovar, esperando al proveedor. Ver
-  // src/db/full-renewals.repository.ts. Dos salidas:
-  //   ✅ El proveedor ya renovó → se extiende la misma cuenta según el plan.
-  //   📦 Enviar cuenta nueva   → otra cuenta (stock o a mano) con la fecha pagada.
+  // RENOVADOS (Pagos > Renovaciones) — cuentas con perfiles donde algún
+  // cliente (web o mayorista) ya pagó su renovación. La cuenta entera no
+  // suma días sola (ver confirmCycleRenewal en access.service.ts):
+  //   ✅ Confirmar renovación → +30 días a la cuenta (ya renovada con el proveedor).
+  //   📦 Enviar cuenta nueva  → mueve a los que pagaron a otra cuenta, con su fecha nueva.
   // ─────────────────────────────────────────────────────────────
 
   async function api(path, options = {}) {
@@ -45,22 +45,21 @@
     const li = document.createElement("li");
     li.className = "catalog-item";
     li.dataset.id = r.id;
-    const who = r.wholesalerId != null
-      ? `🏪 Mayorista ${escapeHtml(r.wholesalerName || "")} · cliente ${escapeHtml(r.clientPhone)}`
-      : `👤 Cliente web ${escapeHtml(r.clientPhone)}`;
+    const payers = r.renewing.map(p =>
+      (p.wholesalerId != null ? "🏪 " : "👤 ") + escapeHtml(p.clientPhone) + (p.profileName ? ` (${escapeHtml(p.profileName)})` : "")
+    ).join(", ");
     li.innerHTML = `
       <div class="catalog-thumb catalog-thumb-empty">♻️</div>
       <div class="catalog-main">
-        <div class="catalog-name">${escapeHtml(r.platform)} — ${escapeHtml(r.accountEmail)}</div>
+        <div class="catalog-name">${escapeHtml(r.platform)} — ${escapeHtml(r.email)}</div>
         <div class="catalog-desc">
-          ${who}<br>
-          💰 Pagó: ${fmtDate(r.createdAt)} · 📅 Vence: ${fmtDate(r.accountExpiresAt)} ${daysBadge(r.daysLeft)}<br>
-          🗓️ Plan: ${r.planDays === 365 ? "anual" : r.planDays + " días"} → nueva fecha: <b>${fmtDate(r.targetExpiresAt)}</b>
+          💰 Pagaron ${r.renewing.length} de ${r.occupiedCount}: ${payers}<br>
+          📅 Vence: ${fmtDate(r.expiresAt)} ${daysBadge(r.daysLeft)} → al confirmar: <b>${fmtDate(r.newExpiresAt)}</b>
         </div>
       </div>
       <div class="catalog-actions">
-        <button class="btn-primary btn-sm full-renewal-done-btn" type="button" title="El proveedor ya renovó esta misma cuenta">✅ Proveedor ya renovó</button>
-        <button class="btn-secondary btn-sm full-renewal-new-btn" type="button" title="Enviarle al cliente otra cuenta">📦 Enviar cuenta nueva</button>
+        <button class="btn-primary btn-sm full-renewal-done-btn" type="button" title="Ya renovaste esta cuenta con el proveedor">✅ Confirmar renovación</button>
+        <button class="btn-secondary btn-sm full-renewal-new-btn" type="button" title="Mover a los que pagaron a otra cuenta">📦 Enviar cuenta nueva</button>
       </div>
     `;
     return li;
@@ -81,8 +80,8 @@
 
   async function load() {
     try {
-      const { renewals } = await api("/full-renewals");
-      cached = renewals || [];
+      const { accounts } = await api("/cycle-renewals");
+      cached = accounts || [];
       render();
     } catch (err) {
       const list = document.getElementById("full-renewals-list");
@@ -93,7 +92,7 @@
   async function openNewAccountModal(r) {
     currentId = r.id;
     document.getElementById("full-renewal-modal-info").innerHTML =
-      `${escapeHtml(r.platform)} de <b>${escapeHtml(r.clientPhone)}</b> — la cuenta nueva quedará con vencimiento <b>${fmtDate(r.targetExpiresAt)}</b>.`;
+      `${escapeHtml(r.platform)}: se mueven los <b>${r.renewing.length}</b> cliente(s) que pagaron, con vencimiento <b>${fmtDate(r.newExpiresAt)}</b>. Los que no pagaron se quedan en la cuenta actual hasta que venza.`;
     document.getElementById("full-renewal-email").value = "";
     document.getElementById("full-renewal-password").value = "";
     document.getElementById("full-renewal-error").hidden = true;
@@ -101,10 +100,10 @@
     select.innerHTML = `<option value="">Cargando…</option>`;
     document.getElementById("full-renewal-modal").hidden = false;
     try {
-      const { accounts } = await api(`/full-renewals/${r.id}/candidates`);
+      const { accounts } = await api(`/cycle-renewals/${r.id}/candidates`);
       select.innerHTML = `<option value="">— Ninguna (escribir a mano) —</option>` +
-        accounts.map(a => `<option value="${a.id}">${escapeHtml(a.email)} · vence ${fmtDate(a.expiresAt)}</option>`).join("");
-      if (accounts.length === 0) select.innerHTML = `<option value="">No hay cuentas completas libres de ${escapeHtml(r.platform)}</option>`;
+        accounts.map(a => `<option value="${a.id}">${escapeHtml(a.email)} · ${a.freeCount} libres · vence ${fmtDate(a.expiresAt)}</option>`).join("");
+      if (accounts.length === 0) select.innerHTML = `<option value="">No hay cuentas de ${escapeHtml(r.platform)} con ${r.renewing.length} cupo(s) libre(s)</option>`;
     } catch (err) {
       select.innerHTML = `<option value="">${escapeHtml(err.message)}</option>`;
     }
@@ -121,11 +120,11 @@
       if (!r) return;
 
       if (e.target.closest(".full-renewal-done-btn")) {
-        if (!confirm(`¿El proveedor ya renovó "${r.platform} — ${r.accountEmail}"?\n\nSe extiende hasta el ${fmtDate(r.targetExpiresAt)} y se le avisa al cliente.`)) return;
+        if (!confirm(`¿Ya renovaste "${r.platform} — ${r.email}" con el proveedor?\n\nLa cuenta pasa a vencer el ${fmtDate(r.newExpiresAt)}, se avisa a los ${r.renewing.length} que pagaron, y a los que no pagaron se les saca en su fecha de vencimiento.`)) return;
         const btn = e.target.closest("button");
         btn.disabled = true;
         try {
-          await api(`/full-renewals/${r.id}/provider-renewed`, { method: "POST" });
+          await api(`/cycle-renewals/${r.id}/confirm`, { method: "POST" });
           await load();
         } catch (err) {
           alert(err.message || "No se pudo confirmar.");
@@ -153,7 +152,7 @@
       btn.disabled = true;
       try {
         const body = targetAccountId ? { targetAccountId } : { newEmail, newPassword };
-        await api(`/full-renewals/${currentId}/send-new`, { method: "POST", body: JSON.stringify(body) });
+        await api(`/cycle-renewals/${currentId}/send-new`, { method: "POST", body: JSON.stringify(body) });
         document.getElementById("full-renewal-modal").hidden = true;
         await load();
       } catch (err) {

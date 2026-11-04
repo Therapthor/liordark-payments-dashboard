@@ -970,6 +970,20 @@ function findFreeProfileId(accountId: number): number | null {
   return row ? row.id : null;
 }
 
+/** Cuentas con perfiles de esa plataforma, vigentes y con al menos
+ *  `minFree` cupos libres — destino para "Enviar cuenta nueva" (Renovados). */
+export function listAccountsWithFreeProfiles(platform: string, minFree: number, todayISO: string):
+  { id: number; email: string; expiresAt: string | null; freeCount: number }[] {
+  return db.prepare(`
+    SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt,
+           (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND p.client_phone = '') AS freeCount
+    FROM access_accounts a
+    WHERE a.platform = ? AND a.has_profiles = 1 AND (a.expires_at IS NULL OR a.expires_at >= ?)
+      AND (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND p.client_phone = '') >= ?
+    ORDER BY a.expires_at DESC
+  `).all(platform.trim().toUpperCase(), todayISO, minFree) as { id: number; email: string; expiresAt: string | null; freeCount: number }[];
+}
+
 /** Reemplazo de pool: mueve al cliente a un perfil libre de `targetAccountId`
  *  (llena o fresca, da igual), conservando su fecha anterior. Si es un
  *  cliente de mayorista, el perfil destino queda marcado como suyo (mismo

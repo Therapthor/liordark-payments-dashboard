@@ -387,7 +387,7 @@
           <h2>Corte de renovación</h2>
           <button id="renewal-cutover-run-btn" class="btn-secondary btn-sm" type="button">🔁 Procesar ahora</button>
         </div>
-        <p class="panel-hint">Automático a las 6am: extiende 30 días a quien ya pagó (1 día antes de vencer) y saca a quien no renovó. El botón de arriba lo dispara a mano para un caso puntual.</p>
+        <p class="panel-hint">Automático a las 6am: saca a quien no renovó en las cuentas que ya confirmaste en "Renovados" (en su fecha de vencimiento original). Ya no suma días solo — eso se confirma en "Renovados".</p>
         <p id="renewal-cutover-status" class="panel-hint" hidden></p>
 
         <div class="panel-header standalone">
@@ -416,17 +416,17 @@
              se venden al cliente como plan anual pero Liordark las paga
              mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
              Va primero: es lo que más importa revisar acá. -->
-        <!-- RENOVADOS — cuentas completas cuya renovación ya se pagó (cliente
-             web o mayorista) pero que todavía no se activa con el proveedor.
-             Ver public/js/full-renewals.js. -->
+        <!-- RENOVADOS — cuentas con perfiles donde algún cliente ya pagó su
+             renovación; la cuenta entera espera la confirmación del admin
+             (ya renovada con el proveedor). Ver public/js/full-renewals.js. -->
         <div class="panel-header standalone">
           <h2>Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
         </div>
 
-        <p class="panel-hint">Cuentas completas que el cliente ya pagó para renovar, esperando al proveedor. No se extienden solas: confirma cuando el proveedor la renueve, o envíale al cliente una cuenta nueva.</p>
+        <p class="panel-hint">Cuentas donde algún cliente ya pagó su renovación. La cuenta no suma días sola: confirma cuando ya la renovaste con el proveedor (+30 días), o envía a los que pagaron a otra cuenta.</p>
 
         <ul id="full-renewals-list" class="catalog-list"></ul>
-        <p id="full-renewals-empty" class="feed-empty" hidden>No hay renovaciones de cuentas completas esperando. 🎉</p>
+        <p id="full-renewals-empty" class="feed-empty" hidden>No hay cuentas esperando confirmación de renovación. 🎉</p>
 
         <div class="panel-header standalone">
           <h2>Renovación con proveedor</h2>
@@ -865,7 +865,7 @@
         <button type="button" class="modal-x" data-close-modal="full-renewal-modal">✕</button>
       </div>
       <p id="full-renewal-modal-info" class="panel-hint"></p>
-      <label>Del stock (cuentas completas libres)
+      <label>Del stock (cuentas con cupos libres)
         <select id="full-renewal-stock"></select>
       </label>
       <p class="panel-hint">…o escríbela a mano (si no eliges del stock):</p>

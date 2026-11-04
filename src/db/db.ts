@@ -208,29 +208,6 @@ ensureColumn("access_accounts", "activation_pending", "activation_pending INTEGE
 ensureColumn("access_accounts", "renewal_cleanup_due_at", "renewal_cleanup_due_at TEXT");
 ensureColumn("access_accounts", "password_change_pending", "password_change_pending INTEGER NOT NULL DEFAULT 0");
 
-// RENOVADOS — renovaciones YA PAGADAS de cuentas completas que todavía no
-// se activan con el proveedor (ver full-renewals.repository.ts). A
-// diferencia de los perfiles, una cuenta completa no se extiende sola al
-// pagar: el admin confirma que el proveedor renovó, o le manda al cliente
-// una cuenta nueva. status: pending | renewed | new_account.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS full_account_renewals (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id    INTEGER NOT NULL,
-    platform      TEXT    NOT NULL,
-    account_email TEXT    NOT NULL DEFAULT '',
-    client_phone  TEXT    NOT NULL,
-    wholesaler_id INTEGER,
-    order_ref     TEXT    NOT NULL UNIQUE,
-    plan_days     INTEGER NOT NULL DEFAULT 30,
-    status        TEXT    NOT NULL DEFAULT 'pending',
-    resolution    TEXT    NOT NULL DEFAULT '',
-    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
-    resolved_at   TEXT
-  );
-  CREATE INDEX IF NOT EXISTS idx_full_account_renewals_status ON full_account_renewals(status);
-`);
-
 db.exec(`
   CREATE TABLE IF NOT EXISTS account_codes (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
