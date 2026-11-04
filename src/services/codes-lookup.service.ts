@@ -29,6 +29,45 @@ export type CodeLookupResult = {
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
 
+/**
+ * Página de resultado de codes.pally.digital (formato confirmado con una
+ * respuesta real, nov-2026): "Consulta Satisfactoria", "Asunto: Netflix ·
+ * Link Inicio Sesión", "Fecha de recepción: 04/11/2026 18:33", y el cuerpo
+ * en .email-body-wrapper → .codigo-resumen con un botón
+ * <a href='https://www.netflix.com/…'> "Iniciar sesión en Netflix" (el
+ * href viene con &amp; — se decodifica, si no el enlace llega roto) o el
+ * código en texto. null = la página no tiene ese formato (se usa el
+ * extractor anterior de respaldo).
+ */
+export function parsePallyResultPage(html: string): CodeLookupResult | null {
+  const wrapperStart = html.indexOf("email-body-wrapper");
+  if (wrapperStart === -1) return null;
+  const formStart = html.indexOf("<form", wrapperStart);
+  const wrapper = html.slice(wrapperStart, formStart === -1 ? undefined : formStart);
+
+  const received = html.match(/Fecha de recepci[oó]n:<\/strong>\s*([^<]+)/i)?.[1]?.trim();
+  const subject  = html.match(/Asunto:<\/strong>\s*([^<]+)/i)?.[1]?.trim();
+  const extra = { ...(received ? { providerReceivedAt: received } : {}) };
+
+  // 1) Enlace: el primer <a href> del cuerpo que no sea del propio sitio.
+  for (const m of wrapper.matchAll(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1/gi)) {
+    const href = decodeHtmlEntities(m[2] ?? "").trim();
+    if (/^https?:\/\//i.test(href) && !/pally\.digital/i.test(href)) {
+      return { found: true, kind: "link", value: href, ...extra };
+    }
+  }
+
+  // 2) Código: número de 4 a 8 dígitos en el texto del cuerpo (se quita la
+  // explicación "código de 6 dígitos" que trae la página del enlace).
+  const text = decodeHtmlEntities(wrapper.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/c[oó]digo de \d+ d[ií]gitos/gi, " ");
+  const code = text.match(/(?<![\d/:.-])\d{4,8}(?![\d/:.-])/)?.[0];
+  if (code) return { found: true, kind: "code", value: code, ...extra };
+
+  if (subject) console.warn("Pally: resultado sin enlace ni código reconocible — asunto:", subject);
+  return { found: false, kind: null, value: null };
+}
+
 async function fetchFromPallyDigital(tipo: string, email: string, accessCode: string): Promise<CodeLookupResult> {
   const url = `https://codes.pally.digital/index.php?tipo=${encodeURIComponent(tipo)}`;
   const body = new URLSearchParams({
@@ -48,7 +87,10 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
     return { found: false, kind: null, value: null };
   }
 
-  // El código (o enlace) viene dentro del primer <strong> dentro de .email-body-wrapper.
+  const parsed = parsePallyResultPage(html);
+  if (parsed) return parsed;
+
+  // Formato anterior: el código (o enlace) dentro del primer <strong>.
   const match = html.match(/<strong[^>]*>([\s\S]*?)<\/strong>/i);
   const raw = match ? match[1].replace(/<[^>]+>/g, "").trim() : "";
   if (!raw) return { found: false, kind: null, value: null };
@@ -118,6 +160,9 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
     return { found: false, kind: null, value: null };
   }
 
+  const parsed = parsePallyResultPage(html);
+  if (parsed) return parsed;
+
   // 1) etiquetas de énfasis (<strong>/<b>) — mismo lugar que usa la
   // variante "sin opciones" para el valor real.
   const emphasisTexts = [...html.matchAll(/<(?:strong|b)[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi)]
@@ -143,13 +188,20 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
 
 type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion: string };
 
+// Orden de prueba: primero lo que se le puede entregar al cliente
+// (inicio de sesión: código de 4 dígitos o enlace), luego el resto.
 const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
-  { id: "definir_hogar",    label: "Definir Hogar",         adminOnly: true,  accion: "tg_1" },
-  { id: "codigo_hogar",     label: "Código Hogar",          adminOnly: false, accion: "tg_2" },
   { id: "codigo_login",     label: "Código Inicio Sesión",  adminOnly: false, accion: "tg_4" },
-  { id: "codigo_6_digitos", label: "Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
   { id: "link_login",       label: "Link Inicio Sesión",    adminOnly: false, accion: "tg_6" },
+  { id: "codigo_hogar",     label: "Código Hogar",          adminOnly: false, accion: "tg_2" },
+  { id: "definir_hogar",    label: "Definir Hogar",         adminOnly: true,  accion: "tg_1" },
+  { id: "codigo_6_digitos", label: "Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
 ];
+
+// Opción combinada para el panel: "Código o link de inicio de sesión" —
+// un solo clic prueba el código de 4 dígitos y, si no hay, el enlace.
+const LOGIN_COMBO_ACTION = { id: "inicio_sesion", label: "Código o link de inicio de sesión" };
+const LOGIN_COMBO_IDS = ["codigo_login", "link_login"];
 
 /** Prueba las sub-acciones en orden sobre el mismo correo y se queda
  *  con la primera que responda algo — una sola llamada sirve tanto para
@@ -190,12 +242,20 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
  *  todas a ciegas — null si la fuente no tiene sub-acciones. */
 export function listSourceActions(sourceId: string | null): { id: string; label: string }[] | null {
   if (sourceId !== "netflix_con_opciones") return null;
-  return CON_OPCIONES_ACTIONS.map(a => ({ id: a.id, label: a.label }));
+  return [LOGIN_COMBO_ACTION, ...CON_OPCIONES_ACTIONS.map(a => ({ id: a.id, label: a.label }))];
 }
 
 /** Consulta puntual de UNA sub-acción específica — para fuentes sin
  *  sub-acciones (actionId ausente o no aplica), cae a la consulta normal. */
 export async function lookupCodeAction(sourceId: string, email: string, actionId?: string): Promise<CodeLookupResult> {
+  if (sourceId === "netflix_con_opciones" && actionId === LOGIN_COMBO_ACTION.id) {
+    for (const id of LOGIN_COMBO_IDS) {
+      const action = CON_OPCIONES_ACTIONS.find(a => a.id === id)!;
+      const result = await fetchFromPallyDigitalConOpciones(email, "gustavo", action.accion).catch(() => null);
+      if (result?.found) return { ...result, sourceAction: action.id };
+    }
+    return { found: false, kind: null, value: null };
+  }
   if (sourceId === "netflix_con_opciones" && actionId) {
     const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);
     if (!action) return { found: false, kind: null, value: null };
@@ -565,7 +625,8 @@ const RETRY_DELAY_MS = 12000; // 5 esperas de 12s ≈ 60s en total
 export type SeenCode = { value: string; providerReceivedAt?: string };
 
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
-  return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix";
+  return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix"
+    || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones";
 }
 
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {
