@@ -416,6 +416,18 @@
              se venden al cliente como plan anual pero Liordark las paga
              mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
              Va primero: es lo que más importa revisar acá. -->
+        <!-- RENOVADOS — cuentas completas cuya renovación ya se pagó (cliente
+             web o mayorista) pero que todavía no se activa con el proveedor.
+             Ver public/js/full-renewals.js. -->
+        <div class="panel-header standalone">
+          <h2>Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
+        </div>
+
+        <p class="panel-hint">Cuentas completas que el cliente ya pagó para renovar, esperando al proveedor. No se extienden solas: confirma cuando el proveedor la renueve, o envíale al cliente una cuenta nueva.</p>
+
+        <ul id="full-renewals-list" class="catalog-list"></ul>
+        <p id="full-renewals-empty" class="feed-empty" hidden>No hay renovaciones de cuentas completas esperando. 🎉</p>
+
         <div class="panel-header standalone">
           <h2>Renovación con proveedor</h2>
         </div>
@@ -841,6 +853,32 @@
       <div class="modal-actions">
         <button type="button" id="combo-order-cancel" class="btn-secondary">Cancelar</button>
         <button type="submit" class="btn-primary">Crear pedido y preparar mensaje</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────── MODAL: Renovados > enviar cuenta nueva ───────────── -->
+  <div id="full-renewal-modal" class="modal-backdrop" hidden>
+    <form id="full-renewal-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Enviar cuenta nueva</h3>
+        <button type="button" class="modal-x" data-close-modal="full-renewal-modal">✕</button>
+      </div>
+      <p id="full-renewal-modal-info" class="panel-hint"></p>
+      <label>Del stock (cuentas completas libres)
+        <select id="full-renewal-stock"></select>
+      </label>
+      <p class="panel-hint">…o escríbela a mano (si no eliges del stock):</p>
+      <label>Correo
+        <input id="full-renewal-email" type="text" autocomplete="off" placeholder="correo@ejemplo.com" />
+      </label>
+      <label>Contraseña
+        <input id="full-renewal-password" type="text" autocomplete="off" />
+      </label>
+      <p id="full-renewal-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal="full-renewal-modal">Cancelar</button>
+        <button type="submit" class="btn-primary">📦 Enviar al cliente</button>
       </div>
     </form>
   </div>
@@ -1283,6 +1321,7 @@
   <script src="js/web-customers.js"></script>
   <script src="js/wholesalers.js"></script>
   <script src="js/support-chat.js"></script>
+  <script src="js/full-renewals.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

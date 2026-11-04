@@ -528,8 +528,11 @@
     const priceLine = product ? `Se descontará S/ ${product.wholesalePrice} de tu saldo.` : "Se descontará el precio mayorista de tu saldo.";
     if (!confirm(`¿Renovar "${client.platform}" de ${client.clientPhone}?\n${priceLine}\nLa cuenta se extiende 30 días.`)) return;
     try {
-      const { account } = await api(`/clients/${client.id}/renew`, { method: "POST" });
-      client.expiresAt = account ? account.expiresAt : client.expiresAt;
+      const { account, pending, message } = await api(`/clients/${client.id}/renew`, { method: "POST" });
+      // Cuenta completa: el pago queda registrado pero la fecha recién se
+      // extiende cuando confirmamos con el proveedor (ver "Renovados").
+      if (pending) alert(message || "✅ Pago recibido. Tu renovación se activa apenas confirmemos con el proveedor.");
+      else client.expiresAt = account ? account.expiresAt : client.expiresAt;
       renderClients();
       await refreshBalance();
     } catch (err) {

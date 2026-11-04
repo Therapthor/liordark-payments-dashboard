@@ -976,6 +976,9 @@ function findFreeProfileId(accountId: number): number | null {
  *  criterio que una venta normal — ver sellProfileForWholesaler). */
 export const replaceClientAccount = db.transaction((params: {
   clientPhone: string; platform: string; email: string; targetAccountId: number; wholesalerId: number | null;
+  // Fecha nueva para el cliente (ej. una renovación pagada) — si no se
+  // pasa, conserva la que ya tenía.
+  expiresAt?: string;
 }): { accountId: number; email: string } => {
   const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
   if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
@@ -989,7 +992,7 @@ export const replaceClientAccount = db.transaction((params: {
     UPDATE access_profiles
     SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?
     WHERE id = ?
-  `).run(source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, freeProfileId);
+  `).run(params.expiresAt ?? source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, freeProfileId);
 
   const account = db.prepare(`SELECT email FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { email: string };
   return { accountId: params.targetAccountId, email: account.email };
@@ -1002,6 +1005,7 @@ export const replaceClientAccount = db.transaction((params: {
 export const replaceClientAccountManual = db.transaction((params: {
   clientPhone: string; platform: string; email: string; wholesalerId: number | null;
   newEmail: string; newPassword: string; newProfileName: string; newProvider: string;
+  expiresAt?: string; // ver replaceClientAccount
 }): { email: string } => {
   const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
   if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
@@ -1015,7 +1019,7 @@ export const replaceClientAccountManual = db.transaction((params: {
     password:     params.newPassword,
     profileName:  params.newProfileName,
     provider:     params.newProvider,
-    expiresAt:    source.preservedExpiresAt,
+    expiresAt:    params.expiresAt ?? source.preservedExpiresAt,
   });
 
   return { email: params.newEmail };

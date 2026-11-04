@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { findAccountByClientPhone, setProfileRenewal } from "./access.repository";
+import { createFullRenewal } from "./full-renewals.repository";
 
 function last9(phone: string): string {
   return phone.replace(/\D/g, "").slice(-9);
@@ -49,6 +50,16 @@ export function confirmRenewalLog(orderName: string): { found: boolean } {
     const account = findAccountByClientPhone(row.platform, row.phone);
     const profile = account?.profiles.find(p => last9(p.clientPhone) === last9(row.phone));
     if (profile) setProfileRenewal(profile.id, "yes");
+
+    // Cuenta completa: queda en "Renovados" hasta que el admin confirme
+    // con el proveedor (el corte automático solo extiende cuentas por
+    // perfiles — ver full-renewals.repository.ts).
+    if (account && profile && !account.hasProfiles) {
+      createFullRenewal({
+        accountId: account.id, platform: account.platform, accountEmail: account.email,
+        clientPhone: profile.clientPhone, wholesalerId: null, orderRef: orderName,
+      });
+    }
   }
 
   return { found: result.changes > 0 };

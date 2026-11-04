@@ -12,7 +12,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // atendido (ver support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active";
 
 export type WholesalerNotification = {
   id:           number;
@@ -32,6 +32,7 @@ function buildMessage(type: WholesalerNotificationType, platform: string): strin
   const name = platformTitle(platform);
   if (type === "purchase_added")      return `🛒 Se agregó tu compra de ${name} a tu registro.`;
   if (type === "full_account_ready")  return `🎉 Tu cuenta completa de ${name} ya está lista.`;
+  if (type === "renewal_active")      return `✅ La renovación de ${name} de tu cliente ya está activa.`;
   return `⏰ Un cliente tuyo de ${name} vence mañana.`; // "client_expiring"
 }
 

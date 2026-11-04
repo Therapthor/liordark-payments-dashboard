@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { replaceClientAccount, replaceClientAccountManual } from "../db/access.repository";
 import {
   createAccountsBulk,
   updateAccount,
@@ -28,7 +29,11 @@ import {
   type RenewalStatus,
   type SoldProfile,
 } from "../db/access.repository";
-import { renewAccount, accountStatus, daysLeft, runRenewalCutover } from "../services/access.service";
+import { renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO, addDaysISO } from "../services/access.service";
+import {
+  listPendingFullRenewals, countPendingFullRenewals, getFullRenewal, resolveFullRenewal,
+  resolvePendingFullRenewalsForAccount, listFreeFullAccounts, type FullRenewal,
+} from "../db/full-renewals.repository";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
@@ -283,7 +288,92 @@ router.post("/accounts/:id/provider-renewal/mark-renewed", (req, res) => {
 router.post("/accounts/:id/renew", (req, res) => {
   const account = renewAccount(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  // Renovada a mano: si había una renovación pagada esperando en
+  // "Renovados", ya quedó resuelta.
+  resolvePendingFullRenewalsForAccount(account.id, "Renovada desde Accesos");
   res.json({ account: withStatus(account) });
+});
+
+// ── RENOVADOS (Pagos > Renovaciones) — cuentas completas ya pagadas que
+// esperan confirmación del proveedor. Ver full-renewals.repository.ts. ──
+
+/** Fecha a la que tiene derecho el cliente: desde su vencimiento actual
+ *  (o desde hoy si ya venció) + los días del plan que pagó. */
+function renewalTargetDate(r: FullRenewal): string {
+  const base = r.accountExpiresAt && (daysLeft(r.accountExpiresAt) ?? -1) >= 0 ? r.accountExpiresAt : limaTodayISO();
+  return addDaysISO(base, r.planDays);
+}
+
+router.get("/full-renewals", (_req, res) => {
+  res.json({
+    renewals: listPendingFullRenewals().map(r => ({
+      ...r, daysLeft: daysLeft(r.accountExpiresAt), targetExpiresAt: renewalTargetDate(r),
+    })),
+  });
+});
+
+router.get("/full-renewals/count", (_req, res) => {
+  res.json({ count: countPendingFullRenewals() });
+});
+
+// El proveedor ya renovó la MISMA cuenta → se extiende según el plan.
+router.post("/full-renewals/:id/provider-renewed", (req, res) => {
+  const r = getFullRenewal(Number(req.params.id));
+  if (!r || r.status !== "pending") return res.status(404).json({ message: "Renovación no encontrada (puede que ya se haya resuelto)." });
+
+  const account = renewAccount(r.accountId, r.planDays);
+  if (!account) return res.status(404).json({ message: "La cuenta ya no existe en Accesos." });
+
+  resolveFullRenewal(r.id, "renewed", `Proveedor renovó — vence ${account.expiresAt}`);
+  if (r.wholesalerId != null) createWholesalerNotification(r.wholesalerId, "renewal_active", r.platform, account.email);
+  res.json({ ok: true, expiresAt: account.expiresAt });
+});
+
+// Cuentas completas libres de esa plataforma para "Enviar cuenta nueva".
+router.get("/full-renewals/:id/candidates", (req, res) => {
+  const r = getFullRenewal(Number(req.params.id));
+  if (!r) return res.status(404).json({ message: "Renovación no encontrada." });
+  res.json({ accounts: listFreeFullAccounts(r.platform, limaTodayISO()).filter(a => a.id !== r.accountId) });
+});
+
+// Le manda al cliente OTRA cuenta (del stock o escrita a mano), ya con la
+// fecha que pagó — la vieja queda libre en Accesos.
+router.post("/full-renewals/:id/send-new", (req, res) => {
+  const r = getFullRenewal(Number(req.params.id));
+  if (!r || r.status !== "pending") return res.status(404).json({ message: "Renovación no encontrada (puede que ya se haya resuelto)." });
+
+  const expiresAt = renewalTargetDate(r);
+  const targetAccountId = Number(req.body?.targetAccountId) || 0;
+  const newEmail    = String(req.body?.newEmail ?? "").trim();
+  const newPassword = String(req.body?.newPassword ?? "").trim();
+  const base = { clientPhone: r.clientPhone, platform: r.platform, email: r.accountEmail, wholesalerId: r.wholesalerId, expiresAt };
+
+  let email: string;
+  let password: string;
+  try {
+    if (targetAccountId) {
+      const result = replaceClientAccount({ ...base, targetAccountId });
+      email = result.email;
+      password = getAccountById(targetAccountId)?.password ?? "";
+    } else {
+      if (!newEmail) return res.status(400).json({ message: "Elige una cuenta del stock o escribe el correo de la cuenta nueva." });
+      const result = replaceClientAccountManual({
+        ...base, newEmail, newPassword, newProfileName: "", newProvider: String(req.body?.newProvider ?? "").trim(),
+      });
+      email = result.email;
+      password = newPassword;
+    }
+  } catch (err: any) {
+    return res.status(400).json({ message: err?.message || "No se pudo enviar la cuenta nueva." });
+  }
+
+  const detail = `📧 Correo: ${email}` + (password ? `\n🔑 Contraseña: ${password}` : "") +
+    `\n📅 Vence: ${expiresAt}\n\n¡Tu renovación ya está activa! Cualquier inconveniente, estamos atentos. 😊`;
+  if (r.wholesalerId != null) createWholesalerNotification(r.wholesalerId, "account_replaced", r.platform, email, detail);
+  else createCustomerNotification(r.clientPhone, "account_replaced", r.platform, email, detail);
+
+  resolveFullRenewal(r.id, "new_account", `Cuenta nueva: ${email} — vence ${expiresAt}`);
+  res.json({ ok: true, email, expiresAt });
 });
 
 // ── CÓDIGOS — marcar cuenta, ver últimos códigos, resetear pedidos ──

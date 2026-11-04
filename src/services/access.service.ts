@@ -60,12 +60,12 @@ export function accountStatus(expiresAt: string | null): AccountStatus {
 }
 
 // ─────────────────────────────────────────────────────────────
-// RENOVAR CUENTA +30 DÍAS
+// RENOVAR CUENTA +30 DÍAS (o los días del plan, ver full-renewals)
 // Renueva la cuenta entera (todos sus clientes comparten la misma
 // fecha). Si ya venció, cuenta desde hoy, no desde la fecha vieja.
 // ─────────────────────────────────────────────────────────────
 
-export function renewAccount(id: number): AccessAccountWithProfiles | null {
+export function renewAccount(id: number, days: number = RENEW_DAYS): AccessAccountWithProfiles | null {
   const account = getAccountById(id);
   if (!account) return null;
 
@@ -73,7 +73,7 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
     ? account.expiresAt
     : limaTodayISO();
 
-  const newExpiresAt = addDaysISO(base, RENEW_DAYS);
+  const newExpiresAt = addDaysISO(base, days);
   setAccountExpiry(id, newExpiresAt);
 
   // Registro permanente — quién estaba ocupando la cuenta en el momento

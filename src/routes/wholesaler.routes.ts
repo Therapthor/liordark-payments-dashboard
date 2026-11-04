@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createFullRenewal } from "../db/full-renewals.repository";
 import axios from "axios";
 import { env } from "../config/env";
 import type { RequestWithWholesaler } from "../services/wholesaler-auth.service";
@@ -355,8 +356,23 @@ router.post("/clients/:profileId/renew", (req, res) => {
   const deduction = applyWholesalerCreditChange(wholesalerId, -priceCents, "renewal", orderRef, "system");
   if (!deduction.ok) return res.status(402).json({ message: deduction.error });
 
-  renewAccount(account.id);
   touchWholesalerActivity(wholesalerId);
+
+  // Cuenta completa: NO se extiende sola — queda en "Renovados" hasta que
+  // el admin confirme que el proveedor la renovó (o le mande otra cuenta).
+  // Extenderla de una era entregar una cuenta vencida con el proveedor.
+  if (!account.hasProfiles) {
+    createFullRenewal({
+      accountId: account.id, platform: account.platform, accountEmail: account.email,
+      clientPhone: profile.clientPhone, wholesalerId, orderRef,
+    });
+    return res.json({
+      ok: true, pending: true, account,
+      message: "✅ Pago recibido. Tu renovación se activa apenas confirmemos con el proveedor — te avisamos por aquí.",
+    });
+  }
+
+  renewAccount(account.id);
   res.json({ ok: true, account: getAccountById(account.id) });
 });
 
