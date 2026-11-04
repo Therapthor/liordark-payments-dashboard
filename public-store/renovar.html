@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Renovar — Liordark</title>
+<title>Renovar — Manguito P</title>
 <link rel="icon" href="/assets/logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
 <body>
 
 <div class="renew-page">
-  <div class="renew-brand">LIORDARK</div>
+  <div class="renew-brand">MANGUITO P</div>
   <div class="renew-subtitle">Renovación exprés</div>
 
   <div class="renew-card">
@@ -24,7 +24,7 @@
 
     <div id="renew-error" class="checkout-state" hidden>
       <p class="form-error" id="renew-error-text"></p>
-      <a class="btn-ghost btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a liordark.com</a>
+      <a class="btn-ghost btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a la tienda</a>
     </div>
 
     <!-- Combo con 2+ cuentas por vencer en el mismo link — el cliente elige cuál renovar. -->
@@ -76,7 +76,7 @@
     <div id="renew-pack" class="checkout-state" hidden>
       <div class="checkout-ready-header">
         <h2>Renovación — <span id="renew-pack-count">tus cuentas</span></h2>
-        <p class="muted">Envía exactamente este monto por Yape:</p>
+        <p class="muted" id="renew-pack-amount-label">Envía exactamente este monto por Yape:</p>
         <div class="checkout-amount-row">
           <span class="checkout-amount" id="renew-pack-amount">S/ 0.00</span>
           <button class="yape-copy-btn yape-copy-btn-amount" id="renew-pack-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
@@ -84,11 +84,19 @@
         <p class="muted" id="renew-pack-timer-row">Este monto vale <b id="renew-pack-timer" style="color:#fff">5:00</b> · si se acaba te damos otro</p>
       </div>
       <div class="checkout-ready-body">
+        <p class="renew-pack-hint">Marca lo que quieres renovar:</p>
         <div id="renew-pack-list" class="renew-picker-list" style="align-self: stretch; margin-bottom: 8px;"></div>
-        <div class="renew-pack-total-row"><span>Total</span><b id="renew-pack-total">S/ 0.00</b></div>
-        <img id="renew-pack-qr" class="checkout-qr" alt="QR de Yape" hidden>
-        <div class="yape-info" id="renew-pack-instructions"></div>
-        <div class="checkout-waiting">
+        <div class="renew-pack-promo" id="renew-pack-promo"></div>
+        <div class="renew-pack-sum">
+          <div class="renew-pack-sum-row" id="renew-pack-discount-row" hidden><span id="renew-pack-discount-label">Descuento 10%</span><b id="renew-pack-discount">−S/ 0.00</b></div>
+          <div class="renew-pack-sum-row renew-pack-sum-total"><span>Total</span><b id="renew-pack-total">S/ 0.00</b></div>
+        </div>
+        <div class="renew-pack-pay" id="renew-pack-pay">
+          <div class="renew-pack-pay-title">Paga con Yape</div>
+          <img id="renew-pack-qr" class="checkout-qr renew-pack-qr" alt="QR de Yape" hidden>
+          <div class="yape-info" id="renew-pack-instructions"></div>
+        </div>
+        <div class="checkout-waiting" id="renew-pack-waiting">
           <span class="spinner spinner-sm"></span>
           <span>Paga el monto exacto (con céntimos). En cuanto llegue tu Yape, se confirma solo.</span>
         </div>
@@ -112,7 +120,7 @@
       </div>
       <div class="checkout-success-body">
         <p style="text-align: center; margin: 4px 0 14px;" id="renew-success-text">Se renovó con la misma cuenta que ya tenías.</p>
-        <a class="btn-primary btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a liordark.com</a>
+        <a class="btn-primary btn-block" href="https://liordark.com" style="text-decoration: none; display: block; text-align: center; box-sizing: border-box;">Ir a la tienda</a>
       </div>
     </div>
 

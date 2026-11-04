@@ -255,6 +255,10 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+// Selección del cliente en el link (qué ítems paga en cada orden).
+ensureColumn("renewal_pay_links", "current_keys", "current_keys TEXT");
+ensureColumn("renewal_pay_link_orders", "keys_json", "keys_json TEXT");
+ensureColumn("renewal_pay_link_orders", "paid_at", "paid_at TEXT");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS account_codes (

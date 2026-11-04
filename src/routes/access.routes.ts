@@ -34,7 +34,7 @@ import {
   listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
 } from "../services/access.service";
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
-import { listPayLinkCandidates, createPayLink, cleanOldPayLinks } from "../db/renewal-pay-links.repository";
+import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
@@ -647,26 +647,23 @@ router.get("/renewal-pay-link/candidates", (req, res) => {
 
 router.post("/renewal-pay-link", (req, res) => {
   const phone = String(req.body?.phone ?? "").replace(/\D/g, "");
-  const ids: number[] = Array.isArray(req.body?.profileIds) ? req.body.profileIds.map(Number).filter(Number.isFinite) : [];
+  const keys: string[] = Array.isArray(req.body?.keys) ? req.body.keys.map(String) : [];
   if (phone.length < 9) { res.status(400).json({ message: "Celular inválido." }); return; }
-  if (ids.length === 0) { res.status(400).json({ message: "Elige al menos una cuenta." }); return; }
+  if (keys.length === 0) { res.status(400).json({ message: "Elige al menos una cuenta." }); return; }
 
   const candidates = listPayLinkCandidates(phone, daysLeft);
-  const chosen = candidates.filter(c => ids.includes(c.profileId));
+  const chosen = candidates.filter(c => keys.includes(c.key));
   const blocked = chosen.filter(c => !c.eligible);
-  if (chosen.length !== ids.length) { res.status(400).json({ message: "Alguna cuenta ya no es de este cliente. Vuelve a buscarlo." }); return; }
-  if (blocked.length) { res.status(400).json({ message: `${blocked[0]!.platformTag}: ${blocked[0]!.reason}.` }); return; }
+  if (chosen.length !== keys.length) { res.status(400).json({ message: "Alguna cuenta ya no es de este cliente. Vuelve a buscarlo." }); return; }
+  if (blocked.length) { res.status(400).json({ message: `${blocked[0]!.label}: ${blocked[0]!.reason}.` }); return; }
 
   cleanOldPayLinks();
-  const link = createPayLink(phone, chosen.map(c => ({
-    profileId: c.profileId, platform: c.platform, platformTag: c.platformTag, profileName: c.profileName,
-    email: c.email, expiresAt: c.expiresAt, price: c.price,
-  })));
+  const link = createPayLink(phone, chosen);
   res.json({
     code: link.code,
     url: "https://liordark.com/renovar.html?pack=" + link.code,
-    total: link.total,
     expiresAt: link.expiresAt,
+    ...priceSelection(link.items),
     items: link.items.map(i => ({ ...i, daysLeft: daysLeft(i.expiresAt) })),
   });
 });

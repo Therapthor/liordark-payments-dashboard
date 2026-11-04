@@ -590,28 +590,44 @@
   }
 
   const KEYCAPS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+  // Mismo cálculo que priceSelection (renewal-pay-links.repository.ts):
+  // 10% a las plataformas sueltas si son 3 o más; los combos van a su precio.
+  const PAYLINK_DISCOUNT_MIN = 3;
+  const PAYLINK_DISCOUNT_PCT = 10;
+
+  function paylinkPricing(items) {
+    const singles = items.filter(i => i.kind === "single");
+    const singlesSum = singles.reduce((s, i) => s + parseFloat(i.price), 0);
+    const combosSum = items.filter(i => i.kind === "combo").reduce((s, i) => s + parseFloat(i.price), 0);
+    const discount = singles.length >= PAYLINK_DISCOUNT_MIN ? singlesSum * PAYLINK_DISCOUNT_PCT / 100 : 0;
+    return { subtotal: singlesSum + combosSum, discount, total: singlesSum + combosSum - discount };
+  }
 
   function paylinkMessage(link) {
     const lines = link.items.map((it, i) => {
       const n = KEYCAPS[i] || `${i + 1}.`;
       const perfil = it.profileName ? ` · Perfil: *${it.profileName}*` : "";
-      return `${n} *${it.platformTag || it.platform}*${perfil}\n` +
-        `      📧 ${it.email} · ⏰ vence ${daysPhrase(it.daysLeft)} (${fmtDateLong(it.expiresAt)}) · S/ ${it.price}`;
+      return `${n} *${it.label}*${perfil}\n` +
+        `      ⏰ vence ${daysPhrase(it.daysLeft)} (${fmtDateLong(it.expiresAt)}) · S/ ${it.price}`;
     }).join("\n");
     const intro = link.items.length > 1 ? "Estas cuentas tuyas vencen pronto:" : "Tu cuenta vence pronto:";
-    return `🥭 *Liordark* — Renovación\n\n` +
+    const discountLine = parseFloat(link.discount) > 0
+      ? `🎁 Descuento ${PAYLINK_DISCOUNT_PCT}% por renovar ${PAYLINK_DISCOUNT_MIN} o más: -S/ ${link.discount}\n`
+      : `🎁 Renueva ${PAYLINK_DISCOUNT_MIN} o más plataformas juntas y te descontamos ${PAYLINK_DISCOUNT_PCT}%\n`;
+    return `🥭 *Manguito P* — Renovación\n\n` +
       `Hola 👋 ${intro}\n\n${lines}\n\n` +
+      discountLine +
       `💰 *Total: S/ ${link.total}*\n\n` +
-      `👉 Renueva ${link.items.length > 1 ? "todo" : ""} aquí en 1 minuto — pagas con Yape y se confirma solo, no necesitas mandar captura:\n` +
+      `👉 Elige qué renovar y paga aquí en 1 minuto — pagas con Yape y se confirma solo, no necesitas mandar captura:\n` +
       `${link.url}\n\n` +
       `⏳ El link vale solo hasta hoy a las 11:59 p. m.`;
   }
 
   function paylinkUpdateTotal() {
-    const total = paylinkState.candidates
-      .filter(c => paylinkState.selected.has(c.profileId))
-      .reduce((sum, c) => sum + parseFloat(c.price), 0);
-    document.getElementById("paylink-total").textContent = "S/ " + total.toFixed(2);
+    const chosen = paylinkState.candidates.filter(c => paylinkState.selected.has(c.key));
+    const p = paylinkPricing(chosen);
+    document.getElementById("paylink-total").textContent = "S/ " + p.total.toFixed(2) +
+      (p.discount > 0 ? `  (−S/ ${p.discount.toFixed(2)} por ${PAYLINK_DISCOUNT_MIN}+ plataformas)` : "");
     document.getElementById("paylink-create").disabled = paylinkState.selected.size === 0;
   }
 
@@ -634,21 +650,21 @@
       return;
     }
 
-    // Preselección: la cuenta del botón tocado + las demás que vencen en 7 días o menos.
+    // Preselección: la cuenta del botón tocado + las que vencen en 3 días o menos.
     const selected = new Set(candidates
-      .filter(c => c.eligible && (c.profileId === clickedProfileId || (c.daysLeft !== null && c.daysLeft <= 7)))
-      .map(c => c.profileId));
+      .filter(c => c.eligible && (c.profileIds.includes(clickedProfileId) || (c.daysLeft !== null && c.daysLeft <= 3)))
+      .map(c => c.key));
     paylinkState = { clientPhone, candidates, selected, link: null };
 
     document.getElementById("paylink-info").textContent =
-      "Cliente: " + clientPhone + " — marca las cuentas que van en el link.";
-    list.innerHTML = candidates.length ? candidates.map(c => `
+      "Cliente: " + clientPhone + " — marca las cuentas que van en el link (el cliente luego elige cuáles paga).";
+    list.innerHTML = candidates.length ? candidates.map((c, idx) => `
       <li>
         <label class="paylink-item ${c.eligible ? "" : "is-disabled"}">
-          <input type="checkbox" data-id="${c.profileId}" ${selected.has(c.profileId) ? "checked" : ""} ${c.eligible ? "" : "disabled"}>
+          <input type="checkbox" data-idx="${idx}" ${selected.has(c.key) ? "checked" : ""} ${c.eligible ? "" : "disabled"}>
           <span class="paylink-item-main">
-            <b>${escapeHtml(c.platformTag || c.platform)}${c.profileName ? " · " + escapeHtml(c.profileName) : ""}</b>
-            <span class="paylink-item-sub">${escapeHtml(c.email)} · vence ${escapeHtml(daysPhrase(c.daysLeft))} (${fmtDateLong(c.expiresAt)})${c.eligible ? "" : " · ⚠️ " + escapeHtml(c.reason)}</span>
+            <b>${escapeHtml(c.label)}${c.profileName ? " · " + escapeHtml(c.profileName) : ""}</b>
+            <span class="paylink-item-sub">${escapeHtml(c.email)} · vence ${escapeHtml(daysPhrase(c.daysLeft))} (${fmtDateLong(c.expiresAt)})${c.kind === "combo" ? (c.priceSource === "paid" ? " · precio que pagó" : " · precio de catálogo") : ""}${c.eligible ? "" : " · ⚠️ " + escapeHtml(c.reason)}</span>
           </span>
           <span class="paylink-item-price">S/ ${escapeHtml(c.price)}</span>
         </label>
@@ -656,8 +672,8 @@
 
     list.querySelectorAll("input[type=checkbox]").forEach(cb => {
       cb.addEventListener("change", () => {
-        const id = Number(cb.dataset.id);
-        if (cb.checked) paylinkState.selected.add(id); else paylinkState.selected.delete(id);
+        const key = paylinkState.candidates[Number(cb.dataset.idx)].key;
+        if (cb.checked) paylinkState.selected.add(key); else paylinkState.selected.delete(key);
         paylinkUpdateTotal();
       });
     });
@@ -674,7 +690,7 @@
     try {
       const link = await api("/renewal-pay-link", {
         method: "POST",
-        body: JSON.stringify({ phone: paylinkState.clientPhone, profileIds: [...paylinkState.selected] }),
+        body: JSON.stringify({ phone: paylinkState.clientPhone, keys: [...paylinkState.selected] }),
       });
       paylinkState.link = link;
       const text = paylinkMessage(link);
