@@ -73,14 +73,31 @@
 
   let isAuthenticated = false;
   let customerHasEmail = false;
+  // Compra que el cliente quiso hacer sin sesión: se retoma sola apenas
+  // termina el registro rápido, sin que tenga que buscar el producto otra vez.
+  let pendingAfterAuth = null;
 
-  function openAuthModal() {
+  function openAuthModal(context) {
+    const sub = document.getElementById("quick-subtitle");
+    sub.textContent = context && context.label
+      ? `${context.label}${context.price ? " · S/ " + context.price : ""} — déjanos tu celular y un PIN y pasas directo al pago.`
+      : "Déjanos tu celular y tu PIN para continuar.";
+    setFormError("quick-error", "");
     showAuthCard("start-card");
     document.getElementById("auth-modal").hidden = false;
+    setTimeout(() => document.getElementById("quick-phone").focus(), 50);
   }
 
   function closeAuthModal() {
     document.getElementById("auth-modal").hidden = true;
+  }
+
+  // Ejecuta la acción si hay sesión; si no, abre el registro rápido y la
+  // deja pendiente para después.
+  function requireAuth(action, context) {
+    if (isAuthenticated) { action(); return; }
+    pendingAfterAuth = action;
+    openAuthModal(context);
   }
 
   function hideAllAuthCards() {
@@ -107,10 +124,11 @@
     document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
     document.getElementById("back-to-start-from-login").addEventListener("click", () => showAuthCard("start-card"));
     document.getElementById("back-to-start-from-guest").addEventListener("click", () => showAuthCard("start-card"));
-    document.getElementById("nav-login-btn").addEventListener("click", openAuthModal);
-    document.getElementById("auth-modal-close").addEventListener("click", closeAuthModal);
+    document.getElementById("nav-login-btn").addEventListener("click", () => { pendingAfterAuth = null; openAuthModal(); });
+    // Cerrar sin registrarse cancela la compra pendiente.
+    document.getElementById("auth-modal-close").addEventListener("click", () => { pendingAfterAuth = null; closeAuthModal(); });
     document.getElementById("auth-modal").addEventListener("click", (e) => {
-      if (e.target.id === "auth-modal") closeAuthModal();
+      if (e.target.id === "auth-modal") { pendingAfterAuth = null; closeAuthModal(); }
     });
   }
 
@@ -122,6 +140,23 @@
   }
 
   function initAuthForms() {
+    document.getElementById("quick-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setFormError("quick-error", "");
+      const phone = document.getElementById("quick-phone").value.trim();
+      const pin   = document.getElementById("quick-pin").value;
+      const btn   = document.getElementById("quick-submit");
+      btn.disabled = true;
+      try {
+        await api("/auth/quick", { method: "POST", body: { phone, password: pin } });
+        await onAuthenticated();
+      } catch (err) {
+        setFormError("quick-error", err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       setFormError("login-error", "");
@@ -201,6 +236,14 @@
     initVisibilityResync();
     await loadCatalog();
 
+    if (pendingAfterAuth) {
+      const action = pendingAfterAuth;
+      pendingAfterAuth = null;
+      switchPage("catalog");
+      action();
+      return;
+    }
+
     // Se queda en la página donde estaba (Catálogo/Mis cuentas) al
     // actualizar, en vez de volver siempre al catálogo — los datos se
     // recargan igual (loadDashboardAccounts/loadCodesAccounts arriba),
@@ -223,8 +266,8 @@
     });
   }
 
-  // Sin sesión — catálogo visible igual, pero con el precio tapado por
-  // "Inicia sesión para comprar" (ver productCardHtml) y la barra en modo
+  // Sin sesión — catálogo visible igual, con precios (el registro rápido
+  // se pide al tocar Comprar, ver requireAuth) y la barra en modo
   // invitado (ver setNavMode). Se usa al arrancar sin sesión y al cerrarla.
   async function enterGuestMode() {
     isAuthenticated = false;
@@ -574,14 +617,12 @@
       ? '<span class="product-badge-overlay badge-exclusive">★ EXCLUSIVO</span>'
       : (annual ? '<span class="product-badge-overlay badge-annual">ANUAL</span>' : "");
 
-    // Sin sesión no se muestra el precio — invita a iniciar sesión en vez
-    // de eso (tocar la card igual abre el modal de login, ver initCatalogClicks).
-    const priceHtml = isAuthenticated
-      ? `${outOfStock ? '<span class="product-reserve-tag-sm">Reservar</span>' : ""}
+    // El precio se ve siempre, con o sin sesión — el registro rápido
+    // (celular + PIN) se pide recién al tocar Comprar (ver requireAuth).
+    const priceHtml = `${outOfStock ? '<span class="product-reserve-tag-sm">Reservar</span>' : ""}
          <div class="product-price-pill${outOfStock ? " product-price-pill-reserve" : ""}">
            <span class="product-price-pill-currency">S/</span><span class="product-price-pill-amount">${escapeHtml(p.price)}</span>
-         </div>`
-      : `<span class="login-prompt-pill">🔒 Inicia sesión para comprar</span>`;
+         </div>`;
 
     return `
       <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
@@ -646,10 +687,8 @@
       const card = e.target.closest("[data-detail-platform], [data-detail-combo]");
       if (!comboBtn && !card) return;
 
-      // Sin sesión, cualquier intento de comprar (card o "Armar combo")
-      // abre el modal de login en vez de avanzar.
-      if (!isAuthenticated) { openAuthModal(); return; }
-
+      // Sin sesión también se puede ver el detalle y armar el combo — el
+      // registro rápido se pide recién al tocar Comprar (ver requireAuth).
       if (comboBtn) { openComboBuilder(); return; }
       if (card.dataset.detailPlatform) openProductDetail({ kind: "platform", id: card.dataset.detailPlatform });
       else openProductDetail({ kind: "combo", id: Number(card.dataset.detailCombo) });
@@ -903,7 +942,7 @@
 
       const platforms = [...comboBuilderCart];
       closeComboBuilder();
-      startCustomComboCheckout(platforms, clientEmail, clientPassword);
+      requireAuth(() => startCustomComboCheckout(platforms, clientEmail, clientPassword), { label: "tu combo" });
     });
   }
 
@@ -968,7 +1007,8 @@
         }
       }
       closeProductDetail();
-      startCheckout({ kind, id, clientEmail, clientPassword, isReserve: outOfStock, platformLabel: title });
+      requireAuth(() => startCheckout({ kind, id, clientEmail, clientPassword, isReserve: outOfStock, platformLabel: title }),
+        { label: title, price: item.price });
     };
 
     document.getElementById("product-detail-modal").hidden = false;

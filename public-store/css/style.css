@@ -1412,3 +1412,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .renew-pack-pay { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: 6px; background: var(--chip-bg); border-radius: 14px; padding: 12px; margin-bottom: 8px; }
 .renew-pack-pay-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--text); }
 .renew-pack-qr { max-width: 200px; width: 100%; border-radius: 12px; background: #fff; }
+
+/* Registro rápido al tocar Comprar */
+.quick-hint { font-size: 12px; color: var(--muted); margin: 6px 0 10px; line-height: 1.4; }
+.btn-link-small { display: block; margin: 12px auto 0; background: none; border: none; color: var(--muted); font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; }

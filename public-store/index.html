@@ -22,9 +22,19 @@
       <button class="modal-close" id="auth-modal-close" type="button" aria-label="Cerrar">✕</button>
 
       <div class="auth-card" id="start-card">
-        <h1>¿Cómo quieres continuar?</h1>
-        <button class="btn-primary btn-block" id="show-login-btn" type="button">🔑 Iniciar sesión</button>
-        <button class="btn-guest btn-block" id="show-guest-btn" type="button" style="margin-top:10px;">🛒 Comprar sin cuenta</button>
+        <h1>Para entregarte tu cuenta</h1>
+        <p class="muted" id="quick-subtitle">Déjanos tu celular y tu PIN para continuar.</p>
+        <form id="quick-form">
+          <label for="quick-phone">Tu celular</label>
+          <input type="tel" id="quick-phone" required placeholder="9XXXXXXXX" autocomplete="tel" inputmode="tel">
+          <label for="quick-pin">Tu PIN de 4 dígitos</label>
+          <input type="password" id="quick-pin" required inputmode="numeric" maxlength="20" placeholder="••••" autocomplete="current-password">
+          <p class="quick-hint">¿Primera compra? Crea tu PIN aquí. ¿Ya compraste antes? Usa el mismo PIN de siempre.</p>
+          <p class="form-error" id="quick-error" hidden></p>
+          <button type="submit" class="btn-primary btn-block" id="quick-submit">Continuar al pago</button>
+        </form>
+        <button class="btn-link-small" id="show-login-btn" type="button">¿Tu clave tiene letras? Ingresa aquí</button>
+        <button id="show-guest-btn" type="button" hidden></button>
       </div>
 
       <div class="auth-card" id="login-card" hidden>
