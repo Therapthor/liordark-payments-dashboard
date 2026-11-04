@@ -1708,9 +1708,11 @@
         const result = await api("/renewal-cutover/run", { method: "POST" });
         status.hidden = false;
         status.textContent =
-          `✅ Procesado: ${result.extended.length} cuenta(s) extendida(s) 30 días, ` +
-          `${result.cleaned.length} cuenta(s) con perfiles liberados.`;
+          `✅ Procesado: ${result.cleaned.length} cuenta(s) con perfiles liberados · ` +
+          `${result.relocated} cliente(s) movidos a otra cuenta · ${result.pendingNew} a Pendientes de cuenta nueva · ` +
+          `${result.assignedPending} pendiente(s) asignados.`;
         await loadPasswordChangePending();
+        if (window.LiordarkFullRenewals) window.LiordarkFullRenewals.load();
         await loadProviderRenewals();
       } catch (err) {
         status.hidden = false;

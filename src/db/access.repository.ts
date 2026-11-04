@@ -984,6 +984,20 @@ export function listAccountsWithFreeProfiles(platform: string, minFree: number, 
   `).all(platform.trim().toUpperCase(), todayISO, minFree) as { id: number; email: string; expiresAt: string | null; freeCount: number }[];
 }
 
+/** Coloca a un cliente (sin cuenta de origen — ej. un pendiente de cuenta
+ *  nueva) en el primer cupo libre de `accountId`, con su propia fecha. */
+export const assignClientToFreeProfile = db.transaction((params: {
+  accountId: number; clientPhone: string; wholesalerId: number | null; expiresAt: string;
+}): number | null => {
+  const freeProfileId = findFreeProfileId(params.accountId);
+  if (!freeProfileId) return null;
+  assignProfileClient(freeProfileId, params.clientPhone);
+  db.prepare(`
+    UPDATE access_profiles SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ? WHERE id = ?
+  `).run(params.expiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, freeProfileId);
+  return freeProfileId;
+});
+
 /** Reemplazo de pool: mueve al cliente a un perfil libre de `targetAccountId`
  *  (llena o fresca, da igual), conservando su fecha anterior. Si es un
  *  cliente de mayorista, el perfil destino queda marcado como suyo (mismo

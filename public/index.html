@@ -99,6 +99,18 @@
             <button id="resumen-provider-renewals-btn" class="btn-secondary btn-sm resumen-provider-renewals-btn" type="button">Ver cuentas →</button>
           </div>
 
+          <div class="panel resumen-provider-renewals-card">
+            <div class="stat-label">🟢 Conviene renovar</div>
+            <div class="stat-value" id="stat-worth-renewing-count">0</div>
+            <button id="resumen-worth-renewing-btn" class="btn-secondary btn-sm resumen-provider-renewals-btn" type="button">Ver en Renovados →</button>
+          </div>
+
+          <div class="panel resumen-provider-renewals-card">
+            <div class="stat-label">🕒 Pendientes de cuenta nueva</div>
+            <div class="stat-value" id="stat-pending-new-count">0</div>
+            <button id="resumen-pending-new-btn" class="btn-secondary btn-sm resumen-provider-renewals-btn" type="button">Ver en Accesos →</button>
+          </div>
+
           <div class="panel resumen-quick-action">
             <button id="resumen-quick-assign-btn" class="btn-primary resumen-quick-assign-btn">➕ Agregar cliente a una cuenta</button>
           </div>
@@ -174,6 +186,19 @@
           <button id="access-renewal-history-btn" class="btn-secondary">📋 Registro</button>
           <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
           <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
+        </div>
+
+        <!-- PENDIENTES DE CUENTA NUEVA — clientes que pagaron su renovación
+             pero su cuenta no convenía renovarse y no había cupo libre. Ver
+             public/js/full-renewals.js / pending-assignments.repository.ts. -->
+        <div id="pending-assignments-panel" class="panel pending-assignments-panel" hidden>
+          <div class="panel-header">
+            <h2>🕒 Pendientes de cuenta nueva <span id="pending-assignments-count" class="badge"></span></h2>
+            <button id="pending-assignments-assign-btn" class="btn-primary btn-sm" type="button">Asignar pendientes</button>
+          </div>
+          <p class="panel-hint">Ya pagaron su renovación, pero no había cupo en otra cuenta que les dure hasta su fecha. Agrega cuentas nuevas (+ Agregar cuentas) y toca "Asignar pendientes": se acomodan solos y se les avisa.</p>
+          <ul id="pending-assignments-list" class="catalog-list"></ul>
+          <p id="pending-assignments-status" class="panel-hint" hidden></p>
         </div>
 
         <!-- Resultado: resumen de cliente por teléfono -->
@@ -423,7 +448,7 @@
           <h2>Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
         </div>
 
-        <p class="panel-hint">Cuentas donde algún cliente ya pagó su renovación. La cuenta no suma días sola: confirma cuando ya la renovaste con el proveedor (+30 días), o envía a los que pagaron a otra cuenta.</p>
+        <p class="panel-hint">Cuentas donde algún cliente ya pagó su renovación. 🟢 Conviene renovar = pagó más de la mitad: renuévala con el proveedor y confírmala (+30 días). 🔴 No conviene = la mitad o menos: 1 día antes de vencer, a los que pagaron se los mueve solos a otra cuenta (o quedan en "Pendientes de cuenta nueva", en Accesos).</p>
 
         <ul id="full-renewals-list" class="catalog-list"></ul>
         <p id="full-renewals-empty" class="feed-empty" hidden>No hay cuentas esperando confirmación de renovación. 🎉</p>

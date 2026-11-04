@@ -31,8 +31,9 @@ import {
 } from "../db/access.repository";
 import {
   renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO,
-  listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal,
+  listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
 } from "../services/access.service";
+import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
@@ -297,6 +298,24 @@ router.post("/accounts/:id/renew", (req, res) => {
 
 router.get("/cycle-renewals", (_req, res) => {
   res.json({ accounts: listCycleRenewalsAwaitingConfirmation() });
+});
+
+// Para las tarjetas del Resumen.
+router.get("/cycle-renewals/summary", (_req, res) => {
+  const awaiting = listCycleRenewalsAwaitingConfirmation();
+  res.json({
+    worthRenewing: awaiting.filter(a => a.worthRenewing).length,
+    pendingNewAccounts: countPendingAssignments(),
+  });
+});
+
+// ── PENDIENTES DE CUENTA NUEVA (Accesos) ──
+router.get("/pending-assignments", (_req, res) => {
+  res.json({ pending: listPendingAssignments() });
+});
+
+router.post("/pending-assignments/assign", (_req, res) => {
+  res.json(assignPendingClients());
 });
 
 router.post("/cycle-renewals/:id/confirm", (req, res) => {

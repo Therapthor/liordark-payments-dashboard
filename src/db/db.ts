@@ -208,6 +208,27 @@ ensureColumn("access_accounts", "activation_pending", "activation_pending INTEGE
 ensureColumn("access_accounts", "renewal_cleanup_due_at", "renewal_cleanup_due_at TEXT");
 ensureColumn("access_accounts", "password_change_pending", "password_change_pending INTEGER NOT NULL DEFAULT 0");
 
+// PENDIENTES DE CUENTA NUEVA — clientes que pagaron su renovación en una
+// cuenta que no convenía renovar (la mitad o menos pagó) y no había cupo
+// libre en otra cuenta que les durara hasta su fecha. El admin consigue
+// cuentas nuevas, las carga en Accesos y "Asignar pendientes" los acomoda
+// (ver pending-assignments.repository.ts). expires_at = fecha que pagó.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pending_account_assignments (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform      TEXT    NOT NULL,
+    client_phone  TEXT    NOT NULL,
+    wholesaler_id INTEGER,
+    profile_name  TEXT    NOT NULL DEFAULT '',
+    expires_at    TEXT    NOT NULL,
+    from_email    TEXT    NOT NULL DEFAULT '',
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    assigned_at   TEXT,
+    assigned_account_id INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_assignments_open ON pending_account_assignments(assigned_at);
+`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS account_codes (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

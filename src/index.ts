@@ -247,10 +247,10 @@ const RENEWAL_CUTOVER_MINUTE_LIMA = 0;
 function runRenewalCutoverJob(): void {
   try {
     const result = runRenewalCutover();
-    if (result.extended.length > 0 || result.cleaned.length > 0) {
+    if (result.cleaned.length > 0 || result.relocated > 0 || result.pendingNew > 0 || result.assignedPending > 0) {
       console.log(
-        `🔁 Corte de renovación: ${result.extended.length} cuenta(s) extendida(s) 30 días, ` +
-        `${result.cleaned.length} cuenta(s) con perfiles sin renovar liberados`
+        `🔁 Corte de renovación: ${result.cleaned.length} cuenta(s) con perfiles sin renovar liberados, ` +
+        `${result.relocated} cliente(s) movidos, ${result.pendingNew} a pendientes, ${result.assignedPending} pendientes asignados`
       );
     }
   } catch (err: any) {

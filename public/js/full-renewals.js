@@ -51,9 +51,14 @@
     li.innerHTML = `
       <div class="catalog-thumb catalog-thumb-empty">♻️</div>
       <div class="catalog-main">
-        <div class="catalog-name">${escapeHtml(r.platform)} — ${escapeHtml(r.email)}</div>
+        <div class="catalog-name">${escapeHtml(r.platform)} — ${escapeHtml(r.email)}
+          ${r.worthRenewing
+            ? `<span class="feed-status matched">🟢 Conviene renovar · ${r.percent}%</span>`
+            : `<span class="feed-status expired">🔴 No conviene · ${r.percent}%</span>`}
+        </div>
         <div class="catalog-desc">
           💰 Pagaron ${r.renewing.length} de ${r.occupiedCount}: ${payers}<br>
+          ${r.worthRenewing ? "" : "↪️ 1 día antes de vencer, los que pagaron pasan solos a otra cuenta (o a Pendientes).<br>"}
           📅 Vence: ${fmtDate(r.expiresAt)} ${daysBadge(r.daysLeft)} → al confirmar: <b>${fmtDate(r.newExpiresAt)}</b>
         </div>
       </div>
@@ -164,6 +169,71 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", init);
-  window.LiordarkFullRenewals = { load };
+  // ── Pendientes de cuenta nueva (Accesos) ──
+
+  async function loadPending() {
+    const panel = document.getElementById("pending-assignments-panel");
+    if (!panel) return;
+    try {
+      const { pending } = await api("/pending-assignments");
+      panel.hidden = pending.length === 0;
+      document.getElementById("pending-assignments-count").textContent = String(pending.length);
+      document.getElementById("pending-assignments-list").innerHTML = pending.map(p => `
+        <li class="catalog-item">
+          <div class="catalog-thumb catalog-thumb-empty">🕒</div>
+          <div class="catalog-main">
+            <div class="catalog-name">${escapeHtml(p.platform)} — ${p.wholesalerId != null ? "🏪 " : "👤 "}${escapeHtml(p.clientPhone)}</div>
+            <div class="catalog-desc">Pagó hasta el <b>${fmtDate(p.expiresAt)}</b> · venía de ${escapeHtml(p.fromEmail)}</div>
+          </div>
+        </li>`).join("");
+    } catch { /* se reintenta al volver a entrar */ }
+  }
+
+  async function loadSummary() {
+    try {
+      const { worthRenewing, pendingNewAccounts } = await api("/cycle-renewals/summary");
+      const a = document.getElementById("stat-worth-renewing-count");
+      const b = document.getElementById("stat-pending-new-count");
+      if (a) a.textContent = String(worthRenewing);
+      if (b) b.textContent = String(pendingNewAccounts);
+    } catch { /* no crítico */ }
+  }
+
+  function initPending() {
+    const btn = document.getElementById("pending-assignments-assign-btn");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const status = document.getElementById("pending-assignments-status");
+      btn.disabled = true;
+      try {
+        const { assigned, stillPending } = await api("/pending-assignments/assign", { method: "POST" });
+        status.hidden = false;
+        status.textContent = assigned > 0
+          ? `✅ ${assigned} cliente(s) asignados y avisados.${stillPending ? ` Faltan ${stillPending}: agrega más cuentas con cupos libres.` : ""}`
+          : "No hay cupos libres que les duren hasta su fecha. Agrega cuentas nuevas y vuelve a intentar.";
+        await loadPending();
+        loadSummary();
+      } catch (err) {
+        alert(err.message || "No se pudo asignar.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Tarjetas del Resumen → vista correspondiente.
+    document.getElementById("resumen-worth-renewing-btn")?.addEventListener("click", () => {
+      document.querySelector('[data-view="renewals"]')?.click();
+    });
+    document.getElementById("resumen-pending-new-btn")?.addEventListener("click", () => {
+      document.querySelector('[data-view="access"]')?.click();
+    });
+    loadSummary();
+    setInterval(loadSummary, 60_000);
+    loadPending();
+    // Accesos se abre desde la barra — refresca pendientes al entrar.
+    document.querySelectorAll('[data-view="access"]').forEach(el => el.addEventListener("click", () => setTimeout(loadPending, 200)));
+  }
+
+  document.addEventListener("DOMContentLoaded", () => { init(); initPending(); });
+  window.LiordarkFullRenewals = { load: () => { load(); loadSummary(); }, loadPending };
 })();

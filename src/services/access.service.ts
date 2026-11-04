@@ -7,11 +7,18 @@ import {
   applyRenewalExtension,
   listAccountsDueForRenewalCleanup,
   applyRenewalCleanup,
+  setProfileRenewal,
+  listAccountsWithFreeProfiles,
+  replaceClientAccount,
+  assignClientToFreeProfile,
   type AccessAccountWithProfiles,
 } from "../db/access.repository";
+import {
+  createPendingAssignment, listPendingAssignments, markPendingAssigned, countPendingAssignments,
+} from "../db/pending-assignments.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
 import { logRenewalHistory } from "../db/renewal-history.repository";
-import { createCustomerNotifications } from "../db/customer-notifications.repository";
+import { createCustomerNotifications, createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
 const RENEW_DAYS = 30;
@@ -132,11 +139,16 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
 export type RenewalCutoverResult = {
   extended: { accountId: number; platform: string; email: string; renewedCount: number }[];
   cleaned:  { accountId: number; platform: string; email: string; freedCount: number }[];
+  // Cuentas que no convenía renovar: clientes movidos / que quedaron pendientes.
+  relocated: number;
+  pendingNew: number;
+  // Pendientes de cuenta nueva que ya se pudieron acomodar.
+  assignedPending: number;
 };
 
 export function runRenewalCutover(): RenewalCutoverResult {
   const today = limaTodayISO();
-  const result: RenewalCutoverResult = { extended: [], cleaned: [] };
+  const result: RenewalCutoverResult = { extended: [], cleaned: [], relocated: 0, pendingNew: 0, assignedPending: 0 };
 
   // Paso 1 (extender a quien ya pagó) YA NO es automático: la cuenta entera
   // se renueva con el proveedor y eso lo confirma el admin en "Renovados"
@@ -154,6 +166,13 @@ export function runRenewalCutover(): RenewalCutoverResult {
     }
   }
 
+  // Cuentas que no convenía renovar (la mitad o menos pagó), 1 día antes de
+  // vencer: los que pagaron pasan a otra cuenta o a "Pendientes".
+  const relocation = relocateUnworthyRenewals();
+  result.relocated  = relocation.relocated;
+  result.pendingNew = relocation.pending;
+  result.assignedPending = assignPendingClients().assigned;
+
   return result;
 }
 
@@ -168,6 +187,9 @@ export type CycleRenewalAccount = {
   id: number; platform: string; email: string; provider: string;
   expiresAt: string | null; daysLeft: number | null; newExpiresAt: string | null;
   occupiedCount: number;
+  // 🟢 conviene renovar: pagó MÁS de la mitad de los clientes de la cuenta.
+  worthRenewing: boolean;
+  percent: number;
   renewing: { profileId: number; clientPhone: string; profileName: string; wholesalerId: number | null }[];
 };
 
@@ -183,11 +205,13 @@ export function listCycleRenewalsAwaitingConfirmation(): CycleRenewalAccount[] {
         expiresAt: a.expiresAt, daysLeft: daysLeft(a.expiresAt),
         newExpiresAt: a.expiresAt ? addDaysISO(a.expiresAt, RENEW_DAYS) : null,
         occupiedCount: a.profiles.filter(p => p.clientPhone).length,
+        worthRenewing: renewing.length * 2 > a.profiles.filter(p => p.clientPhone).length,
+        percent: Math.round(renewing.length * 100 / Math.max(1, a.profiles.filter(p => p.clientPhone).length)),
         renewing: renewing.map(p => ({ profileId: p.id, clientPhone: p.clientPhone, profileName: p.profileName, wholesalerId: p.wholesalerId })),
       };
     })
     .filter(a => a.renewing.length > 0)
-    .sort((x, y) => (x.expiresAt ?? "").localeCompare(y.expiresAt ?? ""));
+    .sort((x, y) => Number(y.worthRenewing) - Number(x.worthRenewing) || (x.expiresAt ?? "").localeCompare(y.expiresAt ?? ""));
 }
 
 /** El admin ya renovó la cuenta con el proveedor: +30 días para todos
@@ -224,4 +248,74 @@ export function confirmCycleRenewal(accountId: number):
   const left = daysLeft(originalExpiresAt);
   const freedCount = left !== null && left <= 1 ? applyRenewalCleanup(account.id).freedCount : 0;
   return { ok: true, newExpiresAt, renewedCount: renewing.length, freedCount };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// CUENTAS QUE NO CONVIENE RENOVAR (la mitad o menos pagó) — 1 día antes de
+// vencer, a los que sí pagaron se los mueve a un cupo libre de otra cuenta
+// que les dure hasta su fecha nueva; si no hay, quedan en "Pendientes de
+// cuenta nueva" (Accesos) hasta que el admin cargue cuentas nuevas. La
+// cuenta vieja se deja vencer (no se renueva con el proveedor).
+// ─────────────────────────────────────────────────────────────
+
+function notifyNewAccount(clientPhone: string, wholesalerId: number | null, platform: string, accountId: number, expiresAt: string): void {
+  const acc = getAccountById(accountId);
+  if (!acc) return;
+  const profile = acc.profiles.find(p => p.clientPhone && p.clientPhone.slice(-9) === clientPhone.replace(/\D/g, "").slice(-9));
+  const detail = `📧 Correo: ${acc.email}` + (acc.password ? `\n🔑 Contraseña: ${acc.password}` : "") +
+    (profile?.profileName ? `\n👤 Perfil: ${profile.profileName}` : "") +
+    `\n📅 Vence: ${expiresAt}\n\n¡Tu renovación ya está activa en esta cuenta nueva! Cualquier inconveniente, estamos atentos. 😊`;
+  if (wholesalerId != null) createWholesalerNotification(wholesalerId, "account_replaced", platform, acc.email, detail);
+  else createCustomerNotification(clientPhone, "account_replaced", platform, acc.email, detail);
+}
+
+export type RelocationResult = { relocated: number; pending: number; accounts: string[] };
+
+export function relocateUnworthyRenewals(): RelocationResult {
+  const result: RelocationResult = { relocated: 0, pending: 0, accounts: [] };
+  for (const a of listCycleRenewalsAwaitingConfirmation()) {
+    if (a.worthRenewing || a.daysLeft === null || a.daysLeft > 1 || !a.newExpiresAt) continue;
+    result.accounts.push(`${a.platform} — ${a.email}`);
+    for (const p of a.renewing) {
+      const target = listAccountsWithFreeProfiles(a.platform, 1, a.newExpiresAt).find(t => t.id !== a.id);
+      if (target) {
+        replaceClientAccount({
+          clientPhone: p.clientPhone, platform: a.platform, email: a.email,
+          targetAccountId: target.id, wholesalerId: p.wholesalerId, expiresAt: a.newExpiresAt,
+        });
+        notifyNewAccount(p.clientPhone, p.wholesalerId, a.platform, target.id, a.newExpiresAt);
+        result.relocated++;
+      } else {
+        createPendingAssignment({
+          platform: a.platform, clientPhone: p.clientPhone, wholesalerId: p.wholesalerId,
+          profileName: p.profileName, expiresAt: a.newExpiresAt, fromEmail: a.email,
+        });
+        // Ya no "renueva" en esta cuenta (que no se renovará): sigue usándola
+        // hasta que venza, y deja de bloquear su archivado.
+        setProfileRenewal(p.profileId, "");
+        result.pending++;
+      }
+    }
+  }
+  return result;
+}
+
+/** "Asignar pendientes" (Accesos) — y también en el corte diario: cada
+ *  pendiente va al primer cupo libre de su plataforma que le dure hasta su
+ *  fecha. Los que no entran siguen pendientes. */
+export function assignPendingClients(): { assigned: number; stillPending: number } {
+  let assigned = 0;
+  for (const pend of listPendingAssignments()) {
+    const target = listAccountsWithFreeProfiles(pend.platform, 1, pend.expiresAt)[0];
+    if (!target) continue;
+    const profileId = assignClientToFreeProfile({
+      accountId: target.id, clientPhone: pend.clientPhone, wholesalerId: pend.wholesalerId, expiresAt: pend.expiresAt,
+    });
+    if (!profileId) continue;
+    markPendingAssigned(pend.id, target.id);
+    notifyNewAccount(pend.clientPhone, pend.wholesalerId, pend.platform, target.id, pend.expiresAt);
+    assigned++;
+  }
+  return { assigned, stillPending: countPendingAssignments() };
 }
