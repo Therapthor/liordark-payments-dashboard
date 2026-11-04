@@ -17,13 +17,13 @@ import { getProfileById, setProfileRenewal, limaTodayISOLocal, addDaysISOLocal }
 //   - "single": un perfil suelto, precio del catálogo.
 //   - "combo":  todos los perfiles de un combo (order_ref "combo:<orden>"),
 //               se renueva completo al precio que pagó la vez anterior.
-// Descuento: 10% sobre las plataformas sueltas si elige 3 o más a la vez
+// Descuento: 10% sobre las plataformas sueltas si elige 2 o más a la vez
 // (los combos ya tienen su propio precio).
 // ─────────────────────────────────────────────────────────────
 
 const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const CODE_LENGTH   = 8;
-export const MULTI_DISCOUNT_MIN = 3;
+export const MULTI_DISCOUNT_MIN = 2;
 export const MULTI_DISCOUNT_PCT = 10;
 
 export type PayLinkItem = {

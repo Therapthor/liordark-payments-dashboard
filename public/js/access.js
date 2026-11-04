@@ -591,8 +591,8 @@
 
   const KEYCAPS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
   // Mismo cálculo que priceSelection (renewal-pay-links.repository.ts):
-  // 10% a las plataformas sueltas si son 3 o más; los combos van a su precio.
-  const PAYLINK_DISCOUNT_MIN = 3;
+  // 10% a las plataformas sueltas si son 2 o más; los combos van a su precio.
+  const PAYLINK_DISCOUNT_MIN = 2;
   const PAYLINK_DISCOUNT_PCT = 10;
 
   function paylinkPricing(items) {

@@ -31,7 +31,7 @@ import {
 } from "../db/customer-notifications.repository";
 import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
-import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection } from "../db/renewal-pay-links.repository";
+import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection, MULTI_DISCOUNT_MIN, MULTI_DISCOUNT_PCT } from "../db/renewal-pay-links.repository";
 import {
   getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
   countUnreadForCustomer, isValidStickerId, chatHasNoMessages,
@@ -366,7 +366,7 @@ function publicPayLinkBody(view: Extract<PayLinkView, { link: unknown }>, extra:
   return {
     paid: states.every(s => s.paid),
     expiresAt: link.expiresAt,
-    discountMin: 3, discountPct: 10,
+    discountMin: MULTI_DISCOUNT_MIN, discountPct: MULTI_DISCOUNT_PCT,
     items: states.map(s => ({
       key: s.key, kind: s.kind, label: s.label, profileName: s.profileName,
       price: s.price, daysLeft: daysLeft(s.expiresAt), paid: s.paid,

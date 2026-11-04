@@ -188,7 +188,7 @@
   // (si la pestaña está a la vista; si no, al volver). Si cambia lo marcado,
   // se pide el monto de la nueva selección. El pago se detecta consultando
   // el link cada 4s con el nombre de la orden mostrada.
-  // 10% de descuento a las plataformas sueltas si marca 3 o más (los combos
+  // 10% de descuento a las plataformas sueltas si marca 2 o más (los combos
   // van completos a su precio) — el monto final lo calcula el servidor.
   // ─────────────────────────────────────────────────────────────
   const pack = (params.get("pack") || "").trim();
@@ -201,7 +201,7 @@
   let packRequesting = false;
   let packNeedsNewAmount = false;
   let packDebounce = null;
-  let packDiscountMin = 3;
+  let packDiscountMin = 2;
   let packDiscountPct = 10;
 
   function packStop() {
