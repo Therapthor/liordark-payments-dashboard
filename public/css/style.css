@@ -756,7 +756,7 @@ button, input {
 .codes-account-icon { font-size: 16px; }
 .codes-account-info { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .codes-account-sub { color: var(--cmuted); font-size: 11px; }
-.codes-account-result { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.codes-account-result { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .codes-account-received { font-size: 10px; color: var(--cmuted); }
 .codes-accounts-empty { color: var(--cmuted); font-size: 12.5px; }
 
@@ -1321,3 +1321,4 @@ button, input {
 .paylink-item-sub { font-size: 12px; opacity: 0.75; }
 .paylink-item-price { font-weight: 700; white-space: nowrap; }
 .paylink-total { text-align: right; font-size: 16px; margin: 10px 0 4px; }
+.codes-quick-btn { background: #ff8c3a; color: #fff; border-color: #ff8c3a; }

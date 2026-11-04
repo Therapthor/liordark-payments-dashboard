@@ -185,6 +185,13 @@
     const actionSelect = a.sourceActions
       ? `<select class="codes-action-select">${a.sourceActions.map(act => `<option value="${escapeHtml(act.id)}">${escapeHtml(act.label)}</option>`).join("")}</select>`
       : "";
+    // Atajos de un toque para lo más pedido: solo el código de 4 dígitos
+    // o solo el enlace de inicio de sesión (sin tocar el desplegable).
+    const hasAction = id => (a.sourceActions || []).some(act => act.id === id);
+    const quickBtns = [
+      hasAction("codigo_login") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="codigo_login">🔢 Código 4 dígitos</button>` : "",
+      hasAction("link_login")   ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="link_login">🔗 Enlace</button>` : "",
+    ].join("");
 
     row.innerHTML = `
       <span class="codes-account-icon">🔑</span>
@@ -194,6 +201,7 @@
       </span>
       <span class="codes-account-result">
         ${latest}
+        ${quickBtns}
         ${actionSelect}
         <button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>
       </span>
@@ -245,7 +253,7 @@
       const row = btn.closest(".codes-account-row");
       const id = Number(row.dataset.id);
       const actionSelect = row.querySelector(".codes-action-select");
-      const actionId = actionSelect ? actionSelect.value : undefined;
+      const actionId = btn.dataset.action || (actionSelect ? actionSelect.value : undefined);
       const original = btn.textContent;
       btn.disabled = true;
       btn.textContent = "Consultando…";
