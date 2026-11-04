@@ -236,14 +236,23 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
   // Netflix por Pally: al cliente SOLO se le entrega automático el código
   // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
   // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
-  if (PALLY_NETFLIX_SOURCES.includes(sourceId)) {
-    return !(result.kind === "code" && /^\d{4}$/.test(result.value ?? ""));
-  }
+  if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result);
   const netflix6 = (sourceId === "netflix_sin_opciones" || sourceId === "joseb_netflix") && result.kind === "code" && result.value?.length === 6;
   return netflix6 || isSensitiveResult(result);
 }
 
-const PALLY_NETFLIX_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones"];
+// Netflix por Pally y por José Streaming: solo se trabaja con el código
+// de inicio de sesión de 4 dígitos — ni enlaces, ni 6 dígitos, ni Hogar
+// (ni al cliente ni en el panel). Disney+ y ChatGPT no entran acá.
+const LOGIN_CODE_ONLY_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones", "joseb_netflix"];
+
+export function isLoginCodeOnlySource(sourceId: string | null): boolean {
+  return !!sourceId && LOGIN_CODE_ONLY_SOURCES.includes(sourceId);
+}
+
+export function isLoginCode(result: CodeLookupResult): boolean {
+  return result.found && result.kind === "code" && /^\d{4}$/.test(result.value ?? "");
+}
 
 /** Búsqueda para el CLIENTE (asistente del chat): en Netflix por Pally
  *  "con opciones" consulta solo «Código Inicio Sesión» (4 dígitos) — no
@@ -263,7 +272,8 @@ export function lookupCodeForClientWithRetries(
  *  todas a ciegas — null si la fuente no tiene sub-acciones. */
 export function listSourceActions(sourceId: string | null): { id: string; label: string }[] | null {
   if (sourceId !== "netflix_con_opciones") return null;
-  return [LOGIN_COMBO_ACTION, ...CON_OPCIONES_ACTIONS.map(a => ({ id: a.id, label: a.label }))];
+  // Solo «Código 4 dígitos» (enlaces y demás opciones retirados del panel).
+  return [{ id: "codigo_login", label: "Código 4 dígitos" }];
 }
 
 /** Consulta puntual de UNA sub-acción específica — para fuentes sin

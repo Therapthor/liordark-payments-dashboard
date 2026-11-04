@@ -219,7 +219,10 @@
 
     // Fuentes con sub-acciones (ej. "PallyStore con opciones") — el admin
     // elige puntualmente qué consultar en vez de probarlas todas a ciegas.
-    const actionSelect = a.sourceActions
+    // Fuente con una sola opción (ej. Pally Netflix: solo «Código 4
+    // dígitos») → solo su botón, sin desplegable ni "Consultar" genérico.
+    const singleAction = a.sourceActions && a.sourceActions.length === 1;
+    const actionSelect = a.sourceActions && !singleAction
       ? `<select class="codes-action-select">${a.sourceActions.map(act => `<option value="${escapeHtml(act.id)}">${escapeHtml(act.label)}</option>`).join("")}</select>`
       : "";
     // Atajos de un toque para lo más pedido: solo el código de 4 dígitos
@@ -229,6 +232,8 @@
       hasAction("codigo_login") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="codigo_login">🔢 Código 4 dígitos</button>` : "",
       hasAction("link_login")   ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="link_login">🔗 Enlace</button>` : "",
     ].join("");
+    const genericBtn = singleAction ? "" :
+      `<button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>`;
 
     row.innerHTML = `
       <span class="codes-account-icon">🔑</span>
@@ -240,7 +245,7 @@
         ${latest}
         ${quickBtns}
         ${actionSelect}
-        <button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>
+        ${genericBtn}
       </span>
     `;
     return row;
