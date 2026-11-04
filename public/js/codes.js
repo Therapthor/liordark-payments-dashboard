@@ -86,95 +86,87 @@
     return `<span class="codes-code" data-code="${escapeHtml(value)}" title="Clic para copiar">${escapeHtml(value)}</span>`;
   }
 
-  // ── Buscador libre (correo → prueba todas las fuentes) ──
+  // ── Buscador: filtra la lista mientras se escribe (no consulta nada
+  // solo). La consulta la hace el admin con el botón de cada fila. Solo si
+  // el correo no está en la lista se ofrece buscarlo en todas las fuentes.
+
+  function showNoMatchBanner(banner, text) {
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+    banner.hidden = false;
+    banner.className = "codes-banner not-found";
+    banner.innerHTML = `
+      <span class="codes-banner-icon">✕</span>
+      <span class="codes-banner-info">
+        <span class="codes-banner-email">No hay cuentas con «${escapeHtml(text)}» en la lista</span>
+        <span class="codes-banner-source">La lista muestra solo las cuentas con «Código» habilitado en Accesos.</span>
+      </span>
+      ${looksLikeEmail ? `<span class="codes-banner-result"><button type="button" class="codes-consult-btn" data-role="search-all">🔎 Buscar en todas las fuentes</button></span>` : ""}
+    `;
+  }
+
+  function applySearchFilter(banner) {
+    const text = document.getElementById("codes-search-email").value.trim();
+    searchFilter = text.toLowerCase();
+    renderAccountsList();
+    if (!searchFilter) { banner.hidden = true; return; }
+    const count = document.querySelectorAll("#codes-accounts-list .codes-account-row").length;
+    if (count === 0) showNoMatchBanner(banner, text);
+    else banner.hidden = true;
+  }
+
+  // Búsqueda libre en todas las fuentes — solo a pedido (correo no registrado).
+  async function runGlobalSearch(email, banner, btn) {
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = "Buscando…";
+    const timerEl = createTimerEl();
+    btn.insertAdjacentElement("beforebegin", timerEl);
+    const stopTimer = startTimer(timerEl);
+    try {
+      const result = await api("/codes/lookup", { method: "POST", body: JSON.stringify({ email }) });
+      banner.hidden = false;
+      if (!result.found) {
+        banner.className = "codes-banner not-found";
+        banner.innerHTML = `<span class="codes-banner-icon">✕</span><span>No se encontró ningún código reciente para <b>${escapeHtml(email)}</b>.</span>`;
+        return;
+      }
+      banner.className = "codes-banner" + (result.kind === "link" ? " link" : "");
+      banner.innerHTML = `
+        <span class="codes-banner-icon">${result.kind === "link" ? "🔗" : "✓"}</span>
+        <span class="codes-banner-info">
+          <span class="codes-banner-email">${escapeHtml(email)}</span>
+          <span class="codes-banner-source">${escapeHtml(result.sourceLabel || "")}${result.receivedAt ? " · Recibido: " + escapeHtml(result.receivedAt) : ""}</span>
+        </span>
+        <span class="codes-banner-result">${resultHtml(result.kind, result.value)}</span>
+      `;
+    } catch (err) {
+      banner.hidden = false;
+      banner.className = "codes-banner not-found";
+      banner.textContent = err.message || "No se pudo buscar.";
+    } finally {
+      stopTimer();
+      timerEl.remove();
+      if (btn.isConnected) { btn.disabled = false; btn.textContent = original; }
+    }
+  }
 
   function initSearchForm() {
     const form   = document.getElementById("codes-search-form");
     const banner = document.getElementById("codes-search-banner");
+    const input  = document.getElementById("codes-search-email");
 
-    // Si el correo se borra, vuelve a la lista completa.
-    document.getElementById("codes-search-email").addEventListener("input", (e) => {
-      if (!e.target.value.trim() && searchFilter) {
-        searchFilter = "";
-        banner.hidden = true;
-        renderAccountsList();
-      }
-    });
-
+    input.addEventListener("input", () => applySearchFilter(banner));
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const email = document.getElementById("codes-search-email").value.trim();
-      const btn   = form.querySelector("button[type='submit']");
-
-      // 1) ¿Es una cuenta registrada? Se muestra su fila (con sus botones
-      // y su fuente configurada) en vez de consultar todas las fuentes.
-      if (!e.submitter || !e.submitter.dataset.forceAll) {
-        if (cachedAccounts.length === 0) await load();
-        const matches = cachedAccounts.filter(a => (a.email || "").trim().toLowerCase() === email.toLowerCase());
-        if (matches.length > 0) {
-          searchFilter = email.toLowerCase();
-          renderAccountsList();
-          banner.hidden = false;
-          banner.className = "codes-banner";
-          banner.innerHTML = `
-            <span class="codes-banner-icon">📌</span>
-            <span class="codes-banner-info">
-              <span class="codes-banner-email">${escapeHtml(email)}</span>
-              <span class="codes-banner-source">Cuenta registrada · ${escapeHtml(matches.map(m => m.platform + (m.codeSourceLabel ? " (" + m.codeSourceLabel + ")" : "")).join(", "))} — usa los botones de abajo</span>
-            </span>
-            <span class="codes-banner-result"><button type="button" class="codes-consult-btn" data-role="clear-filter">Ver todas</button></span>
-          `;
-          const row = document.querySelector("#codes-accounts-list .codes-account-row");
-          if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
-          return;
-        }
-      }
-      searchFilter = "";
-      renderAccountsList();
-
-      btn.disabled = true;
-      const original = btn.textContent;
-      btn.textContent = "Buscando…";
-      const timerEl = createTimerEl();
-      btn.insertAdjacentElement("beforebegin", timerEl);
-      const stopTimer = startTimer(timerEl);
-      try {
-        const result = await api("/codes/lookup", { method: "POST", body: JSON.stringify({ email }) });
-        banner.hidden = false;
-        if (!result.found) {
-          banner.className = "codes-banner not-found";
-          banner.innerHTML = `<span class="codes-banner-icon">✕</span><span>No se encontró ningún código reciente para <b>${escapeHtml(email)}</b>.</span>`;
-          return;
-        }
-        banner.className = "codes-banner" + (result.kind === "link" ? " link" : "");
-        banner.innerHTML = `
-          <span class="codes-banner-icon">${result.kind === "link" ? "🔗" : "✓"}</span>
-          <span class="codes-banner-info">
-            <span class="codes-banner-email">${escapeHtml(email)}</span>
-            <span class="codes-banner-source">${escapeHtml(result.sourceLabel || "")}${result.receivedAt ? " · Recibido: " + escapeHtml(result.receivedAt) : ""}</span>
-          </span>
-          <span class="codes-banner-result">${resultHtml(result.kind, result.value)}</span>
-        `;
-      } catch (err) {
-        banner.hidden = false;
-        banner.className = "codes-banner not-found";
-        banner.textContent = err.message || "No se pudo buscar.";
-      } finally {
-        stopTimer();
-        timerEl.remove();
-        btn.disabled = false;
-        btn.textContent = original;
-      }
+      if (cachedAccounts.length === 0) await load();
+      applySearchFilter(banner);
+      const row = document.querySelector("#codes-accounts-list .codes-account-row");
+      if (row && searchFilter) row.scrollIntoView({ behavior: "smooth", block: "center" });
     });
 
     banner.addEventListener("click", (e) => {
-      if (e.target.closest("[data-role='clear-filter']")) {
-        searchFilter = "";
-        banner.hidden = true;
-        document.getElementById("codes-search-email").value = "";
-        renderAccountsList();
-        return;
-      }
+      const allBtn = e.target.closest("[data-role='search-all']");
+      if (allBtn) { runGlobalSearch(input.value.trim(), banner, allBtn); return; }
       const codeEl = e.target.closest(".codes-code");
       if (codeEl) { copyToClipboard(codeEl.dataset.code, codeEl); return; }
       const linkBtn = e.target.closest(".codes-open-btn");
@@ -273,7 +265,8 @@
     if (cachedAccounts.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
     const visible = searchFilter
-      ? cachedAccounts.filter(a => (a.email || "").trim().toLowerCase() === searchFilter)
+      ? cachedAccounts.filter(a => (a.email || "").toLowerCase().includes(searchFilter)
+          || (a.platform || "").toLowerCase().includes(searchFilter))
       : cachedAccounts;
     for (const a of visible) list.appendChild(renderAccountRow(a));
     scheduleTotpRefresh();
