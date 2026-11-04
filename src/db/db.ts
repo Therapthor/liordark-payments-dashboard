@@ -229,6 +229,33 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pending_assignments_open ON pending_account_assignments(assigned_at);
 `);
 
+// LINK DE PAGO DE RENOVACIÓN (Reno-manual) — varias cuentas del mismo
+// cliente en un solo pago Yape. Vale hasta la medianoche del día en que
+// se creó; cada monto reservado dura 5 min y se regenera solo (cada
+// orden del bot queda en renewal_pay_link_orders para reconocer el pago
+// aunque llegue con el monto de una ventana anterior).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS renewal_pay_links (
+    code          TEXT PRIMARY KEY,
+    client_phone  TEXT NOT NULL,
+    items_json    TEXT NOT NULL,
+    total         TEXT NOT NULL,
+    expires_at    TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    current_order TEXT,
+    current_amount TEXT,
+    current_order_at TEXT,
+    paid_at       TEXT,
+    paid_order    TEXT
+  );
+  CREATE TABLE IF NOT EXISTS renewal_pay_link_orders (
+    order_name TEXT PRIMARY KEY,
+    code       TEXT NOT NULL,
+    amount     TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS account_codes (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

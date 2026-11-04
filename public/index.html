@@ -883,6 +883,37 @@
   </div>
 
   <!-- ───────────── MODAL: Renovados > enviar cuenta nueva ───────────── -->
+  <!-- ───────────── MODAL: 💬 Reno-manual — link de pago con varias cuentas ───────────── -->
+  <div id="paylink-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide" style="overflow-y: auto;">
+      <div class="modal-head">
+        <h3>💬 Reno-manual — link de pago</h3>
+        <button type="button" class="modal-x" data-close-modal="paylink-modal">✕</button>
+      </div>
+      <p id="paylink-info" class="panel-hint"></p>
+      <div id="paylink-step-pick">
+        <ul id="paylink-list" class="paylink-list"></ul>
+        <div class="paylink-total">Total: <b id="paylink-total">S/ 0.00</b></div>
+        <p class="panel-hint">El link vale hasta hoy a medianoche. Cada monto Yape dura 5 min y se regenera solo. Al pagar, las cuentas quedan como «✅ Renueva» automáticamente.</p>
+        <p id="paylink-error" class="login-error" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" data-close-modal="paylink-modal">Cancelar</button>
+          <button type="button" id="paylink-create" class="btn-primary">🔗 Crear link</button>
+        </div>
+      </div>
+      <div id="paylink-step-ready" hidden>
+        <label>Mensaje para el cliente
+          <textarea id="paylink-message" rows="12" style="width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;"></textarea>
+        </label>
+        <div class="modal-actions" style="flex-wrap: wrap;">
+          <button type="button" id="paylink-copy-link" class="btn-secondary">🔗 Copiar link</button>
+          <button type="button" id="paylink-copy-msg" class="btn-secondary">📋 Copiar mensaje</button>
+          <a id="paylink-wa" class="btn-primary" target="_blank" rel="noopener" style="text-decoration: none;">📲 Abrir WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="full-renewal-modal" class="modal-backdrop" hidden>
     <form id="full-renewal-form" class="modal-card">
       <div class="modal-head">

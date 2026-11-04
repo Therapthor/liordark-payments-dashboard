@@ -78,47 +78,12 @@
     return `📋 *Resumen de tus cuentas*\n\n${lines}`;
   }
 
-  // Misma lógica de corte que renderInfoRows (app.js/renovar.js) — el texto
-  // libre del método de pago puede venir en varias líneas o separado por
-  // 2+ espacios en una sola línea. Acá NO se intenta adivinar cuál fila es
-  // "Yape" o "Titular" (la etiqueta puede traer emoji, mayúsculas, etc.) —
-  // se muestran las filas tal cual, igual que ya se ven en renovar.html.
-  let yapeInfoCache = null;
-  async function loadYapeInfo() {
-    if (yapeInfoCache) return yapeInfoCache;
-    try {
-      const res = await fetch("/api/store/payment-methods");
-      const { methods } = await res.json();
-      const yape = (methods || []).find(m => m.name.toLowerCase().includes("yape"));
-      if (!yape) { yapeInfoCache = null; return null; }
-      const lines = (yape.description || "")
-        .split(/\r?\n|(?<=\S) {2,}(?=\S)/).map(l => l.trim()).filter(Boolean);
-      yapeInfoCache = lines.length ? { lines } : null;
-    } catch {
-      yapeInfoCache = null;
-    }
-    return yapeInfoCache;
-  }
-
   function daysPhrase(daysLeft) {
     if (daysLeft == null) return "pronto";
     if (daysLeft === 1) return "mañana";
     if (daysLeft === 0) return "hoy";
     if (daysLeft < 0) return "ya venció";
     return "en " + daysLeft + " días";
-  }
-
-  function msgRenovacion(ctx, extra, yape) {
-    const perfilLine = ctx.profileName ? ` · Perfil: *${ctx.profileName}*` : "";
-    const tag = extra.platformTag || ctx.platform;
-    const payLine = yape
-      ? `💳 ${yape.lines.join("\n")}`
-      : `💳 Pídele al admin el método de pago.`;
-    return `🥭 *Liordark* — Renovación\n\n` +
-      `📺 *${tag}*${perfilLine}\n📧 Correo: *${ctx.email}*\n\n` +
-      `⏰ Tu cuenta vence ${daysPhrase(ctx.daysLeft)}. Renueva ahora y no pierdas el acceso.\n\n` +
-      `*Monto a pagar: S/ ${extra.price}*\n${payLine}\n\n` +
-      `Cuando pagues, mándame la captura del comprobante y te confirmo al toque ✅`;
   }
 
   /** Datos de perfil + cuenta combinados, tal como los necesitan los mensajes de WhatsApp. */
@@ -613,19 +578,132 @@
     if (act === "release")      return releaseProfile(ctx.id, ctx.accountId);
   }
 
-  // Botón 💬 Reno-manual — arma el mensaje con el precio real del catálogo
-  // y el Yape vigente, y abre WhatsApp con todo ya escrito (no hay API
-  // para mandarlo solo, ver msgRenovacion).
-  async function sendRenewalManual(ctx) {
+  // Botón 💬 Reno-manual — abre el modal del LINK DE PAGO: junta todas
+  // las cuentas por vencer del cliente en un solo link (liordark.com/
+  // renovar.html?pack=…) con el total; el cliente paga con Yape y se
+  // confirma solo (ver renewal-pay-links.repository.ts). WhatsApp se abre
+  // con el mensaje ya escrito (no hay API para mandarlo solo).
+  let paylinkState = null;
+
+  function sendRenewalManual(ctx) {
+    openPayLinkModal(ctx.clientPhone, ctx.id);
+  }
+
+  const KEYCAPS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+
+  function paylinkMessage(link) {
+    const lines = link.items.map((it, i) => {
+      const n = KEYCAPS[i] || `${i + 1}.`;
+      const perfil = it.profileName ? ` · Perfil: *${it.profileName}*` : "";
+      return `${n} *${it.platformTag || it.platform}*${perfil}\n` +
+        `      📧 ${it.email} · ⏰ vence ${daysPhrase(it.daysLeft)} (${fmtDateLong(it.expiresAt)}) · S/ ${it.price}`;
+    }).join("\n");
+    const intro = link.items.length > 1 ? "Estas cuentas tuyas vencen pronto:" : "Tu cuenta vence pronto:";
+    return `🥭 *Liordark* — Renovación\n\n` +
+      `Hola 👋 ${intro}\n\n${lines}\n\n` +
+      `💰 *Total: S/ ${link.total}*\n\n` +
+      `👉 Renueva ${link.items.length > 1 ? "todo" : ""} aquí en 1 minuto — pagas con Yape y se confirma solo, no necesitas mandar captura:\n` +
+      `${link.url}\n\n` +
+      `⏳ El link vale solo hasta hoy a las 11:59 p. m.`;
+  }
+
+  function paylinkUpdateTotal() {
+    const total = paylinkState.candidates
+      .filter(c => paylinkState.selected.has(c.profileId))
+      .reduce((sum, c) => sum + parseFloat(c.price), 0);
+    document.getElementById("paylink-total").textContent = "S/ " + total.toFixed(2);
+    document.getElementById("paylink-create").disabled = paylinkState.selected.size === 0;
+  }
+
+  async function openPayLinkModal(clientPhone, clickedProfileId) {
+    const modal = document.getElementById("paylink-modal");
+    const list  = document.getElementById("paylink-list");
+    const err   = document.getElementById("paylink-error");
+    document.getElementById("paylink-step-pick").hidden = false;
+    document.getElementById("paylink-step-ready").hidden = true;
+    document.getElementById("paylink-info").textContent = "Cliente: " + clientPhone + " — cargando cuentas…";
+    list.innerHTML = "";
+    err.hidden = true;
+    modal.hidden = false;
+
+    let candidates = [];
     try {
-      const [extra, yape] = await Promise.all([
-        api("/profiles/" + ctx.id + "/renewal-message"),
-        loadYapeInfo(),
-      ]);
-      window.open(waLink(ctx.clientPhone, msgRenovacion(ctx, extra, yape)), "_blank");
-    } catch (err) {
-      alert(err.message || "No se pudo armar el mensaje.");
+      ({ candidates } = await api("/renewal-pay-link/candidates?phone=" + encodeURIComponent(clientPhone)));
+    } catch (e) {
+      err.textContent = e.message; err.hidden = false;
+      return;
     }
+
+    // Preselección: la cuenta del botón tocado + las demás que vencen en 7 días o menos.
+    const selected = new Set(candidates
+      .filter(c => c.eligible && (c.profileId === clickedProfileId || (c.daysLeft !== null && c.daysLeft <= 7)))
+      .map(c => c.profileId));
+    paylinkState = { clientPhone, candidates, selected, link: null };
+
+    document.getElementById("paylink-info").textContent =
+      "Cliente: " + clientPhone + " — marca las cuentas que van en el link.";
+    list.innerHTML = candidates.length ? candidates.map(c => `
+      <li>
+        <label class="paylink-item ${c.eligible ? "" : "is-disabled"}">
+          <input type="checkbox" data-id="${c.profileId}" ${selected.has(c.profileId) ? "checked" : ""} ${c.eligible ? "" : "disabled"}>
+          <span class="paylink-item-main">
+            <b>${escapeHtml(c.platformTag || c.platform)}${c.profileName ? " · " + escapeHtml(c.profileName) : ""}</b>
+            <span class="paylink-item-sub">${escapeHtml(c.email)} · vence ${escapeHtml(daysPhrase(c.daysLeft))} (${fmtDateLong(c.expiresAt)})${c.eligible ? "" : " · ⚠️ " + escapeHtml(c.reason)}</span>
+          </span>
+          <span class="paylink-item-price">S/ ${escapeHtml(c.price)}</span>
+        </label>
+      </li>`).join("") : `<li class="text-muted">Este cliente no tiene cuentas.</li>`;
+
+    list.querySelectorAll("input[type=checkbox]").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const id = Number(cb.dataset.id);
+        if (cb.checked) paylinkState.selected.add(id); else paylinkState.selected.delete(id);
+        paylinkUpdateTotal();
+      });
+    });
+    paylinkUpdateTotal();
+  }
+
+  async function createPayLinkFromModal() {
+    const btn = document.getElementById("paylink-create");
+    const err = document.getElementById("paylink-error");
+    err.hidden = true;
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = "Creando…";
+    try {
+      const link = await api("/renewal-pay-link", {
+        method: "POST",
+        body: JSON.stringify({ phone: paylinkState.clientPhone, profileIds: [...paylinkState.selected] }),
+      });
+      paylinkState.link = link;
+      const text = paylinkMessage(link);
+      document.getElementById("paylink-message").value = text;
+      document.getElementById("paylink-wa").href = waLink(paylinkState.clientPhone, text);
+      document.getElementById("paylink-step-pick").hidden = true;
+      document.getElementById("paylink-step-ready").hidden = false;
+      document.getElementById("paylink-info").textContent =
+        `✅ Link listo — ${link.items.length} cuenta(s), total S/ ${link.total}. Revisa el mensaje y envíalo.`;
+    } catch (e) {
+      err.textContent = e.message; err.hidden = false;
+    } finally {
+      btn.textContent = original;
+      btn.disabled = false;
+    }
+  }
+
+  function initPayLinkModal() {
+    document.getElementById("paylink-create").addEventListener("click", createPayLinkFromModal);
+    // Si el admin edita el texto, el botón de WhatsApp manda lo editado.
+    document.getElementById("paylink-message").addEventListener("input", (e) => {
+      if (paylinkState) document.getElementById("paylink-wa").href = waLink(paylinkState.clientPhone, e.target.value);
+    });
+    document.getElementById("paylink-copy-msg").addEventListener("click", (e) => {
+      copyToClipboard(e.currentTarget, document.getElementById("paylink-message").value);
+    });
+    document.getElementById("paylink-copy-link").addEventListener("click", (e) => {
+      if (paylinkState?.link) copyToClipboard(e.currentTarget, paylinkState.link.url);
+    });
   }
 
   async function releaseProfile(profileId, accountId) {
@@ -1736,6 +1814,7 @@
     initRenewalHistoryModal();
     initSearch();
     initClientSummarySend();
+    initPayLinkModal();
     initClientSummaryActions();
     initProviderRenewalListActions();
     initPasswordChangeListActions();

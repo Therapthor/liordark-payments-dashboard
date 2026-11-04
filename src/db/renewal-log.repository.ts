@@ -1,5 +1,6 @@
 import { db } from "./db";
 import { findAccountByClientPhone, setProfileRenewal } from "./access.repository";
+import { applyPayLinkPayment } from "./renewal-pay-links.repository";
 
 function last9(phone: string): string {
   return phone.replace(/\D/g, "").slice(-9);
@@ -44,6 +45,11 @@ export function confirmRenewalLog(orderName: string): { found: boolean } {
   const result = db.prepare(`
     UPDATE renewals_log SET status = 'Confirmado' WHERE order_name = ?
   `).run(orderName);
+
+  // Pago de un link de varias cuentas (Reno-manual): la orden no es de una
+  // sola plataforma, así que se marcan todos los perfiles del link.
+  const payLink = applyPayLinkPayment(orderName);
+  if (payLink.applied) return { found: true };
 
   if (result.changes > 0 && row) {
     const account = findAccountByClientPhone(row.platform, row.phone);

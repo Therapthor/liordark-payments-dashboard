@@ -31,6 +31,7 @@ import {
 } from "../db/customer-notifications.repository";
 import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
+import { findPayLink, isPayLinkExpired, stillValidItems, setPayLinkOrder } from "../db/renewal-pay-links.repository";
 import {
   getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
   countUnreadForCustomer, isValidStickerId, chatHasNoMessages,
@@ -329,6 +330,96 @@ router.post("/renew-code/:code/checkout", async (req, res) => {
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
   const { status, body } = await renewalCheckout(link.phone, platform, clientEmail, clientPassword);
   res.status(status).json(body);
+});
+
+// ─────────────────────────────────────────────────────────────
+// LINK DE PAGO DE RENOVACIÓN (💬 Reno-manual) — varias cuentas, un solo
+// pago. Público como /renew-code (el código del link es la llave). Cada
+// monto Yape reservado dura 5 min (igual que en el bot); si se vence sin
+// pagar, el siguiente POST /order reserva uno nuevo. El link entero vale
+// hasta la medianoche (hora Lima) del día en que se creó.
+// ─────────────────────────────────────────────────────────────
+
+const PAY_LINK_ORDER_TTL_MS = 5 * 60 * 1000;
+// Margen para no mostrar un monto al que le quedan segundos — si quedan
+// menos de 30s se reserva uno nuevo de una vez.
+const PAY_LINK_ORDER_MIN_LEFT_MS = 30 * 1000;
+
+function payLinkPublicView(code: string) {
+  const link = findPayLink(code);
+  if (!link) return { status: 404, body: { message: "Este link no existe. Pídele uno nuevo a tu vendedor." } };
+
+  if (link.paidAt) {
+    return { status: 200, body: {
+      paid: true, total: link.total, expiresAt: link.expiresAt,
+      items: link.items.map(i => ({ platform: i.platformTag || i.platform, profileName: i.profileName, price: i.price })),
+    } };
+  }
+  if (isPayLinkExpired(link)) {
+    return { status: 410, body: { message: "Este link ya venció (era válido solo hasta la medianoche). Pídele uno nuevo a tu vendedor." } };
+  }
+
+  const items = stillValidItems(link);
+  if (items.length === 0) {
+    return { status: 410, body: { message: "Estas cuentas ya no están pendientes de renovar." } };
+  }
+  const total = items.reduce((s, i) => s + parseFloat(i.price), 0).toFixed(2);
+
+  let order: { amount: string; expiresAtMs: number } | null = null;
+  if (link.currentOrder && link.currentAmount && link.currentOrderAt) {
+    const expiresAtMs = new Date(link.currentOrderAt).getTime() + PAY_LINK_ORDER_TTL_MS;
+    if (expiresAtMs - Date.now() > PAY_LINK_ORDER_MIN_LEFT_MS) order = { amount: link.currentAmount, expiresAtMs };
+  }
+
+  return { status: 200, body: {
+    paid: false, total, expiresAt: link.expiresAt, order, link, validItems: items,
+    items: items.map(i => ({
+      platform: i.platformTag || i.platform, profileName: i.profileName, price: i.price,
+      daysLeft: daysLeft(i.expiresAt),
+    })),
+  } };
+}
+
+function stripInternal(body: any) {
+  const { link, validItems, ...rest } = body;
+  return rest;
+}
+
+router.get("/renew-pack/:code", (req, res) => {
+  const view = payLinkPublicView(req.params.code);
+  res.status(view.status).json(stripInternal(view.body));
+});
+
+router.post("/renew-pack/:code/order", async (req, res) => {
+  const view = payLinkPublicView(req.params.code);
+  if (view.status !== 200) return res.status(view.status).json(stripInternal(view.body));
+  const body: any = view.body;
+  if (body.paid) return res.json(stripInternal(body));
+  if (body.order) return res.json(stripInternal(body)); // el monto vigente sigue sirviendo
+
+  const link = body.link as NonNullable<ReturnType<typeof findPayLink>>;
+  const items = body.validItems as ReturnType<typeof stillValidItems>;
+  const tags = [...new Set(items.map(i => i.platformTag || i.platform))];
+  const label = ("RENOVACIÓN x" + items.length + ": " + tags.join(" + ")).slice(0, 120);
+
+  try {
+    const response = await axios.post(
+      env.BOT_BASE_URL + "/api/web-orders",
+      {
+        phone: link.clientPhone,
+        isRenewal: true,
+        renewalBundle: { platforms: items.map(i => i.platform), totalPrice: parseFloat(body.total), label },
+      },
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
+    );
+    const orderName = String(response.data.orderName);
+    const amount    = String(response.data.amount);
+    setPayLinkOrder(link.code, orderName, amount);
+    res.json({ ...stripInternal(body), order: { amount, expiresAtMs: Date.now() + PAY_LINK_ORDER_TTL_MS } });
+  } catch (err: any) {
+    const message = err?.response?.data?.message || "No se pudo generar el monto. Intenta de nuevo en unos segundos.";
+    res.status(err?.response?.status === 422 ? 409 : 502).json({ message });
+  }
 });
 
 // GET /api/store/catalog — productos + combos activos, con disponibilidad

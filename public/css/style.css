@@ -1311,3 +1311,13 @@ button, input {
   .chat-admin-conversation { height: 70vh; min-height: 360px; }
   .chat-admin-quick-row { flex-wrap: wrap; }
 }
+
+/* 💬 Reno-manual — link de pago con varias cuentas */
+.paylink-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.paylink-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.paylink-item input { width: 18px; height: 18px; flex-shrink: 0; }
+.paylink-item.is-disabled { opacity: 0.55; cursor: default; }
+.paylink-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.paylink-item-sub { font-size: 12px; opacity: 0.75; }
+.paylink-item-price { font-weight: 700; white-space: nowrap; }
+.paylink-total { text-align: right; font-size: 16px; margin: 10px 0 4px; }

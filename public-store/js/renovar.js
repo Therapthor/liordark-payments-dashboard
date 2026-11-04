@@ -32,7 +32,7 @@
   }
 
   function showState(id) {
-    ["renew-loading", "renew-error", "renew-blocked", "renew-picker", "renew-form", "renew-ready", "renew-success"].forEach(s => {
+    ["renew-loading", "renew-error", "renew-blocked", "renew-picker", "renew-form", "renew-ready", "renew-pack", "renew-success"].forEach(s => {
       document.getElementById(s).hidden = s !== id;
     });
   }
@@ -181,7 +181,120 @@
     showState("renew-picker");
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // LINK DE PAGO CON VARIAS CUENTAS (?pack=CODE, 💬 Reno-manual del panel)
+  // Al abrir se reserva un monto Yape (5 min). Si se acaba sin pagar, se
+  // pide otro solo (si la pestaña está a la vista; si no, al volver).
+  // El pago se detecta consultando el link cada 4s (paid:true).
+  // ─────────────────────────────────────────────────────────────
+  const pack = (params.get("pack") || "").trim();
+  let packTimer = null;
+  let packPoll = null;
+  let packOrderExpiresAt = 0;
+  let packRequesting = false;
+  let packNeedsNewAmount = false;
+
+  function packStop() {
+    if (packTimer) clearInterval(packTimer);
+    if (packPoll) clearInterval(packPoll);
+    packTimer = packPoll = null;
+  }
+
+  function packSuccess(data) {
+    packStop();
+    const n = (data.items || []).length;
+    document.getElementById("renew-success-text").textContent = n > 1
+      ? `Se renovaron tus ${n} cuentas con las mismas que ya tenías. 🙌`
+      : "Se renovó con la misma cuenta que ya tenías.";
+    showState("renew-success");
+  }
+
+  function packRender(data) {
+    const items = data.items || [];
+    document.getElementById("renew-pack-count").textContent =
+      items.length > 1 ? items.length + " cuentas" : (items[0] ? items[0].platform : "tu cuenta");
+    document.getElementById("renew-pack-list").innerHTML = items.map(it => `
+      <div class="renew-picker-item">
+        <div class="renew-picker-info">
+          <span class="renew-picker-name">${escapeHtml(it.platform)}${it.profileName ? " · " + escapeHtml(it.profileName) : ""}</span>
+          <span class="renew-picker-days">${it.daysLeft === 1 ? "Vence mañana" : "Vence en " + it.daysLeft + " días"}</span>
+        </div>
+        <span class="renew-pack-price">S/ ${escapeHtml(it.price)}</span>
+      </div>`).join("");
+    document.getElementById("renew-pack-total").textContent = "S/ " + data.total;
+
+    if (data.order) {
+      const amountEl = document.getElementById("renew-pack-amount");
+      const changed = amountEl.textContent !== "S/ " + data.order.amount;
+      amountEl.textContent = "S/ " + data.order.amount;
+      document.getElementById("renew-pack-amount-copy").dataset.copy = data.order.amount;
+      if (changed) { amountEl.classList.remove("is-new"); void amountEl.offsetWidth; amountEl.classList.add("is-new"); }
+      packOrderExpiresAt = data.order.expiresAtMs;
+    }
+  }
+
+  function packTick() {
+    const left = Math.max(0, packOrderExpiresAt - Date.now());
+    const m = Math.floor(left / 60000);
+    const sec = Math.floor((left % 60000) / 1000);
+    document.getElementById("renew-pack-timer").textContent = m + ":" + String(sec).padStart(2, "0");
+    if (left <= 30000) {
+      if (document.visibilityState === "visible") packRequestAmount();
+      else packNeedsNewAmount = true;
+    }
+  }
+
+  async function packRequestAmount() {
+    if (packRequesting) return;
+    packRequesting = true;
+    try {
+      const data = await api("/renew-pack/" + encodeURIComponent(pack) + "/order", { method: "POST" });
+      if (data.paid) return packSuccess(data);
+      packRender(data);
+      packNeedsNewAmount = false;
+    } catch (err) {
+      if (err.status === 404 || err.status === 410) { packStop(); showError(err.message); }
+      // 409/502: el bot no pudo reservar ahora — se reintenta en el próximo tick.
+    } finally {
+      packRequesting = false;
+    }
+  }
+
+  async function initPack() {
+    showState("renew-loading");
+    try {
+      const data = await api("/renew-pack/" + encodeURIComponent(pack) + "/order", { method: "POST" });
+      if (data.paid) return packSuccess(data);
+      packRender(data);
+    } catch (err) {
+      showError(err.message || "No se pudo abrir tu link. Intenta de nuevo en unos segundos.");
+      return;
+    }
+
+    const { methods } = await api("/payment-methods").catch(() => ({ methods: [] }));
+    const yape = (methods || []).find(m => m.name.toLowerCase().includes("yape"));
+    const qrImg = document.getElementById("renew-pack-qr");
+    if (yape && yape.imageUrl) { qrImg.src = yape.imageUrl; qrImg.hidden = false; } else { qrImg.hidden = true; }
+    renderInfoRows(document.getElementById("renew-pack-instructions"), yape ? yape.description : "");
+
+    showState("renew-pack");
+    packTick();
+    packTimer = setInterval(packTick, 1000);
+    packPoll = setInterval(async () => {
+      try {
+        const data = await api("/renew-pack/" + encodeURIComponent(pack));
+        if (data.paid) packSuccess(data);
+      } catch (err) {
+        if (err.status === 410 || err.status === 404) { packStop(); showError(err.message); }
+      }
+    }, POLL_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && packNeedsNewAmount) packRequestAmount();
+    });
+  }
+
   async function init() {
+    if (pack) return initPack();
     if (!token && !code) {
       showError("Este link no es válido. Entra a liordark.com para renovar.");
       return;

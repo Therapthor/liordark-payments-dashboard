@@ -904,7 +904,7 @@ a { color: var(--btn); }
 .renew-subtitle { font-size: 12.5px; color: rgba(255,255,255,.55); margin-bottom: 26px; }
 .renew-card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
 .renew-card .checkout-state { padding: 28px 24px; }
-.renew-card #renew-ready, .renew-card #renew-success, .renew-card #renew-error { padding: 0; }
+.renew-card #renew-ready, .renew-card #renew-pack, .renew-card #renew-success, .renew-card #renew-error { padding: 0; }
 .renew-picker-list { display: flex; flex-direction: column; gap: 9px; }
 .renew-picker-item {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -1388,3 +1388,14 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   .chat-input-row { padding: 10px 12px; }
   .chat-bubble { max-width: 86%; }
 }
+
+/* Link de pago con varias cuentas (renovar.html?pack=…) */
+.renew-pack-total-row {
+  align-self: stretch; display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; margin-bottom: 10px; border-top: 1px dashed var(--border);
+  font-family: 'Space Grotesk', sans-serif; font-size: 15px; color: var(--text);
+}
+.renew-pack-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; color: var(--text); white-space: nowrap; }
+@keyframes packAmountFlash { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.checkout-amount.is-new { animation: packAmountFlash .5s ease-out; }
+#renew-pack-list .renew-picker-info { align-items: flex-start; text-align: left; }
