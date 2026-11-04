@@ -515,6 +515,7 @@ async function lookupVegamig(email: string): Promise<CodeLookupResult> {
 
 const JB_BASE = "https://joseb.shop";
 const JB_NETFLIX_CATEGORY = "1";
+const JB_DISNEY_CATEGORY  = "3"; // confirmado con una búsqueda real (nov-2026)
 const JB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 let jbCookie: string | null = null;
 let jbQueue: Promise<unknown> = Promise.resolve();
@@ -539,10 +540,10 @@ async function jbLogin(): Promise<string> {
   return cookie;
 }
 
-async function jbSearch(email: string, cookie: string): Promise<any> {
+async function jbSearch(email: string, cookie: string, category: string): Promise<any> {
   const boundary = "----LiordarkBoundary" + Math.random().toString(16).slice(2);
   const body =
-    `--${boundary}\r\nContent-Disposition: form-data; name="categoria_id"\r\n\r\n${JB_NETFLIX_CATEGORY}\r\n` +
+    `--${boundary}\r\nContent-Disposition: form-data; name="categoria_id"\r\n\r\n${category}\r\n` +
     `--${boundary}\r\nContent-Disposition: form-data; name="remitente"\r\n\r\n${email}\r\n` +
     `--${boundary}--\r\n`;
   const res = await axios.post(`${JB_BASE}/search_handler.php`, body, {
@@ -562,20 +563,44 @@ export function parseJosebResponse(data: any): CodeLookupResult {
   return extractCodeFromEmailHtml(data.html, received, { anyButtonFallback: false });
 }
 
-async function jbLookupOnce(email: string): Promise<CodeLookupResult> {
-  if (!jbCookie) jbCookie = await jbLogin();
-  let data = await jbSearch(email, jbCookie);
-  if (data === null) {            // sesión vencida: se vuelve a entrar una vez
-    jbCookie = await jbLogin();
-    data = await jbSearch(email, jbCookie);
-  }
-  return parseJosebResponse(data);
+/**
+ * Disney+ (categoría 3): el correo trae el "código de acceso único" de 6
+ * dígitos en texto (el idioma varía — el de prueba vino en checo), sin
+ * botón. Se toma el primer número de exactamente 6 dígitos del cuerpo
+ * (la dirección/registro de Disney al pie tienen 4 u 8 dígitos).
+ * Exportado para pruebas.
+ */
+export function parseJosebDisneyResponse(data: any): CodeLookupResult {
+  if (!data || data.success !== true || typeof data.html !== "string") return VG_NOT_FOUND;
+  const received = typeof data.details?.date === "string" ? data.details.date : undefined;
+  const code = emailHtmlToText(data.html).match(/(?<![\d.,/-])\d{6}(?![\d.,/-])/)?.[0];
+  if (!code) return VG_NOT_FOUND;
+  return { found: true, kind: "code", value: code, ...(received ? { providerReceivedAt: received } : {}) };
 }
 
-function lookupJosebNetflix(email: string): Promise<CodeLookupResult> {
-  const run = jbQueue.then(() => jbLookupOnce(email));
+async function jbLookupOnce(email: string, category: string): Promise<any> {
+  if (!jbCookie) jbCookie = await jbLogin();
+  let data = await jbSearch(email, jbCookie, category);
+  if (data === null) {            // sesión vencida: se vuelve a entrar una vez
+    jbCookie = await jbLogin();
+    data = await jbSearch(email, jbCookie, category);
+  }
+  return data;
+}
+
+// Las búsquedas se hacen de a una (misma sesión para Netflix y Disney+).
+function jbQueued(email: string, category: string): Promise<any> {
+  const run = jbQueue.then(() => jbLookupOnce(email, category));
   jbQueue = run.catch(() => undefined);
   return run;
+}
+
+async function lookupJosebNetflix(email: string): Promise<CodeLookupResult> {
+  return parseJosebResponse(await jbQueued(email, JB_NETFLIX_CATEGORY));
+}
+
+async function lookupJosebDisney(email: string): Promise<CodeLookupResult> {
+  return parseJosebDisneyResponse(await jbQueued(email, JB_DISNEY_CATEGORY));
 }
 
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
@@ -587,6 +612,7 @@ const SOURCES: Record<string, Source> = {
   streaming_market_web: { label: "Streaming Market — página de códigos", lookup: lookupStreamingMarket },
   vegamig_web:          { label: "Vegamig — Prime Video / Crunchyroll", lookup: lookupVegamig },
   joseb_netflix:        { label: "José Streaming — Netflix", lookup: lookupJosebNetflix },
+  joseb_disney:         { label: "José Streaming — Disney+", lookup: lookupJosebDisney },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -656,7 +682,7 @@ const RETRY_DELAY_MS = 12000; // 5 esperas de 12s ≈ 60s en total
 export type SeenCode = { value: string; providerReceivedAt?: string };
 
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
-  return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix"
+  return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix" || sourceId === "joseb_disney"
     || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones";
 }
 
