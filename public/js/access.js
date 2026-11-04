@@ -614,7 +614,7 @@
     const discountLine = parseFloat(link.discount) > 0
       ? `🎁 Descuento ${PAYLINK_DISCOUNT_PCT}% por renovar ${PAYLINK_DISCOUNT_MIN} o más: -S/ ${link.discount}\n`
       : `🎁 Renueva ${PAYLINK_DISCOUNT_MIN} o más plataformas juntas y te descontamos ${PAYLINK_DISCOUNT_PCT}%\n`;
-    return `🥭 *Manguito P* — Renovación\n\n` +
+    return `🥭 *Manguitope* — Renovación\n\n` +
       `Hola 👋 ${intro}\n\n${lines}\n\n` +
       discountLine +
       `💰 *Total: S/ ${link.total}*\n\n` +
