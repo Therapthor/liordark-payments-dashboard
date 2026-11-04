@@ -9,7 +9,7 @@ import {
 } from "../db/codes.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import {
-  TOTP_SOURCE_ID, isAdminOnlyResult, lookupCodeWithRetries, skipsRepeatedCodes,
+  TOTP_SOURCE_ID, isAdminOnlyResult, lookupCodeForClientWithRetries, skipsRepeatedCodes,
   type CodeLookupResult,
 } from "./codes-lookup.service";
 import { deleteChatMedia } from "./cloudinary.service";
@@ -250,16 +250,27 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
   }
   lookups[accountId] = done + 1;
 
+  // Netflix: solo se entrega el código de inicio de sesión de 4 dígitos.
+  // En la TV no se puede pedir directo — se recuerda el paso previo.
+  const isNetflix = /netflix/i.test(account.platform);
+  if (isNetflix) {
+    say(chat.id,
+      "📺 ¿Vas a entrar en tu TV? Primero inicia sesión en tu celular, laptop o PC con el código que te doy aquí. " +
+      "Luego, desde ese celular, escanea el código QR que aparece en la TV y listo ✅\n" +
+      "(Desde la TV directamente no se puede.)");
+  }
   say(chat.id,
     `🔎 Buscando tu código de ${account.platform}…\n` +
-    "Si aún no lo pediste, solicítalo ahora en la app o página (botón «Enviar código» al iniciar sesión). Puede tardar hasta 1 minuto ⏳");
+    (isNetflix
+      ? "Si aún no lo pediste: en la app toca «Iniciar sesión» → «Usar un código de inicio de sesión». Te llega un código de 4 dígitos. Puede tardar hasta 1 minuto ⏳"
+      : "Si aún no lo pediste, solicítalo ahora en la app o página (botón «Enviar código» al iniciar sesión). Puede tardar hasta 1 minuto ⏳"));
   setBotState(chat.id, "code_searching", { ...chat.botContext, lookups, accountId });
   typing(chat.id, true);
 
   const exclude = skipsRepeatedCodes(sourceId) ? getLastSeenCodeForEmail(account.email) : null;
   let result: CodeLookupResult;
   try {
-    result = await lookupCodeWithRetries(sourceId, account.email, exclude);
+    result = await lookupCodeForClientWithRetries(sourceId, account.email, exclude);
   } catch {
     result = { found: false, kind: null, value: null };
   }
@@ -275,7 +286,9 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
   }
 
   if (result.found && isAdminOnlyResult(sourceId, result)) {
-    handoff(current, "Por seguridad, este tipo de código lo entrega un asesor 👤. Ya le avisé, te escribirá por aquí en breve 🙌");
+    handoff(current, result.kind === "link"
+      ? "El enlace de acceso lo envía un asesor 👤. Ya le avisé, te escribirá por aquí en breve 🙌"
+      : "Por seguridad, este tipo de código lo entrega un asesor 👤. Ya le avisé, te escribirá por aquí en breve 🙌");
     return;
   }
 

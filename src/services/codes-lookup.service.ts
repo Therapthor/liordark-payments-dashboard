@@ -233,8 +233,29 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
  *  sub-acciones sensibles de "con opciones". Lo ve solo el admin. */
 export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
   if (!result.found) return false;
+  // Netflix por Pally: al cliente SOLO se le entrega automático el código
+  // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
+  // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
+  if (PALLY_NETFLIX_SOURCES.includes(sourceId)) {
+    return !(result.kind === "code" && /^\d{4}$/.test(result.value ?? ""));
+  }
   const netflix6 = (sourceId === "netflix_sin_opciones" || sourceId === "joseb_netflix") && result.kind === "code" && result.value?.length === 6;
   return netflix6 || isSensitiveResult(result);
+}
+
+const PALLY_NETFLIX_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones"];
+
+/** Búsqueda para el CLIENTE (asistente del chat): en Netflix por Pally
+ *  "con opciones" consulta solo «Código Inicio Sesión» (4 dígitos) — no
+ *  prueba las demás opciones, así se generan muchas menos consultas al
+ *  proveedor. El resto de fuentes, igual que lookupCodeWithRetries. */
+export function lookupCodeForClientWithRetries(
+  sourceId: string, email: string, exclude: SeenCode | null = null
+): Promise<CodeLookupResult> {
+  if (sourceId === "netflix_con_opciones") {
+    return lookupCodeActionWithRetries(sourceId, email, "codigo_login", exclude);
+  }
+  return lookupCodeWithRetries(sourceId, email, exclude);
 }
 
 /** Sub-acciones de una fuente, para que el admin elija puntualmente qué
