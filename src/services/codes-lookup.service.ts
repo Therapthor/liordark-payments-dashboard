@@ -181,7 +181,7 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
  *  sub-acciones sensibles de "con opciones". Lo ve solo el admin. */
 export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
   if (!result.found) return false;
-  const netflix6 = sourceId === "netflix_sin_opciones" && result.kind === "code" && result.value?.length === 6;
+  const netflix6 = (sourceId === "netflix_sin_opciones" || sourceId === "joseb_netflix") && result.kind === "code" && result.value?.length === 6;
   return netflix6 || isSensitiveResult(result);
 }
 
@@ -346,7 +346,7 @@ function emailHtmlToText(html: string): string {
 // Texto típico del botón que hay que tocar (Crunchyroll: confirmar correo
 // / dispositivo). Si ninguno calza, se usa el primer enlace con forma de
 // botón que no sea de los de abajo (ayuda, redes, darse de baja…).
-const VG_CONFIRM_LINK = /(confirm|verif|activ|validar|validate|aprob|approve|autoriz|authoriz|s[ií],? (fui|soy) yo|it was me|this was me|yes,? it|continu)/i;
+const VG_CONFIRM_LINK = /(confirm|verif|activ|validar|validate|aprob|approve|autoriz|authoriz|s[ií],? (fui|soy) yo|it was me|this was me|yes,? it|continu|s[ií],? la envi[eé] yo|obtener c[oó]digo|get code|actualizar (tu )?hogar|update (your )?household|update-primary-location|travel\/verify)/i;
 const VG_IGNORE_LINK = /(deny|deneg|no fui yo|not me|wasn.t me|unsubscribe|desuscrib|darte de baja|preferenc|privacy|privacidad|help|ayuda|support|soporte|centro de|reset|password|contrase|terms|t[eé]rminos|facebook|twitter|instagram|youtube|tiktok|discord|app store|google play|view in browser|ver en (el )?navegador)/i;
 const VG_BUTTON_TAG = /(background|bgcolor|padding|border-radius|class="[^"]*(button|btn|cta)|role="button")/i;
 // Años (ej. "© 2026") no son códigos.
@@ -358,9 +358,20 @@ export function parseVegamigPage(page: string): CodeLookupResult {
   if (!srcdoc) return VG_NOT_FOUND;
 
   const emailHtml = decodeHtmlEntities(srcdoc);
-  const text = emailHtmlToText(emailHtml);
-  const received = text.match(/(?:When|Cu[aá]ndo|Fecha)\s*:\s*([^\n]+)/i)?.[1]?.trim();
+  const received = emailHtmlToText(emailHtml).match(/(?:When|Cu[aá]ndo|Fecha)\s*:\s*([^\n]+)/i)?.[1]?.trim();
   // Lo que muestra esta página es para el cliente, sin restricciones.
+  return extractCodeFromEmailHtml(emailHtml, received, { anyButtonFallback: true });
+}
+
+/** Saca el código (o el enlace a tocar) de un correo en HTML — compartido
+ *  por las fuentes que muestran el correo completo (Vegamig, José Streaming).
+ *  anyButtonFallback: si no hay código ni botón "de confirmar", usar el
+ *  primer botón del correo (sirve en Crunchyroll; en Netflix no, porque sus
+ *  correos sin código traen "Ver todas las series" como botón). */
+function extractCodeFromEmailHtml(
+  emailHtml: string, received: string | undefined, opts: { anyButtonFallback: boolean }
+): CodeLookupResult {
+  const text = emailHtmlToText(emailHtml);
   const extra = received ? { providerReceivedAt: received } : {};
 
   // 1) Código explícito ("your verification code is: 123456").
@@ -383,8 +394,10 @@ export function parseVegamigPage(page: string): CodeLookupResult {
   if (loose) return { found: true, kind: "code", value: loose, ...extra };
 
   // 4) Cualquier otro botón (con texto) del correo.
-  const button = links.find(l => l.isButton && l.label);
-  if (button) return { found: true, kind: "link", value: button.href, ...extra };
+  if (opts.anyButtonFallback) {
+    const button = links.find(l => l.isButton && l.label);
+    if (button) return { found: true, kind: "link", value: button.href, ...extra };
+  }
 
   return VG_NOT_FOUND;
 }
@@ -402,6 +415,78 @@ async function lookupVegamig(email: string): Promise<CodeLookupResult> {
   return parseVegamigPage(String(res.data));
 }
 
+// ── José Streaming (joseb.shop) — Netflix ──
+// Pide usuario: POST auth_handler.php (username/password) deja la sesión en
+// la cookie PHPSESSID; la búsqueda es POST search_handler.php (multipart:
+// categoria_id=1 → Netflix, remitente=correo) y devuelve JSON
+// { success, details: { subject, date }, html } con el último correo.
+// Credenciales en .env.production: JOSEB_USER / JOSEB_PASSWORD.
+
+const JB_BASE = "https://joseb.shop";
+const JB_NETFLIX_CATEGORY = "1";
+const JB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+let jbCookie: string | null = null;
+let jbQueue: Promise<unknown> = Promise.resolve();
+
+function jbSessionCookie(setCookie: string[] | string | undefined): string | null {
+  const list = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  const m = list.map(c => c.match(/PHPSESSID=([^;]+)/)?.[1]).find(Boolean);
+  return m ? `PHPSESSID=${m}; cookies_accepted=true` : null;
+}
+
+async function jbLogin(): Promise<string> {
+  if (!env.JOSEB_USER || !env.JOSEB_PASSWORD) throw new Error("Faltan JOSEB_USER / JOSEB_PASSWORD en .env.production.");
+  const page = await axios.get(`${JB_BASE}/index.php`, { headers: { "User-Agent": JB_UA }, timeout: 15_000, maxRedirects: 0, validateStatus: () => true });
+  let cookie = jbSessionCookie(page.headers["set-cookie"]) ?? "cookies_accepted=true";
+  const res = await axios.post(`${JB_BASE}/auth_handler.php`,
+    new URLSearchParams({ username: env.JOSEB_USER, password: env.JOSEB_PASSWORD }).toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie, "User-Agent": JB_UA, Referer: `${JB_BASE}/index.php` },
+      timeout: 15_000, maxRedirects: 0, validateStatus: () => true,
+    });
+  cookie = jbSessionCookie(res.headers["set-cookie"]) ?? cookie;
+  if (!cookie.includes("PHPSESSID")) throw new Error("José Streaming no devolvió sesión.");
+  return cookie;
+}
+
+async function jbSearch(email: string, cookie: string): Promise<any> {
+  const boundary = "----LiordarkBoundary" + Math.random().toString(16).slice(2);
+  const body =
+    `--${boundary}\r\nContent-Disposition: form-data; name="categoria_id"\r\n\r\n${JB_NETFLIX_CATEGORY}\r\n` +
+    `--${boundary}\r\nContent-Disposition: form-data; name="remitente"\r\n\r\n${email}\r\n` +
+    `--${boundary}--\r\n`;
+  const res = await axios.post(`${JB_BASE}/search_handler.php`, body, {
+    headers: {
+      "Content-Type": `multipart/form-data; boundary=${boundary}`, Cookie: cookie,
+      "User-Agent": JB_UA, Referer: `${JB_BASE}/index.php`, Accept: "*/*",
+    },
+    timeout: 20_000, maxRedirects: 0, validateStatus: () => true, responseType: "text", transformResponse: r => r,
+  });
+  try { return JSON.parse(String(res.data)); } catch { return null; } // null = sesión vencida (devuelve HTML/redirección)
+}
+
+/** JSON de search_handler → código/enlace. Exportado para pruebas. */
+export function parseJosebResponse(data: any): CodeLookupResult {
+  if (!data || data.success !== true || typeof data.html !== "string") return VG_NOT_FOUND;
+  const received = typeof data.details?.date === "string" ? data.details.date : undefined;
+  return extractCodeFromEmailHtml(data.html, received, { anyButtonFallback: false });
+}
+
+async function jbLookupOnce(email: string): Promise<CodeLookupResult> {
+  if (!jbCookie) jbCookie = await jbLogin();
+  let data = await jbSearch(email, jbCookie);
+  if (data === null) {            // sesión vencida: se vuelve a entrar una vez
+    jbCookie = await jbLogin();
+    data = await jbSearch(email, jbCookie);
+  }
+  return parseJosebResponse(data);
+}
+
+function lookupJosebNetflix(email: string): Promise<CodeLookupResult> {
+  const run = jbQueue.then(() => jbLookupOnce(email));
+  jbQueue = run.catch(() => undefined);
+  return run;
+}
+
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
 const SOURCES: Record<string, Source> = {
@@ -410,6 +495,7 @@ const SOURCES: Record<string, Source> = {
   disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
   streaming_market_web: { label: "Streaming Market — página de códigos", lookup: lookupStreamingMarket },
   vegamig_web:          { label: "Vegamig — Prime Video / Crunchyroll", lookup: lookupVegamig },
+  joseb_netflix:        { label: "José Streaming — Netflix", lookup: lookupJosebNetflix },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -479,7 +565,7 @@ const RETRY_DELAY_MS = 12000; // 5 esperas de 12s ≈ 60s en total
 export type SeenCode = { value: string; providerReceivedAt?: string };
 
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
-  return sourceId === "streaming_market_web" || sourceId === "vegamig_web";
+  return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix";
 }
 
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {

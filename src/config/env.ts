@@ -55,6 +55,11 @@ export const env = {
   // responde "no encontrado" siempre (no rompe nada).
   STREAMING_MARKET_LOGINS: streamingMarketLogins(),
 
+  // José Streaming (joseb.shop) — buscador de códigos de Netflix (ver
+  // codes-lookup.service.ts). Opcional: sin esto, esa fuente no funciona.
+  JOSEB_USER:     process.env.JOSEB_USER ?? "",
+  JOSEB_PASSWORD: process.env.JOSEB_PASSWORD ?? "",
+
   // SMS de recordatorio de vencimiento (ClickLab/Infobip) — panel >
   // Renovaciones > SMS. Sin esto configurado, ese botón queda inactivo
   // (no rompe nada, solo no se puede mandar SMS).
