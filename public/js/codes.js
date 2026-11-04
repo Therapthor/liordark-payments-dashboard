@@ -92,10 +92,45 @@
     const form   = document.getElementById("codes-search-form");
     const banner = document.getElementById("codes-search-banner");
 
+    // Si el correo se borra, vuelve a la lista completa.
+    document.getElementById("codes-search-email").addEventListener("input", (e) => {
+      if (!e.target.value.trim() && searchFilter) {
+        searchFilter = "";
+        banner.hidden = true;
+        renderAccountsList();
+      }
+    });
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const email = document.getElementById("codes-search-email").value.trim();
       const btn   = form.querySelector("button[type='submit']");
+
+      // 1) ¿Es una cuenta registrada? Se muestra su fila (con sus botones
+      // y su fuente configurada) en vez de consultar todas las fuentes.
+      if (!e.submitter || !e.submitter.dataset.forceAll) {
+        if (cachedAccounts.length === 0) await load();
+        const matches = cachedAccounts.filter(a => (a.email || "").trim().toLowerCase() === email.toLowerCase());
+        if (matches.length > 0) {
+          searchFilter = email.toLowerCase();
+          renderAccountsList();
+          banner.hidden = false;
+          banner.className = "codes-banner";
+          banner.innerHTML = `
+            <span class="codes-banner-icon">📌</span>
+            <span class="codes-banner-info">
+              <span class="codes-banner-email">${escapeHtml(email)}</span>
+              <span class="codes-banner-source">Cuenta registrada · ${escapeHtml(matches.map(m => m.platform + (m.codeSourceLabel ? " (" + m.codeSourceLabel + ")" : "")).join(", "))} — usa los botones de abajo</span>
+            </span>
+            <span class="codes-banner-result"><button type="button" class="codes-consult-btn" data-role="clear-filter">Ver todas</button></span>
+          `;
+          const row = document.querySelector("#codes-accounts-list .codes-account-row");
+          if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      }
+      searchFilter = "";
+      renderAccountsList();
 
       btn.disabled = true;
       const original = btn.textContent;
@@ -133,6 +168,13 @@
     });
 
     banner.addEventListener("click", (e) => {
+      if (e.target.closest("[data-role='clear-filter']")) {
+        searchFilter = "";
+        banner.hidden = true;
+        document.getElementById("codes-search-email").value = "";
+        renderAccountsList();
+        return;
+      }
       const codeEl = e.target.closest(".codes-code");
       if (codeEl) { copyToClipboard(codeEl.dataset.code, codeEl); return; }
       const linkBtn = e.target.closest(".codes-open-btn");
@@ -143,6 +185,9 @@
   // ── Lista de todas las cuentas con código habilitado ──
 
   let cachedAccounts = [];
+  // Correo buscado que corresponde a una cuenta registrada: la lista se
+  // filtra a esa(s) fila(s). Vacío = se ven todas.
+  let searchFilter = "";
 
   const TOTP_PERIOD_SECONDS = 30;
 
@@ -227,7 +272,10 @@
     list.innerHTML = "";
     if (cachedAccounts.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
-    for (const a of cachedAccounts) list.appendChild(renderAccountRow(a));
+    const visible = searchFilter
+      ? cachedAccounts.filter(a => (a.email || "").trim().toLowerCase() === searchFilter)
+      : cachedAccounts;
+    for (const a of visible) list.appendChild(renderAccountRow(a));
     scheduleTotpRefresh();
   }
 
