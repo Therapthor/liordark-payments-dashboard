@@ -33,6 +33,41 @@
     return d.toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
+  // La fila muestra el ÚLTIMO código que se consultó, no necesariamente
+  // el último correo que llegó: si el cliente pidió otro código después,
+  // hay que darle a Consultar. Por eso se muestra la hora del correo en
+  // hora de Lima y cuánto tiempo tiene, y se marca como posiblemente
+  // vencido pasados 15 min (Disney+ y Netflix duran ~15 min).
+  const CODE_STALE_MS = 15 * 60 * 1000;
+
+  function emailDateFromSnippet(snippet) {
+    const raw = String(snippet || "").replace(/^Recibido:\s*/, "").trim();
+    const t = raw ? Date.parse(raw) : NaN;
+    return Number.isNaN(t) ? null : new Date(t);
+  }
+
+  function agoText(ms) {
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "hace segundos";
+    if (min < 60) return "hace " + min + " min";
+    const h = Math.floor(min / 60);
+    return h < 24 ? "hace " + h + " h" : "hace " + Math.floor(h / 24) + " d";
+  }
+
+  function latestCodeHtml(lc) {
+    const isLink = lc.code.startsWith("http");
+    const when = emailDateFromSnippet(lc.snippet)
+      || (() => { const d = new Date(lc.receivedAt && !/[Z+]/.test(lc.receivedAt) ? lc.receivedAt + "Z" : lc.receivedAt); return Number.isNaN(d.getTime()) ? null : d; })();
+    const age = when ? Date.now() - when.getTime() : 0;
+    const stale = !isLink && when && age > CODE_STALE_MS;
+    const hora = when ? when.toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "numeric", minute: "2-digit" }) : "";
+    const label = when
+      ? `Correo de las ${escapeHtml(hora)} · ${agoText(age)}${stale ? " · ⚠️ puede estar vencido, dale a Consultar" : ""}`
+      : escapeHtml(lc.snippet || fmtDateTime(lc.receivedAt));
+    return `<span class="${stale ? "codes-stale" : ""}">${resultHtml(isLink ? "link" : "code", lc.code)}</span>` +
+      `<span class="codes-account-received${stale ? " codes-received-stale" : ""}">${label}</span>`;
+  }
+
   async function copyToClipboard(text, triggerEl) {
     try {
       await navigator.clipboard.writeText(text);
@@ -212,10 +247,7 @@
       return row;
     }
 
-    const latest = a.latestCode
-      ? resultHtml(a.latestCode.code.startsWith("http") ? "link" : "code", a.latestCode.code) +
-        `<span class="codes-account-received">${a.latestCode.snippet ? escapeHtml(a.latestCode.snippet) : fmtDateTime(a.latestCode.receivedAt)}</span>`
-      : "";
+    const latest = a.latestCode ? latestCodeHtml(a.latestCode) : "";
 
     // Fuentes con sub-acciones (ej. "PallyStore con opciones") — el admin
     // elige puntualmente qué consultar en vez de probarlas todas a ciegas.

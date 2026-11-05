@@ -758,6 +758,8 @@ button, input {
 .codes-account-sub { color: var(--cmuted); font-size: 11px; }
 .codes-account-result { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .codes-account-received { font-size: 10px; color: var(--cmuted); }
+.codes-stale { opacity: .45; text-decoration: line-through; }
+.codes-received-stale { color: #F5941E; }
 .codes-accounts-empty { color: var(--cmuted); font-size: 12.5px; }
 
 .codes-code {
