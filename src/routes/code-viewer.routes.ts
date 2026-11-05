@@ -21,6 +21,8 @@ import { getCurrentTotp } from "../utils/totp.util";
 // ─────────────────────────────────────────────────────────────
 
 export const CODE_LINK_MINUTES = [5, 10, 15];
+// 2FA (ChatGPT): el código se ve al instante y rota cada 30 s.
+export const TOTP_LINK_MINUTES = [2, 5, 10];
 
 function limaTime(d: Date): string {
   return d.toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "numeric", minute: "2-digit" });
@@ -88,10 +90,15 @@ codeViewerAdminRoutes.post("/:accountId/link", (req, res) => {
   const account = getAccountById(accountId);
   if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
   const sourceId = getAccountCodeSource(accountId);
-  if (!sourceId || sourceId === TOTP_SOURCE_ID) {
-    return res.status(409).json({ message: "Esta cuenta no tiene una fuente de correo para compartir." });
+  if (!sourceId) {
+    return res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." });
   }
-  const minutes = CODE_LINK_MINUTES.includes(Number(req.body?.minutes)) ? Number(req.body.minutes) : 5;
+  const isTotp = sourceId === TOTP_SOURCE_ID;
+  if (isTotp && !getAccountTotpSecret(accountId)) {
+    return res.status(409).json({ message: "Falta la clave 2FA en Accesos > Editar cuenta." });
+  }
+  const allowed = isTotp ? TOTP_LINK_MINUTES : CODE_LINK_MINUTES;
+  const minutes = allowed.includes(Number(req.body?.minutes)) ? Number(req.body.minutes) : allowed[0]!;
   const link = createCodeLink({
     accountId, email: account.email, sourceId, clientPhone: String(req.body?.clientPhone ?? ""),
     createdBy: "admin", minutes,
@@ -152,6 +159,19 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
   const link = findCodeLink(String(req.params.token));
   if (!link) return res.status(404).json({ message: "Este link no existe." });
   if (codeLinkState(link) !== "active") return res.status(410).json(linkInfo(link));
+
+  // 2FA: se calcula al momento (sin consultar a nadie), siempre vigente.
+  if (link.sourceId === TOTP_SOURCE_ID) {
+    const secret = getAccountTotpSecret(link.accountId);
+    if (!secret) return res.json({ status: "advisor", ...linkInfo(link) });
+    try {
+      const totp = await getCurrentTotp(secret);
+      return res.json({ status: "totp", value: totp.code, secondsRemaining: totp.secondsRemaining, ...linkInfo(link) });
+    } catch (err: any) {
+      console.error("⚠️ link 2FA:", err?.message);
+      return res.json({ status: "advisor", ...linkInfo(link) });
+    }
+  }
 
   const cached = lastChecks.get(link.token);
   if (cached && Date.now() - cached.at < CHECK_MIN_INTERVAL_MS) return res.json(cached.body);

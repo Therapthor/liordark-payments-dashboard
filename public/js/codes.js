@@ -247,6 +247,7 @@
         <span class="codes-account-result">
           <span class="codes-code" data-code="${escapeHtml(a.totp.code)}" title="Clic para copiar">${escapeHtml(a.totp.code)}</span>
           <span class="codes-timer" data-role="totp-ring"><span class="codes-timer-num"></span></span>
+          <button type="button" class="codes-view-btn" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Enviar link</button>
         </span>
       `;
       startTimer(row.querySelector("[data-role='totp-ring']"), a.totp.secondsRemaining, TOTP_PERIOD_SECONDS);

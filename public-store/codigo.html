@@ -205,6 +205,30 @@
     }
   }
 
+  // 2FA: el código cambia cada 30 s; se muestra cuánto le queda y se pide
+  // el siguiente justo al cambiar.
+  let totpTimer = null, totpTick = null;
+  function showTotp(data) {
+    clearTimeout(totpTimer); clearInterval(totpTick);
+    document.querySelector("#s-found .label").textContent = "TU CÓDIGO DE VERIFICACIÓN (2FA)";
+    document.getElementById("found-code").textContent = data.value;
+    document.getElementById("found-code").classList.toggle("long", String(data.value).length > 4);
+    document.getElementById("found-code").hidden = false;
+    document.getElementById("found-codebox").hidden = false;
+    document.getElementById("copy-btn").hidden = false;
+    document.getElementById("found-link").hidden = true;
+    document.getElementById("mail-toggle").hidden = true;
+    document.getElementById("refresh-btn2").hidden = true;
+    lastValue = data.value;
+    let left = Math.max(1, Number(data.secondsRemaining) || 30);
+    const meta = document.getElementById("found-meta");
+    const paint = () => { meta.textContent = platform + " · cambia en " + left + " s"; };
+    paint();
+    totpTick = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
+    totpTimer = setTimeout(() => check(false), left * 1000 + 600);
+    show("s-found");
+  }
+
   async function check(manual) {
     const btns = [document.getElementById("refresh-btn"), document.getElementById("refresh-btn2")];
     btns.forEach(b => { b.disabled = true; });
@@ -213,7 +237,9 @@
       applyInfo(data);
       if (status === 410) { showClosed(data.state); return; }
       if (status !== 200) { toast(data.message || "No se pudo consultar. Intenta de nuevo."); return; }
-      if (data.status === "found") {
+      if (data.status === "totp") {
+        showTotp(data);
+      } else if (data.status === "found") {
         const isLink = data.kind === "link";
         document.getElementById("found-meta").textContent = platform + (data.receivedAtLima ? " · llegó a las " + data.receivedAtLima : "");
         document.getElementById("found-code").textContent = isLink ? "" : data.value;
