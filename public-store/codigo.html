@@ -69,6 +69,9 @@
   body.t-chatgpt { --t-bg: #171717; --t-card: #212121; --t-top: #0F2A22; --t-box: #171717; --t-text: #ECECEC; --t-muted: #B4B4B4; --t-line: #383838; --t-accent: #10A37F; --t-on-accent: #fff; --t-glow: rgba(16,163,127,.35); }
   .code { white-space: nowrap; }
   .code.long, body.themed .code.long { font-size: 44px; letter-spacing: 7px; }
+  .totp-bar { width: 200px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .totp-bar > i { display: block; height: 100%; background: var(--orange); border-radius: 99px; transition: width 1s linear; }
+  .totp-bar.low > i { background: #E5484D; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--brown); color: var(--cream); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
 </style>
 </head>
@@ -97,6 +100,7 @@
     <div class="center">
       <p class="muted" id="found-meta"></p>
       <div class="codebox" id="found-codebox"><p class="code" id="found-code"></p></div>
+      <div class="totp-bar" id="totp-bar" hidden><i></i></div>
       <a class="btn orange" id="found-link" href="#" target="_blank" rel="noopener" hidden>Abrir enlace</a>
       <button class="btn dark" id="copy-btn">Copiar</button>
       <button class="link" id="mail-toggle" hidden>Ver correo completo</button>
@@ -222,7 +226,13 @@
     lastValue = data.value;
     let left = Math.max(1, Number(data.secondsRemaining) || 30);
     const meta = document.getElementById("found-meta");
-    const paint = () => { meta.textContent = platform + " · cambia en " + left + " s"; };
+    const bar = document.getElementById("totp-bar");
+    bar.hidden = false;
+    const paint = () => {
+      meta.textContent = platform + " · cambia en " + left + " s";
+      bar.firstElementChild.style.width = (left / 30 * 100) + "%";
+      bar.classList.toggle("low", left <= 5);
+    };
     paint();
     totpTick = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
     totpTimer = setTimeout(() => check(false), left * 1000 + 600);

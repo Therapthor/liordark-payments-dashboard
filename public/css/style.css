@@ -1404,3 +1404,7 @@ button, input {
 .cv-mail { flex: 1; }
 .cv-body { justify-content: flex-start; }
 .cv-empty { margin: auto; }
+.cv-card-bar { width: 220px; height: 6px; border-radius: 99px; background: var(--t-line); overflow: hidden; }
+.cv-card-bar > i { display: block; height: 100%; background: var(--t-accent); border-radius: 99px; transition: width 1s linear; }
+.cv-card-bar.low > i { background: #E5484D; }
+.cv-card-meta b { color: var(--t-text); }

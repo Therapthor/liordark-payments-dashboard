@@ -95,6 +95,7 @@ window.LiordarkCodeViewer = (() => {
   async function refresh(auto = false) {
     if (!current) return;
     if (!auto) stopWaiting();
+    stopTotpTimer();
     const btn = $("cv-refresh");
     btn.disabled = true; btn.textContent = "Consultando…";
     try {
@@ -106,7 +107,8 @@ window.LiordarkCodeViewer = (() => {
         lastValue = d.totp.code;
         $("cv-copy").hidden = false;
         $("cv-copy").textContent = "Copiar código " + d.totp.code;
-        setEmpty(`<span class="cv-big">${d.totp.code}</span><span>Código 2FA (se renueva solo)</span>`);
+        showCard(d.totp.code, "", false, false);
+        startTotpTimer(d.totp.secondsRemaining);
         return;
       }
       const when = d.receivedAtIso
@@ -155,7 +157,31 @@ window.LiordarkCodeViewer = (() => {
     refresh();
   }
 
+  // 2FA: cuenta regresiva hasta el próximo código (cada 30 s) y se pide
+  // el nuevo apenas cambia.
+  let totpTick = null, totpNext = null;
+  function stopTotpTimer() {
+    clearInterval(totpTick); clearTimeout(totpNext);
+    totpTick = null; totpNext = null;
+    $("cv-card-bar").hidden = true;
+  }
+  function startTotpTimer(seconds) {
+    stopTotpTimer();
+    let left = Math.max(1, Number(seconds) || 30);
+    const bar = $("cv-card-bar");
+    bar.hidden = false;
+    const paint = () => {
+      $("cv-card-meta").innerHTML = current.platform + " · cambia en <b>" + left + " s</b>";
+      bar.firstElementChild.style.width = (left / 30 * 100) + "%";
+      bar.classList.toggle("low", left <= 5);
+    };
+    paint();
+    totpTick = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
+    totpNext = setTimeout(() => { if (current) refresh(true); }, left * 1000 + 600);
+  }
+
   function close() {
+    stopTotpTimer();
     stopWaiting();
     $("cv-drawer-back").hidden = true;
     $("cv-mail").srcdoc = "";
