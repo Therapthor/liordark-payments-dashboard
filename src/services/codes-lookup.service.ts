@@ -802,10 +802,15 @@ export function sanitizeEmailHtml(html: string, forClient: boolean): string {
     out = out
       .replace(/<a\b[^>]*>/gi, '<span style="color:inherit;text-decoration:none">')
       .replace(/<\/a>/gi, "</span>");
-  } else {
-    out = '<base target="_blank">' + out;
   }
-  return '<meta charset="utf-8"><style>body{margin:0;padding:12px;font-family:Arial,sans-serif;background:#fff;color:#222}img{max-width:100%;height:auto}table{max-width:100%}</style>' + out;
+  // Sin forzar fondo ni color: hay correos oscuros (Netflix: fondo negro
+  // por bgcolor, letras blancas) y un fondo blanco los dejaba en blanco.
+  const head = '<meta charset="utf-8"><style>body{margin:0}img{max-width:100%;height:auto}</style>' +
+    (forClient ? "" : '<base target="_blank">');
+  // Si el correo es un documento completo, lo de arriba va dentro de su
+  // <head> (antes del <!DOCTYPE> lo pondría en modo raro).
+  if (/<head\b[^>]*>/i.test(out)) return out.replace(/<head\b[^>]*>/i, m => m + head);
+  return head + out;
 }
 
 const MONTHS: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
