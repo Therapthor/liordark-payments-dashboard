@@ -42,6 +42,12 @@
 
   function emailDateFromSnippet(snippet) {
     const raw = String(snippet || "").replace(/^Recibido:\s*/, "").trim();
+    // Pally: "05/11/2026 08:30:46" = día/mes/año, hora de Lima (Date.parse
+    // lo leía como 11 de mayo). Streaming Market: "2026-11-02 23:04:51", Lima.
+    const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (dmy) return new Date(Date.UTC(+dmy[3], +dmy[2] - 1, +dmy[1], +dmy[4] + 5, +dmy[5], +(dmy[6] || 0)));
+    const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (ymd) return new Date(Date.UTC(+ymd[1], +ymd[2] - 1, +ymd[3], +ymd[4] + 5, +ymd[5], +(ymd[6] || 0)));
     const t = raw ? Date.parse(raw) : NaN;
     return Number.isNaN(t) ? null : new Date(t);
   }

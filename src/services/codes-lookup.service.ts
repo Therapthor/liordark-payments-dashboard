@@ -43,19 +43,42 @@ const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
  * código en texto. null = la página no tiene ese formato (se usa el
  * extractor anterior de respaldo).
  */
+/** El <div class="…cls…"> completo (con sus divs internos balanceados). */
+function findDivByClass(html: string, cls: string): { start: number; end: number } | null {
+  const open = new RegExp(`<div\\b[^>]*class\\s*=\\s*["'][^"']*\\b${cls}\\b[^"']*["'][^>]*>`, "i").exec(html);
+  if (!open) return null;
+  const tags = /<\/?div\b[^>]*>/gi;
+  tags.lastIndex = open.index;
+  let depth = 0;
+  for (let t = tags.exec(html); t; t = tags.exec(html)) {
+    if (t[0][1] === "/") {
+      depth--;
+      if (depth === 0) return { start: open.index, end: t.index + t[0].length };
+    } else if (!t[0].endsWith("/>")) {
+      depth++;
+    }
+  }
+  return { start: open.index, end: html.length };
+}
+
 export function parsePallyResultPage(html: string, preferCode = false): CodeLookupResult | null {
-  const wrapperStart = html.indexOf("email-body-wrapper");
-  if (wrapperStart === -1) return null;
-  const formStart = html.indexOf("<form", wrapperStart);
-  const wrapper = html.slice(wrapperStart, formStart === -1 ? undefined : formStart);
+  // El recuadro del correo (la clase también aparece antes en el <style>
+  // de la página: por eso se busca el <div> con esa clase, no el texto).
+  const box = findDivByClass(html, "email-body-wrapper");
+  if (!box) return null;
+  const formStart = html.indexOf("<form", box.start);
+  const end = formStart !== -1 && formStart < box.end ? formStart : box.end;
+  const wrapper = html.slice(box.start, end);
 
   const received = html.match(/Fecha de recepci[oó]n:<\/strong>\s*([^<]+)/i)?.[1]?.trim();
   const subject  = html.match(/Asunto:<\/strong>\s*([^<]+)/i)?.[1]?.trim();
-  const bodyStart = html.lastIndexOf("<div", wrapperStart);
   const extra = {
     ...(received ? { providerReceivedAt: received } : {}),
     ...(subject ? { subject: decodeHtmlEntities(subject) } : {}),
-    emailHtml: html.slice(bodyStart === -1 ? wrapperStart : bodyStart, formStart === -1 ? undefined : formStart),
+    // Si Pally trae el correo original en un <iframe srcdoc>, se muestra su
+    // contenido (el visor quita los iframes por seguridad).
+    emailHtml: wrapper.replace(/<iframe\b[^>]*\ssrcdoc\s*=\s*"([^"]*)"[^>]*>(?:\s*<\/iframe>)?/gi,
+      (_m, src: string) => `<div class="correo-original">${decodeHtmlEntities(src)}</div>`),
   };
 
   // Código: número de 4 a 8 dígitos en el texto del cuerpo (se quita la
