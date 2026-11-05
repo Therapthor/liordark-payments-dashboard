@@ -1382,3 +1382,25 @@ button, input {
 .cv-share-status { font-size: 12px; color: #9C8873; text-align: center; }
 .cv-share-status.on { color: #25D366; }
 @media (max-width: 640px) { .cv-body { padding: 10px; } .cv-head { padding: 12px; } }
+.cv-spin { width: 46px; height: 46px; border-radius: 50%; border: 5px solid #D9CFC2; border-top-color: #FF7D1A; animation: cv-spin 1s linear infinite; }
+@keyframes cv-spin { to { transform: rotate(360deg); } }
+/* Tarjeta del código con los colores de cada plataforma (sin logos) */
+.cv-body { flex-direction: column; align-items: center; gap: 16px; }
+.cv-card { --t-card: #241A10; --t-top: #3a2414; --t-box: #1a120a; --t-text: #FFFAF3; --t-muted: #CDB79E; --t-line: #3a2c1f; --t-accent: #FF7D1A; --t-glow: rgba(255,125,26,.35);
+  width: 100%; max-width: 640px; box-sizing: border-box; border-radius: 18px; padding: 26px 22px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center;
+  background: linear-gradient(180deg, var(--t-top) 0%, var(--t-card) 60%); border: 1px solid var(--t-line); color: var(--t-text); }
+.cv-card-meta { font-size: 13px; color: var(--t-muted); }
+.cv-card-box { background: var(--t-box); border: 1px solid var(--t-line); border-radius: 12px; padding: 16px 26px; }
+.cv-card-code { font-size: 54px; font-weight: 800; letter-spacing: 12px; white-space: nowrap; text-shadow: 0 0 24px var(--t-glow); }
+.cv-card-code.long { font-size: 42px; letter-spacing: 7px; }
+.cv-card-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.cv-card-btn { background: var(--t-accent); color: #fff; border: 0; border-radius: 10px; padding: 10px 22px; font: inherit; font-weight: 800; cursor: pointer; }
+.cv-card-link { background: none; border: 0; color: var(--t-muted); text-decoration: underline; font: inherit; font-size: 13px; cursor: pointer; }
+.cv-card.t-netflix { --t-card: #141414; --t-top: #1C0A0B; --t-box: #000; --t-text: #fff; --t-muted: #B3B3B3; --t-line: #2B2B2B; --t-accent: #E50914; --t-glow: rgba(229,9,20,.35); }
+.cv-card.t-disney { --t-card: #0B1530; --t-top: #1A2A5C; --t-box: #040714; --t-text: #F9F9F9; --t-muted: #A9B4CF; --t-line: #26345C; --t-accent: #0063E5; --t-glow: rgba(2,231,245,.35); }
+.cv-card.t-prime { --t-card: #0F171E; --t-top: #1A2B38; --t-box: #0B1218; --t-text: #fff; --t-muted: #8197A4; --t-line: #26343F; --t-accent: #00A8E1; --t-glow: rgba(0,168,225,.35); }
+.cv-card.t-crunchy { --t-card: #141519; --t-top: #2A1607; --t-box: #000; --t-text: #fff; --t-muted: #A0A0A0; --t-line: #2C2D33; --t-accent: #F47521; --t-glow: rgba(244,117,33,.35); }
+.cv-card.t-chatgpt { --t-card: #212121; --t-top: #0F2A22; --t-box: #171717; --t-text: #ECECEC; --t-muted: #B4B4B4; --t-line: #383838; --t-accent: #10A37F; --t-glow: rgba(16,163,127,.35); }
+.cv-mail { flex: 1; }
+.cv-body { justify-content: flex-start; }
+.cv-empty { margin: auto; }

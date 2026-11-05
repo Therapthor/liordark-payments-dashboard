@@ -125,7 +125,8 @@ const OLD_EMAIL_MARGIN_MS = 10 * 60 * 1000;
 
 /** Minutos que suele tardar el correo en llegar (Disney+ es lento). */
 export function codeWaitMinutes(sourceId: string, platform: string): number {
-  return /disney/i.test(sourceId) || /disney/i.test(platform) ? 4 : 1;
+  // Disney+ y PallyStore tardan en recibir el correo.
+  return /disney|netflix_sin_opciones|netflix_con_opciones/i.test(sourceId) || /disney/i.test(platform) ? 4 : 1;
 }
 
 function linkInfo(link: CodeLink) {

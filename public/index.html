@@ -1435,6 +1435,14 @@
         <button type="button" class="cv-x" id="cv-close" aria-label="Cerrar">×</button>
       </div>
       <div class="cv-body">
+        <div class="cv-card" id="cv-card" hidden>
+          <span class="cv-card-meta" id="cv-card-meta"></span>
+          <div class="cv-card-box"><span class="cv-card-code" id="cv-card-code"></span></div>
+          <div class="cv-card-actions">
+            <button type="button" class="cv-card-btn" id="cv-card-copy">Copiar</button>
+            <button type="button" class="cv-card-link" id="cv-card-toggle">Ver correo completo</button>
+          </div>
+        </div>
         <div class="cv-empty" id="cv-empty">Cargando…</div>
         <iframe class="cv-mail" id="cv-mail" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Correo" hidden></iframe>
       </div>

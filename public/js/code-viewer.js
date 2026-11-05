@@ -3,6 +3,11 @@ window.LiordarkCodeViewer = (() => {
   "use strict";
 
   let current = null;     // { id, platform, email }
+  // Si todavía no hay correo, se sigue buscando solo (cada 10 s, hasta 4
+  // min): Pally y Disney+ tardan en recibirlo.
+  const WAIT_MS = 4 * 60 * 1000;
+  const POLL_MS = 10 * 1000;
+  let waitStart = 0, waitTimer = null, tickTimer = null;
   let lastValue = "";
   let share = null;       // { token, minutes }
   let shareTimer = null;
@@ -29,14 +34,67 @@ window.LiordarkCodeViewer = (() => {
     return h < 24 ? "hace " + h + " h" : "hace " + Math.floor(h / 24) + " d";
   }
 
+  function themeFor(platform) {
+    return /netflix/i.test(platform) ? "t-netflix"
+      : /disney/i.test(platform) ? "t-disney"
+      : /prime|amazon/i.test(platform) ? "t-prime"
+      : /crunchy/i.test(platform) ? "t-crunchy"
+      : /chatgpt|gpt|openai/i.test(platform) ? "t-chatgpt" : "";
+  }
+
+  // Tarjeta con el código (colores de la plataforma) y el correo debajo,
+  // plegado, para quien quiera verlo completo.
+  function showCard(code, meta, isLink, hasMail) {
+    const card = $("cv-card");
+    card.className = "cv-card " + themeFor(current ? current.platform : "");
+    card.hidden = false;
+    $("cv-card-meta").textContent = meta;
+    const el = $("cv-card-code");
+    el.textContent = isLink ? "Enlace de acceso" : code;
+    el.classList.toggle("long", isLink || String(code).length > 4);
+    $("cv-card-copy").textContent = isLink ? "Copiar enlace" : "Copiar";
+    $("cv-card-toggle").hidden = !hasMail;
+    $("cv-card-toggle").textContent = "Ver correo completo";
+    $("cv-empty").hidden = true;
+    $("cv-mail").hidden = true;
+  }
+
   function setEmpty(html) {
+    $("cv-card").hidden = true;
     $("cv-mail").hidden = true;
     $("cv-empty").hidden = false;
     $("cv-empty").innerHTML = html;
   }
 
-  async function refresh() {
+  function stopWaiting() {
+    clearTimeout(waitTimer); clearInterval(tickTimer);
+    waitTimer = null; tickTimer = null; waitStart = 0;
+  }
+
+  function renderWaiting() {
+    const left = Math.max(0, WAIT_MS - (Date.now() - waitStart));
+    const elapsed = Math.floor((Date.now() - waitStart) / 1000);
+    const fmt = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    setEmpty(`<span class="cv-spin"></span><b>Esperando el correo…</b>` +
+      `<span>${fmt(elapsed)} de 4:00 · se revisa solo cada 10 segundos</span>`);
+    if (left <= 0) {
+      stopWaiting();
+      setEmpty("<b>No llegó ningún correo en 4 minutos.</b><span>Revisa que el código se haya pedido y toca Actualizar.</span>");
+    }
+  }
+
+  function startWaiting() {
+    if (!waitStart) waitStart = Date.now();
+    renderWaiting();
+    clearInterval(tickTimer);
+    tickTimer = setInterval(renderWaiting, 1000);
+    clearTimeout(waitTimer);
+    waitTimer = setTimeout(() => refresh(true), POLL_MS);
+  }
+
+  async function refresh(auto = false) {
     if (!current) return;
+    if (!auto) stopWaiting();
     const btn = $("cv-refresh");
     btn.disabled = true; btn.textContent = "Consultando…";
     try {
@@ -58,16 +116,22 @@ window.LiordarkCodeViewer = (() => {
       const isLink = d.kind === "link";
       $("cv-copy").hidden = !lastValue;
       $("cv-copy").textContent = isLink ? "Copiar enlace" : "Copiar código " + lastValue;
-      if (d.html) {
+      if (d.html) $("cv-mail").srcdoc = d.html;
+      if (lastValue) {
+        const meta = current.platform + (d.receivedAtLima ? " · llegó a las " + d.receivedAtLima : "");
+        showCard(lastValue, meta, isLink, !!d.html);
+      } else if (d.html) {
+        // Llegó un correo pero sin código reconocible: se muestra tal cual.
+        $("cv-card").hidden = true;
         $("cv-empty").hidden = true;
-        const frame = $("cv-mail");
-        frame.hidden = false;
-        frame.srcdoc = d.html;
-      } else if (lastValue) {
-        setEmpty(`<span class="cv-big">${escapeHtml(isLink ? "Enlace" : lastValue)}</span><span>Este proveedor no muestra el correo completo.</span>`);
+        $("cv-mail").hidden = false;
+      } else if (waitStart && Date.now() - waitStart >= WAIT_MS) {
+        renderWaiting();
       } else {
-        setEmpty("<b>Todavía no llegó ningún correo para esta cuenta.</b><span>Pide el código y toca Actualizar.</span>");
+        startWaiting();
+        return;
       }
+      stopWaiting();
     } catch (err) {
       setEmpty("<b>No se pudo consultar.</b><span>" + escapeHtml(err.message) + "</span>");
     } finally {
@@ -91,6 +155,7 @@ window.LiordarkCodeViewer = (() => {
   }
 
   function close() {
+    stopWaiting();
     $("cv-drawer-back").hidden = true;
     $("cv-mail").srcdoc = "";
     current = null;
@@ -155,7 +220,13 @@ window.LiordarkCodeViewer = (() => {
   function init() {
     $("cv-close").addEventListener("click", close);
     $("cv-drawer-back").addEventListener("click", e => { if (e.target.id === "cv-drawer-back") close(); });
-    $("cv-refresh").addEventListener("click", refresh);
+    $("cv-refresh").addEventListener("click", () => refresh(false));
+    $("cv-card-copy").addEventListener("click", e => { if (lastValue) copy(lastValue, e.currentTarget); });
+    $("cv-card-toggle").addEventListener("click", e => {
+      const frame = $("cv-mail");
+      frame.hidden = !frame.hidden;
+      e.currentTarget.textContent = frame.hidden ? "Ver correo completo" : "Ocultar correo";
+    });
     $("cv-copy").addEventListener("click", e => { if (lastValue) copy(lastValue, e.currentTarget); });
     $("cv-share").addEventListener("click", openShare);
     $("cv-share-close").addEventListener("click", closeShare);

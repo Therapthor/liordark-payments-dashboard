@@ -318,7 +318,7 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
     }
     // Disney+ tarda hasta ~4 min en mandar el correo: link más largo y
     // aviso de no pedir otro código mientras tanto.
-    const slow = /disney/i.test(account.platform) || /disney/i.test(sourceId);
+    const slow = /disney|netflix_sin_opciones|netflix_con_opciones/i.test(sourceId) || /disney/i.test(account.platform);
     const minutes = slow ? CODE_LINK_MINUTES_SLOW : CODE_LINK_MINUTES;
     const link = createCodeLink({
       accountId, email: account.email, sourceId, clientPhone: phone, createdBy: "bot", minutes,
@@ -328,7 +328,7 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
       `🔑 Abre este link para ver tu código de ${account.platform}:\n` +
       `https://liordark.com/codigo/${link.token}\n\n` +
       (slow
-        ? "⏳ El correo de Disney+ puede tardar hasta 4 minutos en llegar. Pide el código UNA sola vez y espera en esa página: se actualiza sola. " +
+        ? `⏳ El correo de ${account.platform} puede tardar hasta 4 minutos en llegar. Pide el código UNA sola vez y espera en esa página: se actualiza sola. ` +
           "Si pides otro, el anterior deja de servir.\n"
         : "Si el código aún no aparece, toca «Actualizar» en esa página. ") +
       `El link vence en ${minutes} minutos` +
