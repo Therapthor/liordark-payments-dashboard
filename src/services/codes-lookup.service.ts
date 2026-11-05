@@ -206,18 +206,18 @@ type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion
 
 // Orden de prueba: primero lo que se le puede entregar al cliente
 // (inicio de sesión: código de 4 dígitos o enlace), luego el resto.
+// Solo «Código Inicio Sesión» (tg_4, confirmado con captura de la página
+// real, nov-2026). Los demás botones de Pally (Definir Hogar, Código Hogar,
+// Link Contraseña, Código 6 dígitos, Link Inicio Sesión) ya no se consultan
+// nunca: si hace falta alguno, el admin lo busca a mano en la web.
 const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
-  { id: "codigo_login",     label: "Código Inicio Sesión",  adminOnly: false, accion: "tg_4" },
-  { id: "link_login",       label: "Link Inicio Sesión",    adminOnly: false, accion: "tg_6" },
-  { id: "codigo_hogar",     label: "Código Hogar",          adminOnly: false, accion: "tg_2" },
-  { id: "definir_hogar",    label: "Definir Hogar",         adminOnly: true,  accion: "tg_1" },
-  { id: "codigo_6_digitos", label: "Código 6 dígitos",      adminOnly: true,  accion: "tg_5" },
+  { id: "codigo_login", label: "Código Inicio Sesión", adminOnly: false, accion: "tg_4" },
 ];
 
 // Opción combinada para el panel: "Código o link de inicio de sesión" —
 // un solo clic prueba el código de 4 dígitos y, si no hay, el enlace.
 const LOGIN_COMBO_ACTION = { id: "inicio_sesion", label: "Código o link de inicio de sesión" };
-const LOGIN_COMBO_IDS = ["codigo_login", "link_login"];
+const LOGIN_COMBO_IDS = ["codigo_login"];
 
 /** Prueba las sub-acciones en orden sobre el mismo correo y se queda
  *  con la primera que responda algo — una sola llamada sirve tanto para
