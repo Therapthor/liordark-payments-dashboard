@@ -29,6 +29,9 @@ import { getBotFlowConfig } from "../db/bot-flow.repository";
 import { listCombos } from "../db/combo.repository";
 import { findWholesalerById, touchWholesalerActivity } from "../db/wholesaler.repository";
 import { applyWholesalerCreditChange, creditWasAlreadyApplied } from "../db/wholesaler-credit.repository";
+import { markCoursePurchasePaid, createPendingPurchase } from "../services/course.service";
+import { findCustomerByPhone } from "../db/customer.repository";
+import { emitDashboardEvent } from "../utils/live-events.util";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
@@ -358,6 +361,38 @@ router.post("/wholesale-credit", (req, res) => {
   }
   touchWholesalerActivity(wholesalerId);
   res.json({ ok: true, newBalanceCents: result.newBalanceCents });
+});
+
+// POST /course-paid — { orderName, amount } — el bot confirmó el Yape de
+// una compra del curso. Idempotente. Si la fila no existe (raro: el
+// panel no llegó a guardarla), se arma desde el celular del orderName
+// ("web-<celular>-…") para no dejar a un alumno que pagó sin acceso.
+router.post("/course-paid", (req, res) => {
+  const orderName = String(req.body?.orderName ?? "");
+  const amount    = req.body?.amount !== undefined ? String(req.body.amount) : undefined;
+  if (!orderName) {
+    res.status(400).json({ message: "Falta orderName." });
+    return;
+  }
+
+  let result = markCoursePurchasePaid(orderName, amount);
+  if (!result.ok) {
+    const phone = /^web-(\d+)-/.exec(orderName)?.[1] ?? "";
+    const customer = phone ? findCustomerByPhone(phone) : null;
+    if (!customer) {
+      res.status(404).json({ message: "Compra del curso no encontrada." });
+      return;
+    }
+    createPendingPurchase(customer.id, customer.phone, orderName, amount ?? "0");
+    result = markCoursePurchasePaid(orderName, amount);
+  }
+
+  if (!result.alreadyPaid) {
+    try {
+      emitDashboardEvent({ type: "order_approved", message: "🎓 Curso vendido — S/ " + (amount ?? ""), createdAt: new Date().toISOString() });
+    } catch { /* no crítico */ }
+  }
+  res.json({ ok: true, alreadyPaid: !!result.alreadyPaid });
 });
 
 export default router;

@@ -392,4 +392,79 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_support_chat_messages_chat ON support_chat_messages(chat_id)`);
 
+// ─────────────────────────────────────────────────────────────
+// CURSO (liordark.com/curso) — compras, progreso por alumno y recursos.
+// Ver services/course.service.ts. Los videos y el Excel viven en disco
+// (data/course-media/), no en la base.
+// ─────────────────────────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS course_purchases (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id   TEXT    NOT NULL,
+    customer_id INTEGER NOT NULL,
+    phone       TEXT    NOT NULL,
+    order_name  TEXT    NOT NULL UNIQUE,
+    amount      TEXT    NOT NULL DEFAULT '0',
+    status      TEXT    NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'revoked'
+    source      TEXT    NOT NULL DEFAULT 'yape',    -- 'yape' | 'admin'
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    paid_at     TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_course_purchases_customer ON course_purchases(customer_id, course_id);
+
+  CREATE TABLE IF NOT EXISTS course_progress (
+    customer_id  INTEGER NOT NULL,
+    course_id    TEXT    NOT NULL,
+    episode      INTEGER NOT NULL,
+    last_second  REAL    NOT NULL DEFAULT 0,
+    max_second   REAL    NOT NULL DEFAULT 0,
+    duration     REAL    NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    updated_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (customer_id, course_id, episode)
+  );
+
+  CREATE TABLE IF NOT EXISTS course_unlocks (
+    customer_id INTEGER NOT NULL,
+    course_id   TEXT    NOT NULL,
+    cue_id      TEXT    NOT NULL,
+    unlocked_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (customer_id, course_id, cue_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS course_downloads (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    course_id   TEXT    NOT NULL,
+    resource    TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS course_coupons (
+    customer_id INTEGER NOT NULL,
+    course_id   TEXT    NOT NULL,
+    code        TEXT    NOT NULL UNIQUE,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (customer_id, course_id)
+  );
+
+  -- 1 acceso mayorista por compra (purchase_id UNIQUE).
+  CREATE TABLE IF NOT EXISTS course_wholesale_claims (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    purchase_id   INTEGER NOT NULL UNIQUE,
+    customer_id   INTEGER NOT NULL,
+    phone         TEXT    NOT NULL,
+    panel_name    TEXT    NOT NULL,
+    wholesaler_id INTEGER NOT NULL,
+    created_new   INTEGER NOT NULL DEFAULT 1,
+    gift_cents    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS course_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

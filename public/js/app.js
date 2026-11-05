@@ -245,7 +245,7 @@
   // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
   // Renovaciones); "Accesos" es un botón directo aparte.
   const ADMIN_VIEW_KEY = "ldp_admin_view";
-  const VALID_VIEWS = ["resumen", "access", "codes", "wholesalers", "web-customers", "history", "renewals", "config", "support-chat"];
+  const VALID_VIEWS = ["resumen", "access", "codes", "wholesalers", "web-customers", "course", "history", "renewals", "config", "support-chat"];
 
   function switchView(view) {
     try { localStorage.setItem(ADMIN_VIEW_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
@@ -255,6 +255,7 @@
     document.getElementById("view-codes").hidden         = view !== "codes";
     document.getElementById("view-wholesalers").hidden   = view !== "wholesalers";
     document.getElementById("view-web-customers").hidden = view !== "web-customers";
+    document.getElementById("view-course").hidden        = view !== "course";
     document.getElementById("view-history").hidden       = view !== "history";
     document.getElementById("view-renewals").hidden      = view !== "renewals";
     document.getElementById("view-config").hidden        = view !== "config";
@@ -284,6 +285,7 @@
     if (view === "codes" && window.LiordarkCodes) window.LiordarkCodes.load();
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
+    if (view === "course" && window.LiordarkCourse) window.LiordarkCourse.load();
     if (view === "support-chat" && window.LiordarkSupportChat) window.LiordarkSupportChat.load();
     if (view === "config") {
       let savedSection = "catalog";

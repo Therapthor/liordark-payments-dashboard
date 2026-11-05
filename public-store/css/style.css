@@ -1416,3 +1416,18 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 /* Registro rápido al tocar Comprar */
 .quick-hint { font-size: 12px; color: var(--muted); margin: 6px 0 10px; line-height: 1.4; }
 .btn-link-small { display: block; margin: 12px auto 0; background: none; border: none; color: var(--muted); font: inherit; font-size: 12.5px; text-decoration: underline; cursor: pointer; }
+
+/* ── Acceso al curso (liordark.com/curso) ── */
+.nav-course-link { text-decoration: none; display: inline-flex; align-items: center; }
+.course-banner {
+  display: flex; align-items: center; gap: 14px; text-decoration: none; color: #241A10;
+  background: linear-gradient(90deg, #FF7D1A, #FFD373); border: 2px solid #241A10; box-shadow: 4px 4px 0 #241A10;
+  padding: 14px 16px; margin: 0 0 20px; border-radius: 4px;
+}
+.course-banner:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 #241A10; }
+.course-banner-ico { font-size: 30px; }
+.course-banner-txt { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.course-banner-txt b { font-size: 16px; }
+.course-banner-txt small { font-size: 13px; font-weight: 600; opacity: .85; }
+.course-banner-cta { background: #241A10; color: #FFD373; font-weight: 800; padding: 8px 12px; white-space: nowrap; font-size: 14px; }
+@media (max-width: 560px) { .course-banner-cta { display: none; } }

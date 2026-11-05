@@ -15,7 +15,8 @@ export type LedgerEntryType =
   | "purchase_profile"
   | "purchase_full_account"
   | "renewal"
-  | "wipe_inactive";
+  | "wipe_inactive"
+  | "gift_course";
 
 export type CreditChangeResult =
   | { ok: true; newBalanceCents: number }

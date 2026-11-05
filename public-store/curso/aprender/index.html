@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi curso — Manguitope</title>
+<link rel="icon" href="/assets/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/curso.css">
+</head>
+<body>
+
+<header class="c-header">
+  <a class="c-brand" href="/" id="brand"><b>MANGUITOPE</b></a>
+  <nav class="c-nav">
+    <a href="/">Tienda</a>
+    <a href="/curso/aprender/" class="active">🎓 Mis cursos</a>
+  </nav>
+  <span class="c-user" id="user-label"></span>
+</header>
+
+<!-- Sin sesión -->
+<div class="card gate" id="gate-login" hidden></div>
+
+<!-- Con sesión pero sin el curso -->
+<div class="card gate" id="gate-buy" hidden>
+  <h1>TODAVÍA NO TIENES ESTE CURSO</h1>
+  <p class="muted" style="margin:0">Si ya pagaste, espera unos segundos y recarga. Si no, mira el primer episodio gratis.</p>
+  <a class="c-btn orange block" href="/curso/">Ver el curso</a>
+</div>
+
+<main class="aula" id="aula" hidden>
+  <section class="card aula-top">
+    <div class="aula-top-head">
+      <b class="pix">TUS PRIMEROS S/ 1,000</b>
+      <span class="muted" style="font-size:12px" id="resume-label"></span>
+    </div>
+    <div class="stepmap" id="stepmap"></div>
+    <div class="progress"><span id="progress-label">Progreso del curso: 0/5</span><div class="bar"><i id="progress-bar" style="width:0%"></i></div></div>
+  </section>
+
+  <div class="aula-grid">
+    <div class="aula-main">
+      <div class="player" id="player">
+        <video id="video" controls playsinline preload="metadata" controlslist="nodownload" disablepictureinpicture hidden></video>
+        <div class="empty" id="video-empty">
+          <span id="video-empty-mango"></span>
+          <span class="pix" id="video-empty-text">CARGANDO…</span>
+        </div>
+        <span class="watermark" id="watermark"></span>
+      </div>
+      <div class="mobile-hint" id="mobile-hint" hidden></div>
+      <div class="ep-info">
+        <span class="kicker" id="ep-kicker"></span>
+        <h2 id="ep-title"></h2>
+        <p id="ep-summary"></p>
+        <div class="ep-nav">
+          <button class="c-btn" id="ep-prev">← Episodio anterior</button>
+          <button class="c-btn orange" id="ep-next">Siguiente episodio →</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="aula-side" id="side">
+      <span class="side-title">RECURSOS DEL CURSO</span>
+      <div id="resources" style="display:flex;flex-direction:column;gap:12px"></div>
+      <span class="side-title">EPISODIOS</span>
+      <div class="ep-list" id="ep-list"></div>
+    </aside>
+  </div>
+</main>
+
+<div class="finish" id="finish" hidden>
+  <canvas id="confetti"></canvas>
+  <div class="finish-card">
+    <span id="finish-mango"></span>
+    <h2>¡CURSO COMPLETADO!</h2>
+    <span class="score">5/5</span>
+    <p style="margin:0">Ya tienes todo para tus primeros S/ 1,000. Ahora a vender 💪</p>
+    <div class="acts">
+      <button class="c-btn amber block" id="finish-coupon">🎟️ Ver mi cupón −30%</button>
+      <a class="c-btn dark block" href="https://mayorista.liordark.com" target="_blank" rel="noopener">Ir al Panel Mayorista →</a>
+      <button class="c-btn block" id="finish-close">Volver al curso</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/curso-common.js"></script>
+<script src="/js/aprender.js"></script>
+</body>
+</html>

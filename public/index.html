@@ -45,6 +45,7 @@
         <button class="tab-btn" data-view="codes">Códigos</button>
         <button class="tab-btn" data-view="wholesalers">Mayoristas <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
         <button class="tab-btn" data-view="web-customers">Clientes</button>
+        <button class="tab-btn" data-view="course">🎓 Curso</button>
         <button class="tab-btn" data-view="config">Configuración</button>
         <button class="tab-btn" data-view="support-chat">Chat <span class="tab-badge-alert" id="chat-unread-badge" hidden>0</span></button>
       </nav>
@@ -300,6 +301,53 @@
         </div>
         <p id="wholesalers-queue-empty" class="feed-empty" hidden>No hay pedidos de cuenta completa pendientes.</p>
 
+      </section>
+
+      <!-- ═══════════ VISTA: CURSO ═══════════ -->
+      <section id="view-course" class="view" hidden>
+        <div class="panel-header standalone">
+          <h2>🎓 Curso — Tus Primeros S/ 1,000</h2>
+          <a class="btn-secondary btn-sm" href="https://liordark.com/curso/" target="_blank" rel="noopener" style="text-decoration:none">Ver página de venta ↗</a>
+        </div>
+        <p class="panel-hint">Se compra en liordark.com/curso con el mismo Yape automático. Aquí subes los videos y la plantilla, ajustas cuándo aparece cada recurso y ves a tus alumnos.</p>
+
+        <div class="crs-stats" id="crs-stats"></div>
+
+        <div class="panel crs-block">
+          <h3>📁 Videos y plantilla</h3>
+          <p class="panel-hint">Videos MP4 horizontales (16:9). Se suben por partes, puedes subir archivos grandes. Si subes uno nuevo, reemplaza al anterior.</p>
+          <div id="crs-media"></div>
+        </div>
+
+        <div class="panel crs-block">
+          <h3>⏱️ ¿En qué minuto aparece cada recurso?</h3>
+          <p class="panel-hint">El panel aparece a la derecha del video en ese minuto (sin pausar el video) y queda desbloqueado para siempre. Formato minutos:segundos, ej. 2:15.</p>
+          <div id="crs-cues"></div>
+          <button class="btn-primary btn-sm" id="crs-cues-save" style="margin-top:10px">Guardar tiempos</button>
+        </div>
+
+        <div class="panel crs-block">
+          <h3>💲 Precio y acceso manual</h3>
+          <div class="crs-row">
+            <label>Precio S/ <input id="crs-price" type="number" step="0.10" min="1" style="width:110px"></label>
+            <button class="btn-secondary btn-sm" id="crs-price-save">Guardar precio</button>
+          </div>
+          <div class="crs-row" style="margin-top:12px">
+            <input id="crs-grant-phone" type="text" inputmode="numeric" placeholder="Celular del alumno" style="width:170px">
+            <label>Monto pagado S/ <input id="crs-grant-amount" type="number" step="0.10" min="0" value="39.90" style="width:100px"></label>
+            <button class="btn-primary btn-sm" id="crs-grant-btn">Dar acceso</button>
+          </div>
+          <p class="panel-hint" id="crs-grant-result"></p>
+        </div>
+
+        <div class="panel crs-block">
+          <h3>👩‍🎓 Alumnos</h3>
+          <table class="history-table">
+            <thead><tr><th>Celular</th><th>Pagó</th><th>Fecha</th><th>Progreso</th><th>Plantilla</th><th>Mayorista (S/10)</th><th>Cupón</th><th></th></tr></thead>
+            <tbody id="crs-students"></tbody>
+          </table>
+          <p class="feed-empty" id="crs-students-empty" hidden>Todavía no hay alumnos.</p>
+        </div>
       </section>
 
       <!-- ═══════════ VISTA: CLIENTES WEB (liordark.com) ═══════════ -->
@@ -1378,6 +1426,7 @@
   <script src="js/wholesalers.js"></script>
   <script src="js/support-chat.js"></script>
   <script src="js/full-renewals.js"></script>
+  <script src="js/course-admin.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

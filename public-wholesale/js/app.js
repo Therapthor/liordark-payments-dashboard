@@ -773,6 +773,7 @@
 
   const LEDGER_TYPE_LABEL = {
     topup_yape:             "Recarga Yape",
+    gift_course:            "Regalo curso",
     topup_manual_admin:     "Recarga manual (admin)",
     debit_manual_admin:     "Ajuste del admin",
     purchase_profile:       "Compra de perfil",

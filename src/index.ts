@@ -27,6 +27,9 @@ import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
 import wholesalerRoutes, { generateExpiryNotificationsForAllWholesalers } from "./routes/wholesaler.routes";
 import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
 import supportChatRoutes from "./routes/support-chat.routes";
+import courseRoutes from "./routes/course.routes";
+import courseAdminRoutes from "./routes/course-admin.routes";
+import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
 import { seedPaymentMethodsIfEmpty } from "./db/payment-method.repository";
@@ -93,6 +96,9 @@ apiRouter.use("/wholesaler", requireWholesalerSession, wholesalerRoutes);
 // saldo, asignar stock, cola de cuentas completas) — requireAuth normal.
 apiRouter.use("/wholesalers", requireAuth, wholesalersAdminRoutes);
 apiRouter.use("/support-chat", requireAuth, supportChatRoutes);
+// Curso (liordark.com/curso) — alumno con su sesión de cliente; admin aparte.
+apiRouter.use("/course", courseRoutes);
+apiRouter.use("/course-admin", requireAuth, courseAdminRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {
@@ -144,6 +150,11 @@ const server = app.listen(env.PORT, () => {
 
   runArchiveExpiredAccounts();
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
+
+  // Curso: pedidos que nunca se pagaron (más de 1 día) se borran.
+  const cleanCourse = () => { try { cleanOldPendingPurchases(); } catch { /* no crítico */ } };
+  cleanCourse();
+  setInterval(cleanCourse, ARCHIVE_INTERVAL_MS);
 
   runDisableInactiveWholesalers();
   setInterval(runDisableInactiveWholesalers, ARCHIVE_INTERVAL_MS);
