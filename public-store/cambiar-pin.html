@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Cambia tu PIN — Manguitope</title>
+<link rel="icon" href="/assets/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --cream: #FFFAF3; --bg: #EFE6DA; --brown: #241A10; --muted: #7A6552; --line: #D9CFC2; --orange: #FF7D1A; --yellow: #FFD373; --green-dark: #1E6B36; --red: #B3261E; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--brown); font-family: Manrope, system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 16px; }
+  [hidden] { display: none !important; }
+  .phone { width: 100%; max-width: 420px; min-height: calc(100vh - 32px); background: var(--cream); border-radius: 28px; border: 1px solid var(--line); padding: 22px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .brand { font-size: 14px; font-weight: 800; letter-spacing: 1px; }
+  .pill { font-size: 12px; font-weight: 800; background: var(--yellow); padding: 5px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+  .pill.off { background: #EADBC8; color: var(--muted); }
+  .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+  .spinner { width: 56px; height: 56px; border-radius: 50%; border: 6px solid #EADBC8; border-top-color: var(--orange); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { margin: 0; font-size: 22px; }
+  .muted { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0; }
+  form { width: 100%; display: flex; flex-direction: column; gap: 14px; text-align: left; }
+  label { font-size: 12px; font-weight: 800; color: var(--muted); letter-spacing: .5px; display: flex; flex-direction: column; gap: 6px; }
+  .pin { width: 100%; font: inherit; font-size: 32px; font-weight: 800; letter-spacing: 18px; text-align: center; padding: 12px 0 12px 18px; border-radius: 14px; border: 2px solid var(--line); background: #fff; color: var(--brown); }
+  .pin:focus { outline: none; border-color: var(--orange); }
+  .err { color: var(--red); font-size: 13px; font-weight: 700; margin: 0; min-height: 18px; text-align: center; }
+  .btn { border: 0; border-radius: 12px; padding: 15px; font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; text-align: center; text-decoration: none; display: block; width: 100%; }
+  .btn.orange { background: var(--orange); color: #fff; }
+  .btn.dark { background: var(--brown); color: var(--cream); }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .circle { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
+  .circle.ok { background: #E9F9EF; color: var(--green-dark); }
+  .circle.off { background: #EADBC8; color: var(--muted); }
+  .phone-tag { font-weight: 800; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main class="phone">
+  <div class="top">
+    <span class="brand">MANGUITOPE</span>
+    <span class="pill" id="timer" hidden></span>
+  </div>
+
+  <section class="center" id="st-loading">
+    <div class="spinner"></div>
+    <p class="muted">Cargando…</p>
+  </section>
+
+  <section class="center" id="st-form" hidden>
+    <h1>Cambia tu PIN</h1>
+    <span class="phone-tag" id="phone"></span>
+    <p class="muted">Crea un PIN nuevo de 4 números. Lo usarás para entrar a liordark.com.</p>
+    <form id="form" autocomplete="off">
+      <label>PIN NUEVO
+        <input class="pin" id="pin1" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" required autocomplete="new-password">
+      </label>
+      <label>REPÍTELO
+        <input class="pin" id="pin2" type="password" inputmode="numeric" pattern="\d{4}" maxlength="4" required autocomplete="new-password">
+      </label>
+      <p class="err" id="err"></p>
+      <button class="btn orange" id="save" type="submit">Guardar PIN</button>
+    </form>
+  </section>
+
+  <section class="center" id="st-done" hidden>
+    <div class="circle ok">✓</div>
+    <h1>¡Listo!</h1>
+    <p class="muted">Tu PIN se cambió. Ya puedes entrar con tu celular y tu PIN nuevo.</p>
+    <a class="btn orange" href="/">Ir a la tienda</a>
+  </section>
+
+  <section class="center" id="st-off" hidden>
+    <div class="circle off">!</div>
+    <h1 id="off-title">Este link venció</h1>
+    <p class="muted" id="off-text">Pide uno nuevo por WhatsApp.</p>
+    <a class="btn dark" href="/">Ir a la tienda</a>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const token = (location.pathname.match(/\/cambiar-pin\/([A-Za-z0-9]+)/) || [])[1] || "";
+  const $ = id => document.getElementById(id);
+  let expiresAt = 0, skew = 0, tick = null;
+
+  function show(id) {
+    ["st-loading", "st-form", "st-done", "st-off"].forEach(s => { $(s).hidden = s !== id; });
+    if (id !== "st-form") { clearInterval(tick); $("timer").hidden = true; }
+  }
+
+  function off(state) {
+    if (state === "used") {
+      $("off-title").textContent = "Este link ya se usó";
+      $("off-text").textContent = "El PIN ya se cambió. Si necesitas cambiarlo otra vez, pide un link nuevo.";
+    } else {
+      $("off-title").textContent = "Este link venció";
+      $("off-text").textContent = "Los links duran 10 minutos. Pide uno nuevo por WhatsApp.";
+    }
+    show("st-off");
+  }
+
+  function startTimer() {
+    const t = $("timer");
+    t.hidden = false;
+    const draw = () => {
+      const left = Math.max(0, Math.round((expiresAt - (Date.now() + skew)) / 1000));
+      t.textContent = "Vence en " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+      if (left <= 0) off("expired");
+    };
+    draw();
+    tick = setInterval(draw, 1000);
+  }
+
+  async function load() {
+    try {
+      const res = await fetch("/api/pin-link/" + encodeURIComponent(token));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.state !== "active") return off(data.state);
+      skew = new Date(data.serverNow).getTime() - Date.now();
+      expiresAt = new Date(data.expiresAt).getTime();
+      $("phone").textContent = data.phone;
+      show("st-form");
+      startTimer();
+      $("pin1").focus();
+    } catch {
+      off("expired");
+    }
+  }
+
+  ["pin1", "pin2"].forEach(id => $(id).addEventListener("input", e => {
+    e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4);
+    $("err").textContent = "";
+    if (id === "pin1" && e.target.value.length === 4) $("pin2").focus();
+  }));
+
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const p1 = $("pin1").value, p2 = $("pin2").value;
+    if (!/^\d{4}$/.test(p1)) { $("err").textContent = "El PIN debe tener 4 números."; return; }
+    if (p1 !== p2) { $("err").textContent = "Los PIN no coinciden."; $("pin2").value = ""; $("pin2").focus(); return; }
+    $("save").disabled = true;
+    $("save").textContent = "Guardando…";
+    try {
+      const res = await fetch("/api/pin-link/" + encodeURIComponent(token), {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: p1 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return show("st-done");
+      if (res.status === 410 || res.status === 404) return off(data.state);
+      $("err").textContent = data.message || "No se pudo guardar. Intenta de nuevo.";
+    } catch {
+      $("err").textContent = "Sin conexión. Intenta de nuevo.";
+    }
+    $("save").disabled = false;
+    $("save").textContent = "Guardar PIN";
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

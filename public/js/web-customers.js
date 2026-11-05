@@ -48,6 +48,7 @@
     div.className = "web-customer-row";
     div.dataset.id = c.id === null ? "" : c.id;
     div.dataset.email = c.email || "";
+    div.dataset.phone = c.phone || "";
 
     const purchaseLabel = c.purchaseCount === 1 ? "1 compra" : `${c.purchaseCount} compras`;
 
@@ -99,6 +100,7 @@
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
       <div class="web-customer-actions">
         ${passwordArea}
+        <button class="btn-secondary btn-sm web-customer-pinlink-btn" type="button">🔑 Link cambio de PIN</button>
         ${emailArea}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
         <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
@@ -149,6 +151,68 @@
     }
   }
 
+  // ─── Link para que el cliente cambie su PIN (10 min, un solo uso) ───
+  let pinPoll = null;
+  let pinTick = null;
+
+  function closePinLink() {
+    clearInterval(pinPoll); pinPoll = null;
+    clearInterval(pinTick); pinTick = null;
+    document.getElementById("pin-link-back").hidden = true;
+  }
+
+  async function openPinLink(id, phone) {
+    const $ = (x) => document.getElementById(x);
+    closePinLink();
+    $("pin-link-back").hidden = false;
+    $("pin-link-sub").textContent = phone;
+    $("pin-link-url").textContent = "Generando…";
+    $("pin-link-wa").removeAttribute("href");
+    $("pin-link-status").textContent = "Vale 10 min · se usa una sola vez";
+    let link;
+    try {
+      link = await api(`/${id}/pin-link`, { method: "POST" });
+    } catch (err) {
+      $("pin-link-url").textContent = err.message;
+      return;
+    }
+    $("pin-link-url").textContent = link.url;
+    const text = `Hola! Para cambiar tu PIN de Manguitope entra aquí (vale ${link.minutes} min):\n${link.url}`;
+    $("pin-link-wa").href = waLink(phone, text);
+    $("pin-link-copy").onclick = () => {
+      navigator.clipboard.writeText(link.url).then(() => {
+        $("pin-link-copy").textContent = "Copiado";
+        setTimeout(() => { $("pin-link-copy").textContent = "Copiar"; }, 1500);
+      }).catch(() => {});
+    };
+
+    const expires = new Date(link.expiresAt).getTime();
+    let state = { state: "active", openedAt: null };
+    const draw = () => {
+      const left = Math.max(0, Math.round((expires - Date.now()) / 1000));
+      const st = $("pin-link-status");
+      if (state.state === "used") { st.textContent = "✅ El cliente ya cambió su PIN"; return stop(); }
+      if (state.state === "expired" || left <= 0) { st.textContent = "Link vencido"; return stop(); }
+      const opened = state.openedAt ? "Abierto por el cliente" : "Aún no lo abre";
+      st.textContent = `${opened} · vence en ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    };
+    const stop = () => { clearInterval(pinPoll); pinPoll = null; clearInterval(pinTick); pinTick = null; };
+    draw();
+    pinTick = setInterval(draw, 1000);
+    pinPoll = setInterval(async () => {
+      try {
+        state = await api(`/pin-link/${encodeURIComponent(link.token)}`);
+        draw();
+        if (state.state === "used") load();
+      } catch { /* red momentánea */ }
+    }, 5000);
+  }
+
+  document.getElementById("pin-link-close").addEventListener("click", closePinLink);
+  document.getElementById("pin-link-back").addEventListener("click", (e) => {
+    if (e.target.id === "pin-link-back") closePinLink();
+  });
+
   function initRowActions(list) {
     list.addEventListener("click", (e) => {
       const row = e.target.closest(".web-customer-row");
@@ -158,6 +222,7 @@
       if (e.target.closest(".web-customer-reset-btn")) resetPassword(id);
       if (e.target.closest(".web-customer-email-btn")) setEmail(id, row.dataset.email);
       if (e.target.closest(".web-customer-ban-btn")) ban(id);
+      if (e.target.closest(".web-customer-pinlink-btn")) openPinLink(id, row.dataset.phone);
     });
   }
 

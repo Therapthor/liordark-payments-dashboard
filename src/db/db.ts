@@ -485,4 +485,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_code_links_phone ON code_links(client_phone, created_at);
 `);
 
+// Links para que el cliente cambie su PIN (liordark.com/cambiar-pin/<token>).
+// Valen 10 min y se usan una sola vez.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pin_links (
+    token       TEXT PRIMARY KEY,
+    customer_id INTEGER NOT NULL,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    expires_at  TEXT    NOT NULL,
+    opened_at   TEXT,
+    used_at     TEXT
+  );
+`);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);
