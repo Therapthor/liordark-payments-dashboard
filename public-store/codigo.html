@@ -37,6 +37,26 @@
   .ok-circle { width: 64px; height: 64px; border-radius: 50%; background: #E9F9EF; color: var(--green-dark); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
   .mail { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
   .actions { display: flex; flex-direction: column; gap: 10px; }
+  /* Tema Netflix: solo sus colores (negro, rojo, blanco), sin logos. */
+  body.nf { --cream: #141414; --bg: #000; --brown: #fff; --muted: #B3B3B3; --line: #2B2B2B; --orange: #E50914; --yellow: #E50914; --green: #fff; --green-dark: #fff; }
+  body.nf .phone { background: linear-gradient(180deg, #1C0A0B 0%, #141414 28%); border-color: #2B2B2B; }
+  body.nf .brand { color: #fff; }
+  body.nf .pill { background: #E50914; color: #fff; }
+  body.nf .pill.off { background: #2B2B2B; color: #B3B3B3; }
+  body.nf .label { color: #B3B3B3; }
+  body.nf .label.ok { color: #E50914; }
+  body.nf .spinner { border-color: #333; border-top-color: #E50914; }
+  body.nf .code { color: #fff; font-size: 64px; letter-spacing: 14px; text-shadow: 0 0 24px rgba(229,9,20,.35); }
+  body.nf .codebox { background: #000; border: 1px solid #2B2B2B; border-radius: 10px; padding: 18px 22px; }
+  body.nf .btn.orange { background: #E50914; color: #fff; }
+  body.nf .btn.green { background: #fff; color: #000; }
+  body.nf .btn.dark { background: #2B2B2B; color: #fff; }
+  body.nf .btn.light { background: transparent; color: #fff; border: 1px solid #444; }
+  body.nf .link { color: #B3B3B3; }
+  body.nf .ok-circle { background: #2B2B2B; color: #E50914; }
+  body.nf #waiting-slow { background: #2B2B2B !important; color: #fff !important; }
+  body.nf .mail { border-color: #2B2B2B; background: #000; }
+  body.nf .toast { background: #E50914; color: #fff; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--brown); color: var(--cream); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
 </style>
 </head>
@@ -64,7 +84,7 @@
     <span class="label ok">LLEGÓ TU CÓDIGO</span>
     <div class="center">
       <p class="muted" id="found-meta"></p>
-      <p class="code" id="found-code"></p>
+      <div class="codebox" id="found-codebox"><p class="code" id="found-code"></p></div>
       <a class="btn orange" id="found-link" href="#" target="_blank" rel="noopener" hidden>Abrir enlace</a>
       <button class="btn dark" id="copy-btn">Copiar</button>
       <button class="link" id="mail-toggle" hidden>Ver correo completo</button>
@@ -145,6 +165,7 @@
     if (d.serverNow) skew = new Date(d.serverNow).getTime() - Date.now();
     if (d.expiresAt) expiresAt = new Date(d.expiresAt).getTime();
     if (d.platform) platform = d.platform;
+    document.body.classList.toggle("nf", /netflix/i.test(platform));
     if (d.waitMinutes) waitMinutes = d.waitMinutes;
     if (d.createdAt) createdAt = new Date(d.createdAt).getTime();
   }
@@ -180,6 +201,7 @@
         document.getElementById("found-meta").textContent = platform + (data.receivedAtLima ? " · llegó a las " + data.receivedAtLima : "");
         document.getElementById("found-code").textContent = isLink ? "" : data.value;
         document.getElementById("found-code").hidden = isLink;
+        document.getElementById("found-codebox").hidden = isLink;
         document.getElementById("copy-btn").hidden = isLink;
         const a = document.getElementById("found-link");
         a.hidden = !isLink;
