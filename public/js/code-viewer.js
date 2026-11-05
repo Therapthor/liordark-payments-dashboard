@@ -107,7 +107,9 @@ window.LiordarkCodeViewer = (() => {
       const d = await api("/" + current.id + "/link", { method: "POST", body: JSON.stringify({ minutes }) });
       share = { token: d.token, minutes, url: d.url };
       $("cv-share-url").textContent = d.url.replace(/^https:\/\//, "");
-      const text = `Hola 👋 Aquí puedes ver tu código de ${current.platform} (vence en ${minutes} minutos):\n${d.url}`;
+      const slow = /disney/i.test(current.platform);
+      const text = `Hola 👋 Aquí puedes ver tu código de ${current.platform} (vence en ${minutes} minutos):\n${d.url}` +
+        (slow ? "\n\n⏳ El correo de Disney+ puede tardar hasta 4 minutos. Pide el código una sola vez y espera en la página: se actualiza sola." : "");
       $("cv-share-wa").href = "https://api.whatsapp.com/send?text=" + encodeURIComponent(text);
       pollShare();
     } catch (err) {
@@ -133,7 +135,8 @@ window.LiordarkCodeViewer = (() => {
     if (!current) return;
     $("cv-share-sub").textContent = current.platform + " · " + current.email;
     $("cv-share-back").hidden = false;
-    makeLink(5);
+    // Disney+ tarda hasta ~4 min en mandar el correo: 10 min por defecto.
+    makeLink(/disney/i.test(current.platform) ? 10 : 5);
   }
 
   function closeShare() {

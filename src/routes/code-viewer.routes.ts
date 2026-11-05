@@ -123,11 +123,18 @@ const lastChecks = new Map<string, { at: number; body: unknown }>();
 // viejo (el que ya se usó): se trata como «todavía no llega».
 const OLD_EMAIL_MARGIN_MS = 10 * 60 * 1000;
 
+/** Minutos que suele tardar el correo en llegar (Disney+ es lento). */
+export function codeWaitMinutes(sourceId: string, platform: string): number {
+  return /disney/i.test(sourceId) || /disney/i.test(platform) ? 4 : 1;
+}
+
 function linkInfo(link: CodeLink) {
   const account = getAccountById(link.accountId);
   return {
     state: codeLinkState(link),
     platform: account?.platform ?? "",
+    waitMinutes: codeWaitMinutes(link.sourceId, account?.platform ?? ""),
+    createdAt: sqliteDate(link.createdAt)?.toISOString() ?? null,
     expiresAt: sqliteDate(link.expiresAt)?.toISOString() ?? null,
     serverNow: new Date().toISOString(),
   };

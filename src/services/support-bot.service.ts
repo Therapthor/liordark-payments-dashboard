@@ -52,6 +52,7 @@ const MAX_LOOKUPS        = 3;     // búsquedas de código por cuenta, por chat
 const USE_CODE_LINKS     = true;  // códigos por link temporal (visor) en vez de buscar en el chat
 const MAX_CODE_LINKS_PER_DAY = 2; // links que el cliente puede generar por día (luego, asesor)
 const CODE_LINK_MINUTES  = 5;
+const CODE_LINK_MINUTES_SLOW = 8; // Disney+: el correo tarda hasta ~4 min
 const MAX_MISUNDERSTOOD  = 2;     // mensajes sin entender antes de pasar a una persona
 
 export function isSupportBotEnabledFor(phone: string): boolean {
@@ -315,14 +316,22 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
       handoff(chat, `Hoy ya generaste ${MAX_CODE_LINKS_PER_DAY} links de código 🙏. Te paso con un asesor para ayudarte 👤`);
       return;
     }
+    // Disney+ tarda hasta ~4 min en mandar el correo: link más largo y
+    // aviso de no pedir otro código mientras tanto.
+    const slow = /disney/i.test(account.platform) || /disney/i.test(sourceId);
+    const minutes = slow ? CODE_LINK_MINUTES_SLOW : CODE_LINK_MINUTES;
     const link = createCodeLink({
-      accountId, email: account.email, sourceId, clientPhone: phone, createdBy: "bot", minutes: CODE_LINK_MINUTES,
+      accountId, email: account.email, sourceId, clientPhone: phone, createdBy: "bot", minutes,
     });
     const left = MAX_CODE_LINKS_PER_DAY - usedToday - 1;
     say(chat.id,
       `🔑 Abre este link para ver tu código de ${account.platform}:\n` +
       `https://liordark.com/codigo/${link.token}\n\n` +
-      `Si el código aún no aparece, toca «Actualizar» en esa página. El link vence en ${CODE_LINK_MINUTES} minutos ⏳` +
+      (slow
+        ? "⏳ El correo de Disney+ puede tardar hasta 4 minutos en llegar. Pide el código UNA sola vez y espera en esa página: se actualiza sola. " +
+          "Si pides otro, el anterior deja de servir.\n"
+        : "Si el código aún no aparece, toca «Actualizar» en esa página. ") +
+      `El link vence en ${minutes} minutos` +
       (left > 0 ? ` (hoy te queda ${left} link más).` : " (es tu último link de hoy)."),
       [DONE_OPTION, HUMAN_OPTION]);
     setBotState(chat.id, "code_result", { ...chat.botContext, accountId });
