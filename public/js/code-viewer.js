@@ -272,5 +272,11 @@ window.LiordarkCodeViewer = (() => {
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
-  return { open };
+  // «Enviar link» directo desde la lista (sin abrir el correo primero).
+  function shareDirect(account) {
+    current = { ...account };
+    openShare();
+  }
+
+  return { open, share: shareDirect };
 })();

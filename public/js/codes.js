@@ -247,7 +247,7 @@
         <span class="codes-account-result">
           <span class="codes-code" data-code="${escapeHtml(a.totp.code)}" title="Clic para copiar">${escapeHtml(a.totp.code)}</span>
           <span class="codes-timer" data-role="totp-ring"><span class="codes-timer-num"></span></span>
-          <button type="button" class="codes-view-btn" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Enviar link</button>
+          <button type="button" class="codes-share-btn" data-totp="1" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Enviar link</button>
         </span>
       `;
       startTimer(row.querySelector("[data-role='totp-ring']"), a.totp.secondsRemaining, TOTP_PERIOD_SECONDS);
@@ -275,7 +275,8 @@
       `<button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>`;
     // Visor: el correo tal cual llegó (ver code-viewer.js).
     const viewBtn = a.codeSource
-      ? `<button type="button" class="codes-view-btn" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Ver correo</button>`
+      ? `<button type="button" class="codes-view-btn" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Ver correo</button>` +
+        `<button type="button" class="codes-share-btn" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Enviar link</button>`
       : "";
 
     row.innerHTML = `
@@ -334,6 +335,16 @@
     list.addEventListener("click", async (e) => {
       const codeEl = e.target.closest(".codes-code");
       if (codeEl) { copyToClipboard(codeEl.dataset.code, codeEl); return; }
+
+      const shareBtn = e.target.closest(".codes-share-btn");
+      if (shareBtn && window.LiordarkCodeViewer) {
+        const row = shareBtn.closest(".codes-account-row");
+        window.LiordarkCodeViewer.share({
+          id: Number(row.dataset.id), platform: shareBtn.dataset.platform, email: shareBtn.dataset.email,
+          totp: shareBtn.dataset.totp === "1",
+        });
+        return;
+      }
 
       const viewBtn = e.target.closest(".codes-view-btn");
       if (viewBtn && window.LiordarkCodeViewer) {
