@@ -37,26 +37,38 @@
   .ok-circle { width: 64px; height: 64px; border-radius: 50%; background: #E9F9EF; color: var(--green-dark); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
   .mail { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
   .actions { display: flex; flex-direction: column; gap: 10px; }
-  /* Tema Netflix: solo sus colores (negro, rojo, blanco), sin logos. */
-  body.nf { --cream: #141414; --bg: #000; --brown: #fff; --muted: #B3B3B3; --line: #2B2B2B; --orange: #E50914; --yellow: #E50914; --green: #fff; --green-dark: #fff; }
-  body.nf .phone { background: linear-gradient(180deg, #1C0A0B 0%, #141414 28%); border-color: #2B2B2B; }
-  body.nf .brand { color: #fff; }
-  body.nf .pill { background: #E50914; color: #fff; }
-  body.nf .pill.off { background: #2B2B2B; color: #B3B3B3; }
-  body.nf .label { color: #B3B3B3; }
-  body.nf .label.ok { color: #E50914; }
-  body.nf .spinner { border-color: #333; border-top-color: #E50914; }
-  body.nf .code { color: #fff; font-size: 64px; letter-spacing: 14px; text-shadow: 0 0 24px rgba(229,9,20,.35); }
-  body.nf .codebox { background: #000; border: 1px solid #2B2B2B; border-radius: 10px; padding: 18px 22px; }
-  body.nf .btn.orange { background: #E50914; color: #fff; }
-  body.nf .btn.green { background: #fff; color: #000; }
-  body.nf .btn.dark { background: #2B2B2B; color: #fff; }
-  body.nf .btn.light { background: transparent; color: #fff; border: 1px solid #444; }
-  body.nf .link { color: #B3B3B3; }
-  body.nf .ok-circle { background: #2B2B2B; color: #E50914; }
-  body.nf #waiting-slow { background: #2B2B2B !important; color: #fff !important; }
-  body.nf .mail { border-color: #2B2B2B; background: #000; }
-  body.nf .toast { background: #E50914; color: #fff; }
+  /* Temas por plataforma: solo sus colores, sin logos oficiales. */
+  body.themed { --cream: var(--t-card); --bg: var(--t-bg); --brown: var(--t-text); --muted: var(--t-muted); --line: var(--t-line); --orange: var(--t-accent); --yellow: var(--t-accent); --green: var(--t-text); --green-dark: var(--t-text); }
+  body.themed .phone { background: linear-gradient(180deg, var(--t-top) 0%, var(--t-card) 28%); border-color: var(--t-line); }
+  body.themed .brand { color: var(--t-text); }
+  body.themed .pill { background: var(--t-accent); color: var(--t-on-accent); }
+  body.themed .pill.off { background: var(--t-line); color: var(--t-muted); }
+  body.themed .label { color: var(--t-muted); }
+  body.themed .label.ok { color: var(--t-accent); }
+  body.themed .spinner { border-color: var(--t-line); border-top-color: var(--t-accent); }
+  body.themed .code { color: var(--t-text); font-size: 64px; letter-spacing: 14px; text-shadow: 0 0 24px var(--t-glow); }
+  body.themed .codebox { background: var(--t-box); border: 1px solid var(--t-line); border-radius: 12px; padding: 18px 22px; }
+  body.themed .btn.orange { background: var(--t-accent); color: var(--t-on-accent); }
+  body.themed .btn.green { background: var(--t-text); color: var(--t-bg); }
+  body.themed .btn.dark { background: var(--t-line); color: var(--t-text); }
+  body.themed .btn.light { background: transparent; color: var(--t-text); border: 1px solid var(--t-line); }
+  body.themed .link { color: var(--t-muted); }
+  body.themed .ok-circle { background: var(--t-line); color: var(--t-accent); }
+  body.themed #waiting-slow { background: var(--t-line) !important; color: var(--t-text) !important; }
+  body.themed .mail { border-color: var(--t-line); background: var(--t-box); }
+  body.themed .toast { background: var(--t-accent); color: var(--t-on-accent); }
+  /* Netflix: negro, rojo, blanco */
+  body.t-netflix { --t-bg: #000; --t-card: #141414; --t-top: #1C0A0B; --t-box: #000; --t-text: #fff; --t-muted: #B3B3B3; --t-line: #2B2B2B; --t-accent: #E50914; --t-on-accent: #fff; --t-glow: rgba(229,9,20,.35); }
+  /* Disney+: azul noche y azul brillante */
+  body.t-disney { --t-bg: #040714; --t-card: #0B1530; --t-top: #1A2A5C; --t-box: #040714; --t-text: #F9F9F9; --t-muted: #A9B4CF; --t-line: #26345C; --t-accent: #0063E5; --t-on-accent: #fff; --t-glow: rgba(2,231,245,.35); }
+  /* Prime Video: azul pizarra y celeste */
+  body.t-prime { --t-bg: #0B1218; --t-card: #0F171E; --t-top: #1A2B38; --t-box: #0B1218; --t-text: #fff; --t-muted: #8197A4; --t-line: #26343F; --t-accent: #00A8E1; --t-on-accent: #0B1218; --t-glow: rgba(0,168,225,.35); }
+  /* Crunchyroll: negro y naranja */
+  body.t-crunchy { --t-bg: #000; --t-card: #141519; --t-top: #2A1607; --t-box: #000; --t-text: #fff; --t-muted: #A0A0A0; --t-line: #2C2D33; --t-accent: #F47521; --t-on-accent: #000; --t-glow: rgba(244,117,33,.35); }
+  /* ChatGPT: gris oscuro y verde */
+  body.t-chatgpt { --t-bg: #171717; --t-card: #212121; --t-top: #0F2A22; --t-box: #171717; --t-text: #ECECEC; --t-muted: #B4B4B4; --t-line: #383838; --t-accent: #10A37F; --t-on-accent: #fff; --t-glow: rgba(16,163,127,.35); }
+  .code { white-space: nowrap; }
+  .code.long, body.themed .code.long { font-size: 44px; letter-spacing: 7px; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--brown); color: var(--cream); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
 </style>
 </head>
@@ -165,7 +177,12 @@
     if (d.serverNow) skew = new Date(d.serverNow).getTime() - Date.now();
     if (d.expiresAt) expiresAt = new Date(d.expiresAt).getTime();
     if (d.platform) platform = d.platform;
-    document.body.classList.toggle("nf", /netflix/i.test(platform));
+    const theme = /netflix/i.test(platform) ? "t-netflix"
+      : /disney/i.test(platform) ? "t-disney"
+      : /prime|amazon/i.test(platform) ? "t-prime"
+      : /crunchy/i.test(platform) ? "t-crunchy"
+      : /chatgpt|gpt|openai/i.test(platform) ? "t-chatgpt" : "";
+    document.body.className = theme ? "themed " + theme : "";
     if (d.waitMinutes) waitMinutes = d.waitMinutes;
     if (d.createdAt) createdAt = new Date(d.createdAt).getTime();
   }
@@ -200,6 +217,7 @@
         const isLink = data.kind === "link";
         document.getElementById("found-meta").textContent = platform + (data.receivedAtLima ? " · llegó a las " + data.receivedAtLima : "");
         document.getElementById("found-code").textContent = isLink ? "" : data.value;
+        document.getElementById("found-code").classList.toggle("long", !isLink && String(data.value).length > 4);
         document.getElementById("found-code").hidden = isLink;
         document.getElementById("found-codebox").hidden = isLink;
         document.getElementById("copy-btn").hidden = isLink;
