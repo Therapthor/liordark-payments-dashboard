@@ -14,80 +14,86 @@
 <meta property="og:url" content="https://liordark.com/curso/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/curso.css">
 </head>
-<body>
+<body class="landing">
 
-<header class="c-header">
-  <a class="c-brand" href="/" id="brand"><b>MANGUITOPE</b></a>
-  <nav class="c-nav">
-    <a href="/">Tienda</a>
-    <a href="/curso/" class="active">Curso</a>
-  </nav>
-  <span class="c-user" id="user-label"></span>
+<header class="l-header">
+  <a class="l-brand" href="/">Manguitope</a>
+  <div class="l-header-right">
+    <span class="l-user" id="user-label"></span>
+    <a class="l-pill" href="/">Volver a la tienda</a>
+  </div>
 </header>
 
-<main class="sale">
+<main class="sale l-main">
 
-  <section class="hero">
-    <div>
-      <h1>TUS PRIMEROS <span>S/ 1,000</span></h1>
-      <p class="sub">Cuentas Streaming: aprende a vender cuentas y perfiles desde cero, paso a paso.</p>
-      <ul>
-        <li>🎬 <span><b>5 episodios en video</b> — cortos y al grano</span></li>
-        <li>♾️ <span><b>Acceso de por vida</b> — míralos las veces que quieras</span></li>
-        <li>📊 <span><b>Plantilla Excel gratis</b> para organizar a tus clientes</span></li>
-        <li>🏪 <span><b>Tu acceso al Panel Mayorista</b> con <b>S/ 10 de saldo de regalo</b></span></li>
-        <li>🎟️ <span><b>Cupón −30%</b> para el curso avanzado</span></li>
-      </ul>
-      <div class="price-box">
-        <div class="price">S/ <span id="price">39.90</span><small>Pago único · Yape automático</small></div>
-        <button class="c-btn orange big" id="buy-btn">Comprar curso</button>
-      </div>
+  <section class="l-hero">
+    <span class="l-chip">Curso · 5 episodios</span>
+    <h1>Tus Primeros S/&nbsp;1,000</h1>
+    <p>Cuentas streaming: aprende a vender cuentas y perfiles desde cero.</p>
+    <div class="l-hero-actions">
+      <button class="l-btn primary" id="buy-btn">Comprar curso · S/ <span id="price">39.90</span></button>
+      <button class="l-btn ghost" id="watch-btn">Ver episodio 1 gratis</button>
     </div>
-    <div>
-      <div class="player" id="preview">
-        <span class="badge-free">EPISODIO 1 GRATIS</span>
-        <video id="preview-video" controls playsinline preload="none" poster="/assets/curso-portada-1280.jpg" controlslist="nodownload" disablepictureinpicture hidden></video>
-        <img class="cover" id="preview-empty" src="/assets/curso-portada-1280.jpg" alt="Tus Primeros S/ 1,000 — portada del curso">
-      </div>
-      <p class="muted" style="font-size:13px;margin:8px 0 0">Mira el primer episodio gratis, sin registrarte.</p>
+    <span class="l-note">Pago único con Yape · confirmación automática</span>
+  </section>
+
+  <section class="l-video-card" id="preview-section">
+    <div class="l-video" id="preview">
+      <video id="preview-video" controls playsinline preload="none" poster="/assets/curso-portada-1280.jpg" controlslist="nodownload" disablepictureinpicture hidden></video>
+      <button class="l-cover" id="preview-empty" aria-label="Ver episodio 1">
+        <img src="/assets/curso-portada-1280.jpg" alt="Tus Primeros S/ 1,000 — portada del curso">
+        <span class="l-play" id="play-icon"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#241A10"/></svg></span>
+      </button>
     </div>
+    <p class="l-video-note" id="preview-note">Episodio 1 gratis</p>
   </section>
 
-  <section class="card map-card">
-    <h2 class="section-title">TU CAMINO EN 4 PASOS</h2>
-    <div class="stepmap" id="stepmap"></div>
-  </section>
-
-  <section>
-    <h2 class="section-title">LOS EPISODIOS</h2>
-    <div class="eps-sale" id="eps"></div>
-  </section>
-
-  <section>
-    <h2 class="section-title">ADEMÁS TE LLEVAS</h2>
-    <div class="gifts">
-      <div class="card gift"><span class="big">📊</span><b>Gestor de cuentas (Excel)</b><p>Organiza clientes, perfiles, vencimientos y ganancias. Se desbloquea en el episodio 4.</p></div>
-      <div class="card gift"><span class="big">🏪</span><b>Panel Mayorista + S/ 10</b><p>Compra tus cuentas a precio mayorista. Te regalamos S/ 10 de saldo. Episodio 3.</p></div>
-      <div class="card gift"><span class="big">🎟️</span><b>Cupón −30%</b><p>Para el curso avanzado: escala tu negocio. Lo obtienes al terminar el episodio 5.</p></div>
+  <section class="l-features">
+    <div class="l-feature">
+      <span class="l-ico green"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E6B36" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+      <b>Plantilla Excel</b><span>Gestor de cuentas y clientes.</span>
+    </div>
+    <div class="l-feature">
+      <span class="l-ico orange"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3480A" stroke-width="2"><path d="M3 9l1.5-5h15L21 9M4 9h16v11H4z"/><path d="M9 20v-6h6v6"/></svg></span>
+      <b>Panel Mayorista</b><span>Con S/ 10 de saldo de regalo.</span>
+    </div>
+    <div class="l-feature">
+      <span class="l-ico yellow"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6200" stroke-width="2"><path d="M4 7h16v4a2 2 0 000 4v4H4v-4a2 2 0 000-4z"/></svg></span>
+      <b>Cupón −30%</b><span>Para el curso avanzado.</span>
+    </div>
+    <div class="l-feature">
+      <span class="l-ico brown"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D2F22" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <b>De por vida</b><span>Repite cuando quieras.</span>
     </div>
   </section>
 
-  <section class="faq">
-    <h2 class="section-title">PREGUNTAS</h2>
-    <details class="card"><summary>¿Cómo pago?</summary><p>Con Yape. Te damos un monto exacto y el pago se confirma solo en segundos. Apenas se confirma, entras al curso.</p></details>
-    <details class="card"><summary>¿Hasta cuándo puedo verlo?</summary><p>Para siempre. Entras con tu celular y tu PIN desde cualquier celular o computadora.</p></details>
-    <details class="card"><summary>¿Necesito experiencia?</summary><p>No. Empezamos desde cero: qué es una cuenta, qué es un perfil, cuánto cobrar y cómo conseguir clientes.</p></details>
-    <details class="card"><summary>¿Puedo descargar los videos?</summary><p>No se descargan, pero los puedes volver a ver todas las veces que quieras.</p></details>
+  <section class="l-two">
+    <div class="l-box">
+      <h2>Episodios</h2>
+      <div id="eps" class="l-eps"></div>
+    </div>
+    <div class="l-box">
+      <h2>Preguntas</h2>
+      <div class="l-faq"><b>¿Cómo pago?</b><p>Con Yape. Te damos un monto exacto y el pago se confirma solo.</p></div>
+      <div class="l-faq"><b>¿Hasta cuándo puedo verlo?</b><p>Para siempre, con tu celular y tu PIN.</p></div>
+      <div class="l-faq"><b>¿Necesito experiencia?</b><p>No. Empezamos desde cero.</p></div>
+      <div class="l-faq"><b>¿Puedo descargar los videos?</b><p>No se descargan, pero los ves todas las veces que quieras.</p></div>
+    </div>
+  </section>
+
+  <section class="l-cta">
+    <div><b>Empieza hoy</b><span>S/ <span id="price3">39.90</span> · pago único · acceso de por vida</span></div>
+    <button class="l-btn primary" id="buy-btn3">Comprar curso</button>
   </section>
 
 </main>
 
-<div class="sticky-buy" id="sticky-buy">
-  <div style="flex:1"><b class="pix" style="font-size:12px">S/ <span id="price2">39.90</span></b><div class="muted" style="font-size:12px">Acceso de por vida</div></div>
-  <button class="c-btn orange" id="buy-btn2">Comprar curso</button>
+<div class="l-sticky" id="sticky-buy">
+  <div class="l-sticky-price"><b>S/ <span id="price2">39.90</span></b><span>Pago único · Yape</span></div>
+  <button class="l-btn primary" id="buy-btn2">Comprar curso</button>
 </div>
 
 <div class="modal-back" id="buy-modal" hidden>

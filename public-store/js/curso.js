@@ -11,7 +11,6 @@
   let pollTimer = null;
   let countdownTimer = null;
 
-  document.getElementById("brand").insertAdjacentHTML("afterbegin", mango(30));
 
   async function load() {
     try {
@@ -21,32 +20,27 @@
     }
     if (!info.visible) { showSoon(); return; }
     const price = Number(info.price).toFixed(2);
-    document.getElementById("price").textContent = price;
-    document.getElementById("price2").textContent = price;
-    document.getElementById("stepmap").innerHTML = stepmap(info.steps, 1, new Set());
+    ["price", "price2", "price3"].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = price; });
 
     document.getElementById("eps").innerHTML = info.episodes.map(e => `
-      <div class="card ep-card">
-        <span class="kick">${e.n === 1 ? "EPISODIO 1 · INICIO" : "PASO " + (e.n - 1) + " · " + esc(e.step)}</span>
-        <b>${esc(e.title)}</b>
-        <p>${esc(e.summary)}</p>
-        <span class="lockline">${e.n === 1 ? "▶ Gratis" : info.owned ? "✓ Incluido" : "🔒 Con el curso"}</span>
+      <div class="l-ep ${e.n === 1 ? "first" : ""}">
+        <span class="l-ep-n">${e.n}</span>
+        <span class="l-ep-t">${esc(e.title)}</span>
+        ${e.n === 1 ? `<span class="l-ep-free">Gratis</span>` : ""}
       </div>`).join("");
 
-    if (info.previewAvailable) {
-      const v = document.getElementById("preview-video");
-      v.src = "/api/course/preview";
-      v.hidden = false;
-      document.getElementById("preview-empty").hidden = true;
-      v.addEventListener("contextmenu", e => e.preventDefault());
+    if (!info.previewAvailable) {
+      document.getElementById("play-icon").hidden = true;
+      document.getElementById("preview-note").textContent = "Episodio 1 gratis · muy pronto";
+      document.getElementById("watch-btn").hidden = true;
     }
 
     if (info.owned) {
-      ["buy-btn", "buy-btn2"].forEach(id => {
+      ["buy-btn", "buy-btn2", "buy-btn3"].forEach(id => {
         const b = document.getElementById(id);
+        if (!b) return;
         b.textContent = "Ir a mi curso →";
-        b.classList.remove("orange");
-        b.classList.add("green");
+        b.classList.add("owned");
       });
     }
     if (info.loggedIn) {
@@ -57,16 +51,34 @@
     }
   }
 
+  // Episodio 1 gratis: el video se carga recién al tocar play.
+  function playPreview() {
+    if (!info || !info.previewAvailable) return;
+    const v = document.getElementById("preview-video");
+    if (!v.src) {
+      v.src = "/api/course/preview";
+      v.addEventListener("contextmenu", e => e.preventDefault());
+    }
+    v.hidden = false;
+    document.getElementById("preview-empty").hidden = true;
+    v.play().catch(() => {});
+  }
+  document.getElementById("preview-empty").addEventListener("click", playPreview);
+  document.getElementById("watch-btn").addEventListener("click", () => {
+    document.getElementById("preview-section").scrollIntoView({ behavior: "smooth", block: "center" });
+    playPreview();
+  });
+
   // Curso en borrador: para el público todavía no existe.
   function showSoon() {
     document.getElementById("sticky-buy").hidden = true;
     document.querySelector(".sale").innerHTML = `
-      <section class="card gate" style="align-items:center;text-align:center">
-        ${mango(72)}
-        <h1>MUY PRONTO</h1>
-        <p class="muted" style="margin:0">Estamos preparando el curso <b>Tus Primeros S/ 1,000</b>. Vuelve pronto.</p>
-        ${info && info.loggedIn ? "" : `<button class="c-btn block" id="soon-login">¿Tienes acceso? Entrar</button>`}
-        <a class="c-btn orange block" href="/">Ir a la tienda</a>
+      <section class="l-box l-soon">
+        ${mango(64)}
+        <h1>Muy pronto</h1>
+        <p>Estamos preparando el curso <b>Tus Primeros S/ 1,000</b>. Vuelve pronto.</p>
+        ${info && info.loggedIn ? "" : `<button class="l-btn ghost" id="soon-login">¿Tienes acceso? Entrar</button>`}
+        <a class="l-btn primary" href="/">Ir a la tienda</a>
       </section>`;
     const btn = document.getElementById("soon-login");
     if (btn) btn.addEventListener("click", () => {
@@ -109,8 +121,7 @@
       startCheckout();
     });
   }
-  document.getElementById("buy-btn").addEventListener("click", onBuy);
-  document.getElementById("buy-btn2").addEventListener("click", onBuy);
+  ["buy-btn", "buy-btn2", "buy-btn3"].forEach(id => document.getElementById(id).addEventListener("click", onBuy));
 
   async function startCheckout() {
     stopTimers();

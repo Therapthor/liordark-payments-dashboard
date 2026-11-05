@@ -348,3 +348,93 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ═════════ VENTA — estilo «landing de app» (limpio, sin pixel) ═════════ */
+body.landing { background: #FBF5EC; font-family: Manrope, system-ui, -apple-system, sans-serif; }
+.landing .l-header { height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 64px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+.landing .l-brand { font-weight: 800; font-size: 17px; color: var(--brown); text-decoration: none; }
+.landing .l-header-right { display: flex; align-items: center; gap: 14px; }
+.landing .l-user { font-size: 13px; color: var(--muted); }
+.landing .l-pill { background: #fff; color: var(--brown); text-decoration: none; font-weight: 700; font-size: 14px; padding: 10px 18px; border-radius: 999px; box-shadow: 0 1px 3px rgba(36,26,16,.08); }
+.landing .l-main { max-width: 1100px; margin: 0 auto; padding: 40px 24px 96px; display: flex; flex-direction: column; gap: 56px; }
+.landing .l-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; }
+.landing .l-chip { background: #FFEBD6; color: #A3480A; font-weight: 700; font-size: 13px; padding: 7px 14px; border-radius: 999px; }
+.landing .l-hero h1 { margin: 0; font-size: 60px; line-height: 1.05; font-weight: 800; letter-spacing: -1.5px; }
+.landing .l-hero p { margin: 0; font-size: 19px; color: #5C4A39; max-width: 560px; line-height: 1.5; }
+.landing .l-hero-actions { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+.landing .l-note { font-size: 13px; color: var(--muted); }
+.landing .l-btn { border: 0; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-weight: 800; font-size: 17px; padding: 16px 30px; border-radius: 999px; transition: transform .1s ease, box-shadow .1s ease; }
+.landing .l-btn:hover { transform: translateY(-1px); }
+.landing .l-btn.primary { background: var(--orange); color: #fff; box-shadow: 0 8px 20px rgba(255,125,26,.3); }
+.landing .l-btn.primary.owned { background: var(--green); box-shadow: 0 8px 20px rgba(37,211,102,.25); }
+.landing .l-btn.ghost { background: #fff; color: var(--brown); font-weight: 700; font-size: 16px; padding: 16px 26px; }
+.landing .l-video-card { background: #fff; border-radius: 28px; padding: 16px; box-shadow: 0 20px 50px rgba(36,26,16,.08); width: 100%; max-width: 860px; align-self: center; box-sizing: border-box; }
+.landing .l-video { position: relative; border-radius: 18px; overflow: hidden; aspect-ratio: 16 / 9; background: #241A10; }
+.landing .l-video video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+.landing .l-cover { position: absolute; inset: 0; padding: 0; border: 0; cursor: pointer; background: none; }
+.landing .l-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.landing .l-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 80px; height: 80px; border-radius: 50%; background: rgba(255,250,243,.95); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.landing .l-video-note { margin: 10px 4px 2px; font-size: 13px; color: var(--muted); text-align: center; }
+.landing .l-features { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.landing .l-feature { background: #fff; border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 8px; }
+.landing .l-feature b { font-size: 16px; }
+.landing .l-feature span:last-child { font-size: 14px; color: #5C4A39; }
+.landing .l-ico { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.landing .l-ico.green { background: #E3F7EA; } .landing .l-ico.orange { background: #FFEBD6; }
+.landing .l-ico.yellow { background: #FFF4D6; } .landing .l-ico.brown { background: #EDE6DC; }
+.landing .l-two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.landing .l-box { background: #fff; border-radius: 24px; padding: 28px; display: flex; flex-direction: column; gap: 4px; }
+.landing .l-box h2 { margin: 0 0 10px; font-size: 22px; font-weight: 800; }
+.landing .l-eps { display: flex; flex-direction: column; gap: 6px; }
+.landing .l-ep { display: flex; gap: 14px; align-items: center; padding: 12px; border-radius: 14px; }
+.landing .l-ep.first { background: #FBF5EC; }
+.landing .l-ep-n { width: 32px; height: 32px; flex: none; border-radius: 10px; background: #F3EADF; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; }
+.landing .l-ep.first .l-ep-n { background: var(--orange); color: #fff; }
+.landing .l-ep-t { flex: 1; font-weight: 600; font-size: 15px; }
+.landing .l-ep-free { font-size: 12px; font-weight: 700; color: var(--green-dark); }
+.landing .l-faq { padding: 14px 0; border-bottom: 1px solid #F3EADF; }
+.landing .l-faq:last-child { border-bottom: 0; }
+.landing .l-faq p { margin: 6px 0 0; color: #5C4A39; font-size: 15px; }
+.landing .l-cta { background: var(--brown); color: var(--cream); border-radius: 28px; padding: 40px 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.landing .l-cta > div { display: flex; flex-direction: column; gap: 6px; }
+.landing .l-cta b { font-size: 26px; }
+.landing .l-cta > div > span { color: #D8C8B4; }
+.landing .l-soon { align-items: center; text-align: center; gap: 14px; max-width: 460px; margin: 40px auto; }
+.landing .l-soon h1 { margin: 0; font-size: 32px; }
+.landing .l-soon p { margin: 0; color: #5C4A39; }
+.landing .l-sticky { display: none; }
+/* Modal de compra/ingreso más suave en esta página */
+.landing .modal.card { border: 0; border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.25); background: #fff; }
+.landing .modal .c-btn { border: 0; box-shadow: none; border-radius: 999px; }
+.landing .modal .field input { border: 1px solid #E6DACB; border-radius: 12px; background: #FBF5EC; }
+.landing .modal .pay-qr { border: 1px solid #E6DACB; border-radius: 12px; }
+.landing .modal .pay-amount b { font-family: Manrope, sans-serif; font-weight: 800; font-size: 26px; }
+
+@media (max-width: 900px) {
+  .landing .l-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .landing .l-two { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .landing .l-header { height: 60px; padding: 0 16px; }
+  .landing .l-user { display: none; }
+  .landing .l-pill { font-size: 13px; padding: 8px 14px; }
+  .landing .l-main { padding: 20px 16px 120px; gap: 24px; }
+  .landing .l-hero { gap: 12px; }
+  .landing .l-hero h1 { font-size: 36px; letter-spacing: -1px; }
+  .landing .l-hero p { font-size: 16px; }
+  .landing .l-hero-actions .l-btn.primary { display: none; }
+  .landing .l-video-card { border-radius: 22px; padding: 10px; }
+  .landing .l-video { border-radius: 14px; }
+  .landing .l-play { width: 56px; height: 56px; }
+  .landing .l-features { gap: 10px; }
+  .landing .l-feature { border-radius: 18px; padding: 16px; }
+  .landing .l-feature .l-ico { display: none; }
+  .landing .l-box { border-radius: 22px; padding: 18px; }
+  .landing .l-cta { display: none; }
+  .landing .l-sticky { display: flex; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; background: var(--brown); border-radius: 20px; padding: 10px 10px 10px 18px; align-items: center; gap: 12px; box-shadow: 0 10px 30px rgba(36,26,16,.25); }
+  .landing .l-sticky[hidden] { display: none; }
+  .landing .l-sticky-price { flex: 1; display: flex; flex-direction: column; color: var(--cream); }
+  .landing .l-sticky-price b { font-size: 17px; }
+  .landing .l-sticky-price > span { font-size: 12px; color: #B9A68F; }
+  .landing .l-sticky .l-btn { font-size: 15px; padding: 14px 20px; }
+}
