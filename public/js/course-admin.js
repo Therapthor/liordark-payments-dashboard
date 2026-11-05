@@ -51,12 +51,38 @@ window.LiordarkCourse = (() => {
       document.getElementById("crs-stats").innerHTML = `<p class="panel-hint">${esc(err.message)}</p>`;
       return;
     }
+    renderPublish();
     renderStats();
     renderMedia();
     renderCues();
     renderStudents();
     document.getElementById("crs-price").value = Number(data.price).toFixed(2);
   }
+
+  function renderPublish() {
+    const on = !!data.published;
+    document.getElementById("crs-publish").classList.toggle("on", on);
+    document.getElementById("crs-publish-state").textContent = on ? "✅ Publicado — todos lo ven en liordark.com/curso" : "Borrador — todavía no es público";
+    document.getElementById("crs-publish-hint").textContent = on
+      ? "Aparece en la tienda y cualquiera lo puede comprar."
+      : "Solo lo ve y lo puede comprar el celular de prueba (" + (data.previewPhones || []).join(", ") + "). Cuando esté todo listo, dale a Publicar.";
+    const btn = document.getElementById("crs-publish-btn");
+    btn.textContent = on ? "Volver a borrador" : "Publicar curso";
+    btn.className = on ? "btn-secondary" : "btn-primary";
+  }
+
+  document.getElementById("crs-publish-btn").addEventListener("click", async () => {
+    const next = !data.published;
+    const msg = next
+      ? "¿Publicar el curso? Aparecerá en la tienda y cualquiera lo podrá comprar."
+      : "¿Volver a borrador? Dejará de verse en la tienda (quien ya lo compró sigue entrando).";
+    if (!confirm(msg)) return;
+    try {
+      const r = await api("/published", { method: "PUT", body: JSON.stringify({ published: next }) });
+      data.published = r.published;
+      renderPublish();
+    } catch (err) { alert(err.message); }
+  });
 
   function renderStats() {
     const t = data.totals;

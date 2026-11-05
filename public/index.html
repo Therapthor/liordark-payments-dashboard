@@ -45,7 +45,7 @@
         <button class="tab-btn" data-view="codes">Códigos</button>
         <button class="tab-btn" data-view="wholesalers">Mayoristas <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
         <button class="tab-btn" data-view="web-customers">Clientes</button>
-        <button class="tab-btn" data-view="course">🎓 Curso</button>
+        <button class="tab-btn" data-view="course">Curso</button>
         <button class="tab-btn" data-view="config">Configuración</button>
         <button class="tab-btn" data-view="support-chat">Chat <span class="tab-badge-alert" id="chat-unread-badge" hidden>0</span></button>
       </nav>
@@ -306,10 +306,18 @@
       <!-- ═══════════ VISTA: CURSO ═══════════ -->
       <section id="view-course" class="view" hidden>
         <div class="panel-header standalone">
-          <h2>🎓 Curso — Tus Primeros S/ 1,000</h2>
+          <h2>Curso — Tus Primeros S/ 1,000</h2>
           <a class="btn-secondary btn-sm" href="https://liordark.com/curso/" target="_blank" rel="noopener" style="text-decoration:none">Ver página de venta ↗</a>
         </div>
         <p class="panel-hint">Se compra en liordark.com/curso con el mismo Yape automático. Aquí subes los videos y la plantilla, ajustas cuándo aparece cada recurso y ves a tus alumnos.</p>
+
+        <div class="panel crs-publish" id="crs-publish">
+          <div>
+            <b id="crs-publish-state">Borrador</b>
+            <p class="panel-hint" id="crs-publish-hint" style="margin:4px 0 0">Mientras esté en borrador solo lo ve el celular de prueba.</p>
+          </div>
+          <button class="btn-primary" id="crs-publish-btn">Publicar curso</button>
+        </div>
 
         <div class="crs-stats" id="crs-stats"></div>
 

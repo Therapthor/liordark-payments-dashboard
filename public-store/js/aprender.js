@@ -38,6 +38,7 @@
     try { me = await api("/api/course/me"); }
     catch (err) {
       if (err.status === 401) { showLogin(); return; }
+      if (err.status === 404) { document.getElementById("gate-buy").hidden = false; return; }
       toast(err.message); return;
     }
     if (!me.owned) { document.getElementById("gate-buy").hidden = false; return; }

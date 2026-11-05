@@ -19,6 +19,7 @@
     } catch {
       return;
     }
+    if (!info.visible) { showSoon(); return; }
     const price = Number(info.price).toFixed(2);
     document.getElementById("price").textContent = price;
     document.getElementById("price2").textContent = price;
@@ -54,6 +55,24 @@
         if (me && me.phone) document.getElementById("user-label").textContent = maskPhone(me.phone);
       } catch { /* sin sesión */ }
     }
+  }
+
+  // Curso en borrador: para el público todavía no existe.
+  function showSoon() {
+    document.getElementById("sticky-buy").hidden = true;
+    document.querySelector(".sale").innerHTML = `
+      <section class="card gate" style="align-items:center;text-align:center">
+        ${mango(72)}
+        <h1>MUY PRONTO</h1>
+        <p class="muted" style="margin:0">Estamos preparando el curso <b>Tus Primeros S/ 1,000</b>. Vuelve pronto.</p>
+        ${info && info.loggedIn ? "" : `<button class="c-btn block" id="soon-login">¿Tienes acceso? Entrar</button>`}
+        <a class="c-btn orange block" href="/">Ir a la tienda</a>
+      </section>`;
+    const btn = document.getElementById("soon-login");
+    if (btn) btn.addEventListener("click", () => {
+      openModal(loginFormHtml("Entrar", "Con tu celular y tu PIN de Manguitope."));
+      bindLogin(body.querySelector("form"), () => location.reload());
+    });
   }
 
   // ─── Compra ────────────────────────────────────────────────

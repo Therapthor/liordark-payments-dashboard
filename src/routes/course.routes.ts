@@ -17,7 +17,7 @@ import {
   getCoursePrice, getCues, findPaidPurchase, hasCourseAccess, createPendingPurchase, findPurchaseByOrder,
   getProgress, saveProgress, getUnlocks, unlockCue, hasUnlockedType, recordDownload, downloadCount,
   getCoupon, getOrCreateCoupon, findClaimForPurchase, insertClaim, maskPhone,
-  streamUrl, verifyStream, mediaPath, mediaStatus,
+  streamUrl, verifyStream, mediaPath, mediaStatus, isCoursePublished, isPreviewPhone,
 } from "../services/course.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -32,10 +32,21 @@ function sessionCustomerId(req: Request): number | null {
   return verifyCustomerSessionToken(req.cookies?.[CUSTOMER_SESSION_COOKIE]);
 }
 
+/** Borrador: solo el celular de prueba y quien ya tenga acceso. */
+function canSeeCourse(customerId: number | null): boolean {
+  if (isCoursePublished()) return true;
+  if (!customerId) return false;
+  const customer = findCustomerById(customerId);
+  return !!customer && (isPreviewPhone(customer.phone) || hasCourseAccess(customer.id));
+}
+
+const NOT_AVAILABLE = { message: "El curso todavía no está disponible.", unavailable: true };
+
 function requireStudent(req: Request, res: Response, next: NextFunction): void {
   const customerId = sessionCustomerId(req);
   const customer = customerId ? findCustomerById(customerId) : null;
   if (!customer) { res.status(401).json({ message: "Inicia sesión para continuar." }); return; }
+  if (!canSeeCourse(customer.id)) { res.status(404).json(NOT_AVAILABLE); return; }
   (req as RequestWithCustomer).customerId = customer.id;
   next();
 }
@@ -63,6 +74,9 @@ function episodesPublic() {
 // GET /api/course/info — PÚBLICO (página de venta).
 router.get("/info", (req, res) => {
   const customerId = sessionCustomerId(req);
+  if (!canSeeCourse(customerId)) {
+    return res.json({ visible: false, loggedIn: !!customerId });
+  }
   const media = mediaStatus();
   res.json({
     courseId: COURSE_ID,
@@ -71,13 +85,16 @@ router.get("/info", (req, res) => {
     steps: STEPS,
     episodes: EPISODES.map(e => ({ n: e.n, step: e.step, title: e.title, summary: e.summary })),
     previewAvailable: media.ep1.exists,
+    visible: true,
+    published: isCoursePublished(),
     loggedIn: !!customerId,
     owned: customerId ? hasCourseAccess(customerId) : false,
   });
 });
 
 // GET /api/course/preview — Episodio 1 gratis (página de venta).
-router.get("/preview", (_req, res) => {
+router.get("/preview", (req, res) => {
+  if (!canSeeCourse(sessionCustomerId(req))) { res.status(404).json(NOT_AVAILABLE); return; }
   sendVideo(res, mediaPath("ep1"));
 });
 
@@ -296,7 +313,7 @@ router.post("/wholesale", requireOwner, async (req, res) => {
   try {
     emitDashboardEvent({
       type: "order_approved",
-      message: "🎓 Curso → acceso mayorista " + (result.createdNew ? "creado" : result.disabled ? "(ya existía, deshabilitado, +S/10 guardados)" : "(ya existía, +S/10)") + " · " + panelName + " · " + digits,
+      message: "Curso → acceso mayorista " + (result.createdNew ? "creado" : result.disabled ? "(ya existía, deshabilitado, +S/10 guardados)" : "(ya existía, +S/10)") + " · " + panelName + " · " + digits,
       createdAt: new Date().toISOString(),
     });
   } catch { /* no crítico */ }

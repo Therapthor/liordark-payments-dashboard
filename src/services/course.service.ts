@@ -114,6 +114,24 @@ export function setCoursePrice(price: number): void {
   setSetting("price", String(Math.round(price * 100) / 100));
 }
 
+// ─── Publicación ─────────────────────────────────────────────
+// Mientras el curso está en borrador solo lo ven estos celulares (para
+// probar) y quien ya tenga acceso; para el resto no existe.
+export const COURSE_PREVIEW_PHONES = ["977430941"];
+
+export function isCoursePublished(): boolean {
+  return getSetting("published") === "1";
+}
+
+export function setCoursePublished(published: boolean): void {
+  setSetting("published", published ? "1" : "0");
+}
+
+export function isPreviewPhone(phone: string | null | undefined): boolean {
+  const last9 = String(phone ?? "").replace(/\D/g, "").slice(-9);
+  return COURSE_PREVIEW_PHONES.includes(last9);
+}
+
 export function getCues(): Record<number, Cue[]> {
   const raw = getSetting("cues");
   if (!raw) return DEFAULT_CUES;
@@ -414,6 +432,8 @@ export function adminOverview() {
     courseId: COURSE_ID,
     title: COURSE_TITLE,
     price: getCoursePrice(),
+    published: isCoursePublished(),
+    previewPhones: COURSE_PREVIEW_PHONES,
     episodes: EPISODES,
     cues: getCues(),
     media: mediaStatus(),

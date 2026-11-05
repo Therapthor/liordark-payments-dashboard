@@ -117,6 +117,21 @@
   function setNavMode(authed) {
     document.getElementById("nav-auth-actions").hidden  = !authed;
     document.getElementById("nav-guest-actions").hidden = authed;
+    refreshCourseVisibility();
+  }
+
+  // Curso: el botón y el banner solo aparecen si el curso está publicado
+  // (o, en borrador, para el celular de prueba / quien ya lo tiene).
+  async function refreshCourseVisibility() {
+    let visible = false;
+    try {
+      const res = await fetch("/api/course/info", { credentials: "include" });
+      visible = !!(await res.json()).visible;
+    } catch { /* sin red: se queda oculto */ }
+    const link = document.getElementById("nav-course-link");
+    const banner = document.getElementById("course-banner");
+    if (link) link.hidden = !visible;
+    if (banner) banner.hidden = !visible;
   }
 
   function initAuthToggle() {

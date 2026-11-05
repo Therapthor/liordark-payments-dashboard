@@ -6,7 +6,7 @@ import { findCustomerByPhone, createCustomer } from "../db/customer.repository";
 import { hashPassword } from "../services/customer-auth.service";
 import {
   adminOverview, sanitizeCues, setCues, setCoursePrice, grantCourseManually, revokeCoursePurchase,
-  isMediaKind, mediaPath, ensureMediaDir, MEDIA_DIR, getCoursePrice,
+  isMediaKind, mediaPath, ensureMediaDir, MEDIA_DIR, getCoursePrice, setCoursePublished, isCoursePublished,
 } from "../services/course.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -30,6 +30,12 @@ router.put("/cues", (req, res) => {
   if (!cues) return res.status(400).json({ message: "Tiempos inválidos. Revisa que inicio ≤ fin y que sean números." });
   setCues(cues);
   res.json({ ok: true, cues });
+});
+
+// Publicar / volver a borrador.
+router.put("/published", (req, res) => {
+  setCoursePublished(req.body?.published === true);
+  res.json({ ok: true, published: isCoursePublished() });
 });
 
 router.put("/price", (req, res) => {

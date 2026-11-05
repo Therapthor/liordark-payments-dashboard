@@ -389,7 +389,7 @@ router.post("/course-paid", (req, res) => {
 
   if (!result.alreadyPaid) {
     try {
-      emitDashboardEvent({ type: "order_approved", message: "🎓 Curso vendido — S/ " + (amount ?? ""), createdAt: new Date().toISOString() });
+      emitDashboardEvent({ type: "order_approved", message: "Curso vendido — S/ " + (amount ?? ""), createdAt: new Date().toISOString() });
     } catch { /* no crítico */ }
   }
   res.json({ ok: true, alreadyPaid: !!result.alreadyPaid });
