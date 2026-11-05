@@ -8,9 +8,7 @@ import {
 } from "../services/customer-auth.service";
 import { findCustomerById } from "../db/customer.repository";
 import { normalizePeruPhone } from "../utils/phone.util";
-import {
-  createWholesaler, findWholesalerByPhone, setWholesalerStatus, touchWholesalerActivity,
-} from "../db/wholesaler.repository";
+import { createWholesaler, findWholesalerByPhone, touchWholesalerActivity } from "../db/wholesaler.repository";
 import { applyWholesalerCreditChange } from "../db/wholesaler-credit.repository";
 import { db } from "../db/db";
 import { emitDashboardEvent } from "../utils/live-events.util";
@@ -247,7 +245,7 @@ router.post("/wholesale", requireOwner, async (req, res) => {
   const password = generatePassword();
   const passwordHash = await hashPassword(password);
 
-  type ClaimResult = { createdNew: boolean; wholesalerId: number; balanceCents: number };
+  type ClaimResult = { createdNew: boolean; disabled: boolean; wholesalerId: number; balanceCents: number };
   const run = db.transaction((): ClaimResult => {
     // Re-chequeo dentro de la transacción (doble clic / dos pestañas).
     if (findClaimForPurchase(purchase.id)) throw Object.assign(new Error("claimed"), { code: "CLAIMED" });
@@ -255,11 +253,14 @@ router.post("/wholesale", requireOwner, async (req, res) => {
     const existing = findWholesalerByPhone(phone);
     let wholesalerId: number;
     let createdNew: boolean;
+    let disabled = false;
     if (existing) {
-      // Ya era mayorista → se le suman los S/ 10 a su panel de siempre.
+      // Ya era mayorista → NUNCA se crea otro panel: solo se le suman los
+      // S/ 10 a su saldo. Si está deshabilitado (1 mes sin actividad) no se
+      // reactiva acá: el saldo queda guardado y lo reactiva soporte.
       wholesalerId = existing.id;
       createdNew = false;
-      if (existing.status !== "active") setWholesalerStatus(existing.id, "active");
+      disabled = existing.status !== "active";
     } else {
       wholesalerId = createWholesaler(phone, passwordHash, password, panelName).id;
       createdNew = true;
@@ -268,11 +269,11 @@ router.post("/wholesale", requireOwner, async (req, res) => {
       wholesalerId, COURSE_GIFT_CENTS, "gift_course", "curso:" + purchase.id, "system"
     );
     if (!credit.ok) throw new Error(credit.error);
-    touchWholesalerActivity(wholesalerId);
+    if (!disabled) touchWholesalerActivity(wholesalerId);
     insertClaim({
       purchaseId: purchase.id, customerId, phone, panelName, wholesalerId, createdNew, giftCents: COURSE_GIFT_CENTS,
     });
-    return { createdNew, wholesalerId, balanceCents: credit.newBalanceCents };
+    return { createdNew, disabled, wholesalerId, balanceCents: credit.newBalanceCents };
   });
 
   let result: ClaimResult;
@@ -295,7 +296,7 @@ router.post("/wholesale", requireOwner, async (req, res) => {
   try {
     emitDashboardEvent({
       type: "order_approved",
-      message: "🎓 Curso → acceso mayorista " + (result.createdNew ? "creado" : "(ya existía, +S/10)") + " · " + panelName + " · " + digits,
+      message: "🎓 Curso → acceso mayorista " + (result.createdNew ? "creado" : result.disabled ? "(ya existía, deshabilitado, +S/10 guardados)" : "(ya existía, +S/10)") + " · " + panelName + " · " + digits,
       createdAt: new Date().toISOString(),
     });
   } catch { /* no crítico */ }
@@ -303,6 +304,7 @@ router.post("/wholesale", requireOwner, async (req, res) => {
   res.json({
     ok: true,
     createdNew: result.createdNew,
+    disabled: result.disabled,
     user: digits,
     password: result.createdNew ? password : null,
     giftCents: COURSE_GIFT_CENTS,

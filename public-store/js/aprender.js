@@ -352,6 +352,7 @@
           <label>Nombre de tu panel</label>
           <input name="panelName" maxlength="30" value="${esc(mayo.panelName)}" placeholder="Ej. Streaming Rosa">
           <div class="warn">⚠️ Solo puedes hacerlo 1 vez por compra. Revisa bien tus datos.</div>
+          <span class="muted" style="font-size:12px">Si ese celular ya tiene Panel Mayorista, no se crea otro: te sumamos los S/ 10 a tu panel.</span>
           ${err}
           <button type="submit" class="c-btn green block">Continuar</button></form>`;
       case "confirm":
@@ -363,9 +364,16 @@
         return head + `<div class="pay-wait"><span class="spin"></span> Creando tu acceso…</div>`;
       case "done": {
         const r = mayo.result;
+        if (!r.createdNew && r.disabled) {
+          return head + `<div class="ok-box"><b style="font-size:15px;color:var(--green-dark)">✓ Te sumamos S/ 10 a tu panel 🎁</b>
+            <span>Ese celular ya tiene su Panel Mayorista, así que no se crea otro.</span>
+            <span>Tu panel está pausado por inactividad. Tu saldo (con los S/ 10) está guardado: escríbenos para reactivarlo.</span></div>
+            <a class="c-btn green block" href="${esc(supportLink("Hola, compré el curso y quiero reactivar mi Panel Mayorista (" + r.user + ")."))}" target="_blank" rel="noopener">Reactivar por WhatsApp</a>`;
+        }
         if (!r.createdNew) {
           return head + `<div class="ok-box"><b style="font-size:15px;color:var(--green-dark)">✓ ¡Listo! Te sumamos S/ 10 🎁</b>
-            <span>Ese celular ya tenía Panel Mayorista. Entra con tu contraseña de siempre.</span></div>
+            <span>Ese celular ya tiene su Panel Mayorista, así que no se crea otro. Entra con tu contraseña de siempre.</span>
+            <span>Saldo: <b>S/ ${(r.balanceCents / 100).toFixed(2)}</b></span></div>
             <a class="c-btn dark block" href="${esc(r.panelUrl)}" target="_blank" rel="noopener">Entrar al Panel Mayorista →</a>`;
         }
         return head + `<div class="ok-box"><b style="font-size:15px;color:var(--green-dark)">✓ ¡Listo! Tu acceso mayorista</b>

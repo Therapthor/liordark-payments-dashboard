@@ -81,7 +81,7 @@
       `🔑 Contraseña: *${password}*\n\n` +
       `Entra a *mayorista.liordark.com* para comprar perfiles y cuentas completas con tu saldo.\n\n` +
       `¿Necesitas soporte? Escríbenos indicando la plataforma, qué cuenta es, y una captura del problema — así te ayudamos más rápido. 📸\n\n` +
-      `⚠️ Importante: si pasa 1 mes sin ninguna compra o recarga, la cuenta se deshabilita y el saldo se borra. ¡No dejes que se te pase! 😉`;
+      `⚠️ Importante: si pasa 1 mes sin ninguna compra o recarga, la cuenta se deshabilita. Tu saldo queda guardado: para reactivarla escríbenos por aquí. 😉`;
   }
 
   function deliverMessage(order) {

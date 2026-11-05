@@ -188,7 +188,7 @@ function runArchiveExpiredAccounts(): void {
   }
 }
 
-// Mayoristas sin comprar/recargar en 1 mes — deshabilitados y saldo
+// Mayoristas sin comprar/recargar en 1 mes — deshabilitados (el saldo se guarda)
 // borrado (a pedido explícito). Mismo cadencia que el archivado de arriba.
 function runDisableInactiveWholesalers(): void {
   try {

@@ -46,7 +46,7 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ message: "Celular o contraseña incorrectos." });
   }
   if (wholesaler.status === "disabled") {
-    return res.status(403).json({ message: "Tu cuenta está deshabilitada. Contáctanos si crees que es un error." });
+    return res.status(403).json({ message: "Tu cuenta está deshabilitada. Tu saldo sigue guardado: escríbenos al WhatsApp 963 081 436 para reactivarla." });
   }
 
   recordWholesalerLoginSuccess(wholesaler.id);

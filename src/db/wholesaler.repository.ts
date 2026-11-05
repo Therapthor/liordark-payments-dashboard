@@ -1,6 +1,5 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
-import { applyWholesalerCreditChange } from "./wholesaler-credit.repository";
 import { checkLockout, nextLockoutState, type LockoutCheck } from "../services/login-lockout.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -67,7 +66,13 @@ export function listAllWholesalers(): Wholesaler[] {
 }
 
 export function setWholesalerStatus(id: number, status: "active" | "disabled"): void {
-  db.prepare(`UPDATE wholesalers SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
+  // Al reactivar se reinicia el contador de 1 mes — si no, la regla de
+  // inactividad la volvía a deshabilitar en menos de una hora.
+  db.prepare(`
+    UPDATE wholesalers SET status = ?, updated_at = datetime('now'),
+      last_activity_at = CASE WHEN ? = 'active' THEN datetime('now') ELSE last_activity_at END
+    WHERE id = ?
+  `).run(status, status, id);
 }
 
 export function setWholesalerPassword(id: number, passwordHash: string, passwordPlain: string): Wholesaler | null {
@@ -100,22 +105,16 @@ export function recordWholesalerLoginSuccess(id: number): void {
 }
 
 /**
- * 1 mes sin comprar/recargar → deshabilitada y saldo borrado (a pedido
- * explícito del dueño). El borrado de saldo pasa por
- * applyWholesalerCreditChange para que quede en el ledger, no sea un
- * reseteo silencioso de la columna.
+ * 1 mes sin comprar/recargar → deshabilitada. El saldo NO se borra: queda
+ * guardado y, cuando el mayorista vuelve, soporte lo reactiva (Mayoristas →
+ * Habilitar) con el mismo saldo que tenía.
  */
 export function disableInactiveWholesalers(): number {
   const inactive = db.prepare(`
-    SELECT id, balance_cents FROM wholesalers
+    SELECT id FROM wholesalers
     WHERE status = 'active' AND last_activity_at < datetime('now', '-1 month')
-  `).all() as { id: number; balance_cents: number }[];
+  `).all() as { id: number }[];
 
-  for (const w of inactive) {
-    setWholesalerStatus(w.id, "disabled");
-    if (w.balance_cents > 0) {
-      applyWholesalerCreditChange(w.id, -w.balance_cents, "wipe_inactive", "1 mes sin actividad", "system");
-    }
-  }
+  for (const w of inactive) setWholesalerStatus(w.id, "disabled");
   return inactive.length;
 }

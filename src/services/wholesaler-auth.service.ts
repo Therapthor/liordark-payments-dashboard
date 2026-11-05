@@ -74,7 +74,7 @@ export function requireWholesalerSession(req: Request, res: Response, next: Next
   }
   if (wholesaler.status === "disabled") {
     res.clearCookie(WHOLESALER_SESSION_COOKIE);
-    res.status(403).json({ message: "Tu cuenta está deshabilitada. Contáctanos si crees que es un error." });
+    res.status(403).json({ message: "Tu cuenta está deshabilitada. Tu saldo sigue guardado: escríbenos al WhatsApp 963 081 436 para reactivarla." });
     return;
   }
 
