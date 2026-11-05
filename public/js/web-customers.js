@@ -95,7 +95,7 @@
         <span class="web-customer-password">${escapeHtml(c.password)}</span>
         <a class="btn-secondary btn-sm" href="${waLink(c.phone, `Hola! Estos son tus accesos a Manguitope 🥭\n\nCelular: ${localPhone(c.phone)}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`)}" target="_blank" rel="noopener">📲 Enviar accesos</a>`
       : `
-        <span class="web-customer-password web-customer-password-none">Sin contraseña guardada</span>
+        <span class="web-customer-password web-customer-password-none">${c.pinRecovery === "not_found" ? "Clave antigua (no es PIN de 4 números)" : "Buscando su PIN…"}</span>
         <button class="btn-secondary btn-sm web-customer-reset-btn" type="button">🔑 Generar contraseña</button>`;
 
     // Bloqueo por intentos fallidos de PIN (3+ fallos: 1 a 15 min).

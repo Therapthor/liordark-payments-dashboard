@@ -293,6 +293,8 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_access_profiles_wholesaler ON access_pro
 
 ensureColumn("customers", "failed_login_count", "failed_login_count INTEGER NOT NULL DEFAULT 0");
 ensureColumn("customers", "locked_until", "locked_until TEXT");
+// Recuperar PIN de cuentas viejas sin password_plain: '' = sin intentar, 'not_found' = no es de 4 números.
+ensureColumn("customers", "pin_recovery", "pin_recovery TEXT NOT NULL DEFAULT ''");
 
 ensureColumn("catalog_products", "wholesale_price", "wholesale_price TEXT NOT NULL DEFAULT '0'");
 ensureColumn("catalog_products", "wholesale_full_price", "wholesale_full_price TEXT NOT NULL DEFAULT '0'");

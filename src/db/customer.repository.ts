@@ -21,6 +21,7 @@ export type Customer = {
   email:           string;
   suspendedUntil:  string | null;
   lockedUntil:     string | null;
+  pinRecovery:     string;
   createdAt:       string;
 };
 
@@ -34,6 +35,7 @@ function toCustomer(row: any): Customer {
     email:           row.email || "",
     suspendedUntil:  row.suspended_until,
     lockedUntil:     row.locked_until,
+    pinRecovery:     row.pin_recovery || "",
     createdAt:       row.created_at,
   };
 }
@@ -224,4 +226,21 @@ export function mergeDuplicateCustomers(): number {
   }
   if (merged) console.log(`👥 Clientes duplicados fusionados: ${merged}`);
   return merged;
+}
+
+/** Login correcto: si el panel no tenía la contraseña visible (o era otra), se guarda. */
+export function rememberCustomerPlain(id: number, plain: string): void {
+  db.prepare(`UPDATE customers SET password_plain = ?, pin_recovery = '' WHERE id = ? AND password_plain != ?`).run(plain, id, plain);
+}
+
+/** Cuentas viejas sin contraseña visible a las que aún no se les buscó el PIN. */
+export function listCustomersForPinRecovery(): { id: number; phone: string; passwordHash: string }[] {
+  return (db.prepare(`
+    SELECT id, phone, password_hash FROM customers WHERE password_plain = '' AND pin_recovery = '' ORDER BY id
+  `).all() as any[]).map(r => ({ id: r.id, phone: r.phone, passwordHash: r.password_hash }));
+}
+
+export function savePinRecovery(id: number, pin: string | null): void {
+  if (pin) db.prepare(`UPDATE customers SET password_plain = ?, pin_recovery = 'found' WHERE id = ? AND password_plain = ''`).run(pin, id);
+  else db.prepare(`UPDATE customers SET pin_recovery = 'not_found' WHERE id = ?`).run(id);
 }

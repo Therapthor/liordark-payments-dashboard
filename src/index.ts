@@ -34,6 +34,7 @@ import { cleanOldCodeLinks } from "./db/code-links.repository";
 import { pinLinkAdminRoutes, pinLinkRoutes } from "./routes/pin-link.routes";
 import { cleanPinLinks } from "./db/pin-links.repository";
 import { mergeDuplicateCustomers } from "./db/customer.repository";
+import { runPinRecovery } from "./services/pin-recovery.service";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -168,6 +169,9 @@ app.use((req, res, next) => {
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);
   try { mergeDuplicateCustomers(); } catch (err: any) { console.error("⚠️ fusión de clientes:", err?.message); }
+  // PIN de cuentas viejas sin contraseña visible (en segundo plano).
+  setTimeout(() => { runPinRecovery().catch(() => {}); }, 60_000);
+  setInterval(() => { runPinRecovery().catch(() => {}); }, ARCHIVE_INTERVAL_MS);
   startSync();
 
   getPlatformCatalog()

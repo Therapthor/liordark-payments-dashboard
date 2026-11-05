@@ -10,6 +10,7 @@ import {
   customerLockoutStatus,
   recordCustomerLoginFailure,
   recordCustomerLoginSuccess,
+  rememberCustomerPlain,
 } from "../db/customer.repository";
 import {
   checkPassword,
@@ -53,6 +54,7 @@ router.post("/login", async (req, res) => {
   }
 
   recordCustomerLoginSuccess(phone);
+  rememberCustomerPlain(customer.id, password);
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone });
 });
@@ -117,6 +119,7 @@ router.post("/quick", async (req, res) => {
       return res.status(403).json({ message: "Tu cuenta está suspendida temporalmente. Contáctanos si es un error." });
     }
     recordCustomerLoginSuccess(phone);
+    rememberCustomerPlain(existing.id, pin);
     setSessionCookie(res, existing.id);
     return res.json({ ok: true, phone: existing.phone, created: false });
   }

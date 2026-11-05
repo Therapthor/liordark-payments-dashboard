@@ -57,6 +57,7 @@ router.get("/", (_req, res) => {
       suspended:      isCustomerSuspended(c),
       suspendedUntil: c.suspendedUntil,
       lockedUntil:    checkLockout(c.lockedUntil).locked ? c.lockedUntil : null,
+      pinRecovery:    c.pinRecovery,
       createdAt:      c.createdAt,
     };
   });
