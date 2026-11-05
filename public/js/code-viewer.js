@@ -3,10 +3,10 @@ window.LiordarkCodeViewer = (() => {
   "use strict";
 
   let current = null;     // { id, platform, email }
-  // Si todavía no hay correo, se sigue buscando solo (cada 10 s, hasta 4
+  // Si todavía no hay correo, se sigue buscando solo (cada 35 s, hasta 4
   // min): Pally y Disney+ tardan en recibirlo.
   const WAIT_MS = 4 * 60 * 1000;
-  const POLL_MS = 10 * 1000;
+  const POLL_MS = 35 * 1000;
   let waitStart = 0, waitTimer = null, tickTimer = null;
   let lastValue = "";
   let share = null;       // { token, minutes }
@@ -76,7 +76,7 @@ window.LiordarkCodeViewer = (() => {
     const elapsed = Math.floor((Date.now() - waitStart) / 1000);
     const fmt = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
     setEmpty(`<span class="cv-spin"></span><b>Esperando el correo…</b>` +
-      `<span>${fmt(elapsed)} de 4:00 · se revisa solo cada 10 segundos</span>`);
+      `<span>${fmt(elapsed)} de 4:00 · se revisa solo cada 35 segundos</span>`);
     if (left <= 0) {
       stopWaiting();
       setEmpty("<b>No llegó ningún correo en 4 minutos.</b><span>Revisa que el código se haya pedido y toca Actualizar.</span>");
