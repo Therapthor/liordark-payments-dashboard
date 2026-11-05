@@ -26,7 +26,8 @@
   }
 
   function waLink(phone, text) {
-    const digits = String(phone).replace(/\D/g, "");
+    let digits = String(phone).replace(/\D/g, "");
+    if (digits.length === 9) digits = "51" + digits;
     return "https://api.whatsapp.com/send?phone=" + digits + "&text=" + encodeURIComponent(text);
   }
 
@@ -41,6 +42,12 @@
     } catch {
       return iso;
     }
+  }
+
+  // En la lista se ve solo el número (9 dígitos), sin el 51.
+  function localPhone(phone) {
+    const d = String(phone ?? "").replace(/\D/g, "");
+    return d.length === 11 && d.startsWith("51") ? d.slice(2) : d;
   }
 
   function renderRow(c) {
@@ -59,7 +66,7 @@
     if (c.id === null) {
       div.innerHTML = `
         <div class="web-customer-main">
-          <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
+          <span class="web-customer-phone">${escapeHtml(localPhone(c.phone))}</span>
           <span class="web-customer-status">📋 Registro general</span>
         </div>
         <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>`;
@@ -86,16 +93,23 @@
     const passwordArea = c.password
       ? `
         <span class="web-customer-password">${escapeHtml(c.password)}</span>
-        <a class="btn-secondary btn-sm" href="${waLink(c.phone, `Hola! Estos son tus accesos a Manguitope 🥭\n\nCelular: ${c.phone}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`)}" target="_blank" rel="noopener">📲 Enviar accesos</a>`
+        <a class="btn-secondary btn-sm" href="${waLink(c.phone, `Hola! Estos son tus accesos a Manguitope 🥭\n\nCelular: ${localPhone(c.phone)}\nContraseña: ${c.password}\n\nEntrá en https://liordark.com para comprar.`)}" target="_blank" rel="noopener">📲 Enviar accesos</a>`
       : `
         <span class="web-customer-password web-customer-password-none">Sin contraseña guardada</span>
         <button class="btn-secondary btn-sm web-customer-reset-btn" type="button">🔑 Generar contraseña</button>`;
 
+    // Bloqueo por intentos fallidos de PIN (3+ fallos: 1 a 15 min).
+    const lockBadge = c.lockedUntil
+      ? `<span class="web-customer-status web-customer-status-locked">🔒 Bloqueada por intentos · hasta ${new Date(c.lockedUntil).toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })}</span>
+         <button class="btn-secondary btn-sm web-customer-unlock-btn" type="button">🔓 Quitar bloqueo</button>`
+      : "";
+
     div.innerHTML = `
       <div class="web-customer-main">
-        <span class="web-customer-phone">${escapeHtml(c.phone)}</span>
+        <span class="web-customer-phone">${escapeHtml(localPhone(c.phone))}</span>
         ${originBadge}
         ${statusBadge}
+        ${lockBadge}
       </div>
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
       <div class="web-customer-actions">
@@ -112,6 +126,15 @@
     if (!confirm("¿Suspender esta cuenta por 3 días? El cliente no va a poder iniciar sesión hasta entonces.")) return;
     try {
       await api(`/${id}/suspend`, { method: "POST" });
+      await load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function unlock(id) {
+    try {
+      await api(`/${id}/unlock`, { method: "POST" });
       await load();
     } catch (err) {
       alert(err.message);
@@ -165,7 +188,7 @@
     const $ = (x) => document.getElementById(x);
     closePinLink();
     $("pin-link-back").hidden = false;
-    $("pin-link-sub").textContent = phone;
+    $("pin-link-sub").textContent = localPhone(phone);
     $("pin-link-url").textContent = "Generando…";
     $("pin-link-wa").removeAttribute("href");
     $("pin-link-status").textContent = "Vale 10 min · se usa una sola vez";
@@ -222,6 +245,7 @@
       if (e.target.closest(".web-customer-reset-btn")) resetPassword(id);
       if (e.target.closest(".web-customer-email-btn")) setEmail(id, row.dataset.email);
       if (e.target.closest(".web-customer-ban-btn")) ban(id);
+      if (e.target.closest(".web-customer-unlock-btn")) unlock(id);
       if (e.target.closest(".web-customer-pinlink-btn")) openPinLink(id, row.dataset.phone);
     });
   }

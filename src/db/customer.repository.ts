@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { checkLockout, nextLockoutState, type LockoutCheck } from "../services/login-lockout.service";
@@ -65,7 +66,7 @@ export function createCustomer(
 // importar qué formato tenga guardado o cómo lo haya tipeado ahora.
 export function findCustomerByPhone(phone: string): Customer | null {
   const digits = normalizeCustomerPhone(phone);
-  const row = db.prepare(`SELECT * FROM customers WHERE substr(phone, -9) = substr(?, -9)`).get(digits);
+  const row = db.prepare(`SELECT * FROM customers WHERE substr(phone, -9) = substr(?, -9) ORDER BY id LIMIT 1`).get(digits);
   return row ? toCustomer(row) : null;
 }
 
@@ -125,6 +126,11 @@ export function recordCustomerLoginSuccess(phone: string): void {
   db.prepare(`UPDATE customers SET failed_login_count = 0, locked_until = NULL WHERE id = ?`).run(customer.id);
 }
 
+/** Admin: quita el bloqueo por intentos fallidos (y reinicia el contador). */
+export function clearCustomerLockout(id: number): void {
+  db.prepare(`UPDATE customers SET failed_login_count = 0, locked_until = NULL WHERE id = ?`).run(id);
+}
+
 /** Correo para avisos de vencimiento (Resend) — opcional, el cliente lo
  *  pone en el checkout o desde "Mis cuentas" (banner / botón recordatorio).
  *  Simple sanity check, no hace falta verificación: si está mal escrito
@@ -161,4 +167,61 @@ export function dailyRegistrationsThisMonth(): { day: string; count: number }[] 
     GROUP BY day
     ORDER BY day ASC
   `).all() as { day: string; count: number }[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// DUPLICADOS — datos viejos dejaron el mismo celular dos veces (con y sin
+// el "51"). El login siempre usó la fila más antigua (id menor), así que
+// esa se queda con su PIN: el cliente sigue entrando igual. De la otra se
+// rescata el correo, la contraseña visible (solo si es la misma) y todo lo
+// del curso. La fila borrada queda respaldada en customers_merged.
+// ─────────────────────────────────────────────────────────────
+const CUSTOMER_REF_TABLES = [
+  "course_purchases", "course_progress", "course_unlocks", "course_downloads",
+  "course_coupons", "course_wholesale_claims", "pin_links",
+];
+
+export function mergeDuplicateCustomers(): number {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customers_merged (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      merged_into INTEGER NOT NULL,
+      row_json    TEXT    NOT NULL,
+      merged_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  const groups = db.prepare(`
+    SELECT substr(phone, -9) AS d FROM customers GROUP BY substr(phone, -9) HAVING COUNT(*) > 1
+  `).all() as { d: string }[];
+  const existingTables = new Set(
+    (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as { name: string }[]).map(t => t.name),
+  );
+  let merged = 0;
+  const run = db.transaction((d: string) => {
+    const rows = db.prepare(`SELECT * FROM customers WHERE substr(phone, -9) = ? ORDER BY id`).all(d) as any[];
+    const keep = rows[0];
+    let { email, password_plain: plain, is_guest: isGuest, created_at: createdAt } = keep;
+    for (const r of rows.slice(1)) {
+      if (!email && r.email) email = r.email;
+      if (!plain && r.password_plain && bcrypt.compareSync(r.password_plain, keep.password_hash)) plain = r.password_plain;
+      if (!r.is_guest) isGuest = 0;
+      if (r.created_at < createdAt) createdAt = r.created_at;
+      for (const t of CUSTOMER_REF_TABLES) {
+        if (!existingTables.has(t)) continue;
+        db.prepare(`UPDATE OR IGNORE ${t} SET customer_id = ? WHERE customer_id = ?`).run(keep.id, r.id);
+        db.prepare(`DELETE FROM ${t} WHERE customer_id = ?`).run(r.id);
+      }
+      db.prepare(`INSERT INTO customers_merged (merged_into, row_json) VALUES (?, ?)`).run(keep.id, JSON.stringify(r));
+      db.prepare(`DELETE FROM customers WHERE id = ?`).run(r.id);
+      merged++;
+    }
+    db.prepare(`
+      UPDATE customers SET phone = ?, email = ?, password_plain = ?, is_guest = ?, created_at = ? WHERE id = ?
+    `).run(normalizePeruPhone(d), email || "", plain || "", isGuest ? 1 : 0, createdAt, keep.id);
+  });
+  for (const g of groups) {
+    try { run(g.d); } catch (err: any) { console.error("⚠️ fusión de clientes duplicados:", g.d, err?.message); }
+  }
+  if (merged) console.log(`👥 Clientes duplicados fusionados: ${merged}`);
+  return merged;
 }

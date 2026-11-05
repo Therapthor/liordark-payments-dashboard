@@ -10,10 +10,12 @@ import {
   countAllCustomers,
   countCustomersWithEmail,
   dailyRegistrationsThisMonth,
+  clearCustomerLockout,
 } from "../db/customer.repository";
 import { listAccessClientStats } from "../db/access.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { limaTodayISO } from "../services/access.service";
+import { checkLockout } from "../services/login-lockout.service";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -54,6 +56,7 @@ router.get("/", (_req, res) => {
       purchaseCount:  stat?.purchaseCount ?? 0,
       suspended:      isCustomerSuspended(c),
       suspendedUntil: c.suspendedUntil,
+      lockedUntil:    checkLockout(c.lockedUntil).locked ? c.lockedUntil : null,
       createdAt:      c.createdAt,
     };
   });
@@ -117,6 +120,16 @@ router.post("/:id/reset-password", async (req, res) => {
   const passwordHash = await hashPassword(newPassword);
   setCustomerPassword(id, passwordHash, newPassword);
   res.json({ ok: true, password: newPassword });
+});
+
+// Quita el bloqueo por intentos fallidos para que el cliente entre ya.
+router.post("/:id/unlock", (req, res) => {
+  const id = Number(req.params.id);
+  if (!findCustomerById(id)) {
+    return res.status(404).json({ message: "Cliente no encontrado." });
+  }
+  clearCustomerLockout(id);
+  res.json({ ok: true });
 });
 
 // Permite al admin poner/corregir el correo de aviso de vencimiento de un
