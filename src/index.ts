@@ -29,6 +29,8 @@ import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
 import supportChatRoutes from "./routes/support-chat.routes";
 import courseRoutes from "./routes/course.routes";
 import courseAdminRoutes from "./routes/course-admin.routes";
+import { codeViewerAdminRoutes, codeLinkRoutes } from "./routes/code-viewer.routes";
+import { cleanOldCodeLinks } from "./db/code-links.repository";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -99,6 +101,9 @@ apiRouter.use("/support-chat", requireAuth, supportChatRoutes);
 // Curso (liordark.com/curso) — alumno con su sesión de cliente; admin aparte.
 apiRouter.use("/course", courseRoutes);
 apiRouter.use("/course-admin", requireAuth, courseAdminRoutes);
+// Visor de códigos: panel (admin) y link temporal del cliente (sin sesión).
+apiRouter.use("/code-viewer", requireAuth, codeViewerAdminRoutes);
+apiRouter.use("/code-link", codeLinkRoutes);
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {
@@ -127,6 +132,15 @@ const storeStatic     = express.static(path.resolve(process.cwd(), "public-store
 const panelStatic      = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
 const wholesaleStatic  = express.static(path.resolve(process.cwd(), "public-wholesale"), noCacheHeaders);
 
+// liordark.com/codigo/<token> — página del link temporal de códigos.
+const CODE_LINK_PAGE = path.resolve(process.cwd(), "public-store/codigo.html");
+app.get(/^\/codigo\/[A-Za-z0-9]{6,20}\/?$/, (req, res, next) => {
+  const host = req.hostname;
+  if (host === "mayorista.liordark.com") return next();
+  res.setHeader("Cache-Control", "no-cache");
+  res.sendFile(CODE_LINK_PAGE);
+});
+
 app.use((req, res, next) => {
   const host = req.hostname;
   if (host === "liordark.com" || host === "www.liordark.com") {
@@ -152,7 +166,7 @@ const server = app.listen(env.PORT, () => {
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
 
   // Curso: pedidos que nunca se pagaron (más de 1 día) se borran.
-  const cleanCourse = () => { try { cleanOldPendingPurchases(); } catch { /* no crítico */ } };
+  const cleanCourse = () => { try { cleanOldPendingPurchases(); cleanOldCodeLinks(); } catch { /* no crítico */ } };
   cleanCourse();
   setInterval(cleanCourse, ARCHIVE_INTERVAL_MS);
 

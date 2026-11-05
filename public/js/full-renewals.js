@@ -15,7 +15,9 @@
       headers: { "Content-Type": "application/json" },
       ...options,
     });
-    if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
+    // Sin sesión (pantalla de contraseña): no recargar — antes esto recargaba
+    // la página en bucle y no dejaba escribir la contraseña.
+    if (res.status === 401) throw new Error("No autenticado");
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || "Error de red");
     return data;

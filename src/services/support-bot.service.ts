@@ -16,6 +16,7 @@ import { deleteChatMedia } from "./cloudinary.service";
 import { limaTodayISO } from "./access.service";
 import { getCurrentTotp } from "../utils/totp.util";
 import { emitChatEvent } from "../utils/chat-events.util";
+import { createCodeLink, countBotLinksToday } from "../db/code-links.repository";
 
 // ─────────────────────────────────────────────────────────────
 // ASISTENTE AUTOMÁTICO DEL CHAT DE SOPORTE — "cerebro" propio, sin IA ni
@@ -48,6 +49,9 @@ const INACTIVITY_MS      = 5 * 60 * 1000;
 const TOTP_WINDOW_MS     = 2 * 60 * 1000;
 const REPLY_DELAY_MS     = 900;   // pausa "escribiendo…" antes de responder
 const MAX_LOOKUPS        = 3;     // búsquedas de código por cuenta, por chat
+const USE_CODE_LINKS     = true;  // códigos por link temporal (visor) en vez de buscar en el chat
+const MAX_CODE_LINKS_PER_DAY = 2; // links que el cliente puede generar por día (luego, asesor)
+const CODE_LINK_MINUTES  = 5;
 const MAX_MISUNDERSTOOD  = 2;     // mensajes sin entender antes de pasar a una persona
 
 export function isSupportBotEnabledFor(phone: string): boolean {
@@ -267,7 +271,7 @@ function guideLoginDevice(chat: Chat, phone: string, accountId: number, device: 
   say(chat.id,
     `${device === "pc" ? "💻" : "📱"} ${where} → toca «Iniciar sesión» → escribe el correo ${account.email} → ` +
     "elige «Usar un código de inicio de sesión».\n" +
-    "Cuando Netflix te diga que envió el código, toca «✅ Ya lo pedí» y te paso el código de 4 dígitos 🔢", [ready, BACK_OPTION]);
+    "Cuando Netflix te diga que envió el código, toca «✅ Ya lo pedí» y te paso el link para ver tu código de 4 dígitos 🔢", [ready, BACK_OPTION]);
   setBotState(chat.id, "code_device", { ...chat.botContext, accountId, device });
 }
 
@@ -299,6 +303,29 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
   const sourceId = getAccountCodeSource(accountId);
   if (!sourceId || sourceId === TOTP_SOURCE_ID) {
     handoff(chat, `Para tu cuenta de ${account.platform} el código lo envía un asesor 👤. Ya le avisé, te escribirá por aquí en breve 🙌`);
+    return;
+  }
+
+  // Visor de códigos: en vez de buscar acá, se le da un link de 5 min
+  // (liordark.com/codigo/…) donde ve el código de SU cuenta y puede
+  // «Actualizar» hasta que llegue. Máximo 2 links al día; luego, asesor.
+  if (USE_CODE_LINKS) {
+    const usedToday = countBotLinksToday(phone);
+    if (usedToday >= MAX_CODE_LINKS_PER_DAY) {
+      handoff(chat, `Hoy ya generaste ${MAX_CODE_LINKS_PER_DAY} links de código 🙏. Te paso con un asesor para ayudarte 👤`);
+      return;
+    }
+    const link = createCodeLink({
+      accountId, email: account.email, sourceId, clientPhone: phone, createdBy: "bot", minutes: CODE_LINK_MINUTES,
+    });
+    const left = MAX_CODE_LINKS_PER_DAY - usedToday - 1;
+    say(chat.id,
+      `🔑 Abre este link para ver tu código de ${account.platform}:\n` +
+      `https://liordark.com/codigo/${link.token}\n\n` +
+      `Si el código aún no aparece, toca «Actualizar» en esa página. El link vence en ${CODE_LINK_MINUTES} minutos ⏳` +
+      (left > 0 ? ` (hoy te queda ${left} link más).` : " (es tu último link de hoy)."),
+      [DONE_OPTION, HUMAN_OPTION]);
+    setBotState(chat.id, "code_result", { ...chat.botContext, accountId });
     return;
   }
 

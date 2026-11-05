@@ -1347,3 +1347,38 @@ button, input {
 @media (max-width: 700px) { .crs-media-row { grid-template-columns: 1fr; } }
 .crs-publish { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
 .crs-publish.on { border-color: #25D366; }
+
+/* ── Visor de códigos ── */
+.codes-view-btn { background: transparent; color: var(--cmuted, #CDB79E); border: 1px solid #3a2c1f; border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.codes-view-btn:hover { color: #FFFAF3; border-color: #FF7D1A; }
+.cv-back { position: fixed; inset: 0; z-index: 900; background: #0d0905a6; display: flex; justify-content: flex-end; }
+.cv-drawer { width: min(860px, 100%); height: 100%; background: #1a120a; color: #FFFAF3; display: flex; flex-direction: column; box-shadow: -20px 0 60px #000a; }
+.cv-head { padding: 16px 20px; border-bottom: 1px solid #3a2c1f; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cv-head-info { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 220px; }
+.cv-head-info b { font-size: 16px; word-break: break-all; }
+.cv-head-info span { font-size: 13px; color: #CDB79E; }
+.cv-btn { background: #241A10; color: #FFFAF3; border: 1px solid #3a2c1f; border-radius: 8px; padding: 10px 14px; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; text-decoration: none; text-align: center; }
+.cv-btn:disabled { opacity: .6; cursor: default; }
+.cv-btn.green { background: #25D366; color: #0b2e18; border: 0; font-weight: 800; }
+.cv-btn.orange { background: #FF7D1A; color: #1a120a; border: 0; font-weight: 800; }
+.cv-btn.light { background: #FFFAF3; color: #1a120a; border: 0; font-weight: 800; font-size: 13px; padding: 8px 14px; }
+.cv-btn.big { display: block; padding: 14px; font-size: 16px; border-radius: 10px; }
+.cv-x { background: transparent; border: 1px solid #3a2c1f; color: #FFFAF3; border-radius: 8px; width: 38px; height: 38px; font: inherit; font-size: 20px; cursor: pointer; }
+.cv-body { flex: 1; min-height: 0; background: #ECE7E1; padding: 20px; display: flex; justify-content: center; overflow: auto; }
+.cv-mail { width: 100%; max-width: 640px; height: 100%; min-height: 480px; border: 0; border-radius: 12px; background: #fff; box-shadow: 0 2px 10px #0002; }
+.cv-empty { align-self: center; color: #5C4A39; font-size: 15px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.cv-empty .cv-big { font-size: 46px; font-weight: 800; letter-spacing: 6px; color: #241A10; }
+.cv-modal-back { position: fixed; inset: 0; z-index: 950; background: #0d0905b3; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.cv-modal { width: min(520px, 100%); background: #241A10; color: #FFFAF3; border: 1px solid #3a2c1f; border-radius: 16px; box-shadow: 0 20px 60px #000a; padding: 26px 28px; display: flex; flex-direction: column; gap: 18px; }
+.cv-modal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.cv-modal-top > div { display: flex; flex-direction: column; gap: 4px; }
+.cv-modal-top b { font-size: 19px; }
+.cv-modal-top span { font-size: 13px; color: #CDB79E; word-break: break-all; }
+.cv-linkbox { display: flex; gap: 10px; align-items: center; background: #1a120a; border: 1px solid #3a2c1f; border-radius: 10px; padding: 12px 14px; }
+.cv-linkbox span { flex: 1; font-size: 15px; font-weight: 700; color: #FFD373; word-break: break-all; }
+.cv-durations { display: flex; gap: 10px; align-items: center; font-size: 13px; color: #CDB79E; flex-wrap: wrap; }
+.cv-pill { background: #241A10; color: #CDB79E; border: 1px solid #3a2c1f; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.cv-pill.active { background: #3a2414; color: #FFFAF3; border-color: #FF7D1A; font-weight: 700; }
+.cv-share-status { font-size: 12px; color: #9C8873; text-align: center; }
+.cv-share-status.on { color: #25D366; }
+@media (max-width: 640px) { .cv-body { padding: 10px; } .cv-head { padding: 12px; } }

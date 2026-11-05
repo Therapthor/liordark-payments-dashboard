@@ -25,6 +25,10 @@ export type CodeLookupResult = {
   // Hora en que le llegó el correo al proveedor, tal como la muestra su
   // página (ej. "2026-11-02 23:04:51") — solo las fuentes que la dan.
   providerReceivedAt?: string;
+  // Visor: el correo tal cual lo muestra el proveedor (HTML) y su asunto.
+  // Nunca se manda al cliente sin pasar por sanitizeEmailHtml.
+  emailHtml?: string;
+  subject?: string;
 };
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
@@ -39,7 +43,7 @@ const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
  * código en texto. null = la página no tiene ese formato (se usa el
  * extractor anterior de respaldo).
  */
-export function parsePallyResultPage(html: string): CodeLookupResult | null {
+export function parsePallyResultPage(html: string, preferCode = false): CodeLookupResult | null {
   const wrapperStart = html.indexOf("email-body-wrapper");
   if (wrapperStart === -1) return null;
   const formStart = html.indexOf("<form", wrapperStart);
@@ -47,7 +51,23 @@ export function parsePallyResultPage(html: string): CodeLookupResult | null {
 
   const received = html.match(/Fecha de recepci[oó]n:<\/strong>\s*([^<]+)/i)?.[1]?.trim();
   const subject  = html.match(/Asunto:<\/strong>\s*([^<]+)/i)?.[1]?.trim();
-  const extra = { ...(received ? { providerReceivedAt: received } : {}) };
+  const bodyStart = html.lastIndexOf("<div", wrapperStart);
+  const extra = {
+    ...(received ? { providerReceivedAt: received } : {}),
+    ...(subject ? { subject: decodeHtmlEntities(subject) } : {}),
+    emailHtml: html.slice(bodyStart === -1 ? wrapperStart : bodyStart, formStart === -1 ? undefined : formStart),
+  };
+
+  // Código: número de 4 a 8 dígitos en el texto del cuerpo (se quita la
+  // explicación "código de 6 dígitos" que trae la página del enlace, y los
+  // años tipo "© 2026"). Con preferCode (código de inicio de sesión de
+  // Netflix) se busca ANTES que cualquier enlace: el correo del código
+  // también trae enlaces (ayuda, etc.) y antes se devolvía el enlace.
+  const text = decodeHtmlEntities(wrapper.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/c[oó]digo de \d+ d[ií]gitos/gi, " ");
+  const codes = [...text.matchAll(/(?<![\d/:.-])\d{4,8}(?![\d/:.-])/g)].map(m => m[0]).filter(d => !/^(19|20)\d\d$/.test(d));
+  const code = preferCode ? (codes.find(d => d.length === 4) ?? codes[0]) : codes[0];
+  if (preferCode && code) return { found: true, kind: "code", value: code, ...extra };
 
   // 1) Enlace: el primer <a href> del cuerpo que no sea del propio sitio.
   for (const m of wrapper.matchAll(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1/gi)) {
@@ -57,15 +77,11 @@ export function parsePallyResultPage(html: string): CodeLookupResult | null {
     }
   }
 
-  // 2) Código: número de 4 a 8 dígitos en el texto del cuerpo (se quita la
-  // explicación "código de 6 dígitos" que trae la página del enlace).
-  const text = decodeHtmlEntities(wrapper.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " "))
-    .replace(/c[oó]digo de \d+ d[ií]gitos/gi, " ");
-  const code = text.match(/(?<![\d/:.-])\d{4,8}(?![\d/:.-])/)?.[0];
+  // 2) Código.
   if (code) return { found: true, kind: "code", value: code, ...extra };
 
   if (subject) console.warn("Pally: resultado sin enlace ni código reconocible — asunto:", subject);
-  return { found: false, kind: null, value: null };
+  return { found: false, kind: null, value: null, ...extra };
 }
 
 async function fetchFromPallyDigital(tipo: string, email: string, accessCode: string): Promise<CodeLookupResult> {
@@ -87,7 +103,7 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
     return { found: false, kind: null, value: null };
   }
 
-  const parsed = parsePallyResultPage(html);
+  const parsed = parsePallyResultPage(html, tipo === "netflix");
   if (parsed) return parsed;
 
   // Formato anterior: el código (o enlace) dentro del primer <strong>.
@@ -160,7 +176,7 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
     return { found: false, kind: null, value: null };
   }
 
-  const parsed = parsePallyResultPage(html);
+  const parsed = parsePallyResultPage(html, accion === "tg_4");
   if (parsed) return parsed;
 
   // 1) etiquetas de énfasis (<strong>/<b>) — mismo lugar que usa la
@@ -451,7 +467,8 @@ export function parseVegamigPage(page: string): CodeLookupResult {
   const emailHtml = decodeHtmlEntities(srcdoc);
   const received = emailHtmlToText(emailHtml).match(/(?:When|Cu[aá]ndo|Fecha)\s*:\s*([^\n]+)/i)?.[1]?.trim();
   // Lo que muestra esta página es para el cliente, sin restricciones.
-  return extractCodeFromEmailHtml(emailHtml, received, { anyButtonFallback: true });
+  const r = extractCodeFromEmailHtml(emailHtml, received, { anyButtonFallback: true });
+  return { ...r, emailHtml, ...(received && !r.providerReceivedAt ? { providerReceivedAt: received } : {}) };
 }
 
 /** Saca el código (o el enlace a tocar) de un correo en HTML — compartido
@@ -556,11 +573,23 @@ async function jbSearch(email: string, cookie: string, category: string): Promis
   try { return JSON.parse(String(res.data)); } catch { return null; } // null = sesión vencida (devuelve HTML/redirección)
 }
 
+/** Adjunta el correo completo de José (para el visor). */
+function withEmail(result: CodeLookupResult, data: any): CodeLookupResult {
+  const subject = typeof data?.details?.subject === "string" ? data.details.subject : undefined;
+  const received = typeof data?.details?.date === "string" ? data.details.date : undefined;
+  return {
+    ...result,
+    emailHtml: data.html,
+    ...(subject ? { subject } : {}),
+    ...(received && !result.providerReceivedAt ? { providerReceivedAt: received } : {}),
+  };
+}
+
 /** JSON de search_handler → código/enlace. Exportado para pruebas. */
 export function parseJosebResponse(data: any): CodeLookupResult {
   if (!data || data.success !== true || typeof data.html !== "string") return VG_NOT_FOUND;
   const received = typeof data.details?.date === "string" ? data.details.date : undefined;
-  return extractCodeFromEmailHtml(data.html, received, { anyButtonFallback: false });
+  return withEmail(extractCodeFromEmailHtml(data.html, received, { anyButtonFallback: false }), data);
 }
 
 /**
@@ -574,8 +603,8 @@ export function parseJosebDisneyResponse(data: any): CodeLookupResult {
   if (!data || data.success !== true || typeof data.html !== "string") return VG_NOT_FOUND;
   const received = typeof data.details?.date === "string" ? data.details.date : undefined;
   const code = emailHtmlToText(data.html).match(/(?<![\d.,/-])\d{6}(?![\d.,/-])/)?.[0];
-  if (!code) return VG_NOT_FOUND;
-  return { found: true, kind: "code", value: code, ...(received ? { providerReceivedAt: received } : {}) };
+  if (!code) return withEmail(VG_NOT_FOUND, data);
+  return withEmail({ found: true, kind: "code", value: code, ...(received ? { providerReceivedAt: received } : {}) }, data);
 }
 
 async function jbLookupOnce(email: string, category: string): Promise<any> {
@@ -750,4 +779,56 @@ export async function lookupAnySourceWithRetries(
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
   return null;
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// VISOR DE CÓDIGOS — el correo tal cual llegó (ver code-viewer.routes.ts)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Limpia el HTML del correo para mostrarlo dentro de un <iframe sandbox>:
+ * sin scripts, sin formularios ni manejadores on*. forClient=true además
+ * desactiva todos los enlaces (los enlaces de Netflix los maneja un asesor).
+ */
+export function sanitizeEmailHtml(html: string, forClient: boolean): string {
+  let out = String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<(iframe|object|embed|form|input|button|textarea|select|meta|link|base)\b[\s\S]*?>/gi, "")
+    .replace(/<\/(iframe|object|embed|form|button|textarea|select)>/gi, "")
+    .replace(/\s(on\w+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src)\s*=\s*(["']?)\s*javascript:[^"'\s>]*\2/gi, "");
+  if (forClient) {
+    out = out
+      .replace(/<a\b[^>]*>/gi, '<span style="color:inherit;text-decoration:none">')
+      .replace(/<\/a>/gi, "</span>");
+  } else {
+    out = '<base target="_blank">' + out;
+  }
+  return '<meta charset="utf-8"><style>body{margin:0;padding:12px;font-family:Arial,sans-serif;background:#fff;color:#222}img{max-width:100%;height:auto}table{max-width:100%}</style>' + out;
+}
+
+const MONTHS: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
+/**
+ * Hora de llegada del correo tal como la da cada proveedor → Date.
+ * "Thu, 5 Nov 2026 00:28:02 +0000" (José), "04/11/2026 18:33" (Pally,
+ * hora de Lima), "2026-11-02 23:04:51" (Streaming Market, hora de Lima).
+ */
+export function parseProviderDate(raw: string | undefined | null): Date | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dmy) {
+    const [, d, m, y, hh, mm, ss] = dmy;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) + 5, Number(mm), Number(ss ?? 0)));
+  }
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (ymd) {
+    const [, y, m, d, hh, mm, ss] = ymd;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) + 5, Number(mm), Number(ss ?? 0)));
+  }
+  if (/[a-z]{3}/i.test(s) && !(s.toLowerCase().slice(0, 3) in MONTHS) && Number.isNaN(Date.parse(s))) return null;
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : new Date(t);
 }

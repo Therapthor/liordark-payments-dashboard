@@ -1421,6 +1421,44 @@
     </div>
   </div>
 
+  <!-- Visor de códigos: correo tal cual llegó + link para el cliente -->
+  <div class="cv-back" id="cv-drawer-back" hidden>
+    <aside class="cv-drawer" id="cv-drawer" role="dialog" aria-label="Correo de la cuenta">
+      <div class="cv-head">
+        <div class="cv-head-info">
+          <b id="cv-email"></b>
+          <span id="cv-meta"></span>
+        </div>
+        <button type="button" class="cv-btn" id="cv-refresh">Actualizar</button>
+        <button type="button" class="cv-btn green" id="cv-copy" hidden></button>
+        <button type="button" class="cv-btn orange" id="cv-share">Enviar link al cliente</button>
+        <button type="button" class="cv-x" id="cv-close" aria-label="Cerrar">×</button>
+      </div>
+      <div class="cv-body">
+        <div class="cv-empty" id="cv-empty">Cargando…</div>
+        <iframe class="cv-mail" id="cv-mail" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Correo" hidden></iframe>
+      </div>
+    </aside>
+  </div>
+
+  <div class="cv-modal-back" id="cv-share-back" hidden>
+    <div class="cv-modal" role="dialog" aria-label="Link para el cliente">
+      <div class="cv-modal-top">
+        <div><b>Link para el cliente</b><span id="cv-share-sub"></span></div>
+        <button type="button" class="cv-x" id="cv-share-close" aria-label="Cerrar">×</button>
+      </div>
+      <div class="cv-linkbox"><span id="cv-share-url">Generando…</span><button type="button" class="cv-btn light" id="cv-share-copy">Copiar</button></div>
+      <div class="cv-durations">
+        <span>Duración:</span>
+        <button type="button" class="cv-pill active" data-min="5">5 min</button>
+        <button type="button" class="cv-pill" data-min="10">10 min</button>
+        <button type="button" class="cv-pill" data-min="15">15 min</button>
+      </div>
+      <a class="cv-btn green big" id="cv-share-wa" href="#" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      <span class="cv-share-status" id="cv-share-status">Abierto por el cliente: aún no</span>
+    </div>
+  </div>
+
   <div id="img-lightbox" class="img-lightbox" hidden>
     <button class="img-lightbox-close" id="img-lightbox-close" type="button" aria-label="Cerrar">✕</button>
     <img id="img-lightbox-img" src="" alt="">
@@ -1428,6 +1466,7 @@
 
   <script src="js/access.js"></script>
   <script src="js/codes.js"></script>
+  <script src="js/code-viewer.js"></script>
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>

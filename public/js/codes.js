@@ -266,6 +266,10 @@
     ].join("");
     const genericBtn = singleAction ? "" :
       `<button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>`;
+    // Visor: el correo tal cual llegó (ver code-viewer.js).
+    const viewBtn = a.codeSource
+      ? `<button type="button" class="codes-view-btn" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">Ver correo</button>`
+      : "";
 
     row.innerHTML = `
       <span class="codes-account-icon">🔑</span>
@@ -278,6 +282,7 @@
         ${quickBtns}
         ${actionSelect}
         ${genericBtn}
+        ${viewBtn}
       </span>
     `;
     return row;
@@ -322,6 +327,13 @@
     list.addEventListener("click", async (e) => {
       const codeEl = e.target.closest(".codes-code");
       if (codeEl) { copyToClipboard(codeEl.dataset.code, codeEl); return; }
+
+      const viewBtn = e.target.closest(".codes-view-btn");
+      if (viewBtn && window.LiordarkCodeViewer) {
+        const row = viewBtn.closest(".codes-account-row");
+        window.LiordarkCodeViewer.open({ id: Number(row.dataset.id), platform: viewBtn.dataset.platform, email: viewBtn.dataset.email });
+        return;
+      }
 
       const linkBtn = e.target.closest(".codes-open-btn");
       if (linkBtn) { window.open(linkBtn.dataset.link, "_blank", "noopener"); return; }

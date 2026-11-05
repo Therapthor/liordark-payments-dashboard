@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tu código — Manguitope</title>
+<link rel="icon" href="/assets/logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --cream: #FFFAF3; --bg: #EFE6DA; --brown: #241A10; --muted: #7A6552; --line: #D9CFC2; --orange: #FF7D1A; --yellow: #FFD373; --green: #25D366; --green-dark: #1E6B36; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--brown); font-family: Manrope, system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 16px; }
+  [hidden] { display: none !important; }
+  .phone { width: 100%; max-width: 420px; min-height: calc(100vh - 32px); background: var(--cream); border-radius: 28px; border: 1px solid var(--line); padding: 22px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .brand { font-size: 14px; font-weight: 800; letter-spacing: 1px; }
+  .pill { font-size: 12px; font-weight: 800; background: var(--yellow); padding: 5px 10px; border-radius: 999px; }
+  .pill.off { background: #EADBC8; color: var(--muted); }
+  .label { font-size: 12px; font-weight: 800; color: var(--muted); letter-spacing: .5px; }
+  .label.ok { color: var(--green-dark); }
+  .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+  .spinner { width: 64px; height: 64px; border-radius: 50%; border: 6px solid #EADBC8; border-top-color: var(--orange); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { margin: 0; font-size: 20px; }
+  .muted { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0; }
+  .code { font-size: 56px; font-weight: 800; letter-spacing: 10px; margin: 0; word-break: break-all; }
+  .btn { border: 0; border-radius: 12px; padding: 15px; font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; text-align: center; text-decoration: none; display: block; width: 100%; }
+  .btn.orange { background: var(--orange); color: #fff; }
+  .btn.green { background: var(--green); color: #0b2e18; }
+  .btn.dark { background: var(--brown); color: var(--cream); padding: 11px 24px; font-size: 14px; width: auto; display: inline-block; }
+  .btn.light { background: #fff; color: var(--brown); border: 1px solid var(--line); font-weight: 700; font-size: 15px; }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .link { background: none; border: 0; font: inherit; font-size: 13px; color: var(--muted); text-decoration: underline; cursor: pointer; }
+  .ok-circle { width: 64px; height: 64px; border-radius: 50%; background: #E9F9EF; color: var(--green-dark); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
+  .mail { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--brown); color: var(--cream); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+<main class="phone">
+  <div class="top"><span class="brand">MANGUITOPE</span><span class="pill" id="timer">…</span></div>
+
+  <!-- Cargando -->
+  <section class="center" id="s-loading"><div class="spinner"></div><p class="muted">Abriendo tu link…</p></section>
+
+  <!-- 1 · Esperando -->
+  <section id="s-waiting" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
+    <span class="label">ESPERANDO</span>
+    <div class="center">
+      <div class="spinner"></div>
+      <h1>Esperando tu código…</h1>
+      <p class="muted" id="waiting-text">Pide el código en la app y luego toca Actualizar.</p>
+    </div>
+    <button class="btn orange" id="refresh-btn">Actualizar</button>
+  </section>
+
+  <!-- 2 · Llegó -->
+  <section id="s-found" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
+    <span class="label ok">LLEGÓ TU CÓDIGO</span>
+    <div class="center">
+      <p class="muted" id="found-meta"></p>
+      <p class="code" id="found-code"></p>
+      <a class="btn orange" id="found-link" href="#" target="_blank" rel="noopener" hidden>Abrir enlace</a>
+      <button class="btn dark" id="copy-btn">Copiar</button>
+      <button class="link" id="mail-toggle" hidden>Ver correo completo</button>
+      <iframe class="mail" id="mail" sandbox="" title="Correo completo" hidden></iframe>
+    </div>
+    <div class="actions">
+      <button class="btn green" id="done-btn">Ya ingresé, gracias</button>
+      <button class="link" id="refresh-btn2">¿No te sirvió? Buscar otro</button>
+    </div>
+  </section>
+
+  <!-- Lo entrega un asesor -->
+  <section id="s-advisor" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
+    <span class="label">ATENCIÓN PERSONAL</span>
+    <div class="center">
+      <h1>Este código lo entrega un asesor</h1>
+      <p class="muted">Por seguridad, este tipo de código no se muestra aquí. Escríbenos y te ayudamos al toque.</p>
+    </div>
+    <a class="btn green" href="https://wa.me/51963081436?text=Hola%2C%20necesito%20ayuda%20con%20mi%20c%C3%B3digo" target="_blank" rel="noopener">Escribir por WhatsApp</a>
+  </section>
+
+  <!-- 3 · Cerrado o vencido -->
+  <section id="s-closed" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
+    <span class="label" id="closed-label">CERRADO</span>
+    <div class="center">
+      <div class="ok-circle" id="closed-icon">✓</div>
+      <h1 id="closed-title">¡Listo, disfruta!</h1>
+      <p class="muted" id="closed-text">Este link ya se cerró. Si necesitas otro código, pídelo por soporte.</p>
+    </div>
+    <a class="btn light" href="https://liordark.com">Ir a Mis cuentas</a>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const token = location.pathname.split("/").filter(Boolean)[1] || "";
+  const api = (path, opts = {}) => fetch("/api/code-link/" + encodeURIComponent(token) + path, { method: opts.method || "GET" })
+    .then(async r => ({ status: r.status, data: await r.json().catch(() => ({})) }));
+
+  let expiresAt = null, skew = 0, timerId = null, autoId = null, lastValue = "", platform = "";
+
+  function show(id) {
+    ["s-loading", "s-waiting", "s-found", "s-advisor", "s-closed"].forEach(s => { document.getElementById(s).hidden = s !== id; });
+  }
+
+  function toast(text) {
+    const el = document.createElement("div");
+    el.className = "toast"; el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1800);
+  }
+
+  function showClosed(state) {
+    clearInterval(timerId); clearInterval(autoId);
+    const timer = document.getElementById("timer");
+    timer.className = "pill off";
+    timer.textContent = state === "expired" ? "Vencido" : "Cerrado";
+    if (state === "expired") {
+      document.getElementById("closed-label").textContent = "VENCIDO";
+      document.getElementById("closed-icon").textContent = "⏱";
+      document.getElementById("closed-title").textContent = "Este link ya venció";
+      document.getElementById("closed-text").textContent = "Si todavía necesitas tu código, pide uno nuevo por soporte.";
+    }
+    show("s-closed");
+  }
+
+  function tick() {
+    if (!expiresAt) return;
+    const left = Math.max(0, Math.floor((expiresAt - (Date.now() + skew)) / 1000));
+    document.getElementById("timer").textContent = "Vence en " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+    if (left <= 0) showClosed("expired");
+  }
+
+  function applyInfo(d) {
+    if (d.serverNow) skew = new Date(d.serverNow).getTime() - Date.now();
+    if (d.expiresAt) expiresAt = new Date(d.expiresAt).getTime();
+    if (d.platform) platform = d.platform;
+  }
+
+  async function check(manual) {
+    const btns = [document.getElementById("refresh-btn"), document.getElementById("refresh-btn2")];
+    btns.forEach(b => { b.disabled = true; });
+    try {
+      const { status, data } = await api("/check", { method: "POST" });
+      applyInfo(data);
+      if (status === 410) { showClosed(data.state); return; }
+      if (status !== 200) { toast(data.message || "No se pudo consultar. Intenta de nuevo."); return; }
+      if (data.status === "found") {
+        const isLink = data.kind === "link";
+        document.getElementById("found-meta").textContent = platform + (data.receivedAtLima ? " · llegó a las " + data.receivedAtLima : "");
+        document.getElementById("found-code").textContent = isLink ? "" : data.value;
+        document.getElementById("found-code").hidden = isLink;
+        document.getElementById("copy-btn").hidden = isLink;
+        const a = document.getElementById("found-link");
+        a.hidden = !isLink;
+        if (isLink) a.href = data.value;
+        const frame = document.getElementById("mail");
+        document.getElementById("mail-toggle").hidden = !data.html;
+        if (data.html) frame.srcdoc = data.html;
+        if (data.value !== lastValue && lastValue && !manual) toast("Llegó un código nuevo");
+        lastValue = data.value;
+        show("s-found");
+      } else if (data.status === "advisor") {
+        show("s-advisor");
+      } else {
+        if (manual) toast("Aún no llega. Intenta en unos segundos.");
+        show("s-waiting");
+      }
+    } catch {
+      toast("Sin conexión. Intenta de nuevo.");
+    } finally {
+      btns.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  document.getElementById("refresh-btn").addEventListener("click", () => check(true));
+  document.getElementById("refresh-btn2").addEventListener("click", () => check(true));
+  document.getElementById("copy-btn").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(lastValue); toast("Copiado"); } catch { toast(lastValue); }
+  });
+  document.getElementById("mail-toggle").addEventListener("click", e => {
+    const frame = document.getElementById("mail");
+    frame.hidden = !frame.hidden;
+    e.target.textContent = frame.hidden ? "Ver correo completo" : "Ocultar correo";
+  });
+  document.getElementById("done-btn").addEventListener("click", async () => {
+    await api("/close", { method: "POST" }).catch(() => {});
+    showClosed("closed");
+  });
+
+  (async () => {
+    if (!token) { showClosed("expired"); return; }
+    const { status, data } = await api("").catch(() => ({ status: 0, data: {} }));
+    if (status === 404 || status === 0) { showClosed("expired"); return; }
+    applyInfo(data);
+    if (data.state !== "active") { showClosed(data.state); return; }
+    document.getElementById("waiting-text").textContent = /netflix/i.test(platform)
+      ? "Pide el código en Netflix («Usar un código de inicio de sesión») y luego toca Actualizar."
+      : "Pide el código en la app de " + platform + " y luego toca Actualizar.";
+    tick(); timerId = setInterval(tick, 1000);
+    await check(false);
+    // Mientras espera, se revisa solo cada 15 s.
+    autoId = setInterval(() => { if (!document.getElementById("s-waiting").hidden) check(false); }, 15000);
+  })();
+})();
+</script>
+</body>
+</html>

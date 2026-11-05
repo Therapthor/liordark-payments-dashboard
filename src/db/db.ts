@@ -467,4 +467,22 @@ db.exec(`
   );
 `);
 
+// Visor de códigos: links temporales para que el cliente vea el código de
+// SU cuenta (liordark.com/codigo/<token>). Ver code-viewer.routes.ts.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS code_links (
+    token        TEXT PRIMARY KEY,
+    account_id   INTEGER NOT NULL,
+    email        TEXT    NOT NULL,
+    source_id    TEXT    NOT NULL,
+    client_phone TEXT    NOT NULL DEFAULT '',
+    created_by   TEXT    NOT NULL DEFAULT 'admin', -- 'admin' | 'bot'
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    expires_at   TEXT    NOT NULL,
+    opened_at    TEXT,
+    closed_at    TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_code_links_phone ON code_links(client_phone, created_at);
+`);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);
