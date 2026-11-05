@@ -12,7 +12,6 @@
   let countdownTimer = null;
 
   document.getElementById("brand").insertAdjacentHTML("afterbegin", mango(30));
-  document.getElementById("preview-mango").innerHTML = mango(84);
 
   async function load() {
     try {
