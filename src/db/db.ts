@@ -330,6 +330,13 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_ti
 // notificación (avisa primero que se reemplazó la cuenta).
 ensureColumn("support_tickets", "replaced_at", "replaced_at TEXT");
 
+// Soportes (reportes «sin suscripción» desde liordark.com): cómo se cerró
+// ('active' = sí tenía suscripción, 'replaced' = se le cambió la cuenta) y
+// el perfil reportado.
+ensureColumn("support_tickets", "resolution", "resolution TEXT NOT NULL DEFAULT ''");
+ensureColumn("support_tickets", "profile_name", "profile_name TEXT NOT NULL DEFAULT ''");
+ensureColumn("support_tickets", "reviewed_at", "reviewed_at TEXT");
+
 // Correo del cliente retail — opcional, solo para el aviso de vencimiento
 // por correo (Resend). Vacío = no quiso o no lo puso todavía; en ese caso
 // no se le manda nada y liordark.com le sigue mostrando el banner para pedirlo.

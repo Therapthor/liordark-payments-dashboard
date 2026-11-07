@@ -375,6 +375,7 @@
         document.querySelectorAll("[data-customers-section]").forEach(b => b.classList.toggle("active", b === btn));
         document.getElementById("customers-section-web").hidden     = section !== "web";
         document.getElementById("customers-section-registro").hidden = section !== "registro";
+        document.getElementById("customers-section-blocked").hidden  = section !== "blocked";
       });
     });
   }
@@ -386,12 +387,44 @@
       cachedCustomers = customers || [];
       renderWebList();
       renderRegistroList();
+      renderLockedList();
     } catch (err) {
       list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
     }
     loadStats();
     loadBlocked();
     loadSecurity();
+  }
+
+  // ─── Bloqueo temporal por intentos fallidos de PIN ───
+  let blockedCounts = { locked: 0, phones: 0, ips: 0 };
+  function paintBlockedCount() {
+    const n = blockedCounts.locked + blockedCounts.phones + blockedCounts.ips;
+    const el = document.getElementById("customers-blocked-count");
+    if (el) el.textContent = n ? `(${n})` : "";
+  }
+
+  function renderLockedList() {
+    const list = document.getElementById("locked-list");
+    if (!list) return;
+    const locked = cachedCustomers.filter(c => c.id !== null && c.lockedUntil);
+    blockedCounts.locked = locked.length;
+    paintBlockedCount();
+    list.innerHTML = locked.length ? "" : `<p class="feed-empty">Nadie bloqueado por intentos.</p>`;
+    locked.forEach(c => {
+      const row = document.createElement("div");
+      row.className = "web-customer-row";
+      row.dataset.id = c.id;
+      row.innerHTML = `
+        <div class="web-customer-main">
+          <span class="web-customer-phone">${escapeHtml(localPhone(c.phone))}</span>
+          <span class="web-customer-status web-customer-status-locked">🔒 Hasta ${escapeHtml(formatDate(c.lockedUntil))}</span>
+        </div>
+        <div class="web-customer-actions">
+          <button class="btn-secondary btn-sm web-customer-unlock-btn" type="button">🔓 Quitar bloqueo</button>
+        </div>`;
+      list.appendChild(row);
+    });
   }
 
   // ─── Intentos de ataque e IPs bloqueadas ───
@@ -416,6 +449,8 @@
         row.querySelector(".blocked-evidence").textContent = ev.evidence;
         list.appendChild(row);
       });
+      blockedCounts.ips = ips.length;
+      paintBlockedCount();
       ipsEl.innerHTML = ips.length ? "" : `<p class="feed-empty">No hay IPs bloqueadas.</p>`;
       ips.forEach(b => {
         const row = document.createElement("div");
@@ -446,6 +481,8 @@
     if (!list) return;
     try {
       const { blocked } = await api("/blocked/list");
+      blockedCounts.phones = blocked.length;
+      paintBlockedCount();
       empty.hidden = blocked.length > 0;
       list.innerHTML = "";
       blocked.forEach(b => {
@@ -475,7 +512,7 @@
   document.getElementById("blocked-list")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-unblock]");
     if (!btn) return;
-    if (!confirm("¿Desbloquear este número? Podrá volver a entrar y escribir al chat.")) return;
+    if (!confirm("¿Desbloquear este número? Podrá volver a entrar.")) return;
     try {
       await api(`/blocked/${encodeURIComponent(btn.dataset.unblock)}/unblock`, { method: "POST" });
       loadBlocked();
@@ -535,6 +572,7 @@
 
   initRowActions(document.getElementById("web-customers-list"));
   initRowActions(document.getElementById("registro-customers-list"));
+  initRowActions(document.getElementById("locked-list"));
   initSearch();
   initCustomersSubnav();
 

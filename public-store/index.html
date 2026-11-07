@@ -83,7 +83,7 @@
         <div class="topnav-group" id="nav-auth-actions" hidden>
           <button class="nav-btn" id="nav-dashboard-btn" data-view="dashboard">Mis cuentas</button>
           <a class="nav-support-btn" id="topbar-support-link" href="#" target="_blank" rel="noopener">
-            Soporte<span class="nav-support-badge" id="chat-unread-badge" hidden>0</span>
+            Soporte
           </a>
           <button class="nav-btn" data-view="codes" id="topbar-codes-btn" hidden>Códigos</button>
           <div class="notif-wrap">
@@ -338,7 +338,7 @@
     </div>
   </div>
 
-  <!-- ═══════════ MODAL: chat de soporte en vivo (de prueba) ═══════════ -->
+  <!-- ═══════════ MODAL: soporte (asistente solo con botones, sin chat) ═══════════ -->
   <div id="chat-modal" class="modal-backdrop" hidden>
     <div class="modal-card chat-card">
       <div class="chat-header">
@@ -346,7 +346,7 @@
           <span class="chat-header-logo">🥭</span>
           <div>
             <div class="chat-header-title">Soporte Liordark</div>
-            <div class="chat-header-sub">Manguito te atiende al toque</div>
+            <div class="chat-header-sub">Elige una opción y te ayudamos</div>
           </div>
         </div>
         <button class="modal-close" id="chat-close" type="button" aria-label="Cerrar">✕</button>
@@ -354,27 +354,8 @@
 
       <div class="chat-messages" id="chat-messages"></div>
 
-      <div class="chat-typing-row" id="chat-typing-row" hidden>
-        <span class="chat-typing-avatar">🥭</span>
-        <span class="chat-typing-dots"><span></span><span></span><span></span></span>
-      </div>
-
-      <div class="chat-sticker-popover" id="chat-sticker-popover" hidden></div>
-
-      <p class="chat-buttons-only">Elige una opción del asistente 👆 · Para hablar con un asesor, usa WhatsApp.</p>
-      <form class="chat-input-row" id="chat-input-form" hidden>
-        <input type="file" id="chat-file-input" accept="image/*,video/*" hidden>
-        <button type="button" class="chat-attach-btn" id="chat-attach-btn" title="Adjuntar foto o video" aria-label="Adjuntar foto o video">📎</button>
-        <button type="button" class="chat-sticker-btn" id="chat-sticker-btn" title="Stickers" aria-label="Stickers">😊</button>
-        <input type="text" id="chat-text-input" placeholder="Escribe tu mensaje…" autocomplete="off">
-        <button type="submit" class="chat-send-btn" aria-label="Enviar">➤</button>
-      </form>
+      <p class="chat-buttons-only">Toca una opción 👆 · Asesor por WhatsApp: +51 963 081 436</p>
     </div>
-  </div>
-
-  <div id="img-lightbox" class="img-lightbox" hidden>
-    <button class="img-lightbox-close" id="img-lightbox-close" type="button" aria-label="Cerrar">✕</button>
-    <img id="img-lightbox-img" src="" alt="">
   </div>
 
 </div>

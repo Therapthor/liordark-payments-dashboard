@@ -10,7 +10,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed" | "account_replaced";
+export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed" | "account_replaced" | "support_update";
 
 export type CustomerNotification = {
   id:          number;
@@ -61,7 +61,9 @@ export function createCustomerNotification(
 ): void {
   const digits = normalizePeruPhone(clientPhone);
   if (!digits || !platform) return;
-  const message = type === "support_resolved"
+  const message = type === "support_update"
+    ? customMessage.trim()
+    : type === "support_resolved"
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
     : type === "password_changed"
     ? `🔑 Tu cuenta de ${platformTitle(platform)} tiene una contraseña nueva: ${customMessage}`

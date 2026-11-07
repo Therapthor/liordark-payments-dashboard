@@ -47,7 +47,7 @@
         <button class="tab-btn" data-view="web-customers">Clientes</button>
         <button class="tab-btn" data-view="course">Curso</button>
         <button class="tab-btn" data-view="config">Configuración</button>
-        <button class="tab-btn" data-view="support-chat">Chat <span class="tab-badge-alert" id="chat-unread-badge" hidden>0</span></button>
+        <button class="tab-btn" data-view="soportes">Soportes <span class="tab-badge-alert" id="soportes-badge" hidden>0</span></button>
       </nav>
 
       <div class="topbar-actions">
@@ -389,6 +389,7 @@
         <div class="config-subnav">
           <button class="config-subnav-item active" data-customers-section="web">Web</button>
           <button class="config-subnav-item" data-customers-section="registro">Registro</button>
+          <button class="config-subnav-item" data-customers-section="blocked">Bloqueados <span id="customers-blocked-count"></span></button>
         </div>
 
         <div id="customers-section-web">
@@ -414,19 +415,31 @@
           <p id="registro-customers-empty" class="feed-empty" hidden>Todavía no hay clientes solo en Accesos (sin cuenta en liordark.com).</p>
         </div>
 
-        <div class="panel" style="margin-top:20px">
-          <div class="panel-header"><h2>🚫 Números bloqueados</h2></div>
-          <p class="panel-hint">No pueden entrar ni volver a registrarse. Se agregan cuando baneas a un cliente.</p>
-          <div id="blocked-list" class="web-customers-list"></div>
-          <p id="blocked-empty" class="feed-empty" hidden>No hay números bloqueados.</p>
-        </div>
+        <div id="customers-section-blocked" hidden>
+          <div class="panel">
+            <div class="panel-header"><h2>🔒 Bloqueo temporal por intentos</h2></div>
+            <p class="panel-hint">Fallaron el PIN varias veces (cada 2 fallos: 1 h → 8 h → 2 días → 7 días → 30 días). Quítalo si es el cliente real.</p>
+            <div id="locked-list" class="web-customers-list"></div>
+          </div>
 
-        <div class="panel" style="margin-top:20px">
-          <div class="panel-header"><h2>🚨 Intentos de ataque</h2></div>
-          <p class="panel-hint">Si alguien manda enlaces o código al chat: se le cambia el PIN a esa cuenta, se cierran sus sesiones y se bloquea su IP por 7 días. El dueño real recupera su acceso por WhatsApp con el link de PIN.</p>
-          <div id="security-events" class="web-customers-list"></div>
-          <h3 style="margin:18px 0 6px;font-size:15px">IPs bloqueadas</h3>
-          <div id="security-ips" class="web-customers-list"></div>
+          <div class="panel" style="margin-top:20px">
+            <div class="panel-header"><h2>🚫 Números bloqueados</h2></div>
+            <p class="panel-hint">No pueden entrar ni volver a registrarse. Se agregan cuando baneas a un cliente.</p>
+            <div id="blocked-list" class="web-customers-list"></div>
+            <p id="blocked-empty" class="feed-empty" hidden>No hay números bloqueados.</p>
+          </div>
+
+          <div class="panel" style="margin-top:20px">
+            <div class="panel-header"><h2>🌐 IPs bloqueadas</h2></div>
+            <p class="panel-hint">No pueden entrar ni crear cuentas desde esa conexión (7 días por ataque, o por muchos intentos fallidos).</p>
+            <div id="security-ips" class="web-customers-list"></div>
+          </div>
+
+          <div class="panel" style="margin-top:20px">
+            <div class="panel-header"><h2>🚨 Intentos de ataque</h2></div>
+            <p class="panel-hint">Al detectar enlaces o código: se le cambia el PIN a esa cuenta, se cierran sus sesiones y se bloquea su IP por 7 días. El dueño real recupera su acceso por WhatsApp con el link de PIN.</p>
+            <div id="security-events" class="web-customers-list"></div>
+          </div>
         </div>
       </section>
 
@@ -634,66 +647,19 @@
 
       </section>
 
-      <!-- ═══════════ VISTA: CHAT DE SOPORTE (de prueba) ═══════════ -->
-      <section id="view-support-chat" class="view" hidden>
+      <!-- ═══════════ VISTA: SOPORTES (reportes «sin suscripción» de liordark.com) ═══════════ -->
+      <section id="view-soportes" class="view" hidden>
         <div class="panel-header standalone">
-          <h2>💬 Chat de soporte</h2>
+          <h2>🛟 Soportes</h2>
         </div>
-
-        <div class="chat-admin-layout">
-          <div class="chat-admin-list-col">
-            <div class="chat-admin-filter-row">
-              <button class="chat-admin-filter-btn active" id="chat-filter-pendiente" data-filter="pendiente" type="button">Pendientes</button>
-              <button class="chat-admin-filter-btn" id="chat-filter-cerrado" data-filter="cerrado" type="button">Cerrados</button>
-              <button class="chat-admin-filter-btn" id="chat-filter-todos" data-filter="todos" type="button">Todos</button>
-            </div>
-            <div class="chat-admin-list" id="chat-admin-list">
-              <p class="feed-empty" id="chat-admin-list-empty">No hay chats abiertos.</p>
-            </div>
-          </div>
-
-          <div class="chat-admin-conversation">
-            <div class="chat-admin-empty" id="chat-admin-empty">Selecciona un chat de la lista.</div>
-
-            <div class="chat-admin-thread" id="chat-admin-thread" hidden>
-              <div class="chat-admin-thread-header">
-                <div>
-                  <b id="chat-admin-thread-phone"></b>
-                  <div class="chat-admin-thread-sub">Chat en vivo</div>
-                </div>
-                <div class="chat-admin-thread-actions">
-                  <button class="btn-secondary" id="chat-admin-tag-btn" type="button">🏷️ Marcar cerrado</button>
-                  <button class="btn-secondary" id="chat-admin-close-btn" type="button">🗑️ Cerrar chat</button>
-                </div>
-              </div>
-
-              <div class="chat-admin-messages" id="chat-admin-messages"></div>
-
-              <div class="chat-admin-typing-row" id="chat-admin-typing-row" hidden>
-                <span class="chat-admin-typing-avatar">🥭</span>
-                <span class="chat-admin-typing-dots"><span></span><span></span><span></span></span>
-              </div>
-
-              <div class="chat-admin-quick-row">
-                <button class="chat-admin-quick-btn" id="chat-quick-greeting" type="button">👋 Saludo</button>
-                <button class="chat-admin-quick-btn" id="chat-quick-account" type="button">📋 Solicitar cuenta</button>
-                <button class="chat-admin-quick-btn" id="chat-quick-codes" type="button">🔑 Códigos</button>
-                <button class="chat-admin-quick-btn" id="chat-quick-farewell" type="button">🙏 Despedida</button>
-              </div>
-
-              <div class="chat-admin-codes-popover" id="chat-admin-codes-popover" hidden></div>
-              <div class="chat-admin-sticker-popover" id="chat-admin-sticker-popover" hidden></div>
-
-              <form class="chat-admin-input-row" id="chat-admin-input-form">
-                <input type="file" id="chat-admin-file-input" accept="image/*,video/*" hidden>
-                <button type="button" class="chat-admin-attach-btn" id="chat-admin-attach-btn" title="Adjuntar foto o video">📎</button>
-                <button type="button" class="chat-admin-sticker-btn" id="chat-admin-sticker-btn" title="Stickers">😊</button>
-                <input type="text" id="chat-admin-text-input" placeholder="Escribe tu respuesta…" autocomplete="off">
-                <button type="submit" class="chat-admin-send-btn" aria-label="Enviar">➤</button>
-              </form>
-            </div>
-          </div>
+        <p class="panel-hint">Cuentas «sin suscripción» que reportan los clientes desde liordark.com (una vez por cuenta). Cada botón abre WhatsApp con el mensaje listo y también le avisa en su campanita 🔔.</p>
+        <div class="config-subnav">
+          <button class="config-subnav-item active" data-soportes-filter="open" type="button">Pendientes <span id="soportes-open-count"></span></button>
+          <button class="config-subnav-item" data-soportes-filter="done" type="button">Resueltos</button>
+          <button class="config-subnav-item" data-soportes-filter="all" type="button">Todos</button>
         </div>
+        <div id="soportes-list" class="soportes-list"></div>
+        <p id="soportes-empty" class="feed-empty" hidden>No hay reportes pendientes 🎉</p>
       </section>
 
     </main>
@@ -799,6 +765,32 @@
   </div>
 
   <!-- ───────────── MODAL: proveedor ───────────── -->
+  <!-- ───────────── MODAL: Soportes > Reemplazar cuenta ───────────── -->
+  <div id="soporte-replace-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h3>🔁 Reemplazar cuenta</h3>
+        <button type="button" class="modal-x" id="soporte-replace-close">✕</button>
+      </div>
+      <p id="soporte-replace-info" class="panel-hint"></p>
+      <div class="config-subnav">
+        <button class="config-subnav-item active" data-replace-mode="fresh" type="button">🆕 Cuenta nueva</button>
+        <button class="config-subnav-item" data-replace-mode="shared" type="button">👥 Compartida (temporal)</button>
+      </div>
+      <p id="soporte-replace-hint" class="panel-hint"></p>
+      <div id="soporte-replace-options" class="soporte-replace-options"></div>
+      <label id="soporte-replace-profile-wrap" hidden>Perfil que usará <span class="text-muted">(opcional)</span>
+        <input id="soporte-replace-profile" type="text" maxlength="60" placeholder="ej. Perfil 5" />
+      </label>
+      <p id="soporte-replace-error" class="login-error" hidden></p>
+      <div id="soporte-replace-result" class="soporte-replace-result" hidden></div>
+      <div class="modal-actions">
+        <button type="button" id="soporte-replace-cancel" class="btn-secondary">Cancelar</button>
+        <button type="button" id="soporte-replace-confirm" class="btn-primary" disabled>Reemplazar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="provider-modal" class="modal-backdrop" hidden>
     <form id="provider-form" class="modal-card">
       <div class="modal-head">
@@ -1536,7 +1528,7 @@
   <script src="js/web-customers.js"></script>
   <script src="js/security.js"></script>
   <script src="js/wholesalers.js"></script>
-  <script src="js/support-chat.js"></script>
+  <script src="js/soportes.js"></script>
   <script src="js/full-renewals.js"></script>
   <script src="js/course-admin.js"></script>
   <script src="js/app.js"></script>

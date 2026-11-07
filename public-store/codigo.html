@@ -90,6 +90,7 @@
       <h1>Esperando tu código…</h1>
       <p class="muted" id="waiting-text">Pide el código en la app y espera aquí: revisamos cada 30 segundos.</p>
       <p class="muted" id="waiting-slow" hidden style="background:#FFF1D6;border-radius:12px;padding:10px 12px;color:#5C4A39"></p>
+      <p class="muted" id="waiting-blocked" hidden style="background:#FDE8E8;border-radius:12px;padding:10px 12px;color:#7A2E2E">🔒 El último correo no es un código de inicio de sesión (es de cambio de datos de la cuenta), por eso no se muestra. Pide el código de <b>inicio de sesión</b> y espera aquí.</p>
     </div>
     <button class="btn orange" id="refresh-btn" disabled>Buscando…</button>
   </section>
@@ -286,6 +287,9 @@
         show("s-found");
       } else if (data.status === "advisor") {
         show("s-advisor");
+      } else if (data.status === "blocked") {
+        document.getElementById("waiting-blocked").hidden = false;
+        show("s-waiting");
       } else {
         if (manual) toast("Aún no llega. Seguimos buscando.");
         show("s-waiting");

@@ -282,7 +282,6 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       loadNotifications();
-      if (chatSource && chatSource.readyState === EventSource.CLOSED) connectChatStream();
     });
   }
 
@@ -371,7 +370,6 @@
       renderNotifications(notifications);
       document.getElementById("notif-dot").hidden = !unreadCount;
     } catch { /* no crítico */ }
-    loadChatUnread();
     refreshEmailStatus();
   }
 
@@ -392,48 +390,6 @@
       }
       updateDashboardNotifyBtn();
       updateEmailBanner();
-    } catch { /* no crítico */ }
-  }
-
-  // Sonido de "soporte ya te contestó" — así el cliente se entera aunque
-  // no tenga el chat abierto en ese momento (ver loadChatUnread), y
-  // también si lo tiene abierto y le llega en vivo por SSE.
-  let chatAudioCtx = null;
-  function playChatReplyChime() {
-    try {
-      chatAudioCtx = chatAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const now = chatAudioCtx.currentTime;
-      [700, 1050].forEach((freq, i) => {
-        const osc  = chatAudioCtx.createOscillator();
-        const gain = chatAudioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, now + i * 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.17, now + i * 0.1 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.1 + 0.35);
-        osc.connect(gain).connect(chatAudioCtx.destination);
-        osc.start(now + i * 0.1);
-        osc.stop(now + i * 0.1 + 0.4);
-      });
-    } catch { /* navegador sin soporte de audio — no crítico */ }
-  }
-
-  // Numerito en "💬 Soporte" — para que sepa que ya le respondieron sin
-  // tener que abrir el chat. Mismo ciclo de polling que la campanita.
-  // chatUnreadInitialized: no suena en el primer chequeo al cargar la
-  // página (sería sonar por algo viejo, no por algo que "acaba de pasar").
-  let lastChatUnreadCount = 0;
-  let chatUnreadInitialized = false;
-  async function loadChatUnread() {
-    try {
-      const { count } = await api("/chat/unread");
-      const badge = document.getElementById("chat-unread-badge");
-      badge.textContent = String(count);
-      badge.hidden = count === 0;
-      const chatModalOpen = !document.getElementById("chat-modal").hidden;
-      if (chatUnreadInitialized && count > lastChatUnreadCount && !chatModalOpen) playChatReplyChime();
-      lastChatUnreadCount = count;
-      chatUnreadInitialized = true;
     } catch { /* no crítico */ }
   }
 
@@ -1696,474 +1652,155 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // CHAT DE SOPORTE EN VIVO — el botón "💬 Soporte" de la barra abre esto
-  // en vez de WhatsApp (ver initNav). Un solo chat por celular — lo crea
-  // solo el backend al pedir GET /chat; si el admin lo cierra, el
-  // siguiente mensaje abre uno nuevo de cero.
+  // SOPORTE — asistente solo con botones, todo en el navegador: no hay
+  // chat ni se guarda ninguna conversación. Lo único que va al panel es el
+  // reporte de una cuenta «sin suscripción» (una vez por cuenta). «No
+  // puedo ingresar» y «Otro problema» llevan a WhatsApp; «Necesito un
+  // código», a Códigos.
   // ─────────────────────────────────────────────────────────────
 
-  let chatSource = null;
-  let chatLastId = 0;
-  let chatTypingTimer = null;
-  let chatIsTyping = false;
-  let chatRenderedIds = new Set();
-  const chatTotpTimers = new Map();
-  // El chat se cerró (soporte o asistente) con el modal abierto: el próximo
-  // mensaje abre uno nuevo, así que antes se recarga (y se reconecta el
-  // stream, que quedó apuntando al chat viejo).
-  let chatClosed = false;
+  const SUPPORT_WA_DISPLAY = "+51 963 081 436";
+  let supportAccounts = [];
+  let supportCloseTimer = null;
 
-  // Catálogo cerrado de stickers — el id es lo único que viaja al server
-  // (ver isValidStickerId en support-chat.repository.ts); "anim" es puro
-  // CSS, nunca un archivo (sin asset que subir ni GIF que mantener).
-  const CHAT_STICKERS = [
-    { id: "mango_hi",    emoji: "🥭👋", anim: "wiggle" },
-    { id: "mango_love",  emoji: "🥭❤️", anim: "pulse" },
-    { id: "mango_lol",   emoji: "🥭😂", anim: "shake" },
-    { id: "mango_thumb", emoji: "🥭👍", anim: "" },
-    { id: "mango_party", emoji: "🥭🎉", anim: "bounce" },
-    { id: "mango_sad",   emoji: "🥭😢", anim: "" },
-    { id: "mango_sleep", emoji: "🥭💤", anim: "" },
-    { id: "mango_fire",  emoji: "🥭🔥", anim: "flicker" },
-  ];
-  const CHAT_STICKER_MAP = Object.fromEntries(CHAT_STICKERS.map(s => [s.id, s]));
-
-  // Convierte links sueltos en el texto del chat (ej. el link de código
-  // de Prime Video/Crunchyroll) en <a> clickeables — escapa primero, así
-  // que lo que arme la URL sigue siendo texto plano seguro.
-  function linkifyText(raw) {
-    // Seguro contra inyección: la URL se corta en comillas/espacios y todo
-    // (texto y href) se escapa — un mensaje nunca puede crear atributos.
-    const text = String(raw ?? "");
-    const re = /https?:\/\/[^\s<>"'`]+/g;
-    let out = "", last = 0, m;
-    while ((m = re.exec(text))) {
-      const url = m[0];
-      out += escapeHtml(text.slice(last, m.index)) +
-        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
-      last = m.index + url.length;
-    }
-    return out + escapeHtml(text.slice(last));
+  function waSupportUrl(text) {
+    return "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(text);
   }
 
-  function fmtChatTime(sqliteUTC) {
-    try {
-      return new Date(sqliteUTC.replace(" ", "T") + "Z").toLocaleTimeString("es-PE", {
-        timeZone: "America/Lima", hour: "2-digit", minute: "2-digit",
-      });
-    } catch { return ""; }
+  function localPhoneNumber() {
+    return String(currentPhone || "").replace(/\D/g, "").slice(-9);
   }
 
-  function fmtChatDateShort(iso) {
-    if (!iso) return "";
-    const [y, m, d] = String(iso).split("-");
-    return d && m && y ? `${d}/${m}/${y}` : iso;
-  }
-
-  function chatBubbleHtml(m) {
-    chatLastId = Math.max(chatLastId, m.id);
-    chatRenderedIds.add(m.id);
-    const who = m.sender === "customer" ? "from-customer" : "from-admin";
-    let body;
-    if (m.type === "account_request") {
-      body = `<span class="chat-quick-tag">📋 Pedido de cuenta</span>${escapeHtml(m.text)}` +
-        `<div class="chat-account-picker" id="chat-picker-${m.id}"></div>`;
-    } else if (m.type === "account_reply") {
-      let acc = {};
-      try { acc = JSON.parse(m.text); } catch { /* texto raro — se ignora */ }
-      body = `
-        <div class="chat-account-card">
-          <div class="chat-account-card-title">📋 ${escapeHtml(acc.platform || "")}</div>
-          <div><b>Correo:</b> ${escapeHtml(acc.email || "")}</div>
-          <div><b>Contraseña:</b> ${escapeHtml(acc.password || "")}</div>
-          <div><b>Vence:</b> ${fmtChatDateShort(acc.expiresAt)}</div>
-        </div>`;
-    } else if (m.type === "text") {
-      body = linkifyText(m.text);
-    } else if (m.type === "bot_options" || m.type === "bot_code" || m.type === "bot_totp") {
-      return `
-      <div class="chat-bubble-row ${who}"${m.type === "bot_options" ? ` data-bot-options="${m.id}"` : ""}>
-        <div class="chat-bubble">${botBubbleBody(m).replace(/>\s+</g, "><").trim()}<span class="chat-bubble-time">${fmtChatTime(m.createdAt)}</span></div>
-      </div>`;
-    } else if (m.type === "sticker") {
-      const s = CHAT_STICKER_MAP[m.text];
-      return `
-        <div class="chat-bubble-row ${who} chat-bubble-row-sticker">
-          <span class="chat-sticker${s && s.anim ? " chat-sticker-" + s.anim : ""}">${s ? s.emoji : "🥭"}</span>
-        </div>`;
-    } else if (m.mediaExpired) {
-      body = `<span class="chat-bubble-expired">${m.type === "image" ? "📷 Foto" : "🎥 Video"} (se autodestruyó)</span>`;
-    } else if (m.type === "image") {
-      body = `<img class="chat-bubble-media chat-bubble-media-zoomable" src="${escapeHtml(m.mediaUrl)}" alt="Foto">`;
-    } else {
-      body = `<video class="chat-bubble-media" src="${escapeHtml(m.mediaUrl)}" controls></video>`;
-    }
-    return `
-      <div class="chat-bubble-row ${who}">
-        <div class="chat-bubble">${body}<span class="chat-bubble-time">${fmtChatTime(m.createdAt)}</span></div>
-      </div>`;
-  }
-
-  // ── Asistente automático (ver support-bot.service.ts) ──
-
-  function parseBotPayload(text) {
-    try { const v = JSON.parse(text); return v && typeof v === "object" ? v : {}; } catch { return {}; }
-  }
-
-  function botBubbleBody(m) {
-    const p = parseBotPayload(m.text);
-    const tag = `<span class="chat-bot-tag">🤖 Asistente</span>`;
-    if (m.type === "bot_options") {
-      const options = Array.isArray(p.options) ? p.options : [];
-      return tag + `<div class="chat-bot-text">${linkifyText(p.text || "")}</div>` +
-        (options.length
-          ? `<div class="chat-bot-options" data-msgid="${m.id}">` +
-            options.map(o => `<button type="button" class="chat-bot-option" data-opt="${escapeHtml(o.id)}"${safeWaUrl(o.url) ? ` data-url="${escapeHtml(o.url)}"` : ""}>${escapeHtml(o.label)}</button>`).join("") +
-            `</div>`
-          : "");
-    }
-    if (m.type === "bot_code") {
-      const value = String(p.value || "");
-      const isLink = p.kind === "link" && /^https?:\/\//i.test(value);
-      return tag + `
-        <div class="chat-bot-code-card">
-          <div class="chat-bot-code-title">🔑 ${escapeHtml(p.platform || "")}</div>
-          ${isLink
-            ? `<a class="chat-bot-code-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">✅ Confirmar ingreso</a>
-               <div class="chat-bot-code-hint">Solo confirma tu inicio de sesión; luego vuelve a la app.</div>`
-            : `<button type="button" class="chat-bot-code" data-code="${escapeHtml(value)}">${escapeHtml(value)}</button>
-               <div class="chat-bot-code-hint">Toca el código para copiarlo</div>`}
-          ${p.received ? `<div class="chat-bot-code-received">Recibido: ${escapeHtml(p.received)}</div>` : ""}
-        </div>`;
-    }
-    // bot_totp — el código se pide en vivo (startBotTotp), nunca viene en el mensaje.
-    return tag + `<div class="chat-bot-text">${linkifyText(p.text || "")}</div>
-      <div class="chat-bot-code-card chat-bot-totp" id="chat-totp-${m.id}">
-        <div class="chat-bot-code-title">🔐 ${escapeHtml(p.platform || "")}</div>
-        <button type="button" class="chat-bot-code" data-code="">······</button>
-        <div class="chat-bot-totp-meta">
-          <span class="chat-bot-totp-rotate"></span>
-          <span class="chat-bot-totp-expire"></span>
-        </div>
-      </div>`;
-  }
-
-  // Solo los botones del ÚLTIMO mensaje del asistente, y solo si el
-  // cliente todavía no respondió, siguen activos (el server valida igual).
-  function refreshBotOptions(forceAllOff) {
+  function supportScroll() {
     const list = document.getElementById("chat-messages");
-    const rows = [...list.querySelectorAll(".chat-bubble-row")];
-    let lastIdx = -1;
-    rows.forEach((r, i) => { if (r.dataset.botOptions) lastIdx = i; });
-    const answered = lastIdx === -1 || rows.slice(lastIdx + 1).some(r => r.classList.contains("from-customer"));
-    list.querySelectorAll(".chat-bot-options").forEach(group => {
-      const active = !forceAllOff && !answered && group.closest(".chat-bubble-row") === rows[lastIdx];
-      group.querySelectorAll(".chat-bot-option").forEach(b => { b.disabled = !active; });
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function disableSupportOptions() {
+    document.querySelectorAll("#chat-messages .chat-bot-option").forEach(b => {
+      if (b.tagName === "BUTTON") b.disabled = true;
     });
   }
 
-  // Solo enlaces de WhatsApp del propio negocio (los arma el servidor).
-  function safeWaUrl(url) {
-    return typeof url === "string" && /^https:\/\/wa\.me\/51963081436\?text=[^"'<>\s]*$/.test(url);
+  // html: texto YA escapado. options: [{ id, label, url?, disabled? }]
+  function supportSay(html, options) {
+    disableSupportOptions();
+    const opts = (options || []).map(o => o.url
+      ? `<a class="chat-bot-option chat-bot-option-link" href="${escapeHtml(o.url)}" target="_blank" rel="noopener">${escapeHtml(o.label)}</a>`
+      : `<button type="button" class="chat-bot-option" data-opt="${escapeHtml(o.id)}"${o.disabled ? " disabled" : ""}>${escapeHtml(o.label)}</button>`
+    ).join("");
+    document.getElementById("chat-messages").insertAdjacentHTML("beforeend", `
+      <div class="chat-bubble-row from-admin">
+        <div class="chat-bubble"><span class="chat-bot-tag">🤖 Asistente</span><div class="chat-bot-text">${html}</div>${opts ? `<div class="chat-bot-options">${opts}</div>` : ""}</div>
+      </div>`);
+    supportScroll();
   }
 
-  async function sendBotChoice(btn) {
-    // WhatsApp se abre en el mismo toque (si se espera a la respuesta, el
-    // navegador lo bloquea como ventana emergente).
-    if (btn.dataset.opt === "whatsapp") {
-      const url = safeWaUrl(btn.dataset.url) ? btn.dataset.url
-        : "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent("Hola, necesito ayuda 🙏");
-      window.open(url, "_blank", "noopener");
-    }
-    const group = btn.closest(".chat-bot-options");
-    group.querySelectorAll(".chat-bot-option").forEach(b => { b.disabled = true; });
-    btn.classList.add("is-picked");
+  function supportUserSays(label) {
+    document.getElementById("chat-messages").insertAdjacentHTML("beforeend", `
+      <div class="chat-bubble-row from-customer"><div class="chat-bubble">${escapeHtml(label)}</div></div>`);
+    supportScroll();
+  }
+
+  const BACK_OPTION = { id: "menu", label: "⬅️ Volver al menú" };
+
+  function supportMenu(text) {
+    supportSay(text, [
+      { id: "nosub", label: "📺 Mi cuenta dice «sin suscripción»" },
+      { id: "login", label: "🔒 No puedo ingresar a mi cuenta" },
+      { id: "other", label: "⚠️ Otro problema con mi cuenta" },
+      ...(hasCodesAccounts ? [{ id: "codes", label: "🔑 Necesito un código" }] : []),
+    ]);
+  }
+
+  function supportWhatsapp(problemText) {
+    supportSay(
+      `Para esto te atiende un asesor por WhatsApp 💬<br>📱 <b>${SUPPORT_WA_DISPLAY}</b>`,
+      [
+        { id: "wa", label: "💬 Abrir WhatsApp", url: waSupportUrl(`Hola 👋, ${problemText}. Mi número: ${localPhoneNumber()}`) },
+        BACK_OPTION,
+      ]
+    );
+  }
+
+  async function supportPickAccount() {
+    supportSay("Un momento, busco tus cuentas… ⏳");
     try {
-      const { message } = await api("/chat/messages", {
-        method: "POST", body: { type: "bot_choice", messageId: Number(group.dataset.msgid), optionId: btn.dataset.opt },
-      });
-      appendChatMessage(message);
-      // Cierre de venta: abre la compra en la tienda (el asistente deja su
-      // mensaje en el chat por si el cliente vuelve).
-      const opt = btn.dataset.opt || "";
-      if (opt === "opencatalog") {
-        setTimeout(() => { closeChatModal(); switchPage("catalog"); }, 600);
-      } else if (opt === "opencodes") {
-        setTimeout(async () => {
-          closeChatModal();
-          if (await refreshCodesAvailability()) switchPage("codes");
-        }, 600);
-      } else if (opt.startsWith("buynow:") || opt === "buycombo") {
-        setTimeout(() => {
-          closeChatModal();
-          if (opt === "buycombo") openComboBuilder();
-          else openProductDetail({ kind: "platform", id: opt.slice("buynow:".length) });
-        }, 600);
-      }
+      const { accounts } = await api("/support/accounts");
+      supportAccounts = accounts || [];
     } catch (err) {
-      btn.classList.remove("is-picked");
-      alert(err.message || "No se pudo enviar tu opción.");
-      refreshBotOptions();
-    }
-  }
-
-  function stopBotTotp(id) {
-    clearInterval(chatTotpTimers.get(id));
-    chatTotpTimers.delete(id);
-  }
-
-  function stopAllBotTotps() {
-    for (const id of [...chatTotpTimers.keys()]) stopBotTotp(id);
-  }
-
-  function expireBotTotpCard(card) {
-    card.classList.add("is-expired");
-    const codeEl = card.querySelector(".chat-bot-code");
-    codeEl.textContent = "⏱️ Código expirado";
-    codeEl.dataset.code = "";
-    card.querySelector(".chat-bot-totp-rotate").textContent = "";
-    card.querySelector(".chat-bot-totp-expire").textContent = "";
-  }
-
-  // Pide el 2FA vigente; vuelve a pedirlo cuando rota (cada 30s) hasta
-  // que vence la ventana de ~2 minutos.
-  async function startBotTotp(id) {
-    stopBotTotp(id);
-    const card = document.getElementById("chat-totp-" + id);
-    if (!card) return;
-    let data;
-    try {
-      data = await api("/chat/totp/" + id);
-    } catch {
-      expireBotTotpCard(card);
+      supportSay(escapeHtml(err.message || "No se pudo cargar tus cuentas."), [BACK_OPTION]);
       return;
     }
-    const codeEl = card.querySelector(".chat-bot-code");
-    codeEl.textContent = data.code;
-    codeEl.dataset.code = data.code;
-    let rotate = data.secondsRemaining;
-    let expire = data.expiresInSeconds;
-    const tick = () => {
-      card.querySelector(".chat-bot-totp-rotate").textContent = `Cambia en ${rotate}s`;
-      const mm = Math.floor(expire / 60), ss = String(expire % 60).padStart(2, "0");
-      card.querySelector(".chat-bot-totp-expire").textContent = `Expira en ${mm}:${ss}`;
-    };
-    tick();
-    chatTotpTimers.set(id, setInterval(() => {
-      rotate -= 1;
-      expire -= 1;
-      if (expire <= 0) { stopBotTotp(id); expireBotTotpCard(card); return; }
-      if (rotate <= 0) { startBotTotp(id); return; }
-      tick();
-    }, 1000));
-  }
-
-  async function copyBotCode(el) {
-    const code = el.dataset.code;
-    if (!code) return;
-    try { await navigator.clipboard.writeText(code); } catch { return; }
-    el.classList.add("copied");
-    setTimeout(() => el.classList.remove("copied"), 1200);
-  }
-
-  async function renderAccountPicker(messageId) {
-    const container = document.getElementById("chat-picker-" + messageId);
-    if (!container) return;
-    container.innerHTML = `<div class="chat-picker-loading">Cargando tus cuentas…</div>`;
-    try {
-      const { accounts } = await api("/dashboard");
-      if (!accounts || !accounts.length) {
-        container.innerHTML = `<div class="chat-picker-empty">No tienes cuentas activas todavía.</div>`;
-        return;
-      }
-      container.dataset.accounts = JSON.stringify(accounts.map(a => ({ platform: a.platform, email: a.email })));
-      container.innerHTML = accounts.map((a, i) => `
-        <label class="chat-picker-option">
-          <input type="radio" name="chat-picker-${messageId}" value="${i}">
-          <span>${escapeHtml(a.platform)} · ${escapeHtml(a.email)}</span>
-        </label>
-      `).join("") + `<button type="button" class="chat-picker-send-btn" data-msgid="${messageId}">Enviar cuenta</button>`;
-    } catch {
-      container.innerHTML = `<div class="chat-picker-empty">No se pudo cargar tus cuentas.</div>`;
+    if (!supportAccounts.length) {
+      supportSay("No encontramos cuentas activas en tu perfil 🤔. Si crees que es un error, escríbenos.", [
+        { id: "wa", label: "💬 Abrir WhatsApp", url: waSupportUrl(`Hola 👋, mi cuenta dice sin suscripción. Mi número: ${localPhoneNumber()}`) },
+        BACK_OPTION,
+      ]);
+      return;
     }
+    supportSay("¿Cuál de tus cuentas dice «sin suscripción»? 👇", [
+      ...supportAccounts.map((a, i) => ({
+        id: "acc:" + i,
+        label: `${a.platformTag} · ${a.email}${a.reported ? " · ya reportada" : ""}`,
+        disabled: a.reported,
+      })),
+      BACK_OPTION,
+    ]);
   }
 
-  async function sendAccountPickerReply(messageId) {
-    const container = document.getElementById("chat-picker-" + messageId);
-    const btn = container.querySelector(".chat-picker-send-btn");
-    const selected = container.querySelector("input[type=radio]:checked");
-    if (!selected) { alert("Elige una cuenta."); return; }
+  function finishSupport() {
+    disableSupportOptions();
+    document.getElementById("chat-messages").insertAdjacentHTML("beforeend", `<div class="chat-empty">— Chat finalizado —</div>`);
+    supportScroll();
+    clearTimeout(supportCloseTimer);
+    supportCloseTimer = setTimeout(closeChatModal, 7000);
+  }
 
-    const accounts = JSON.parse(container.dataset.accounts || "[]");
-    const acc = accounts[Number(selected.value)];
-    btn.disabled = true;
-    btn.textContent = "Enviando…";
+  async function supportReport(index) {
+    const acc = supportAccounts[index];
+    if (!acc) return supportMenu("Elige una opción 👇");
     try {
-      const { message } = await api("/chat/messages", {
-        method: "POST", body: { type: "account_reply", platform: acc.platform, accountEmail: acc.email },
-      });
-      appendChatMessage(message);
-      container.innerHTML = `<div class="chat-picker-empty">✓ Cuenta enviada</div>`;
+      const data = await api("/support/reports", { method: "POST", body: { platform: acc.platform, email: acc.email } });
+      supportSay(
+        `✅ ¡Listo! Tu cuenta de <b>${escapeHtml(data.platformTag || acc.platformTag)}</b> (${escapeHtml(acc.email)}) ya fue enviada a soporte 🛠️<br>` +
+        `La revisamos y te avisamos por WhatsApp y en la campanita 🔔. ¡Gracias por tu paciencia! 🥭`
+      );
+      finishSupport();
     } catch (err) {
-      alert(err.message || "No se pudo enviar la cuenta.");
-      btn.disabled = false;
-      btn.textContent = "Enviar cuenta";
+      supportSay(escapeHtml(err.message || "No se pudo enviar el reporte."), [BACK_OPTION]);
     }
   }
 
-  function appendChatMessage(m) {
-    if (chatRenderedIds.has(m.id)) return; // ya se mostró optimista al mandarlo — evita duplicar cuando llega por SSE
-    chatRenderedIds.add(m.id);
-    const el = document.getElementById("chat-messages");
-    const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    el.querySelector(".chat-empty")?.remove();
-    el.insertAdjacentHTML("beforeend", chatBubbleHtml(m));
-    if (wasAtBottom || m.sender === "customer") el.scrollTop = el.scrollHeight;
-    if (m.type === "account_request") renderAccountPicker(m.id);
-    if (m.type === "bot_totp") startBotTotp(m.id);
-    refreshBotOptions();
-  }
-
-  function showChatTyping(show) {
-    document.getElementById("chat-typing-row").hidden = !show;
-    if (show) {
-      const el = document.getElementById("chat-messages");
-      el.scrollTop = el.scrollHeight;
+  async function handleSupportOption(btn) {
+    const id = btn.dataset.opt || "";
+    supportUserSays(btn.textContent || "");
+    if (id === "menu") return supportMenu("¿En qué más te ayudo? 👇");
+    if (id === "nosub") return supportPickAccount();
+    if (id === "login") return supportWhatsapp("no puedo ingresar a mi cuenta");
+    if (id === "other") return supportWhatsapp("tengo un problema con mi cuenta");
+    if (id === "codes") {
+      supportSay("¡Listo! Te llevo a «Códigos» 🔑");
+      setTimeout(async () => {
+        closeChatModal();
+        if (await refreshCodesAvailability()) switchPage("codes");
+      }, 700);
+      return;
     }
+    if (id.startsWith("acc:")) return supportReport(Number(id.slice(4)));
   }
 
-  function connectChatStream() {
-    if (chatSource) chatSource.close();
-    chatSource = new EventSource(API_BASE + "/chat/stream", { withCredentials: true });
-    chatSource.onmessage = (ev) => {
-      let evt;
-      try { evt = JSON.parse(ev.data); } catch { return; }
-      if (evt.type === "message") {
-        if (evt.message.sender === "admin") { showChatTyping(false); playChatReplyChime(); }
-        appendChatMessage(evt.message);
-      } else if (evt.type === "typing") {
-        if (evt.sender === "admin") showChatTyping(evt.typing);
-      } else if (evt.type === "closed") {
-        showChatTyping(false);
-        chatClosed = true;
-        stopAllBotTotps();
-        refreshBotOptions(true);
-        document.querySelectorAll("#chat-messages .chat-bot-totp:not(.is-expired)").forEach(expireBotTotpCard);
-        const list = document.getElementById("chat-messages");
-        list.insertAdjacentHTML("beforeend", `<div class="chat-empty">— Chat finalizado —</div>`);
-        list.scrollTop = list.scrollHeight;
-        if (chatSource) { chatSource.close(); chatSource = null; }
-      }
-    };
-  }
-
-  async function openChatModal() {
+  function openChatModal() {
+    clearTimeout(supportCloseTimer);
     document.getElementById("chat-modal").hidden = false;
-    const list = document.getElementById("chat-messages");
-    list.innerHTML = `<div class="chat-empty">Cargando…</div>`;
-    showChatTyping(false);
-    chatLastId = 0;
-    chatRenderedIds = new Set();
-    stopAllBotTotps();
-    chatClosed = false;
-    try {
-      const { messages, adminTyping } = await api("/chat");
-      list.innerHTML = messages.length
-        ? messages.map(chatBubbleHtml).join("")
-        : `<div class="chat-empty">Cuéntanos qué necesitas 🥭</div>`;
-      list.scrollTop = list.scrollHeight;
-      messages.filter(m => m.type === "account_request").forEach(m => renderAccountPicker(m.id));
-      messages.filter(m => m.type === "bot_totp").forEach(m => startBotTotp(m.id));
-      refreshBotOptions();
-      showChatTyping(adminTyping);
-      connectChatStream();
-      document.getElementById("chat-unread-badge").hidden = true; // ya se vio — markSeen corrió en el server
-    } catch (err) {
-      list.innerHTML = `<div class="chat-empty">${escapeHtml(err.message || "No se pudo cargar el chat.")}</div>`;
-    }
+    document.getElementById("chat-messages").innerHTML = "";
+    supportAccounts = [];
+    supportMenu("¡Hola! 👋 Soy Manguito, el asistente de Liordark 🥭<br>¿Qué pasa con tu cuenta? Elige una opción 👇");
   }
 
   function closeChatModal() {
+    clearTimeout(supportCloseTimer);
     document.getElementById("chat-modal").hidden = true;
-    document.getElementById("chat-sticker-popover").hidden = true;
-    if (chatSource) { chatSource.close(); chatSource = null; }
-    stopAllBotTotps();
-    sendChatTyping(false);
-  }
-
-  function sendChatTyping(typing) {
-    if (typing === chatIsTyping) return;
-    chatIsTyping = typing;
-    api("/chat/typing", { method: "POST", body: { typing } }).catch(() => {});
-  }
-
-  async function sendChatText() {
-    const input = document.getElementById("chat-text-input");
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = "";
-    clearTimeout(chatTypingTimer);
-    sendChatTyping(false);
-    if (chatClosed) await openChatModal();
-    try {
-      const { message } = await api("/chat/messages", { method: "POST", body: { text } });
-      appendChatMessage(message); // optimista — no espera a que vuelva por SSE
-    } catch (err) {
-      alert(err.message || "No se pudo mandar el mensaje.");
-    }
-  }
-
-  async function sendChatMedia(file) {
-    const btn = document.getElementById("chat-attach-btn");
-    const original = btn.textContent;
-    btn.textContent = "⏳";
-    btn.disabled = true;
-    if (chatClosed) await openChatModal();
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(API_BASE + "/chat/messages/media", { method: "POST", credentials: "include", body: form });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "No se pudo subir el archivo.");
-      appendChatMessage(data.message);
-    } catch (err) {
-      alert(err.message || "No se pudo subir el archivo.");
-    } finally {
-      btn.textContent = original;
-      btn.disabled = false;
-    }
-  }
-
-  async function sendChatSticker(stickerId) {
-    toggleStickerPopover(false);
-    if (chatClosed) await openChatModal();
-    try {
-      const { message } = await api("/chat/messages", { method: "POST", body: { type: "sticker", stickerId } });
-      appendChatMessage(message);
-    } catch (err) {
-      alert(err.message || "No se pudo mandar el sticker.");
-    }
-  }
-
-  function toggleStickerPopover(show) {
-    const pop = document.getElementById("chat-sticker-popover");
-    if (show === undefined) show = pop.hidden;
-    pop.hidden = !show;
-    if (show && !pop.dataset.built) {
-      pop.dataset.built = "1";
-      pop.innerHTML = CHAT_STICKERS.map(s => `
-        <button type="button" class="chat-sticker-pick" data-sticker="${s.id}">${s.emoji}</button>
-      `).join("");
-    }
-  }
-
-  function openImgLightbox(src) {
-    document.getElementById("img-lightbox-img").src = src;
-    document.getElementById("img-lightbox").hidden = false;
-  }
-  function closeImgLightbox() {
-    document.getElementById("img-lightbox").hidden = true;
-    document.getElementById("img-lightbox-img").src = "";
   }
 
   function initChatModal() {
@@ -2171,48 +1808,9 @@
     document.getElementById("chat-modal").addEventListener("click", (e) => {
       if (e.target.id === "chat-modal") closeChatModal();
     });
-
-    document.getElementById("chat-sticker-btn").addEventListener("click", () => toggleStickerPopover());
-    document.getElementById("chat-sticker-popover").addEventListener("click", (e) => {
-      const btn = e.target.closest(".chat-sticker-pick");
-      if (btn) sendChatSticker(btn.dataset.sticker);
-    });
     document.getElementById("chat-messages").addEventListener("click", (e) => {
-      const img = e.target.closest(".chat-bubble-media-zoomable");
-      if (img) openImgLightbox(img.src);
-    });
-    document.getElementById("img-lightbox-close").addEventListener("click", closeImgLightbox);
-    document.getElementById("img-lightbox").addEventListener("click", (e) => {
-      if (e.target.id === "img-lightbox") closeImgLightbox();
-    });
-
-    document.getElementById("chat-input-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      sendChatText();
-    });
-
-    document.getElementById("chat-text-input").addEventListener("input", () => {
-      sendChatTyping(true);
-      clearTimeout(chatTypingTimer);
-      chatTypingTimer = setTimeout(() => sendChatTyping(false), 2000);
-    });
-
-    document.getElementById("chat-attach-btn").addEventListener("click", () => {
-      document.getElementById("chat-file-input").click();
-    });
-    document.getElementById("chat-file-input").addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      e.target.value = "";
-      if (file) sendChatMedia(file);
-    });
-
-    document.getElementById("chat-messages").addEventListener("click", (e) => {
-      const btn = e.target.closest(".chat-picker-send-btn");
-      if (btn) { sendAccountPickerReply(btn.dataset.msgid); return; }
-      const opt = e.target.closest(".chat-bot-option");
-      if (opt && !opt.disabled) { sendBotChoice(opt); return; }
-      const code = e.target.closest(".chat-bot-code");
-      if (code) copyBotCode(code);
+      const opt = e.target.closest("button.chat-bot-option");
+      if (opt && !opt.disabled) { disableSupportOptions(); opt.classList.add("is-picked"); handleSupportOption(opt); }
     });
   }
 

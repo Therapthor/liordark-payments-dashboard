@@ -26,7 +26,7 @@ import customersRoutes from "./routes/customers.routes";
 import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
 import wholesalerRoutes, { generateExpiryNotificationsForAllWholesalers } from "./routes/wholesaler.routes";
 import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
-import supportChatRoutes from "./routes/support-chat.routes";
+import supportReportsRoutes from "./routes/support-reports.routes";
 import courseRoutes from "./routes/course.routes";
 import courseAdminRoutes from "./routes/course-admin.routes";
 import { codeViewerAdminRoutes, codeLinkRoutes } from "./routes/code-viewer.routes";
@@ -35,6 +35,7 @@ import { pinLinkAdminRoutes, pinLinkRoutes } from "./routes/pin-link.routes";
 import { cleanPinLinks } from "./db/pin-links.repository";
 import { mergeDuplicateCustomers } from "./db/customer.repository";
 import { runPinRecovery } from "./services/pin-recovery.service";
+import { ensureWebAccessForAccountHolders } from "./services/web-access.service";
 import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
 import { applyPendingPasswordRotation } from "./services/auth.service";
 import { scanPastChatMessages } from "./services/security.service";
@@ -105,7 +106,8 @@ apiRouter.use("/wholesaler", requireWholesalerSession, wholesalerRoutes);
 // Gestión de mayoristas desde el panel admin (crear cuentas, ajustar
 // saldo, asignar stock, cola de cuentas completas) — requireAuth normal.
 apiRouter.use("/wholesalers", requireAuth, wholesalersAdminRoutes);
-apiRouter.use("/support-chat", requireAuth, supportChatRoutes);
+// Soportes: reportes «sin suscripción» de liordark.com (el chat ya no existe).
+apiRouter.use("/support", requireAuth, supportReportsRoutes);
 // Curso (liordark.com/curso) — alumno con su sesión de cliente; admin aparte.
 apiRouter.use("/course", courseRoutes);
 apiRouter.use("/course-admin", requireAuth, courseAdminRoutes);
@@ -198,6 +200,15 @@ const server = app.listen(env.PORT, () => {
     const n = scanPastChatMessages();
     if (n) console.log(`🚨 ${n} ataque(s) del chat procesados (PIN cambiado y sesiones cerradas)`);
   } catch (err: any) { console.error("⚠️ revisión de chats:", err?.message); }
+  // Clientes con cuentas sin usuario web: PIN al azar (nadie más puede
+  // registrarse con su número). Al arrancar y cada hora.
+  const runWebAccess = () => {
+    ensureWebAccessForAccountHolders()
+      .then(n => { if (n) console.log(`🔐 ${n} cliente(s) con cuentas recibieron usuario web con PIN al azar`); })
+      .catch((err: any) => console.error("⚠️ acceso web de clientes:", err?.message));
+  };
+  runWebAccess();
+  setInterval(runWebAccess, ARCHIVE_INTERVAL_MS);
   // PIN de cuentas viejas sin contraseña visible (en segundo plano).
   setTimeout(() => { runPinRecovery().catch(() => {}); }, 60_000);
   setInterval(() => { runPinRecovery().catch(() => {}); }, ARCHIVE_INTERVAL_MS);

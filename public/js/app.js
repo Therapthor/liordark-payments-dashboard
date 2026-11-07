@@ -245,7 +245,7 @@
   // "Pagos" es un desplegable con tres sub-vistas (En vivo / Historial /
   // Renovaciones); "Accesos" es un botón directo aparte.
   const ADMIN_VIEW_KEY = "ldp_admin_view";
-  const VALID_VIEWS = ["resumen", "access", "codes", "wholesalers", "web-customers", "course", "history", "renewals", "config", "support-chat"];
+  const VALID_VIEWS = ["resumen", "access", "codes", "wholesalers", "web-customers", "course", "history", "renewals", "config", "soportes"];
 
   function switchView(view) {
     try { localStorage.setItem(ADMIN_VIEW_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
@@ -259,7 +259,7 @@
     document.getElementById("view-history").hidden       = view !== "history";
     document.getElementById("view-renewals").hidden      = view !== "renewals";
     document.getElementById("view-config").hidden        = view !== "config";
-    document.getElementById("view-support-chat").hidden  = view !== "support-chat";
+    document.getElementById("view-soportes").hidden      = view !== "soportes";
 
     const isPagos = view === "history" || view === "renewals";
     document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
@@ -286,7 +286,7 @@
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "course" && window.LiordarkCourse) window.LiordarkCourse.load();
-    if (view === "support-chat" && window.LiordarkSupportChat) window.LiordarkSupportChat.load();
+    if (view === "soportes" && window.LiordarkSoportes) window.LiordarkSoportes.load();
     if (view === "config") {
       let savedSection = "catalog";
       try {
@@ -309,7 +309,7 @@
     document.getElementById("config-section-payment-methods").hidden = section !== "payment-methods";
     document.getElementById("config-section-providers").hidden       = section !== "providers";
     document.getElementById("config-section-security").hidden        = section !== "security";
-    document.querySelectorAll(".config-subnav-item").forEach(btn => {
+    document.querySelectorAll(".config-subnav-item[data-config-section]").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.configSection === section);
     });
 
@@ -320,7 +320,7 @@
   }
 
   function initConfigSubnav() {
-    document.querySelectorAll(".config-subnav-item").forEach(btn => {
+    document.querySelectorAll(".config-subnav-item[data-config-section]").forEach(btn => {
       btn.addEventListener("click", () => switchConfigSection(btn.dataset.configSection));
     });
   }
@@ -645,6 +645,11 @@
       if (evt.type === "order_needs_review") {
         playReviewAlertChime();
         loadPendingOrders();
+      }
+
+      if (evt.type === "support_report") {
+        playReviewAlertChime();
+        if (window.LiordarkSoportes) window.LiordarkSoportes.load();
       }
     };
   }
@@ -1548,7 +1553,7 @@
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();
     if (window.LiordarkSettings) window.LiordarkSettings.init();
     if (window.LiordarkWholesalers) window.LiordarkWholesalers.init();
-    if (window.LiordarkSupportChat) window.LiordarkSupportChat.init();
+    if (window.LiordarkSoportes) window.LiordarkSoportes.init();
 
     const { payments, stats } = await api("/live/initial");
     cachedLivePayments = payments;
@@ -1600,7 +1605,7 @@
     loadPendingOrders();
     loadConnectorsStatus();
     loadStockAlert();
-    if (window.LiordarkSupportChat) window.LiordarkSupportChat.load();
+    if (window.LiordarkSoportes) window.LiordarkSoportes.load();
     if (window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
   }

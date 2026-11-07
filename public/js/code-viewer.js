@@ -114,7 +114,8 @@ window.LiordarkCodeViewer = (() => {
       const when = d.receivedAtIso
         ? ` · llegó a las <b style="color:#FFFAF3">${d.receivedAtLima}</b> (${agoText(d.receivedAtIso)})`
         : (d.receivedAt ? " · " + d.receivedAt : "");
-      $("cv-meta").innerHTML = escapeHtml(d.sourceLabel) + when + (d.subject ? " · " + escapeHtml(d.subject) : "");
+      $("cv-meta").innerHTML = escapeHtml(d.sourceLabel) + when + (d.subject ? " · " + escapeHtml(d.subject) : "") +
+        (d.accountChange ? ' · <b style="color:#FF8A80">⚠️ Es de cambio de contraseña/correo: no se lo pases al cliente</b>' : "");
       lastValue = d.found && d.value ? d.value : "";
       const isLink = d.kind === "link";
       $("cv-copy").hidden = !lastValue;

@@ -1463,3 +1463,6 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 @media (max-width: 560px) { .course-banner-cta { display: none; } }
 
 .chat-buttons-only { margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); font-size: 13px; color: var(--muted); text-align: center; border-top: 1px solid var(--border); }
+
+/* Soporte: opción que abre WhatsApp (enlace con forma de botón) */
+.chat-bot-option-link { display: inline-flex; align-items: center; text-decoration: none; }

@@ -6,7 +6,7 @@ import {
   type CodeLink,
 } from "../db/code-links.repository";
 import {
-  lookupCodeAction, codeSourceLabel, isLoginCodeOnlySource, isLoginCode, isAdminOnlyResult,
+  lookupCodeAction, codeSourceLabel, isLoginCodeOnlySource, isLoginCode, isAdminOnlyResult, isAccountChangeResult,
   sanitizeEmailHtml, parseProviderDate, TOTP_SOURCE_ID, type CodeLookupResult,
 } from "../services/codes-lookup.service";
 import { getCurrentTotp } from "../utils/totp.util";
@@ -78,6 +78,7 @@ codeViewerAdminRoutes.post("/:accountId/fetch", async (req, res) => {
   res.json({
     ...base,
     found: result.found, kind: result.kind, value: result.value,
+    accountChange: isAccountChangeResult(result),
     subject: result.subject ?? null,
     ...receivedInfo(result),
     html: result.emailHtml ? sanitizeEmailHtml(result.emailHtml, false) : null,
@@ -186,6 +187,10 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
   let body: Record<string, unknown>;
   if (!result.found || !result.value || isOld) {
     body = { status: "waiting" };
+  } else if (isAccountChangeResult(result)) {
+    // Cambio de contraseña/correo/teléfono: nunca al cliente. Sigue
+    // esperando por si luego llega el de inicio de sesión.
+    body = { status: "blocked" };
   } else if (isLoginCodeOnlySource(link.sourceId) && !isLoginCode(result)) {
     // Netflix: al cliente solo el código de 4 dígitos de inicio de sesión.
     body = { status: "waiting" };

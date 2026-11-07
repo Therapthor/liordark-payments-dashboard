@@ -833,6 +833,54 @@ export async function lookupAnySourceWithRetries(
 // VISOR DE CÓDIGOS — el correo tal cual llegó (ver code-viewer.routes.ts)
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// AL CLIENTE, SOLO INICIO DE SESIÓN — nunca un código o enlace para
+// cambiar la contraseña, el correo o el teléfono de la cuenta (con eso
+// cualquiera se la roba). Se mira el asunto y lo que dice el correo ANTES
+// del código: el pie de los correos de inicio de sesión suele decir «si no
+// fuiste tú, cambia tu contraseña» y eso no cuenta. Varios idiomas (Disney+
+// a veces llega en otro). Ante la duda, no se muestra (lo ve el admin).
+// ─────────────────────────────────────────────────────────────
+
+const CHANGE_PURPOSE_RE = new RegExp([
+  // contraseña (es/en/pt/fr/de/nl/pl/cs/it)
+  "contrase[nñ]a", "password", "passwort", "senha", "mot de passe", "wachtwoord", "has[lł]o", "hesl[oa]", "parola d",
+  // restablecer / recuperar
+  "restablec", "reestablec", "\\breset", "recupera", "recover", "redefin", "r[ée]initialis", "zur[üu]cksetz", "obnov",
+  // cambio de correo / teléfono / datos de la cuenta
+  "(cambi|actualiz|modific)\\w* (de |tu |el |la |su )?(direcci[oó]n de )?(correo|e-?mail|email|tel[eé]fono|n[uú]mero de (tel[eé]fono|celular|m[oó]vil))",
+  "(change|update|modify|edit)\\w* (your |the |of )?(account )?(new )?(e-?mail|email address|phone|mobile)",
+  "(e-?mail|email|phone) (address )?(change|update)",
+  "(nuevo|nueva|new) (correo|e-?mail|email|direcci[oó]n|address|n[uú]mero|phone)",
+  "(alterar|trocar|mudar) (o |seu |sua )?(e-?mail|telefone|senha)",
+  "zm[eě]n", // checo: změna / změnit
+  "(datos|informaci[oó]n) de (tu |la |su )?cuenta", "account (details|information|settings)",
+].join("|"), "i");
+
+// Frases que solo traen los correos de cambio, estén donde estén.
+const CHANGE_ANYWHERE_RE = /(asistencia (de|con) (la |tu )?contrase[nñ]a|password assistance|restablecimiento de (la |tu )?contrase[nñ]a|password reset (request|code)|(c[oó]digo|code|passcode)[^.\n]{0,60}\b(para|to) (cambiar|actualizar|restablecer|modificar|change|update|reset|modify|verify your new)|cambio de (correo|e-?mail|contrase[nñ]a|tel[eé]fono)|(email|password|phone) change request)/i;
+
+// Enlaces de cambio/recuperación (por la dirección).
+const CHANGE_LINK_RE = /(reset|password|passwd|contrase|senha|forgot|recover|recupera|change[-_]?email|email[-_]?change|update[-_]?email|account\/(security|settings|edit))/i;
+
+// «Contraseña de un solo uso» / «one-time password» = código de acceso, no
+// cambio de contraseña: se quita antes de mirar.
+const OTP_PHRASES_RE = /one[- ]time pass(word|code)|contrase[nñ]a (de un solo uso|[uú]nica|temporal de acceso)|senha (de uso [uú]nico|tempor[aá]ria)|\botp\b/gi;
+
+/** true = el correo es para cambiar/recuperar datos de la cuenta (o el
+ *  enlace lleva a eso): al cliente nunca se le muestra. */
+export function isAccountChangeResult(result: CodeLookupResult): boolean {
+  if (!result.found) return false;
+  if (result.kind === "link" && result.value && CHANGE_LINK_RE.test(result.value)) return true;
+  const subject = String(result.subject || "").replace(OTP_PHRASES_RE, " ");
+  const text = result.emailHtml ? emailHtmlToText(result.emailHtml).replace(OTP_PHRASES_RE, " ") : "";
+  if (!subject && !text) return false; // la fuente solo da el código (ej. Streaming Market)
+  if (CHANGE_ANYWHERE_RE.test(subject) || CHANGE_ANYWHERE_RE.test(text)) return true;
+  const at = result.kind === "code" && result.value ? text.indexOf(result.value) : -1;
+  const before = at >= 0 ? text.slice(0, at) : text.slice(0, 600);
+  return CHANGE_PURPOSE_RE.test(subject) || CHANGE_PURPOSE_RE.test(before);
+}
+
 /**
  * Limpia el HTML del correo para mostrarlo dentro de un <iframe sandbox>:
  * sin scripts, sin formularios ni manejadores on*. forClient=true además

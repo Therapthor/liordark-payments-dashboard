@@ -1,6 +1,5 @@
 import { Router } from "express";
 import axios from "axios";
-import multer from "multer";
 import { env } from "../config/env";
 import { requireCustomerSession, type RequestWithCustomer } from "../services/customer-auth.service";
 import { findCustomerById, setCustomerEmail } from "../db/customer.repository";
@@ -8,7 +7,7 @@ import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import {
-  listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone, getActiveAccountForClient,
+  listAccountsByClientPhone, listPlatforms, listRenewalAccountsByPhone,
   listUnnotifiedExpiringClientsForCustomer, listAllUnnotifiedExpiringRetailClients, markExpiryNotified,
 } from "../db/access.repository";
 import { listArchivedAccountsByPhone } from "../db/access-history.repository";
@@ -31,15 +30,8 @@ import {
 import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
 import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection, MULTI_DISCOUNT_MIN, MULTI_DISCOUNT_PCT } from "../db/renewal-pay-links.repository";
-import {
-  getOrCreateOpenChatForPhone, findChatByPhone, listMessages, addMessage, setTyping, markSeen,
-  countUnreadForCustomer, isValidStickerId, chatHasNoMessages,
-} from "../db/support-chat.repository";
-import { uploadChatMedia } from "../services/cloudinary.service";
-import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
-import {
-  isSupportBotEnabledFor, startSupportBot, notifyCustomerMessage, recordCustomerChoice, getBotTotpForCustomer,
-} from "../services/support-bot.service";
+import { listReportableAccounts, reportNoSubscription } from "../services/support-reports.service";
+import { emitDashboardEvent } from "../utils/live-events.util";
 import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { suspiciousReason, autoBlockCustomer, clientIp } from "../services/security.service";
@@ -777,185 +769,50 @@ router.post("/checkout", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// CHAT DE SOPORTE EN VIVO — ya abierto a todos los clientes. El botón
-// "💬 Soporte" de la barra abre esto en vez de WhatsApp (ver app.js).
+// SOPORTE — el asistente de la tienda es solo botones y no guarda ninguna
+// conversación. Lo único que llega al panel (Soportes) es el reporte de
+// una cuenta «sin suscripción», una vez por cuenta mientras siga abierto.
+// El resto (no puedo ingresar, otro problema) va directo a WhatsApp.
 // ─────────────────────────────────────────────────────────────
 
-const CHAT_TEXT_MAX = 1500;
-const CHAT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"]);
-const CHAT_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm", "video/3gpp"]);
-
-const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-
-function requireChatUser(req: any, res: any): { phone: string } | null {
+function requireStoreUser(req: any, res: any): { phone: string } | null {
   const customerId = (req as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
   if (!customer) { res.status(401).json({ message: "Sesión inválida." }); return null; }
   return { phone: customer.phone };
 }
 
-function mediaExpiresAtISO(): string {
-  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
-}
-
-router.get("/chat", (req, res) => {
-  const who = requireChatUser(req, res);
+router.get("/support/accounts", (req, res) => {
+  const who = requireStoreUser(req, res);
   if (!who) return;
-
-  const isNew = !findChatByPhone(who.phone);
-  const chat = getOrCreateOpenChatForPhone(who.phone);
-  // Asistente automático: saluda solo en un chat vacío (ver support-bot.service.ts).
-  if (isSupportBotEnabledFor(who.phone) && chat.botState === null && chatHasNoMessages(chat.id)) {
-    startSupportBot(chat.id);
-  }
-  markSeen(chat.id, "customer");
-  if (isNew) emitChatEvent({ type: "chat_created", chatId: chat.id, clientPhone: who.phone });
-  res.json({ chatId: chat.id, adminTyping: chat.adminTyping, messages: listMessages(chat.id) });
+  res.json({ accounts: listReportableAccounts(who.phone) });
 });
 
-// GET /api/store/chat/unread — numerito en el botón "💬 Soporte" de la
-// barra, sin necesidad de abrir el chat (ver polling en app.js).
-router.get("/chat/unread", (req, res) => {
-  const who = requireChatUser(req, res);
+router.post("/support/reports", (req, res) => {
+  const who = requireStoreUser(req, res);
   if (!who) return;
-  res.json({ count: countUnreadForCustomer(who.phone) });
+  const platform = String(req.body?.platform ?? "").trim().slice(0, 60);
+  const email    = String(req.body?.email ?? "").trim().slice(0, 200);
+  if (!platform || !email) return res.status(400).json({ message: "Falta elegir la cuenta." });
+  const result = reportNoSubscription(who.phone, platform, email);
+  if (!result.ok) return res.status(result.status).json({ message: result.message });
+  emitDashboardEvent({ type: "support_report", id: result.ticket.id, platform: result.ticket.platform });
+  res.status(201).json({ ok: true, platformTag: result.ticket.platformTag, email: result.ticket.accountEmail });
 });
 
-router.post("/chat/messages", (req, res) => {
-  const who = requireChatUser(req, res);
-  if (!who) return;
-
-  // Botón del asistente — se valida y guarda en support-bot.service.ts.
-  if (req.body?.type === "bot_choice") {
-    getOrCreateOpenChatForPhone(who.phone);
-    const result = recordCustomerChoice(who.phone, Number(req.body?.messageId), String(req.body?.optionId ?? ""));
-    if (!result.ok) return res.status(409).json({ message: result.error });
-    return res.status(201).json({ message: result.message });
-  }
-
-  const type = req.body?.type === "account_reply" ? "account_reply" : "text";
-  const chat = getOrCreateOpenChatForPhone(who.phone);
-  const wasFirstMessage = chatHasNoMessages(chat.id);
-
-  // El cliente ya no escribe libre: solo botones del asistente (y la tarjeta
-  // de cuenta que pide el asesor). Un texto con enlaces/código = ataque.
-  if (req.body?.type !== "account_reply") {
-    const raw = String(req.body?.text ?? "").slice(0, 5000);
-    const suspicious = raw ? suspiciousReason(raw) : null;
-    if (suspicious) {
-      autoBlockCustomer(who.phone, clientIp(req), suspicious, raw);
-      res.clearCookie(CUSTOMER_SESSION_COOKIE);
-      return res.status(403).json({ message: "Por seguridad cerramos tu sesión. Escríbenos por WhatsApp al +51 963 081 436.", blocked: true });
-    }
-    return res.status(403).json({ message: "El chat funciona con botones. Elige una opción del asistente." });
-  }
-
-  if (req.body?.type === "sticker") {
-    const stickerId = String(req.body?.stickerId ?? "");
-    if (!isValidStickerId(stickerId)) return res.status(400).json({ message: "Sticker no válido." });
-    const message = addMessage(chat.id, "customer", { type: "sticker", text: stickerId });
-    emitChatEvent({ type: "message", chatId: chat.id, message });
-    return res.status(201).json({ message });
-  }
-
-  if (type === "account_reply") {
-    // Nunca confía en lo que mande el navegador para correo/contraseña —
-    // se reconfirma la cuenta real del cliente, mismo criterio que los
-    // reportes de soporte de arriba (getActiveAccountForClient).
-    const platform     = String(req.body?.platform ?? "").trim();
-    const accountEmail = String(req.body?.accountEmail ?? "").trim();
-    if (!platform || !accountEmail) return res.status(400).json({ message: "Falta elegir la cuenta." });
-
-    const account = getActiveAccountForClient(who.phone, platform, accountEmail);
-    if (!account) return res.status(404).json({ message: "Esa cuenta no está activa en tu perfil." });
-
-    const payload = JSON.stringify({
-      platform: account.platform, email: account.email, password: account.password,
-      expiresAt: account.expiresAt, provider: account.provider || "",
-    });
-    const message = addMessage(chat.id, "customer", { type: "account_reply", text: payload });
-    emitChatEvent({ type: "message", chatId: chat.id, message });
-    return res.status(201).json({ message });
-  }
-
-  const text = String(req.body?.text ?? "").trim();
-  if (!text) return res.status(400).json({ message: "Escribe un mensaje." });
-  if (text.length > CHAT_TEXT_MAX) return res.status(400).json({ message: `El mensaje es muy largo (máximo ${CHAT_TEXT_MAX} caracteres).` });
-
-  // Enlaces o código en el chat → no se atiende: se guarda como evidencia
-  // (el panel lo muestra como texto) y el número queda bloqueado al instante.
-  const suspicious = suspiciousReason(text);
-  if (suspicious) {
-    addMessage(chat.id, "customer", { type: "text", text });
-    autoBlockCustomer(who.phone, clientIp(req), suspicious, text);
-    res.clearCookie(CUSTOMER_SESSION_COOKIE);
-    return res.status(403).json({ message: "Por seguridad no aceptamos enlaces ni código en el chat. Tu número fue bloqueado.", blocked: true });
-  }
-
-  const message = addMessage(chat.id, "customer", { type: "text", text });
-  emitChatEvent({ type: "message", chatId: chat.id, message });
-  notifyCustomerMessage(chat.id, who.phone, { kind: "text", text }, wasFirstMessage);
-  res.status(201).json({ message });
-});
-
-// 2FA en vivo para la burbuja del asistente — se pide cada vez que rota
-// (cada 30s) mientras no venza; nunca queda guardado en el chat.
-router.get("/chat/totp/:messageId", async (req, res) => {
-  const who = requireChatUser(req, res);
-  if (!who) return;
-  const totp = await getBotTotpForCustomer(who.phone, Number(req.params.messageId));
-  if (!totp) return res.status(410).json({ message: "Este código ya expiró." });
-  res.json(totp);
-});
-
-router.post("/chat/messages/media", (req, res) => {
-  const who = requireChatUser(req, res);
-  if (!who) return;
-  // Sin fotos/videos: el chat funciona solo con botones (los reportes van a WhatsApp).
-  res.status(403).json({ message: "Envía tus fotos por WhatsApp al +51 963 081 436." });
-});
-
-router.post("/chat/typing", (req, res) => {
-  const who = requireChatUser(req, res);
-  if (!who) return;
-
-  const chat = getOrCreateOpenChatForPhone(who.phone);
-  const typing = !!req.body?.typing;
-  setTyping(chat.id, "customer", typing);
-  emitChatEvent({ type: "typing", chatId: chat.id, sender: "customer", typing });
-  res.json({ ok: true });
-});
-
-// SSE — mensajes y "escribiendo" del admin, en vivo. Filtra por el chat de
-// ESTE celular; si todavía no tiene chat creado, no hay nada que seguir.
-router.get("/chat/stream", (req, res) => {
+// El chat ya no existe. Si alguien igual intenta escribir con enlaces o
+// código (scripts del atacante), se trata como ataque.
+router.use("/chat", (req, res) => {
   const customerId = (req as RequestWithCustomer).customerId;
-  const customer   = findCustomerById(customerId);
-  if (!customer) {
-    return res.status(401).end();
+  const customer   = customerId ? findCustomerById(customerId) : null;
+  const raw = String(req.body?.text ?? "").slice(0, 5000);
+  const suspicious = raw ? suspiciousReason(raw) : null;
+  if (customer && suspicious) {
+    autoBlockCustomer(customer.phone, clientIp(req), suspicious, raw);
+    res.clearCookie(CUSTOMER_SESSION_COOKIE);
+    return res.status(403).json({ message: "Por seguridad cerramos tu sesión. Escríbenos por WhatsApp al +51 963 081 436.", blocked: true });
   }
-
-  const chat = getOrCreateOpenChatForPhone(customer.phone);
-
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache, no-transform",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-  res.write("retry: 3000\n\n");
-
-  const unsubscribe = onChatEvent((evt) => {
-    if (evt.chatId !== chat.id) return;
-    res.write(`data: ${JSON.stringify(evt)}\n\n`);
-  });
-
-  const ping = setInterval(() => res.write(":ping\n\n"), 25_000);
-
-  req.on("close", () => {
-    clearInterval(ping);
-    unsubscribe();
-  });
+  res.status(410).json({ message: "El chat ya no está disponible. Usa «Soporte» o escríbenos por WhatsApp al +51 963 081 436." });
 });
 
 export default router;
