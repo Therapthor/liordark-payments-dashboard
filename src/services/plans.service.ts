@@ -39,8 +39,9 @@ export function planExpiresAt(p: PlanOption): string {
   return addDaysISO(limaTodayISO(), p.days);
 }
 
+/** Igual que el resto del catálogo: "6", "15", "25" — con céntimos solo si los hay ("49.90"). */
 export function money(n: number): string {
-  return n.toFixed(2);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
 // El catálogo (WhatsApp, renovaciones, tarjeta de la tienda) usa el precio
