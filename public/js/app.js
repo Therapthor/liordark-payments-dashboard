@@ -300,7 +300,7 @@
   // "Configuración" tiene su propio sub-menú (Catálogo / Métodos de pago /
   // Proveedores) — se maneja aparte del menú principal de arriba.
   const ADMIN_CONFIG_SECTION_KEY = "ldp_admin_config_section";
-  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers"];
+  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers", "security"];
 
   function switchConfigSection(section) {
     try { localStorage.setItem(ADMIN_CONFIG_SECTION_KEY, section); } catch { /* localStorage bloqueado */ }
@@ -308,6 +308,7 @@
     document.getElementById("config-section-catalog").hidden         = section !== "catalog";
     document.getElementById("config-section-payment-methods").hidden = section !== "payment-methods";
     document.getElementById("config-section-providers").hidden       = section !== "providers";
+    document.getElementById("config-section-security").hidden        = section !== "security";
     document.querySelectorAll(".config-subnav-item").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.configSection === section);
     });
@@ -315,6 +316,7 @@
     if (section === "catalog" && window.LiordarkCatalog) window.LiordarkCatalog.load();
     if (section === "payment-methods" && window.LiordarkSettings) window.LiordarkSettings.loadMethods();
     if (section === "providers" && window.LiordarkSettings) window.LiordarkSettings.loadProviders();
+    if (section === "security" && window.LiordarkSecurity) window.LiordarkSecurity.load();
   }
 
   function initConfigSubnav() {

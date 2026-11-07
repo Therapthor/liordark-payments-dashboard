@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
 import { findCustomerById, isCustomerSuspended } from "../db/customer.repository";
+import { isPhoneBlocked } from "../db/security.repository";
 
 // ─────────────────────────────────────────────────────────────
 // SESIÓN DE CLIENTE (tienda web) — mismo patrón de token firmado que
@@ -87,6 +88,11 @@ export function requireCustomerSession(req: Request, res: Response, next: NextFu
   if (isCustomerSuspended(customer)) {
     res.clearCookie(CUSTOMER_SESSION_COOKIE);
     res.status(403).json({ message: "Tu cuenta está suspendida temporalmente. Contáctanos si es un error." });
+    return;
+  }
+  if (isPhoneBlocked(customer.phone)) {
+    res.clearCookie(CUSTOMER_SESSION_COOKIE);
+    res.status(403).json({ message: "Este número fue bloqueado por seguridad." });
     return;
   }
 

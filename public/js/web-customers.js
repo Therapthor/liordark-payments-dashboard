@@ -99,6 +99,7 @@
         <button class="btn-secondary btn-sm web-customer-reset-btn" type="button">🔑 Generar contraseña</button>`;
 
     // Bloqueo por intentos fallidos de PIN (3+ fallos: 1 a 15 min).
+    const blockedBadge = c.blocked ? `<span class="web-customer-status web-customer-status-locked">🚫 Bloqueado</span>` : "";
     const lockBadge = c.lockedUntil
       ? `<span class="web-customer-status web-customer-status-locked">🔒 Bloqueada por intentos · hasta ${new Date(c.lockedUntil).toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })}</span>
          <button class="btn-secondary btn-sm web-customer-unlock-btn" type="button">🔓 Quitar bloqueo</button>`
@@ -109,6 +110,7 @@
         <span class="web-customer-phone">${escapeHtml(localPhone(c.phone))}</span>
         ${originBadge}
         ${statusBadge}
+        ${blockedBadge}
         ${lockBadge}
       </div>
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
@@ -363,7 +365,51 @@
       list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
     }
     loadStats();
+    loadBlocked();
   }
+
+  // ─── Números bloqueados (automático por enlaces/código en el chat o baneo) ───
+  async function loadBlocked() {
+    const list = document.getElementById("blocked-list");
+    const empty = document.getElementById("blocked-empty");
+    if (!list) return;
+    try {
+      const { blocked } = await api("/blocked/list");
+      empty.hidden = blocked.length > 0;
+      list.innerHTML = "";
+      blocked.forEach(b => {
+        const row = document.createElement("div");
+        row.className = "web-customer-row";
+        row.innerHTML = `
+          <div class="web-customer-main">
+            <span class="web-customer-phone">${escapeHtml(localPhone(b.phone))}</span>
+            <span class="web-customer-status web-customer-status-locked">🚫 ${escapeHtml(b.reason)}</span>
+            <span class="web-customer-badge">${b.source === "auto" ? "Automático" : "Baneado por ti"}</span>
+          </div>
+          <div class="web-customer-sub">${formatDate(b.createdAt)}${b.ip ? " · IP " + escapeHtml(b.ip) : ""}</div>
+          ${b.evidence ? `<div class="blocked-evidence"></div>` : ""}
+          <div class="web-customer-actions">
+            <button class="btn-secondary btn-sm" data-unblock="${escapeHtml(b.phone)}" type="button">Desbloquear</button>
+          </div>`;
+        // La evidencia es lo que escribió el atacante: siempre como texto.
+        const ev = row.querySelector(".blocked-evidence");
+        if (ev) ev.textContent = b.evidence;
+        list.appendChild(row);
+      });
+    } catch (err) {
+      list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  document.getElementById("blocked-list")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-unblock]");
+    if (!btn) return;
+    if (!confirm("¿Desbloquear este número? Podrá volver a entrar y escribir al chat.")) return;
+    try {
+      await api(`/blocked/${encodeURIComponent(btn.dataset.unblock)}/unblock`, { method: "POST" });
+      loadBlocked();
+    } catch (err) { alert(err.message); }
+  });
 
   // ─────────────────────────────────────────────────────────────
   // RESUMEN + CURVA — total de clientes y registros por día del mes,

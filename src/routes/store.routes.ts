@@ -42,6 +42,8 @@ import {
 } from "../services/support-bot.service";
 import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
+import { suspiciousReason, autoBlockCustomer, clientIp } from "../services/security.service";
+import { CUSTOMER_SESSION_COOKIE } from "../services/customer-auth.service";
 
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -866,6 +868,16 @@ router.post("/chat/messages", (req, res) => {
   const text = String(req.body?.text ?? "").trim();
   if (!text) return res.status(400).json({ message: "Escribe un mensaje." });
   if (text.length > CHAT_TEXT_MAX) return res.status(400).json({ message: `El mensaje es muy largo (máximo ${CHAT_TEXT_MAX} caracteres).` });
+
+  // Enlaces o código en el chat → no se atiende: se guarda como evidencia
+  // (el panel lo muestra como texto) y el número queda bloqueado al instante.
+  const suspicious = suspiciousReason(text);
+  if (suspicious) {
+    addMessage(chat.id, "customer", { type: "text", text });
+    autoBlockCustomer(who.phone, clientIp(req), suspicious, text);
+    res.clearCookie(CUSTOMER_SESSION_COOKIE);
+    return res.status(403).json({ message: "Por seguridad no aceptamos enlaces ni código en el chat. Tu número fue bloqueado.", blocked: true });
+  }
 
   const message = addMessage(chat.id, "customer", { type: "text", text });
   emitChatEvent({ type: "message", chatId: chat.id, message });

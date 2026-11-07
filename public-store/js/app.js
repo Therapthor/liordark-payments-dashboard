@@ -1863,6 +1863,11 @@
   }
 
   async function sendBotChoice(btn) {
+    // WhatsApp se abre en el mismo toque (si se espera a la respuesta, el
+    // navegador lo bloquea como ventana emergente).
+    if (btn.dataset.opt === "whatsapp") {
+      window.open("https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent("Hola, necesito ayuda de un asesor 🙏"), "_blank", "noopener");
+    }
     const group = btn.closest(".chat-bot-options");
     group.querySelectorAll(".chat-bot-option").forEach(b => { b.disabled = true; });
     btn.classList.add("is-picked");
@@ -1874,7 +1879,9 @@
       // Cierre de venta: abre la compra en la tienda (el asistente deja su
       // mensaje en el chat por si el cliente vuelve).
       const opt = btn.dataset.opt || "";
-      if (opt === "opencodes") {
+      if (opt === "opencatalog") {
+        setTimeout(() => { closeChatModal(); switchPage("catalog"); }, 600);
+      } else if (opt === "opencodes") {
         setTimeout(async () => {
           closeChatModal();
           if (await refreshCodesAvailability()) switchPage("codes");

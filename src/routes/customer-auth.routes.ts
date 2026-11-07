@@ -19,6 +19,8 @@ import {
   hashPassword,
   verifyCustomerSessionToken,
 } from "../services/customer-auth.service";
+import { isPhoneBlocked, isIpBlocked, countRegistrationsFromIp, logRegistration } from "../db/security.repository";
+import { clientIp, isPublicIp } from "../services/security.service";
 
 const router = Router();
 
@@ -32,9 +34,24 @@ function setSessionCookie(res: import("express").Response, customerId: number): 
   });
 }
 
+// Número bloqueado (baneo del admin o automático por enlaces/código en el
+// chat): no entra ni puede volver a registrarse con ese número.
+const BLOCKED_MESSAGE = "Este número fue bloqueado por seguridad.";
+// Cuentas nuevas por IP en 24 h (evita crear números en serie).
+const MAX_REGISTRATIONS_PER_IP = 3;
+
+function registrationDenied(req: import("express").Request): string | null {
+  const ip = clientIp(req);
+  if (!isPublicIp(ip)) return null; // sin IP real del cliente no se aplica regla por IP
+  if (isIpBlocked(ip)) return "No se pueden crear cuentas nuevas desde esta conexión. Escríbenos por WhatsApp.";
+  if (countRegistrationsFromIp(ip) >= MAX_REGISTRATIONS_PER_IP) return "Se crearon demasiadas cuentas desde esta conexión hoy. Intenta mañana o escríbenos por WhatsApp.";
+  return null;
+}
+
 router.post("/login", async (req, res) => {
   const phone    = String(req.body?.phone ?? "");
   const password = String(req.body?.password ?? "");
+  if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
 
   const lock = customerLockoutStatus(phone);
   if (lock.locked) {
@@ -71,15 +88,19 @@ router.post("/guest", async (req, res) => {
   if (normalizeCustomerPhone(phone).length < 9) {
     return res.status(400).json({ message: "Número de celular inválido." });
   }
+  if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ message: "El PIN debe ser de 4 dígitos." });
   }
   if (findCustomerByPhone(phone)) {
     return res.status(409).json({ message: "Ya existe una cuenta con ese celular. Iniciá sesión." });
   }
+  const denied = registrationDenied(req);
+  if (denied) return res.status(429).json({ message: denied });
 
   const passwordHash = await hashPassword(pin);
   const customer      = createCustomer(phone, passwordHash, pin, true);
+  logRegistration(clientIp(req));
 
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);
@@ -98,6 +119,7 @@ router.post("/quick", async (req, res) => {
   if (normalizeCustomerPhone(phone).length < 9) {
     return res.status(400).json({ message: "Número de celular inválido." });
   }
+  if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
 
   const existing = findCustomerByPhone(phone);
   if (existing) {
@@ -127,8 +149,11 @@ router.post("/quick", async (req, res) => {
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ message: "Crea un PIN de 4 dígitos (solo números)." });
   }
+  const denied = registrationDenied(req);
+  if (denied) return res.status(429).json({ message: denied });
   const passwordHash = await hashPassword(pin);
   const customer      = createCustomer(phone, passwordHash, pin, true);
+  logRegistration(clientIp(req));
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone, created: true });

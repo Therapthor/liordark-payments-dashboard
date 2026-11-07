@@ -1,44 +1,59 @@
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { env } from "../config/env";
+import {
+  createAdminSession, validateAdminSession, getAdminSetting, setAdminSetting, revokeAllAdminSessions,
+} from "../db/security.repository";
+
+// ─────────────────────────────────────────────────────────────
+// SESIÓN DEL PANEL — cada inicio de sesión queda registrado (dispositivo,
+// IP, última vez) en admin_sessions, así se puede ver dónde está abierto el
+// panel y cerrar cualquier sesión (Configuración > Seguridad). La cookie
+// lleva un token aleatorio; en la base solo se guarda su hash.
+// ─────────────────────────────────────────────────────────────
 
 export const SESSION_COOKIE = "ldp_session";
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
+export const SESSION_TTL_DAYS = 30;
 
-function sign(expiry: number): string {
-  return crypto.createHmac("sha256", env.SESSION_SECRET).update(String(expiry)).digest("hex");
+export function createSessionToken(ip = "", userAgent = ""): { token: string; expires: Date } {
+  return createAdminSession(ip, userAgent, SESSION_TTL_DAYS);
 }
 
-/** Genera el valor de cookie de una sesión nueva, válida por 30 días. */
-export function createSessionToken(): { token: string; expires: Date } {
-  const expiry = Date.now() + SESSION_TTL_MS;
-  const token  = `${expiry}.${sign(expiry)}`;
-  return { token, expires: new Date(expiry) };
+export function verifySessionToken(token: string | undefined, ip?: string): boolean {
+  return validateAdminSession(token, ip);
 }
 
-/** Verifica un token de sesión (firma + expiración). */
-export function verifySessionToken(token: string | undefined): boolean {
-  if (!token) return false;
-  const [expiryStr, signature] = token.split(".");
-  if (!expiryStr || !signature) return false;
+// ── Contraseña ──
+// Si se cambió desde el panel, vale la guardada (hash bcrypt); si no, la
+// de DASHBOARD_PASSWORD en .env.production.
 
-  const expiry = Number(expiryStr);
-  if (!Number.isFinite(expiry) || expiry < Date.now()) return false;
+const PASSWORD_HASH_KEY = "password_hash";
 
-  const expected = sign(expiry);
-  try {
-    const a = Buffer.from(signature);
-    const b = Buffer.from(expected);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
-}
-
-/** Compara la contraseña ingresada contra DASHBOARD_PASSWORD, sin timing attack. */
 export function checkPassword(input: string): boolean {
-  const expected = env.DASHBOARD_PASSWORD;
+  const stored = getAdminSetting(PASSWORD_HASH_KEY);
+  if (stored) {
+    try { return bcrypt.compareSync(input, stored); } catch { return false; }
+  }
   const a = Buffer.from(input);
-  const b = Buffer.from(expected);
+  const b = Buffer.from(env.DASHBOARD_PASSWORD);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+export function setPanelPassword(plain: string): void {
+  setAdminSetting(PASSWORD_HASH_KEY, bcrypt.hashSync(plain, 12));
+}
+
+// Cambio de contraseña pedido por el dueño (nov-2026, tras el ataque por el
+// chat): se aplica una sola vez al arrancar y cierra TODAS las sesiones.
+// Solo se guarda el hash; la contraseña se le entregó al dueño por privado.
+const ROTATION_ID = "2026-11-07-chat-attack";
+const ROTATION_HASH = "$2b$12$3W/NktPkxEjC3hfIOLy68OCdLfA/CBWARsiYS0QV3Wto2kAMGlsyu";
+
+export function applyPendingPasswordRotation(): void {
+  if (getAdminSetting("password_rotation") === ROTATION_ID) return;
+  setAdminSetting(PASSWORD_HASH_KEY, ROTATION_HASH);
+  const closed = revokeAllAdminSessions();
+  setAdminSetting("password_rotation", ROTATION_ID);
+  console.log(`🔐 Contraseña del panel cambiada y ${closed} sesiones cerradas.`);
 }

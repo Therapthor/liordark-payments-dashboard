@@ -413,6 +413,13 @@
           <div id="registro-customers-list" class="web-customers-list"></div>
           <p id="registro-customers-empty" class="feed-empty" hidden>Todavía no hay clientes solo en Accesos (sin cuenta en liordark.com).</p>
         </div>
+
+        <div class="panel" style="margin-top:20px">
+          <div class="panel-header"><h2>🚫 Números bloqueados</h2></div>
+          <p class="panel-hint">No pueden entrar, registrarse ni escribir al chat. Se bloquean solos si mandan enlaces o código al chat, o cuando los baneas.</p>
+          <div id="blocked-list" class="web-customers-list"></div>
+          <p id="blocked-empty" class="feed-empty" hidden>No hay números bloqueados.</p>
+        </div>
       </section>
 
       <!-- ═══════════ VISTA: HISTORIAL ═══════════ -->
@@ -537,6 +544,28 @@
           <button class="config-subnav-item active" data-config-section="catalog">Catálogo</button>
           <button class="config-subnav-item" data-config-section="payment-methods">Métodos de pago</button>
           <button class="config-subnav-item" data-config-section="providers">Proveedores</button>
+          <button class="config-subnav-item" data-config-section="security">🔒 Seguridad</button>
+        </div>
+
+        <div id="config-section-security" class="config-section" hidden>
+          <div class="panel">
+            <div class="panel-header"><h2>Dispositivos con el panel abierto</h2>
+              <button class="btn-secondary btn-sm" id="sec-revoke-others" type="button">Cerrar sesión en los demás</button>
+            </div>
+            <p class="panel-hint">Si ves un dispositivo que no reconoces, ciérralo y cambia la contraseña.</p>
+            <ul id="sec-sessions" class="sec-sessions"></ul>
+          </div>
+          <div class="panel" style="margin-top:16px">
+            <div class="panel-header"><h2>Cambiar contraseña del panel</h2></div>
+            <form id="sec-password-form" class="sec-password-form" autocomplete="off">
+              <input type="password" id="sec-pw-current" placeholder="Contraseña actual" autocomplete="current-password" required>
+              <input type="password" id="sec-pw-next" placeholder="Nueva (mín. 10, letras y números)" autocomplete="new-password" required>
+              <input type="password" id="sec-pw-next2" placeholder="Repite la nueva" autocomplete="new-password" required>
+              <button class="btn-primary" type="submit">Guardar contraseña</button>
+              <p class="form-error" id="sec-pw-msg" hidden></p>
+            </form>
+            <p class="panel-hint">Al cambiarla se cierran todas las demás sesiones.</p>
+          </div>
         </div>
 
         <div id="config-section-catalog" class="config-section">
@@ -1493,6 +1522,7 @@
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>
+  <script src="js/security.js"></script>
   <script src="js/wholesalers.js"></script>
   <script src="js/support-chat.js"></script>
   <script src="js/full-renewals.js"></script>

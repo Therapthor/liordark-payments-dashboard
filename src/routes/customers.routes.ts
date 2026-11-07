@@ -17,6 +17,7 @@ import { generatePassword, hashPassword } from "../services/customer-auth.servic
 import { limaTodayISO } from "../services/access.service";
 import { checkLockout } from "../services/login-lockout.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
+import { blockPhone, unblockPhone, unblockIp, listBlockedPhones, isPhoneBlocked } from "../db/security.repository";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -58,6 +59,7 @@ router.get("/", (_req, res) => {
       suspended:      isCustomerSuspended(c),
       suspendedUntil: c.suspendedUntil,
       lockedUntil:    checkLockout(c.lockedUntil).locked ? c.lockedUntil : null,
+      blocked:        isPhoneBlocked(c.phone),
       pinRecovery:    c.pinRecovery,
       createdAt:      c.createdAt,
     };
@@ -152,11 +154,28 @@ router.post("/:id/email", (req, res) => {
 
 router.delete("/:id", (req, res) => {
   const id = Number(req.params.id);
-  if (!findCustomerById(id)) {
+  const customer = findCustomerById(id);
+  if (!customer) {
     return res.status(404).json({ message: "Cliente no encontrado." });
   }
+  // Baneado = el número tampoco puede volver a registrarse.
+  blockPhone({ phone: customer.phone, reason: "Baneado desde el panel", source: "admin" });
   deleteCustomer(id);
   res.status(204).end();
+});
+
+// Números bloqueados (baneo del admin o automático por enlaces/código en el chat).
+router.get("/blocked/list", (_req, res) => {
+  res.json({ blocked: listBlockedPhones() });
+});
+
+router.post("/blocked/:phone/unblock", (req, res) => {
+  const phone = String(req.params.phone).replace(/\D/g, "");
+  if (phone.length < 9) return res.status(400).json({ message: "Celular inválido." });
+  const entry = listBlockedPhones().find(b => b.phone.slice(-9) === phone.slice(-9));
+  unblockPhone(phone);
+  if (entry?.ip) unblockIp(entry.ip);
+  res.json({ ok: true });
 });
 
 export default router;

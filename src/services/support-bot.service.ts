@@ -68,13 +68,19 @@ function pick<T>(options: readonly T[]): T {
 
 /** "Recibir mi código" solo aparece si el cliente tiene alguna cuenta
  *  con códigos automáticos — si no, no hay nada que entregarle. */
-function menuOptions(phone: string): BotOption[] {
+// El asistente ya no entrega códigos (están en «Códigos») ni vende: solo
+// atiende problemas con cuentas. Para hablar con una persona → WhatsApp.
+function menuOptions(_phone: string): BotOption[] {
   return [
-    ...(listClientCodesAccounts(phone).length ? [{ id: "code", label: "🔑 Recibir mi código" }] : []),
-    { id: "issue",    label: "⚠️ Tengo un problema con mi cuenta" },
-    { id: "products", label: "🛒 Quiero comprar" },
-    { id: "human",    label: "👤 Hablar con un asesor" },
+    { id: "issue", label: "⚠️ Tengo un problema con mi cuenta" },
+    { id: "human", label: "💬 Hablar con un asesor (WhatsApp)" },
   ];
+}
+const WHATSAPP_OPTION: BotOption = { id: "whatsapp", label: "💬 Abrir WhatsApp" };
+
+function offerWhatsapp(chat: Chat, text = "Con gusto 😊. Un asesor te atiende por WhatsApp: toca el botón y te abrimos el chat 👇"): void {
+  say(chat.id, text, [WHATSAPP_OPTION, BACK_OPTION]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
 }
 const BACK_OPTION: BotOption  = { id: "menu",  label: "⬅️ Volver al menú" };
 const HUMAN_OPTION: BotOption = { id: "human", label: "👤 Hablar con un asesor" };
@@ -532,10 +538,21 @@ async function handleOption(chat: Chat, phone: string, optionId: string): Promis
     return;
   }
   if (optionId === "issue")    return startIssue(chat, phone);
-  if (optionId === "products") return showProducts(chat);
   if (optionId === "buycombo") return confirmCombo(chat);
-  if (optionId === "human") {
-    return handoff(chat, pick(HANDOFF_TEXTS));
+  if (optionId === "human") return offerWhatsapp(chat);
+  if (optionId === "whatsapp") {
+    say(chat.id, "¡Listo! Te abrí WhatsApp 💬. Si no se abrió, escríbenos al +51 963 081 436.", [DONE_OPTION, BACK_OPTION]);
+    setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+    return;
+  }
+  if (optionId === "products" || optionId === "opencatalog") {
+    if (optionId === "opencatalog") {
+      say(chat.id, "¡Listo! Te abrí el Catálogo 🛒. Ahí ves precios y compras al instante con Yape.", [DONE_OPTION, BACK_OPTION]);
+    } else {
+      say(chat.id, "Puedes ver todos los precios y comprar al instante en el Catálogo de la tienda 🛒", [{ id: "opencatalog", label: "🛒 Ir al Catálogo" }, BACK_OPTION]);
+    }
+    setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+    return;
   }
   if (optionId === "done") return closeWithThanks(chat.id, pick(THANKS));
 
@@ -605,7 +622,7 @@ async function handleText(chat: Chat, phone: string, text: string): Promise<void
   if (intent === "products" || intent === null || intent === "menu") {
     const platform = matchProductByText(text);
     if (platform && (intent === "products" || /\b(quiero|comprar|precio|cuanto|cuesta|tienen|venden)\b/.test(normalize(text)))) {
-      return showPitch(chat, platform);
+      return handleOption(chat, phone, "products");
     }
   }
 
@@ -616,7 +633,7 @@ async function handleText(chat: Chat, phone: string, text: string): Promise<void
 
   const misses = Number(chat.botContext.misses ?? 0) + 1;
   if (misses > MAX_MISUNDERSTOOD) {
-    return handoff(chat, "Disculpa, no quiero hacerte perder tiempo 😅. Te comunico con un asesor para que te atienda personalmente; te responderá por aquí mismo 👤");
+    return offerWhatsapp(chat, "Disculpa, no quiero hacerte perder tiempo 😅. Un asesor te atiende por WhatsApp: toca el botón 👇");
   }
   say(chat.id, pick([
     "Disculpa, no logré entenderte del todo 🤔. ¿Me ayudas eligiendo una de estas opciones?",
@@ -648,6 +665,7 @@ export function notifyCustomerMessage(chatId: number, phone: string, input: BotI
   if (!isSupportBotEnabledFor(phone)) return;
   const chat = getChatById(chatId);
   if (!chat) return;
+  if (chat.botState === "blocked") return; // número bloqueado: no se atiende
   if (chat.botState === null && wasFirstMessage) setBotState(chatId, "menu", {});
   else if (!chat.botState || chat.botState === "human") return;
 

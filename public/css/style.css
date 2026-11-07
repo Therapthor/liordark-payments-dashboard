@@ -1411,3 +1411,14 @@ button, input {
 .cv-card-meta b { color: var(--t-text); }
 .codes-share-btn { background: #FF7D1A; color: #1a120a; border: 0; border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .codes-share-btn:hover { filter: brightness(1.08); }
+
+/* Seguridad: sesiones del panel */
+.sec-sessions { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sec-session { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card, #fff); }
+.sec-session.current { border-color: var(--accent, #f5a623); }
+.sec-session div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sec-session span { font-size: 12px; color: var(--text-secondary, #777); overflow-wrap: anywhere; }
+.sec-this { font-size: 11px !important; font-weight: 700; color: var(--accent, #c27c0e) !important; margin-left: 6px; }
+.sec-password-form { display: grid; gap: 10px; max-width: 420px; margin-top: 10px; }
+.sec-password-form input { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font: inherit; background: var(--card, #fff); color: inherit; }
+.blocked-evidence { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: rgba(192,57,43,.06); border: 1px dashed rgba(192,57,43,.35); border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; }

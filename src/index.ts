@@ -36,6 +36,8 @@ import { cleanPinLinks } from "./db/pin-links.repository";
 import { mergeDuplicateCustomers } from "./db/customer.repository";
 import { runPinRecovery } from "./services/pin-recovery.service";
 import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
+import { applyPendingPasswordRotation } from "./services/auth.service";
+import { scanPastChatMessages } from "./services/security.service";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -191,6 +193,11 @@ app.use((req, res, next) => {
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);
   try { mergeDuplicateCustomers(); } catch (err: any) { console.error("⚠️ fusión de clientes:", err?.message); }
+  try { applyPendingPasswordRotation(); } catch (err: any) { console.error("⚠️ cambio de contraseña:", err?.message); }
+  try {
+    const n = scanPastChatMessages();
+    if (n) console.log(`🚫 ${n} número(s) bloqueado(s) por enlaces/código en el chat`);
+  } catch (err: any) { console.error("⚠️ revisión de chats:", err?.message); }
   // PIN de cuentas viejas sin contraseña visible (en segundo plano).
   setTimeout(() => { runPinRecovery().catch(() => {}); }, 60_000);
   setInterval(() => { runPinRecovery().catch(() => {}); }, ARCHIVE_INTERVAL_MS);
