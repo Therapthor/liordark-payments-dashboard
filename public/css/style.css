@@ -1422,3 +1422,5 @@ button, input {
 .sec-password-form { display: grid; gap: 10px; max-width: 420px; margin-top: 10px; }
 .sec-password-form input { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); font: inherit; background: var(--card, #fff); color: inherit; }
 .blocked-evidence { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: rgba(192,57,43,.06); border: 1px dashed rgba(192,57,43,.35); border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; }
+.sec-pw-row { display: flex; gap: 8px; }
+.sec-pw-row input { flex: 1; min-width: 0; }

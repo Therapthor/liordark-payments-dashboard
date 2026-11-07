@@ -72,6 +72,22 @@
       } catch (err) { alert(err.message); }
       load();
     });
+    // Contraseña aleatoria generada en este navegador (no pasa por nadie).
+    document.getElementById("sec-pw-generate").addEventListener("click", () => {
+      const A = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+      const bytes = new Uint32Array(12);
+      crypto.getRandomValues(bytes);
+      const chars = Array.from(bytes, n => A[n % A.length]).join("");
+      const pw = "Mango-" + chars.slice(0, 4) + "-" + chars.slice(4, 8) + "-" + chars.slice(8, 12).replace(/\D/g, "") + (Math.floor(Math.random() * 90) + 10);
+      const n1 = document.getElementById("sec-pw-next"), n2 = document.getElementById("sec-pw-next2");
+      n1.value = n2.value = pw;
+      n1.type = "text";
+      const out = document.getElementById("sec-pw-generated");
+      out.hidden = false;
+      out.innerHTML = "Tu nueva contraseña: <b></b> — anótala en un lugar seguro antes de guardar.";
+      out.querySelector("b").textContent = pw;
+    });
+
     document.getElementById("sec-password-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const msg = document.getElementById("sec-pw-msg");
@@ -83,6 +99,8 @@
       try {
         const r = await api("/password", { method: "POST", body: JSON.stringify({ current, next }) });
         e.target.reset();
+        document.getElementById("sec-pw-next").type = "password";
+        document.getElementById("sec-pw-generated").hidden = true;
         msg.style.color = "var(--success, #2f9e5b)";
         msg.textContent = `✅ Contraseña cambiada. Se cerraron ${r.closed} sesión(es) en otros dispositivos.`;
         load();

@@ -559,7 +559,11 @@
             <div class="panel-header"><h2>Cambiar contraseña del panel</h2></div>
             <form id="sec-password-form" class="sec-password-form" autocomplete="off">
               <input type="password" id="sec-pw-current" placeholder="Contraseña actual" autocomplete="current-password" required>
-              <input type="password" id="sec-pw-next" placeholder="Nueva (mín. 10, letras y números)" autocomplete="new-password" required>
+              <div class="sec-pw-row">
+                <input type="password" id="sec-pw-next" placeholder="Nueva (mín. 10, letras y números)" autocomplete="new-password" required>
+                <button class="btn-secondary btn-sm" id="sec-pw-generate" type="button">🎲 Generar segura</button>
+              </div>
+              <p class="panel-hint" id="sec-pw-generated" hidden></p>
               <input type="password" id="sec-pw-next2" placeholder="Repite la nueva" autocomplete="new-password" required>
               <button class="btn-primary" type="submit">Guardar contraseña</button>
               <p class="form-error" id="sec-pw-msg" hidden></p>

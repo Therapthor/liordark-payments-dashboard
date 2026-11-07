@@ -44,16 +44,14 @@ export function setPanelPassword(plain: string): void {
   setAdminSetting(PASSWORD_HASH_KEY, bcrypt.hashSync(plain, 12));
 }
 
-// Cambio de contraseña pedido por el dueño (nov-2026, tras el ataque por el
-// chat): se aplica una sola vez al arrancar y cierra TODAS las sesiones.
-// Solo se guarda el hash; la contraseña se le entregó al dueño por privado.
-const ROTATION_ID = "2026-11-07-chat-attack";
-const ROTATION_HASH = "$2b$12$3W/NktPkxEjC3hfIOLy68OCdLfA/CBWARsiYS0QV3Wto2kAMGlsyu";
+// Tras el ataque por el chat (nov-2026): al arrancar se cierran TODAS las
+// sesiones del panel una sola vez. La contraseña nueva la genera el dueño
+// en Configuración > Seguridad (nadie más la ve).
+const LOGOUT_ALL_ID = "2026-11-07-chat-attack";
 
 export function applyPendingPasswordRotation(): void {
-  if (getAdminSetting("password_rotation") === ROTATION_ID) return;
-  setAdminSetting(PASSWORD_HASH_KEY, ROTATION_HASH);
+  if (getAdminSetting("logout_all") === LOGOUT_ALL_ID) return;
   const closed = revokeAllAdminSessions();
-  setAdminSetting("password_rotation", ROTATION_ID);
-  console.log(`🔐 Contraseña del panel cambiada y ${closed} sesiones cerradas.`);
+  setAdminSetting("logout_all", LOGOUT_ALL_ID);
+  console.log(`🔐 Se cerraron ${closed} sesiones del panel (cierre general por seguridad).`);
 }
