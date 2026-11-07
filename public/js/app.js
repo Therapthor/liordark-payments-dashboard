@@ -743,6 +743,7 @@
         <div class="feed-name">${escapeHtml(a.platform)}${phones ? " · " + escapeHtml(phones) : ""}</div>
         <div class="feed-time">${fmtTime(a.createdAt)} · <span class="activation-pending-label">🟢 Pendiente de activación</span></div>
         <div class="feed-time">📧 ${escapeHtml(a.email)}</div>
+        ${a.planMonths ? `<div class="feed-time">🗓️ Plan ${a.planMonths === 12 ? "anual" : a.planMonths === 1 ? "1 mes" : a.planMonths + " meses"}${a.expiresAt ? " · vence " + escapeHtml(a.expiresAt) : ""}</div>` : ""}
         ${a.password ? `<div class="feed-time">🔑 ${escapeHtml(a.password)}</div>` : ""}
       </div>
       <div class="pending-order-actions">

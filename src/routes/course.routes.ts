@@ -14,7 +14,7 @@ import { db } from "../db/db";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import {
   COURSE_ID, COURSE_TITLE, COURSE_GIFT_CENTS, EPISODES, STEPS,
-  getCoursePrice, getCues, findPaidPurchase, hasCourseAccess, createPendingPurchase, findPurchaseByOrder,
+  getCoursePrice, getCoursePricing, getCues, findPaidPurchase, hasCourseAccess, createPendingPurchase, findPurchaseByOrder,
   getProgress, saveProgress, getUnlocks, unlockCue, hasUnlockedType, recordDownload, downloadCount,
   getCoupon, getOrCreateCoupon, findClaimForPurchase, insertClaim, maskPhone,
   streamUrl, verifyStream, mediaPath, mediaStatus, isCoursePublished, isPreviewPhone,
@@ -81,7 +81,7 @@ router.get("/info", (req, res) => {
   res.json({
     courseId: COURSE_ID,
     title: COURSE_TITLE,
-    price: getCoursePrice(),
+    ...getCoursePricing(),
     steps: STEPS,
     episodes: EPISODES.map(e => ({ n: e.n, step: e.step, title: e.title, summary: e.summary })),
     previewAvailable: media.ep1.exists,

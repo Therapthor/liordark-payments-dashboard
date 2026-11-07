@@ -105,13 +105,58 @@ function setSetting(key: string, value: string): void {
   `).run(key, value);
 }
 
-export function getCoursePrice(): number {
+// ─── Precio: lanzamiento (2 semanas desde que se publica) y luego normal ──
+export const COURSE_REGULAR_DEFAULT_PRICE = 49.9;
+export const COURSE_LAUNCH_DAYS = 14;
+
+function launchPrice(): number {
   const v = Number(getSetting("price"));
   return Number.isFinite(v) && v > 0 ? v : COURSE_DEFAULT_PRICE;
 }
 
+function regularPrice(): number {
+  const v = Number(getSetting("regular_price"));
+  return Number.isFinite(v) && v > 0 ? v : COURSE_REGULAR_DEFAULT_PRICE;
+}
+
+/** Fin del lanzamiento (ISO) — se fija la primera vez que se publica el curso. */
+export function getLaunchEndsAt(): string | null {
+  const end = getSetting("launch_ends_at");
+  // Ya publicado antes de existir el lanzamiento: empieza a contar ahora.
+  if (!end && getSetting("published") === "1") {
+    const start = new Date(Date.now() + COURSE_LAUNCH_DAYS * 86_400_000).toISOString();
+    setSetting("launch_ends_at", start);
+    return start;
+  }
+  return end;
+}
+
+function launchActive(): boolean {
+  const end = getLaunchEndsAt();
+  return !end || new Date(end).getTime() > Date.now();
+}
+
+/** Lo que se cobra hoy: precio de lanzamiento hasta que termina, luego el normal. */
+export function getCoursePrice(): number {
+  return launchActive() ? launchPrice() : regularPrice();
+}
+
+export function getCoursePricing() {
+  return {
+    price: getCoursePrice(),
+    launchPrice: launchPrice(),
+    regularPrice: regularPrice(),
+    launchEndsAt: getLaunchEndsAt(),
+    launchActive: launchActive(),
+  };
+}
+
 export function setCoursePrice(price: number): void {
   setSetting("price", String(Math.round(price * 100) / 100));
+}
+
+export function setCourseRegularPrice(price: number): void {
+  setSetting("regular_price", String(Math.round(price * 100) / 100));
 }
 
 // ─── Publicación ─────────────────────────────────────────────
@@ -125,6 +170,10 @@ export function isCoursePublished(): boolean {
 
 export function setCoursePublished(published: boolean): void {
   setSetting("published", published ? "1" : "0");
+  // Las 2 semanas de lanzamiento empiezan la primera vez que se publica.
+  if (published && !getLaunchEndsAt()) {
+    setSetting("launch_ends_at", new Date(Date.now() + COURSE_LAUNCH_DAYS * 86_400_000).toISOString());
+  }
 }
 
 export function isPreviewPhone(phone: string | null | undefined): boolean {
@@ -431,7 +480,7 @@ export function adminOverview() {
   return {
     courseId: COURSE_ID,
     title: COURSE_TITLE,
-    price: getCoursePrice(),
+    ...getCoursePricing(),
     published: isCoursePublished(),
     previewPhones: COURSE_PREVIEW_PHONES,
     episodes: EPISODES,

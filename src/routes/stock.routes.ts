@@ -14,7 +14,10 @@ import {
   createManualActivationForClient,
   updateAccount,
   markActivationPending,
+  setAccountExpiry,
+  setAccountPlanMonths,
 } from "../db/access.repository";
+import { findPlanOrder, planFor } from "../services/plans.service";
 import { renewAccount, accountStatus, daysLeft, limaTodayISO, addDaysISO } from "../services/access.service";
 import {
   createPendingOrder,
@@ -273,6 +276,11 @@ router.post("/canva-orders", (req, res) => {
   const platformTag = typeof platform === "string" && platform.trim() ? platform : "CANVA ANUAL";
   logCanvaOrder({ orderName, phone, clientEmail: email, platform: platformTag });
 
+  // Plan por meses (GEMINI): lo eligió el cliente al crear el pedido web.
+  const planOrder = findPlanOrder(String(orderName));
+  const plan = planOrder ? planFor(platformTag, planOrder.months) : null;
+  const planDays = plan ? plan.days : manualActivationPlanDays(platformTag);
+
   if (email) {
     // Si el cliente ya tiene una cuenta de esta plataforma (renovación), se
     // extiende la misma en vez de crear otra — crear una cuenta nueva cada
@@ -280,15 +288,21 @@ router.post("/canva-orders", (req, res) => {
     const existing = findAccountByClientPhone(platformTag, phone);
     if (existing) {
       updateAccount(existing.id, password ? { email, password } : { email });
-      renewAccount(existing.id);
+      const renewed = renewAccount(existing.id);
+      // renewAccount suma 30 días; un plan de 3/6/12 meses suma lo que corresponde.
+      if (plan && renewed?.expiresAt && plan.days !== 30) {
+        setAccountExpiry(existing.id, addDaysISO(renewed.expiresAt, plan.days - 30));
+      }
+      if (plan) setAccountPlanMonths(existing.id, plan.months);
       markActivationPending(existing.id);
     } else {
       createManualActivationForClient({
         platform:    platformTag,
         email, password,
-        expiresAt:   addDaysISO(limaTodayISO(), manualActivationPlanDays(platformTag)),
+        expiresAt:   addDaysISO(limaTodayISO(), planDays),
         clientPhone: phone,
         orderRef:    orderName,
+        planMonths:  plan?.months,
       });
     }
   }

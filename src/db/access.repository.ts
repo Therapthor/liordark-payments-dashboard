@@ -608,7 +608,7 @@ export const sellProfileForWholesaler = db.transaction((
  */
 export const createManualActivationForWholesaler = db.transaction((params: {
   platform: string; email: string; password?: string; expiresAt: string;
-  wholesalerId: number; clientPhone: string; orderRef: string;
+  wholesalerId: number; clientPhone: string; orderRef: string; planMonths?: number | undefined;
 }): { accountId: number; email: string } => {
   const [account] = createAccountsBulk({
     platform:    params.platform,
@@ -623,6 +623,7 @@ export const createManualActivationForWholesaler = db.transaction((params: {
     SET client_phone = ?, order_ref = ?, wholesaler_id = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
     WHERE id = ?
   `).run(digits, params.orderRef, params.wholesalerId, account.profiles[0].id);
+  setAccountPlanMonths(account.id, params.planMonths);
   markActivationPending(account.id);
   createWholesalerNotification(params.wholesalerId, "purchase_added", params.platform, params.email);
   return { accountId: account.id, email: params.email };
@@ -639,7 +640,7 @@ export const createManualActivationForWholesaler = db.transaction((params: {
  */
 export const createManualActivationForClient = db.transaction((params: {
   platform: string; email: string; password?: string; expiresAt: string;
-  clientPhone: string; orderRef: string;
+  clientPhone: string; orderRef: string; planMonths?: number | undefined;
 }): { accountId: number; email: string } => {
   const [account] = createAccountsBulk({
     platform:    params.platform,
@@ -654,6 +655,7 @@ export const createManualActivationForClient = db.transaction((params: {
     SET client_phone = ?, order_ref = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(digits, params.orderRef, account.profiles[0].id);
+  setAccountPlanMonths(account.id, params.planMonths);
   markActivationPending(account.id);
   return { accountId: account.id, email: params.email };
 });
@@ -663,6 +665,10 @@ export const createManualActivationForClient = db.transaction((params: {
 // que ya hizo la activación real en la plataforma (Canva/Gemini/YouTube).
 // Se muestra aparte en "Pedidos pendientes" (ver /access/activation-pending).
 // ─────────────────────────────────────────────────────────────
+
+export function setAccountPlanMonths(accountId: number, months: number | undefined | null): void {
+  db.prepare(`UPDATE access_accounts SET plan_months = ? WHERE id = ?`).run(months ?? null, accountId);
+}
 
 export function markActivationPending(accountId: number): void {
   db.prepare(`UPDATE access_accounts SET activation_pending = 1, updated_at = datetime('now') WHERE id = ?`).run(accountId);
@@ -679,12 +685,13 @@ export type PendingActivation = {
   password:    string;
   clientPhones: string[];
   expiresAt:   string | null;
+  planMonths:  number | null;
   createdAt:   string;
 };
 
 export function listPendingActivations(): PendingActivation[] {
   const accounts = db.prepare(`
-    SELECT id, platform, email, password, expires_at, created_at
+    SELECT id, platform, email, password, expires_at, plan_months, created_at
     FROM access_accounts
     WHERE activation_pending = 1
     ORDER BY created_at ASC
@@ -701,6 +708,7 @@ export function listPendingActivations(): PendingActivation[] {
       password:     a.password,
       clientPhones: phones,
       expiresAt:    a.expires_at,
+      planMonths:   a.plan_months ?? null,
       createdAt:    a.created_at,
     };
   });

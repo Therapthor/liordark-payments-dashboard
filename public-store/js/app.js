@@ -988,6 +988,27 @@
     renderDesc(document.getElementById("detail-desc"), desc);
     document.getElementById("detail-price").textContent = "S/ " + item.price;
 
+    // Planes por meses (GEMINI): 1, 3, 6 o 12 meses — cambia el precio.
+    const plans = kind === "platform" && Array.isArray(item.plans) ? item.plans : null;
+    let selectedPlan = plans ? plans[0] : null;
+    const plansBox = document.getElementById("detail-plans");
+    plansBox.hidden = !plans;
+    const renderPlans = () => {
+      if (!plans) return;
+      document.getElementById("detail-plans-grid").innerHTML = plans.map(pl => `
+        <button type="button" class="detail-plan${pl.months === selectedPlan.months ? " active" : ""}" data-months="${pl.months}">
+          <b>${escapeHtml(pl.label)}</b><span>S/ ${escapeHtml(pl.price)}</span>
+        </button>`).join("");
+      document.getElementById("detail-price").textContent = "S/ " + selectedPlan.price;
+    };
+    renderPlans();
+    document.getElementById("detail-plans-grid").onclick = (e) => {
+      const btn = e.target.closest("[data-months]");
+      if (!btn || !plans) return;
+      selectedPlan = plans.find(pl => pl.months === Number(btn.dataset.months)) || plans[0];
+      renderPlans();
+    };
+
     document.getElementById("detail-canva-email").hidden = !needsCanvaEmail;
     document.getElementById("detail-canva-email-input").value = "";
     setFormError("detail-canva-email-error", "");
@@ -1022,8 +1043,10 @@
         }
       }
       closeProductDetail();
-      requireAuth(() => startCheckout({ kind, id, clientEmail, clientPassword, isReserve: outOfStock, platformLabel: title }),
-        { label: title, price: item.price });
+      const months = selectedPlan ? selectedPlan.months : undefined;
+      const label = selectedPlan ? title + " · " + selectedPlan.label : title;
+      requireAuth(() => startCheckout({ kind, id, clientEmail, clientPassword, months, isReserve: outOfStock, platformLabel: label }),
+        { label, price: selectedPlan ? selectedPlan.price : item.price });
     };
 
     document.getElementById("product-detail-modal").hidden = false;
@@ -1310,7 +1333,7 @@
     }
   }
 
-  async function startCheckout({ kind, id, clientEmail, clientPassword, isReserve, platformLabel }) {
+  async function startCheckout({ kind, id, clientEmail, clientPassword, months, isReserve, platformLabel }) {
     const modal = document.getElementById("checkout-modal");
     modal.hidden = false;
     showCheckoutState("loading");
@@ -1324,7 +1347,7 @@
     let beforeAccounts = cachedDashboard;
     try {
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
-      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword };
+      const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword, months };
       const order = await api("/checkout", { method: "POST", body });
 
       await ensureYapeInfo();

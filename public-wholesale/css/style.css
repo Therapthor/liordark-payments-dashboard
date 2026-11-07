@@ -511,6 +511,7 @@ button:disabled { cursor: default; }
 }
 .cart-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .cart-row:last-of-type { border-bottom: none; }
+.cart-plan-select { margin-left: 8px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; font-size: 12px; }
 .cart-total-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
 .cart-total-value { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 19px; color: var(--gold-dark); }
 

@@ -374,6 +374,14 @@ a { color: var(--btn); }
 .detail-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .detail-title-row h2 { font-size: 19px; }
 #detail-desc { font-size: 13.5px; margin: 8px 0 0; }
+.detail-plans { margin-top: 14px; text-align: left; }
+.detail-plans-label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+.detail-plans-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.detail-plan { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--card); color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.detail-plan b { font-size: 14px; }
+.detail-plan span { font-size: 13px; color: var(--muted); }
+.detail-plan.active { border-color: var(--accent, #FF7D1A); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #FF7D1A) 25%, transparent); }
+.detail-plan.active span { color: var(--text); font-weight: 700; }
 .detail-canva-email { margin-top: 14px; text-align: left; }
 .detail-canva-email label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
 .detail-canva-email input {

@@ -41,6 +41,7 @@ import { onChatEvent, emitChatEvent } from "../utils/chat-events.util";
 import {
   isSupportBotEnabledFor, startSupportBot, notifyCustomerMessage, recordCustomerChoice, getBotTotpForCustomer,
 } from "../services/support-bot.service";
+import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
 
 // Códigos — en pruebas, solo para este celular (a pedido explícito). Se
 // quita esta restricción cuando se dé por probado.
@@ -438,10 +439,17 @@ router.post("/renew-pack/:code/order", async (req, res) => {
 router.get("/catalog", (_req, res) => {
   const available = availabilityByPlatform();
 
-  const products = listCatalogProducts(true).map(p => ({
-    ...p,
-    available: availableFor(p.platform, available),
-  }));
+  const products = listCatalogProducts(true).map(p => {
+    const plans = plansFor(p.platform);
+    return {
+      ...p,
+      ...(plans ? {
+        price: money(plans[0]!.price),
+        plans: plans.map(pl => ({ months: pl.months, label: pl.label, price: money(pl.price) })),
+      } : {}),
+      available: availableFor(p.platform, available),
+    };
+  });
 
   const combos = listCombos(true).map(c => ({
     ...c,
@@ -676,6 +684,14 @@ router.post("/checkout", async (req, res) => {
   const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
+  // Planes por meses (GEMINI): 1, 3, 6 o 12 meses — el precio sale del plan,
+  // nunca del navegador.
+  const planOptions = platform ? plansFor(platform) : null;
+  const plan = platform && planOptions ? planFor(platform, req.body?.months ?? 1) : null;
+  if (planOptions && !plan) {
+    return res.status(400).json({ message: "Elige un plan válido (1, 3, 6 o 12 meses)." });
+  }
+
   // Combo armado por el cliente ("¿Quieres armar tu combo? ¡Hazlo!") —
   // lista de plataformas elegidas, sin id de catálogo. Se valida y se
   // calcula el precio ACÁ (el panel es la fuente real de precios), nunca
@@ -758,6 +774,7 @@ router.post("/checkout", async (req, res) => {
       {
         phone: normalizePeruPhone(customer.phone),
         platform, comboId, clientEmail, clientPassword,
+        ...(plan ? { planPrice: plan.price, planMonths: plan.months } : {}),
         customCombo: customComboPlatforms
           ? {
               platforms:  customComboPlatforms,
@@ -768,6 +785,7 @@ router.post("/checkout", async (req, res) => {
       },
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
+    if (plan && platform && response.data?.orderName) savePlanOrder(String(response.data.orderName), platform, plan.months);
     res.json({ orderName: response.data.orderName, amount: response.data.amount });
   } catch (err: any) {
     const message = err?.response?.data?.message || "No se pudo crear la orden. Intenta de nuevo.";

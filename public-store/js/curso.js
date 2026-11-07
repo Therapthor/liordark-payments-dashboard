@@ -21,6 +21,7 @@
     if (!info.visible) { showSoon(); return; }
     const price = Number(info.price).toFixed(2);
     ["price", "price2", "price3"].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = price; });
+    showLaunch();
 
     document.getElementById("eps").innerHTML = info.episodes.map(e => `
       <div class="l-ep ${e.n === 1 ? "first" : ""}">
@@ -49,6 +50,21 @@
         if (me && me.phone) document.getElementById("user-label").textContent = maskPhone(me.phone);
       } catch { /* sin sesión */ }
     }
+  }
+
+  // Precio de lanzamiento: 2 semanas desde que se publica, luego sube solo.
+  function showLaunch() {
+    if (!info.launchActive || !(Number(info.regularPrice) > Number(info.price))) return;
+    const regular = "S/ " + Number(info.regularPrice).toFixed(2);
+    document.querySelectorAll("[data-regular]").forEach(el => { el.textContent = regular; el.hidden = false; });
+    const until = info.launchEndsAt
+      ? " hasta el " + new Date(info.launchEndsAt).toLocaleDateString("es-PE", { day: "numeric", month: "long" })
+      : "";
+    const note = document.getElementById("launch-note");
+    note.innerHTML = `<b>Precio de lanzamiento</b>${esc(until)} · luego ${esc(regular)}`;
+    note.hidden = false;
+    const sub = document.getElementById("sticky-sub");
+    if (sub) sub.textContent = "Precio de lanzamiento";
   }
 
   // Episodio 1 gratis: el video se carga recién al tocar play.

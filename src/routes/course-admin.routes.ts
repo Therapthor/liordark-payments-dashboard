@@ -6,7 +6,7 @@ import { findCustomerByPhone, createCustomer } from "../db/customer.repository";
 import { hashPassword } from "../services/customer-auth.service";
 import {
   adminOverview, sanitizeCues, setCues, setCoursePrice, grantCourseManually, revokeCoursePurchase,
-  isMediaKind, mediaPath, ensureMediaDir, MEDIA_DIR, getCoursePrice, setCoursePublished, isCoursePublished,
+  isMediaKind, mediaPath, ensureMediaDir, MEDIA_DIR, getCoursePrice, setCoursePublished, setCourseRegularPrice, getCoursePricing, isCoursePublished,
 } from "../services/course.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -40,9 +40,12 @@ router.put("/published", (req, res) => {
 
 router.put("/price", (req, res) => {
   const price = Number(req.body?.price);
+  const regular = req.body?.regularPrice === undefined ? null : Number(req.body.regularPrice);
   if (!Number.isFinite(price) || price <= 0 || price > 10000) return res.status(400).json({ message: "Precio inválido." });
+  if (regular !== null && (!Number.isFinite(regular) || regular <= 0 || regular > 10000)) return res.status(400).json({ message: "Precio normal inválido." });
   setCoursePrice(price);
-  res.json({ ok: true, price: getCoursePrice() });
+  if (regular !== null) setCourseRegularPrice(regular);
+  res.json({ ok: true, ...getCoursePricing() });
 });
 
 // Acceso manual (pagó por otro medio). Si el celular no tiene cuenta en la

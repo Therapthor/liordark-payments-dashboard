@@ -37,6 +37,7 @@ function ensureColumn(table: string, column: string, columnDdl: string): void {
 ensureColumn("access_accounts", "provider",     "provider TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_accounts", "has_profiles", "has_profiles INTEGER NOT NULL DEFAULT 1");
 ensureColumn("access_accounts", "expires_at",   "expires_at TEXT");
+ensureColumn("access_accounts", "plan_months",  "plan_months INTEGER"); // planes por meses (GEMINI)
 ensureColumn("access_accounts", "link",         "link TEXT NOT NULL DEFAULT ''");
 ensureColumn("access_profiles", "renewal_status", "renewal_status TEXT NOT NULL DEFAULT ''");
 ensureColumn("catalog_products", "active", "active INTEGER NOT NULL DEFAULT 1");

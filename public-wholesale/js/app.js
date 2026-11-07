@@ -901,6 +901,17 @@
   let lastPurchaseAccounts = [];
   let lastPurchaseClientPhone = "";
 
+  // GEMINI: precio según el plan elegido (1, 3, 6 o 12 meses).
+  function itemUnitPrice(i) {
+    const p = catalogItem(i.platform);
+    if (!p) return 0;
+    if (Array.isArray(p.plans) && p.plans.length) {
+      const plan = p.plans.find(pl => pl.months === i.months) || p.plans[0];
+      return Number(plan.price);
+    }
+    return Number(p.wholesalePrice);
+  }
+
   function cartQtyFor(platform) {
     const item = cartItems.find(i => i.platform === platform);
     return item ? item.qty : 0;
@@ -925,7 +936,7 @@
         <div class="catalog-card-img">${img}</div>
         <div class="catalog-card-body">
           <div class="catalog-card-title">${escapeHtml(p.title)}</div>
-          <div class="catalog-card-price">S/ ${escapeHtml(p.wholesalePrice)}</div>
+          <div class="catalog-card-price">${Array.isArray(p.plans) && p.plans.length ? "Desde " : ""}S/ ${escapeHtml(p.wholesalePrice)}</div>
           <div class="catalog-card-stock">${stockText}</div>
         </div>
         ${stepper}
@@ -946,11 +957,7 @@
   }
 
   function cartTotalCents() {
-    return cartItems.reduce((sum, i) => {
-      const p = catalogItem(i.platform);
-      const price = p ? Number(p.wholesalePrice) : 0;
-      return sum + Math.round(price * 100) * i.qty;
-    }, 0);
+    return cartItems.reduce((sum, i) => sum + Math.round(itemUnitPrice(i) * 100) * i.qty, 0);
   }
 
   function renderCart() {
@@ -967,8 +974,14 @@
     list.innerHTML = cartItems.map(i => {
       const p = catalogItem(i.platform);
       const title = p ? p.title : i.platform;
-      const price = p ? Number(p.wholesalePrice) : 0;
-      return `<div class="cart-row"><span>${escapeHtml(title)} ×${i.qty}</span><span>S/ ${(price * i.qty).toFixed(2)}</span></div>`;
+      const price = itemUnitPrice(i);
+      const plans = p && Array.isArray(p.plans) && p.plans.length ? p.plans : null;
+      const planSelect = plans
+        ? `<select class="cart-plan-select" data-platform="${escapeHtml(i.platform)}" aria-label="Duración">
+             ${plans.map(pl => `<option value="${pl.months}" ${pl.months === (i.months || plans[0].months) ? "selected" : ""}>${escapeHtml(pl.label)} · S/ ${escapeHtml(pl.price)}</option>`).join("")}
+           </select>`
+        : "";
+      return `<div class="cart-row"><span>${escapeHtml(title)} ×${i.qty}${planSelect}</span><span>S/ ${(price * i.qty).toFixed(2)}</span></div>`;
     }).join("");
     totalEl.textContent = money(cartTotalCents());
     buyBtn.disabled = false;
@@ -1009,6 +1022,7 @@
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
         </div>
         <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
+        ${a.planLabel ? `<div class="success-account-row"><b>Plan:</b> ${escapeHtml(a.planLabel)}${a.expiresAt ? " · vence " + escapeHtml(a.expiresAt) : ""}</div>` : ""}
         ${a.password ? `<div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>` : `<div class="muted small">Se activa a mano en ese correo — te avisamos cuando esté lista.</div>`}
         ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
         <div class="success-account-actions">
@@ -1038,7 +1052,11 @@
         // Solo se agrega al carrito si de verdad hay stock para sumar —
         // antes se creaba el item en 0 igual, y quedaba un "×0" fantasma.
         if ((item?.qty ?? 0) < maxQty) {
-          if (!item) { item = { platform, qty: 0 }; cartItems.push(item); }
+          if (!item) {
+            item = { platform, qty: 0 };
+            if (Array.isArray(product.plans) && product.plans.length) item.months = product.plans[0].months;
+            cartItems.push(item);
+          }
           item.qty++;
         }
       } else if (btn.dataset.act === "dec" && item) {
@@ -1046,6 +1064,14 @@
         if (item.qty <= 0) cartItems = cartItems.filter(i => i !== item);
       }
       renderComprarGrid();
+    });
+
+    document.getElementById("cart-list").addEventListener("change", (e) => {
+      const sel = e.target.closest(".cart-plan-select");
+      if (!sel) return;
+      const item = cartItems.find(i => i.platform === sel.dataset.platform);
+      if (item) item.months = Number(sel.value);
+      renderCart();
     });
 
     document.getElementById("cart-buy-btn").addEventListener("click", () => {
@@ -1108,12 +1134,16 @@
       }
 
       const platforms = [];
-      cartItems.forEach(i => { for (let n = 0; n < i.qty; n++) platforms.push(i.platform); });
+      const months = {};
+      cartItems.forEach(i => {
+        for (let n = 0; n < i.qty; n++) platforms.push(i.platform);
+        if (i.months) months[i.platform] = i.months;
+      });
 
       const submitBtn = e.target.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       try {
-        const result = await api("/purchase", { method: "POST", body: { platforms, clientPhone, emails, passwords } });
+        const result = await api("/purchase", { method: "POST", body: { platforms, clientPhone, emails, passwords, months } });
         document.getElementById("cart-checkout-modal").hidden = true;
         cartItems = [];
         showPurchaseSuccess(result.accounts, clientPhone);

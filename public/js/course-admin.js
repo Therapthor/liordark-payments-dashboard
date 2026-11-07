@@ -56,7 +56,23 @@ window.LiordarkCourse = (() => {
     renderMedia();
     renderCues();
     renderStudents();
-    document.getElementById("crs-price").value = Number(data.price).toFixed(2);
+    document.getElementById("crs-price").value = Number(data.launchPrice ?? data.price).toFixed(2);
+    document.getElementById("crs-regular-price").value = Number(data.regularPrice ?? data.price).toFixed(2);
+    renderLaunchHint();
+  }
+
+  // Lanzamiento: 2 semanas desde que se publica; luego pasa solo al precio normal.
+  function renderLaunchHint() {
+    const el = document.getElementById("crs-launch-hint");
+    const fmt = (iso) => new Date(iso).toLocaleDateString("es-PE", { day: "numeric", month: "long" });
+    const lp = Number(data.launchPrice).toFixed(2), rp = Number(data.regularPrice).toFixed(2);
+    if (!data.launchEndsAt) {
+      el.textContent = `Precio de lanzamiento S/ ${lp} durante 2 semanas desde que publiques. Luego pasa solo a S/ ${rp}.`;
+    } else if (data.launchActive) {
+      el.textContent = `🚀 Lanzamiento activo: S/ ${lp} hasta el ${fmt(data.launchEndsAt)}. Luego pasa solo a S/ ${rp}.`;
+    } else {
+      el.textContent = `El lanzamiento terminó el ${fmt(data.launchEndsAt)}. Precio actual: S/ ${rp}.`;
+    }
   }
 
   function renderPublish() {
@@ -201,9 +217,12 @@ window.LiordarkCourse = (() => {
 
   document.getElementById("crs-price-save").addEventListener("click", async () => {
     const price = Number(document.getElementById("crs-price").value);
+    const regularPrice = Number(document.getElementById("crs-regular-price").value);
     try {
-      await api("/price", { method: "PUT", body: JSON.stringify({ price }) });
-      alert("✅ Precio guardado: S/ " + price.toFixed(2));
+      const r = await api("/price", { method: "PUT", body: JSON.stringify({ price, regularPrice }) });
+      Object.assign(data, r);
+      renderLaunchHint();
+      alert("✅ Precios guardados: lanzamiento S/ " + price.toFixed(2) + " · normal S/ " + regularPrice.toFixed(2));
     } catch (err) { alert(err.message); }
   });
 

@@ -363,6 +363,8 @@ body.landing { background: #FBF5EC; font-family: Manrope, system-ui, -apple-syst
 .landing .l-hero p { margin: 0; font-size: 19px; color: #5C4A39; max-width: 560px; line-height: 1.5; }
 .landing .l-hero-actions { display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
 .landing .l-note { font-size: 13px; color: var(--muted); }
+.landing .l-launch { font-size: 14px; color: #A3480A; background: #FFF3E3; border: 1px solid #FFD9AE; padding: 8px 14px; border-radius: 12px; }
+.landing .l-old { opacity: .6; font-weight: 600; font-size: .85em; }
 .landing .l-btn { border: 0; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-weight: 800; font-size: 17px; padding: 16px 30px; border-radius: 999px; transition: transform .1s ease, box-shadow .1s ease; }
 .landing .l-btn:hover { transform: translateY(-1px); }
 .landing .l-btn.primary { background: var(--orange); color: #fff; box-shadow: 0 8px 20px rgba(255,125,26,.3); }

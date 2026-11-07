@@ -35,6 +35,7 @@ import { pinLinkAdminRoutes, pinLinkRoutes } from "./routes/pin-link.routes";
 import { cleanPinLinks } from "./db/pin-links.repository";
 import { mergeDuplicateCustomers } from "./db/customer.repository";
 import { runPinRecovery } from "./services/pin-recovery.service";
+import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -177,6 +178,7 @@ const server = app.listen(env.PORT, () => {
   getPlatformCatalog()
     .then(seedCatalogIfEmpty)
     .catch((err: any) => console.error("⚠️ No se pudo sembrar el catálogo del panel:", err?.message));
+  try { syncPlanCatalogPrices(); } catch (err: any) { console.error("⚠️ precios de planes:", err?.message); }
   seedPaymentMethodsIfEmpty();
   seedBotFlowConfigIfEmpty();
 
@@ -184,7 +186,7 @@ const server = app.listen(env.PORT, () => {
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
 
   // Curso: pedidos que nunca se pagaron (más de 1 día) se borran.
-  const cleanCourse = () => { try { cleanOldPendingPurchases(); cleanOldCodeLinks(); cleanPinLinks(); } catch { /* no crítico */ } };
+  const cleanCourse = () => { try { cleanOldPendingPurchases(); cleanOldCodeLinks(); cleanPinLinks(); cleanOldPlanOrders(); } catch { /* no crítico */ } };
   cleanCourse();
   setInterval(cleanCourse, ARCHIVE_INTERVAL_MS);
 

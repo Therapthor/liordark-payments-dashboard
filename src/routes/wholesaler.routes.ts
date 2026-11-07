@@ -59,6 +59,7 @@ import {
   markFullAccountSeenByWholesaler,
   countUnseenFullAccountsForWholesaler,
 } from "../db/wholesale-full-account.repository";
+import { plansFor, planFor, planExpiresAt, money } from "../services/plans.service";
 
 // ─────────────────────────────────────────────────────────────
 // PANEL MAYORISTA (mayorista.liordark.com) — todo detrás de sesión de
@@ -134,10 +135,13 @@ router.get("/catalog", (req, res) => {
       const plat = product.platform.trim().toUpperCase();
       const manual = isManualActivationPlatform(plat);
       const stock = availability.find(s => s.platform === plat);
+      const plans = plansFor(plat);
       return {
         platform:          plat,
         title:             product.title || plat,
-        wholesalePrice:    product.wholesalePrice,
+        wholesalePrice:    plans ? money(plans[0]!.wholesalePrice) : product.wholesalePrice,
+        // GEMINI: el mayorista elige 1, 3, 6 o 12 meses (S/ 1 menos que la tienda).
+        plans:             plans ? plans.map(pl => ({ months: pl.months, label: pl.label, price: money(pl.wholesalePrice) })) : null,
         wholesaleFullPrice: product.wholesaleFullPrice,
         imageUrl:          product.imageUrl,
         // CANVA/GEMINI/YOUTUBE no tienen perfiles pre-cargados — nunca "sin stock".
@@ -162,6 +166,7 @@ router.post("/purchase", (req, res) => {
   const clientPhone = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
   const rawEmails: Record<string, unknown> = req.body?.emails && typeof req.body.emails === "object" ? req.body.emails : {};
   const rawPasswords: Record<string, unknown> = req.body?.passwords && typeof req.body.passwords === "object" ? req.body.passwords : {};
+  const rawMonths: Record<string, unknown> = req.body?.months && typeof req.body.months === "object" ? req.body.months : {};
 
   if (platforms.length === 0) return res.status(400).json({ message: "El carrito está vacío." });
   if (clientPhone.length < 9) return res.status(400).json({ message: "Celular del cliente inválido." });
@@ -192,10 +197,20 @@ router.post("/purchase", (req, res) => {
     }
   }
 
+  // Planes por meses (GEMINI): el precio y el vencimiento salen del plan.
+  const planByPlatform: Record<string, NonNullable<ReturnType<typeof planFor>>> = {};
+  for (const platform of platforms) {
+    if (!plansFor(platform)) continue;
+    const plan = planFor(platform, rawMonths[platform] ?? 1);
+    if (!plan) return res.status(400).json({ message: `Elige un plan válido para "${platform}" (1, 3, 6 o 12 meses).` });
+    planByPlatform[platform] = plan;
+  }
+
   let totalCents = 0;
   for (const platform of platforms) {
     const product = getCatalogProductByPlatform(platform);
-    const price = Number(product?.wholesalePrice ?? 0);
+    const plan = planByPlatform[platform];
+    const price = plan ? plan.wholesalePrice : Number(product?.wholesalePrice ?? 0);
     if (!Number.isFinite(price) || price <= 0) {
       return res.status(422).json({ message: `"${platform}" no tiene precio mayorista configurado.` });
     }
@@ -208,18 +223,19 @@ router.post("/purchase", (req, res) => {
     return res.status(402).json({ message: deduction.error });
   }
 
-  const sold: { platform: string; email: string; password: string; profileName: string }[] = [];
+  const sold: { platform: string; email: string; password: string; profileName: string; planLabel?: string; expiresAt?: string }[] = [];
   const createdManualAccountIds: number[] = [];
   const failedPlatforms: string[] = [];
   for (const platform of platforms) {
     if (isManualActivationPlatform(platform)) {
-      const expiresAt = addDaysISO(limaTodayISO(), manualActivationPlanDays(platform));
+      const plan = planByPlatform[platform];
+      const expiresAt = plan ? planExpiresAt(plan) : addDaysISO(limaTodayISO(), manualActivationPlanDays(platform));
       const created = createManualActivationForWholesaler({
         platform, email: emailByPlatform[platform], password: passwordByPlatform[platform], expiresAt,
-        wholesalerId, clientPhone, orderRef,
+        wholesalerId, clientPhone, orderRef, planMonths: plan?.months,
       });
       createdManualAccountIds.push(created.accountId);
-      sold.push({ platform, email: created.email, password: "", profileName: "" });
+      sold.push({ platform, email: created.email, password: "", profileName: "", ...(plan ? { planLabel: plan.label, expiresAt } : {}) });
       continue;
     }
     const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef);
@@ -256,7 +272,7 @@ router.post("/purchase", (req, res) => {
   const approvedText =
     "✅ <b>Compra mayorista confirmada</b>\n\n" +
     "🏪 " + (wholesaler?.displayName || "Mayorista #" + wholesalerId) + " (" + (wholesaler?.phone ?? "") + ")\n" +
-    "🎯 " + platforms.join(", ") + "\n" +
+    "🎯 " + platforms.map(p => planByPlatform[p] ? `${p} (${planByPlatform[p]!.label})` : p).join(", ") + "\n" +
     "👤 Cliente final: " + clientPhone + "\n" +
     "💰 S/ " + (totalCents / 100).toFixed(2);
   const createdAt = new Date().toISOString();
