@@ -3,9 +3,9 @@
 
   // ─────────────────────────────────────────────────────────────
   // SOPORTES — reportes «sin suscripción» que mandan los clientes desde
-  // liordark.com (ya no hay chat). Cada acción abre WhatsApp con el
-  // mensaje listo para el cliente y le avisa en su campanita:
-  //   🔎 En revisión · ✅ Tiene suscripción · 🔁 Reemplazar cuenta
+  // liordark.com (ya no hay chat). 🔎 En revisión, ✅ Tiene suscripción y
+  // 🎉 Listo le avisan al cliente solo en su campanita de la web;
+  // 🔁 Reemplazar cuenta además da el mensaje con los datos para WhatsApp.
   // ─────────────────────────────────────────────────────────────
 
   const $ = (id) => document.getElementById(id);
@@ -61,6 +61,7 @@
     if (t.status === "pending") return `<span class="soporte-badge soporte-badge-new">🆕 Nuevo</span>`;
     if (t.status === "seen") return `<span class="soporte-badge soporte-badge-review">🔎 En revisión</span>`;
     if (t.resolution === "replaced") return `<span class="soporte-badge soporte-badge-done">🔁 Cuenta reemplazada</span>`;
+    if (t.resolution === "solved") return `<span class="soporte-badge soporte-badge-done">🎉 Solucionado</span>`;
     return `<span class="soporte-badge soporte-badge-done">✅ Tenía suscripción</span>`;
   }
 
@@ -85,8 +86,9 @@
         </div>
         <div class="soporte-actions">
           ${open ? `
-            <button class="btn-secondary btn-sm" data-act="review" type="button"${t.status === "seen" ? " title=\"Ya está en revisión: vuelve a abrir el mensaje\"" : ""}>🔎 En revisión</button>
+            <button class="btn-secondary btn-sm" data-act="review" type="button"${t.status === "seen" ? " disabled" : ""}>${t.status === "seen" ? "🔎 En revisión ✓" : "🔎 En revisión"}</button>
             <button class="btn-secondary btn-sm" data-act="active" type="button">✅ Tiene suscripción</button>
+            <button class="btn-secondary btn-sm" data-act="solved" type="button">🎉 Listo</button>
             <button class="btn-primary btn-sm" data-act="replace" type="button">🔁 Reemplazar cuenta</button>` : ""}
           <a class="btn-secondary btn-sm" href="${escapeHtml(waUrl(t.clientPhone, ""))}" target="_blank" rel="noopener">💬 WhatsApp</a>
         </div>
@@ -119,14 +121,33 @@
     }
   }
 
-  // WhatsApp se abre en el mismo toque (si se espera a la respuesta del
-  // servidor el navegador lo bloquea como ventana emergente).
-  async function quickAction(t, act) {
-    const message = act === "review" ? t.messages.review : t.messages.active;
-    window.open(waUrl(t.clientPhone, message), "_blank", "noopener");
+  // Avisos solo por la web (campanita del cliente en liordark.com).
+  const QUICK_CONFIRM = {
+    active: "¿Avisarle que su cuenta SÍ tiene suscripción y cerrar el reporte?",
+    solved: "¿Avisarle que su problema ya está solucionado y cerrar el reporte?",
+  };
+  const QUICK_DONE = {
+    review: "🔎 Le avisamos que su cuenta está en revisión.",
+    active: "✅ Le avisamos que su cuenta tiene suscripción.",
+    solved: "🎉 Le avisamos que su problema está solucionado.",
+  };
+
+  function toast(text) {
+    const el = document.createElement("div");
+    el.className = "soporte-toast";
+    el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+  }
+
+  async function quickAction(t, act, btn) {
+    if (QUICK_CONFIRM[act] && !confirm(QUICK_CONFIRM[act])) return;
+    btn.disabled = true;
     try {
       await api(`/tickets/${t.id}/${act}`, { method: "POST" });
+      toast(QUICK_DONE[act] + " (en su campanita de liordark.com)");
     } catch (err) {
+      btn.disabled = false;
       alert(err.message || "No se pudo guardar.");
     }
     load();
@@ -239,7 +260,7 @@
       const t = tickets.find(x => String(x.id) === btn.closest(".soporte-card").dataset.id);
       if (!t) return;
       if (btn.dataset.act === "replace") openReplace(t);
-      else quickAction(t, btn.dataset.act);
+      else quickAction(t, btn.dataset.act, btn);
     });
     document.querySelectorAll("[data-replace-mode]").forEach(b => {
       b.addEventListener("click", () => setReplaceMode(b.dataset.replaceMode));

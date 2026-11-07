@@ -8,13 +8,13 @@ import { findWholesalerById } from "./wholesaler.repository";
 //
 // Estados: pending (recién enviado) → seen (el admin tocó «En revisión»)
 // → attended (resuelto: resolution = 'active' si la cuenta sí tenía
-// suscripción, 'replaced' si se le cambió la cuenta).
+// suscripción, 'solved' si se arregló, 'replaced' si se le cambió).
 // Un cliente no puede reportar la misma cuenta mientras su reporte siga
 // abierto (ver findOpenTicketForAccount).
 // ─────────────────────────────────────────────────────────────
 
 export type SupportTicketStatus = "pending" | "seen" | "attended";
-export type SupportTicketResolution = "" | "active" | "replaced";
+export type SupportTicketResolution = "" | "active" | "solved" | "replaced";
 
 export type SupportTicket = {
   id:              number;

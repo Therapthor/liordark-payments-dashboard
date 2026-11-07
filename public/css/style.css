@@ -1458,3 +1458,8 @@ button, input {
   font: inherit; font-size: 13px; margin: 8px 0 12px;
 }
 .soporte-replace-result a { display: inline-block; text-decoration: none; }
+.soporte-toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2000;
+  background: #171717; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.2); max-width: calc(100vw - 32px);
+}

@@ -15,8 +15,9 @@ import { limaTodayISO } from "./access.service";
 // SOPORTES — el asistente de liordark.com ya no es un chat: el cliente
 // solo elige botones y lo único que se guarda es el reporte de una cuenta
 // «sin suscripción» (una vez por cuenta mientras siga abierto). Desde el
-// panel > Soportes el admin responde con mensajes listos para WhatsApp:
-// «En revisión», «Tiene suscripción» o «Reemplazar cuenta».
+// panel > Soportes el admin avisa al cliente en su campanita de la web:
+// «En revisión», «Tiene suscripción» o «Listo»; «Reemplazar cuenta»
+// además da el mensaje con los datos nuevos para WhatsApp.
 // ─────────────────────────────────────────────────────────────
 
 const MAX_REPORTS_PER_DAY = 5;
@@ -103,6 +104,11 @@ export function activeMessage(platform: string): string {
     `Cierra sesión y vuelve a ingresar con tus datos para que se actualice. ¡Cualquier duda, aquí estamos! 🥭`;
 }
 
+export function solvedMessage(platform: string): string {
+  return `🎉 ¡Listo! El problema de tu cuenta de ${platformTitle(platform)} ya está solucionado ✅\n` +
+    `Si aún no carga, cierra sesión y vuelve a ingresar. ¡Gracias por tu paciencia! 🥭`;
+}
+
 export function replacementMessage(p: {
   platform: string; email: string; password: string; profileName: string; expiresAt: string | null; temporary: boolean;
 }): string {
@@ -138,6 +144,17 @@ export function resolveTicketActive(id: number): { ticket: SupportTicket; messag
   if (!before) return null;
   const message = activeMessage(before.platform);
   const ticket = markSupportTicketResolved(id, "active", message);
+  if (before.status !== "attended" && !before.wholesalerId) {
+    createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
+  }
+  return ticket ? { ticket, message } : null;
+}
+
+export function resolveTicketSolved(id: number): { ticket: SupportTicket; message: string } | null {
+  const before = getSupportTicketById(id);
+  if (!before) return null;
+  const message = solvedMessage(before.platform);
+  const ticket = markSupportTicketResolved(id, "solved", message);
   if (before.status !== "attended" && !before.wholesalerId) {
     createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
   }
