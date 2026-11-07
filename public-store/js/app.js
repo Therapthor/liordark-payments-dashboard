@@ -1818,7 +1818,7 @@
       return tag + `<div class="chat-bot-text">${linkifyText(p.text || "")}</div>` +
         (options.length
           ? `<div class="chat-bot-options" data-msgid="${m.id}">` +
-            options.map(o => `<button type="button" class="chat-bot-option" data-opt="${escapeHtml(o.id)}">${escapeHtml(o.label)}</button>`).join("") +
+            options.map(o => `<button type="button" class="chat-bot-option" data-opt="${escapeHtml(o.id)}"${safeWaUrl(o.url) ? ` data-url="${escapeHtml(o.url)}"` : ""}>${escapeHtml(o.label)}</button>`).join("") +
             `</div>`
           : "");
     }
@@ -1862,11 +1862,18 @@
     });
   }
 
+  // Solo enlaces de WhatsApp del propio negocio (los arma el servidor).
+  function safeWaUrl(url) {
+    return typeof url === "string" && /^https:\/\/wa\.me\/51963081436\?text=[^"'<>\s]*$/.test(url);
+  }
+
   async function sendBotChoice(btn) {
     // WhatsApp se abre en el mismo toque (si se espera a la respuesta, el
     // navegador lo bloquea como ventana emergente).
     if (btn.dataset.opt === "whatsapp") {
-      window.open("https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent("Hola, necesito ayuda de un asesor 🙏"), "_blank", "noopener");
+      const url = safeWaUrl(btn.dataset.url) ? btn.dataset.url
+        : "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent("Hola, necesito ayuda 🙏");
+      window.open(url, "_blank", "noopener");
     }
     const group = btn.closest(".chat-bot-options");
     group.querySelectorAll(".chat-bot-option").forEach(b => { b.disabled = true; });

@@ -416,9 +416,17 @@
 
         <div class="panel" style="margin-top:20px">
           <div class="panel-header"><h2>🚫 Números bloqueados</h2></div>
-          <p class="panel-hint">No pueden entrar, registrarse ni escribir al chat. Se bloquean solos si mandan enlaces o código al chat, o cuando los baneas.</p>
+          <p class="panel-hint">No pueden entrar ni volver a registrarse. Se agregan cuando baneas a un cliente.</p>
           <div id="blocked-list" class="web-customers-list"></div>
           <p id="blocked-empty" class="feed-empty" hidden>No hay números bloqueados.</p>
+        </div>
+
+        <div class="panel" style="margin-top:20px">
+          <div class="panel-header"><h2>🚨 Intentos de ataque</h2></div>
+          <p class="panel-hint">Si alguien manda enlaces o código al chat: se le cambia el PIN a esa cuenta, se cierran sus sesiones y se bloquea su IP por 7 días. El dueño real recupera su acceso por WhatsApp con el link de PIN.</p>
+          <div id="security-events" class="web-customers-list"></div>
+          <h3 style="margin:18px 0 6px;font-size:15px">IPs bloqueadas</h3>
+          <div id="security-ips" class="web-customers-list"></div>
         </div>
       </section>
 

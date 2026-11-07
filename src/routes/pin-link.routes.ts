@@ -5,6 +5,7 @@ import {
 } from "../db/pin-links.repository";
 import { sqliteDate } from "../db/code-links.repository";
 import { hashPassword } from "../services/customer-auth.service";
+import { revokeCustomerSessions } from "../db/security.repository";
 
 // ─────────────────────────────────────────────────────────────
 // CAMBIO DE PIN POR LINK
@@ -83,5 +84,6 @@ pinLinkRoutes.post("/:token", async (req, res) => {
 
   setCustomerPassword(info.customer.id, await hashPassword(pin), pin);
   clearCustomerLockout(info.customer.id); // con el PIN nuevo entra sin esperar
+  revokeCustomerSessions(info.customer.id); // cualquier sesión anterior se cierra
   res.json({ ok: true, phone: info.body.phone });
 });

@@ -837,6 +837,19 @@ router.post("/chat/messages", (req, res) => {
   const chat = getOrCreateOpenChatForPhone(who.phone);
   const wasFirstMessage = chatHasNoMessages(chat.id);
 
+  // El cliente ya no escribe libre: solo botones del asistente (y la tarjeta
+  // de cuenta que pide el asesor). Un texto con enlaces/código = ataque.
+  if (req.body?.type !== "account_reply") {
+    const raw = String(req.body?.text ?? "").slice(0, 5000);
+    const suspicious = raw ? suspiciousReason(raw) : null;
+    if (suspicious) {
+      autoBlockCustomer(who.phone, clientIp(req), suspicious, raw);
+      res.clearCookie(CUSTOMER_SESSION_COOKIE);
+      return res.status(403).json({ message: "Por seguridad cerramos tu sesión. Escríbenos por WhatsApp al +51 963 081 436.", blocked: true });
+    }
+    return res.status(403).json({ message: "El chat funciona con botones. Elige una opción del asistente." });
+  }
+
   if (req.body?.type === "sticker") {
     const stickerId = String(req.body?.stickerId ?? "");
     if (!isValidStickerId(stickerId)) return res.status(400).json({ message: "Sticker no válido." });
@@ -895,32 +908,11 @@ router.get("/chat/totp/:messageId", async (req, res) => {
   res.json(totp);
 });
 
-router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) => {
+router.post("/chat/messages/media", (req, res) => {
   const who = requireChatUser(req, res);
   if (!who) return;
-
-  const file = (req as any).file as Express.Multer.File | undefined;
-  if (!file) return res.status(400).json({ message: "Falta el archivo." });
-
-  // Solo formatos comunes — nada de SVG/HTML disfrazados de imagen.
-  const isImage = CHAT_IMAGE_TYPES.has(file.mimetype);
-  const isVideo = CHAT_VIDEO_TYPES.has(file.mimetype);
-  if (!isImage && !isVideo) return res.status(400).json({ message: "Solo se pueden enviar fotos o videos." });
-
-  try {
-    const chat = getOrCreateOpenChatForPhone(who.phone);
-    const wasFirstMessage = chatHasNoMessages(chat.id);
-    const { url, publicId } = await uploadChatMedia(file.buffer, isImage ? "image" : "video");
-    const message = addMessage(chat.id, "customer", {
-      type: isImage ? "image" : "video", mediaUrl: url, mediaPublicId: publicId,
-      mediaResourceType: isImage ? "image" : "video", mediaExpiresAt: mediaExpiresAtISO(),
-    });
-    emitChatEvent({ type: "message", chatId: chat.id, message });
-    notifyCustomerMessage(chat.id, who.phone, { kind: "media" }, wasFirstMessage);
-    res.status(201).json({ message });
-  } catch (err: any) {
-    res.status(502).json({ message: err?.message || "No se pudo subir el archivo." });
-  }
+  // Sin fotos/videos: el chat funciona solo con botones (los reportes van a WhatsApp).
+  res.status(403).json({ message: "Envía tus fotos por WhatsApp al +51 963 081 436." });
 });
 
 router.post("/chat/typing", (req, res) => {

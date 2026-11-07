@@ -1,7 +1,11 @@
 import type { Request } from "express";
 import { db } from "../db/db";
-import { blockPhone, blockIp, isPhoneBlocked } from "../db/security.repository";
-import { findChatByPhone, setBotState, setChatTag } from "../db/support-chat.repository";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import { blockIp, logSecurityEvent, revokeCustomerSessions } from "../db/security.repository";
+import { findChatByPhone, closeChat } from "../db/support-chat.repository";
+import { findCustomerByPhone, resetCustomerPin } from "../db/customer.repository";
+import { deleteChatMedia } from "./cloudinary.service";
 import { emitChatEvent } from "../utils/chat-events.util";
 
 // ─────────────────────────────────────────────────────────────
@@ -77,33 +81,51 @@ export function clientIp(req: Request): string {
   return ip.replace(/^::ffff:/, "").slice(0, 64);
 }
 
-/** Bloquea el número (y por 7 días su IP para cuentas nuevas) y cierra su chat. */
-export function autoBlockCustomer(phone: string, ip: string, reason: string, evidence: string): void {
-  blockPhone({ phone, reason, evidence, source: "auto", ip });
-  if (isPublicIp(ip)) blockIp(ip, reason);
-  const chat = findChatByPhone(phone);
-  if (chat) {
-    setBotState(chat.id, "blocked", { reason });
-    setChatTag(chat.id, "cerrado");
-    emitChatEvent({ type: "chat_created", chatId: chat.id, clientPhone: chat.clientPhone });
+/**
+ * Ataque detectado en el chat. El número puede ser de un cliente REAL que el
+ * atacante tomó (registrándolo en la web), así que no se bloquea el número:
+ *  · se le pone un PIN nuevo y se cierran todas sus sesiones (el atacante
+ *    pierde el acceso; el dueño lo recupera por WhatsApp con el link de PIN),
+ *  · se bloquea la IP (no entra ni crea cuentas por 7 días),
+ *  · se borra el chat y queda todo registrado en «Intentos de ataque».
+ */
+export function autoBlockCustomer(phone: string, ip: string, reason: string, evidence: string, chatId?: number): void {
+  const actions: string[] = [];
+  const customer = findCustomerByPhone(phone);
+  if (customer) {
+    const pin = String(crypto.randomInt(10000)).padStart(4, "0");
+    resetCustomerPin(customer.id, bcrypt.hashSync(pin, 10), pin);
+    revokeCustomerSessions(customer.id);
+    actions.push("PIN cambiado y sesiones cerradas");
   }
-  console.warn(`🚫 Bloqueado automáticamente ${phone} (${reason}) ip=${ip || "?"}`);
+  if (isPublicIp(ip)) { blockIp(ip, reason, 7); actions.push("IP bloqueada 7 días"); }
+  const targetId = chatId ?? findChatByPhone(phone)?.id;
+  if (targetId) {
+    const media = closeChat(targetId);
+    media.forEach(m => deleteChatMedia(m.publicId, m.resourceType).catch(() => undefined));
+    emitChatEvent({ type: "closed", chatId: targetId });
+    actions.push("chat borrado");
+  }
+  logSecurityEvent({ phone, ip, reason, evidence, action: actions.join(" · ") || "registrado" });
+  console.warn(`🚨 Ataque desde ${phone} (${reason}) ip=${ip || "?"} → ${actions.join(", ")}`);
 }
 
 /** Al arrancar: revisa los mensajes ya guardados y bloquea a quien haya mandado enlaces o código. */
 export function scanPastChatMessages(): number {
   const rows = db.prepare(`
-    SELECT c.client_phone AS phone, m.text AS text
+    SELECT c.client_phone AS phone, m.text AS text, c.id AS chatId
     FROM support_chat_messages m JOIN support_chats c ON c.id = m.chat_id
     WHERE m.sender = 'customer' AND m.type = 'text'
     ORDER BY m.id ASC
-  `).all() as { phone: string; text: string }[];
+  `).all() as { phone: string; text: string; chatId: number }[];
   let blocked = 0;
+  const done = new Set<number>();
   for (const r of rows) {
-    if (isPhoneBlocked(r.phone)) continue;
+    if (done.has(r.chatId)) continue;
     const reason = suspiciousReason(r.text);
     if (!reason) continue;
-    autoBlockCustomer(r.phone, "", reason, r.text);
+    done.add(r.chatId);
+    autoBlockCustomer(r.phone, "", reason, r.text, r.chatId);
     blocked++;
   }
   return blocked;

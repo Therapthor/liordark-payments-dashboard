@@ -69,7 +69,10 @@
           <span class="web-customer-phone">${escapeHtml(localPhone(c.phone))}</span>
           <span class="web-customer-status">📋 Registro general</span>
         </div>
-        <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>`;
+        <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
+        <div class="web-customer-actions">
+          <button class="btn-secondary btn-sm web-customer-access-btn" type="button">🔑 Dar acceso web (link por WhatsApp)</button>
+        </div>`;
       return div;
     }
 
@@ -117,6 +120,7 @@
       <div class="web-customer-actions">
         ${passwordArea}
         <button class="btn-secondary btn-sm web-customer-pinlink-btn" type="button">🔑 Link cambio de PIN</button>
+        <button class="btn-secondary btn-sm web-customer-resetpin-btn" type="button">♻️ Resetear PIN y cerrar sesión</button>
         ${emailArea}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
         <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
@@ -132,6 +136,25 @@
     } catch (err) {
       alert(err.message);
     }
+  }
+
+  async function resetPin(id) {
+    if (!confirm("Se le pondrá un PIN nuevo y se cerrará su sesión en todos sus dispositivos. ¿Continuar?")) return;
+    try {
+      const r = await api(`/${id}/reset-pin`, { method: "POST" });
+      alert("✅ PIN nuevo: " + r.pin + "\nSu sesión se cerró en todos sus dispositivos. Envíale el link de cambio de PIN si debe crear el suyo.");
+      await load();
+    } catch (err) { alert(err.message); }
+  }
+
+  // Número que ya compró pero no tiene acceso web: se crea y se le manda el
+  // link de PIN a SU WhatsApp (solo el dueño real puede abrirlo).
+  async function createAccess(phone) {
+    try {
+      const r = await api(`/create-access`, { method: "POST", body: JSON.stringify({ phone }) });
+      await load();
+      openPinLink(r.id, r.phone);
+    } catch (err) { alert(err.message); }
   }
 
   async function unlock(id) {
@@ -248,6 +271,8 @@
       if (e.target.closest(".web-customer-email-btn")) setEmail(id, row.dataset.email);
       if (e.target.closest(".web-customer-ban-btn")) ban(id);
       if (e.target.closest(".web-customer-unlock-btn")) unlock(id);
+      if (e.target.closest(".web-customer-resetpin-btn")) resetPin(id);
+      if (e.target.closest(".web-customer-access-btn")) createAccess(row.dataset.phone);
       if (e.target.closest(".web-customer-pinlink-btn")) openPinLink(id, row.dataset.phone);
     });
   }
@@ -366,7 +391,53 @@
     }
     loadStats();
     loadBlocked();
+    loadSecurity();
   }
+
+  // ─── Intentos de ataque e IPs bloqueadas ───
+  async function loadSecurity() {
+    const list = document.getElementById("security-events");
+    const ipsEl = document.getElementById("security-ips");
+    if (!list || !ipsEl) return;
+    try {
+      const { events, ips } = await api("/security/events");
+      list.innerHTML = "";
+      if (!events.length) list.innerHTML = `<p class="feed-empty">Sin intentos de ataque detectados.</p>`;
+      events.forEach(ev => {
+        const row = document.createElement("div");
+        row.className = "web-customer-row";
+        row.innerHTML = `
+          <div class="web-customer-main">
+            <span class="web-customer-phone">${escapeHtml(localPhone(ev.phone))}</span>
+            <span class="web-customer-status web-customer-status-locked">🚨 ${escapeHtml(ev.reason)}</span>
+          </div>
+          <div class="web-customer-sub">${formatDate(ev.createdAt)}${ev.ip ? " · IP " + escapeHtml(ev.ip) : ""} · ${escapeHtml(ev.action)}</div>
+          <div class="blocked-evidence"></div>`;
+        row.querySelector(".blocked-evidence").textContent = ev.evidence;
+        list.appendChild(row);
+      });
+      ipsEl.innerHTML = ips.length ? "" : `<p class="feed-empty">No hay IPs bloqueadas.</p>`;
+      ips.forEach(b => {
+        const row = document.createElement("div");
+        row.className = "web-customer-row";
+        row.innerHTML = `
+          <div class="web-customer-main"><span class="web-customer-phone">${escapeHtml(b.ip)}</span>
+            <span class="web-customer-status web-customer-status-locked">${escapeHtml(b.reason)}</span></div>
+          <div class="web-customer-sub">Hasta ${formatDate(b.expiresAt)}</div>
+          <div class="web-customer-actions"><button class="btn-secondary btn-sm" data-unblock-ip="${escapeHtml(b.ip)}" type="button">Desbloquear IP</button></div>`;
+        ipsEl.appendChild(row);
+      });
+    } catch (err) {
+      list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  document.getElementById("security-ips")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-unblock-ip]");
+    if (!btn || !confirm("¿Desbloquear esta IP?")) return;
+    try { await api("/security/ips/unblock", { method: "POST", body: JSON.stringify({ ip: btn.dataset.unblockIp }) }); loadSecurity(); }
+    catch (err) { alert(err.message); }
+  });
 
   // ─── Números bloqueados (automático por enlaces/código en el chat o baneo) ───
   async function loadBlocked() {

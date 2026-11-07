@@ -47,7 +47,26 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_registration_log_ip ON registration_log(ip, created_at);
+  CREATE TABLE IF NOT EXISTS security_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone      TEXT NOT NULL DEFAULT '',
+    ip         TEXT NOT NULL DEFAULT '',
+    reason     TEXT NOT NULL DEFAULT '',
+    evidence   TEXT NOT NULL DEFAULT '',
+    action     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS login_ip_failures (
+    ip           TEXT PRIMARY KEY,
+    count        INTEGER NOT NULL DEFAULT 0,
+    locked_until TEXT,
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
+
+// Sesiones de clientes: un token emitido antes de esta marca ya no vale
+// (se usa al resetear el PIN o al detectar un ataque).
+try { db.exec(`ALTER TABLE customers ADD COLUMN sessions_valid_after INTEGER NOT NULL DEFAULT 0`); } catch { /* ya existe */ }
 
 const last9 = (phone: string) => String(phone ?? "").replace(/\D/g, "").slice(-9);
 
@@ -186,4 +205,61 @@ export function getAdminSetting(key: string): string | null {
 
 export function setAdminSetting(key: string, value: string): void {
   db.prepare(`INSERT INTO admin_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
+}
+
+// ── Registro de ataques (lo que se detectó y qué se hizo) ──
+
+export type SecurityEvent = { id: number; phone: string; ip: string; reason: string; evidence: string; action: string; createdAt: string };
+
+export function logSecurityEvent(e: { phone: string; ip: string; reason: string; evidence: string; action: string }): void {
+  db.prepare(`INSERT INTO security_events (phone, ip, reason, evidence, action) VALUES (?, ?, ?, ?, ?)`)
+    .run(e.phone, e.ip, e.reason, e.evidence.slice(0, 2000), e.action);
+}
+
+export function listSecurityEvents(limit = 100): SecurityEvent[] {
+  return (db.prepare(`SELECT * FROM security_events ORDER BY id DESC LIMIT ?`).all(limit) as any[]).map(r => ({
+    id: r.id, phone: r.phone, ip: r.ip, reason: r.reason, evidence: r.evidence, action: r.action, createdAt: r.created_at,
+  }));
+}
+
+export function listBlockedIps(): { ip: string; reason: string; expiresAt: string; createdAt: string }[] {
+  return (db.prepare(`SELECT * FROM blocked_ips WHERE expires_at > datetime('now') ORDER BY created_at DESC`).all() as any[])
+    .map(r => ({ ip: r.ip, reason: r.reason, expiresAt: r.expires_at, createdAt: r.created_at }));
+}
+
+// ── Sesiones de clientes ──
+
+export function revokeCustomerSessions(customerId: number): void {
+  db.prepare(`UPDATE customers SET sessions_valid_after = ? WHERE id = ?`).run(Date.now(), customerId);
+}
+
+export function customerSessionsValidAfter(customerId: number): number {
+  const r = db.prepare(`SELECT sessions_valid_after AS v FROM customers WHERE id = ?`).get(customerId) as { v: number } | undefined;
+  return r?.v ?? 0;
+}
+
+// ── Intentos fallidos de inicio de sesión por IP (misma escalera que por número) ──
+
+export function ipLoginFailures(ip: string): { count: number; lockedUntil: string | null } {
+  const r = db.prepare(`SELECT count, locked_until FROM login_ip_failures WHERE ip = ?`).get(ip) as any;
+  return { count: r?.count ?? 0, lockedUntil: r?.locked_until ?? null };
+}
+
+export function setIpLoginFailures(ip: string, count: number, lockedUntil: string | null): void {
+  db.prepare(`
+    INSERT INTO login_ip_failures (ip, count, locked_until, updated_at) VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(ip) DO UPDATE SET count = excluded.count, locked_until = excluded.locked_until, updated_at = excluded.updated_at
+  `).run(ip, count, lockedUntil);
+}
+
+/** La IP se "olvida" tras 7 días sin fallar. */
+export function cleanOldIpFailures(): void {
+  db.prepare(`DELETE FROM login_ip_failures WHERE updated_at < datetime('now', '-7 days') AND (locked_until IS NULL OR locked_until < datetime('now'))`).run();
+}
+
+/** ¿Este celular ya tiene cuentas con nosotros (compró por WhatsApp)? */
+export function phoneHasAccounts(phone: string): boolean {
+  const d = last9(phone);
+  if (d.length < 9) return false;
+  return !!db.prepare(`SELECT 1 FROM access_profiles WHERE substr(client_phone, -9) = ? LIMIT 1`).get(d);
 }

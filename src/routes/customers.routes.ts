@@ -11,6 +11,9 @@ import {
   countCustomersWithEmail,
   dailyRegistrationsThisMonth,
   clearCustomerLockout,
+  resetCustomerPin,
+  findCustomerByPhone,
+  createCustomer,
 } from "../db/customer.repository";
 import { listAccessClientStats } from "../db/access.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
@@ -18,6 +21,8 @@ import { limaTodayISO } from "../services/access.service";
 import { checkLockout } from "../services/login-lockout.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { blockPhone, unblockPhone, unblockIp, listBlockedPhones, isPhoneBlocked } from "../db/security.repository";
+import crypto from "crypto";
+import { revokeCustomerSessions, listSecurityEvents, listBlockedIps, setIpLoginFailures } from "../db/security.repository";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -162,6 +167,42 @@ router.delete("/:id", (req, res) => {
   blockPhone({ phone: customer.phone, reason: "Baneado desde el panel", source: "admin" });
   deleteCustomer(id);
   res.status(204).end();
+});
+
+// Resetear PIN y cerrar todas sus sesiones (cuenta tomada, cliente lo pide…).
+router.post("/:id/reset-pin", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!findCustomerById(id)) return res.status(404).json({ message: "Cliente no encontrado." });
+  const pin = String(crypto.randomInt(10000)).padStart(4, "0");
+  resetCustomerPin(id, await hashPassword(pin), pin);
+  revokeCustomerSessions(id);
+  res.json({ ok: true, pin });
+});
+
+// Crear acceso web para un número que ya compró (Registro): se crea con un
+// PIN al azar y el admin le manda el link de cambio de PIN por WhatsApp —
+// así solo el dueño real del número puede entrar.
+router.post("/create-access", async (req, res) => {
+  const phone = String(req.body?.phone ?? "").replace(/\D/g, "");
+  if (phone.length < 9) return res.status(400).json({ message: "Celular inválido." });
+  const existing = findCustomerByPhone(phone);
+  if (existing) return res.json({ ok: true, id: existing.id, phone: existing.phone, existed: true });
+  const pin = String(crypto.randomInt(10000)).padStart(4, "0");
+  const customer = createCustomer(phone, await hashPassword(pin), pin, true);
+  res.json({ ok: true, id: customer.id, phone: customer.phone, existed: false });
+});
+
+// Intentos de ataque detectados e IPs bloqueadas.
+router.get("/security/events", (_req, res) => {
+  res.json({ events: listSecurityEvents(), ips: listBlockedIps() });
+});
+
+router.post("/security/ips/unblock", (req, res) => {
+  const ip = String(req.body?.ip ?? "").trim();
+  if (!ip) return res.status(400).json({ message: "Falta la IP." });
+  unblockIp(ip);
+  setIpLoginFailures(ip, 0, null);
+  res.json({ ok: true });
 });
 
 // Números bloqueados (baneo del admin o automático por enlaces/código en el chat).

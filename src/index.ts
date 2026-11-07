@@ -196,7 +196,7 @@ const server = app.listen(env.PORT, () => {
   try { applyPendingPasswordRotation(); } catch (err: any) { console.error("⚠️ cambio de contraseña:", err?.message); }
   try {
     const n = scanPastChatMessages();
-    if (n) console.log(`🚫 ${n} número(s) bloqueado(s) por enlaces/código en el chat`);
+    if (n) console.log(`🚨 ${n} ataque(s) del chat procesados (PIN cambiado y sesiones cerradas)`);
   } catch (err: any) { console.error("⚠️ revisión de chats:", err?.message); }
   // PIN de cuentas viejas sin contraseña visible (en segundo plano).
   setTimeout(() => { runPinRecovery().catch(() => {}); }, 60_000);

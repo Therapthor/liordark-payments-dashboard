@@ -59,7 +59,7 @@ export function isSupportBotEnabledFor(phone: string): boolean {
   return BOT_FOR_EVERYONE || BOT_PHONES.includes(phone.replace(/\D/g, "").slice(-9));
 }
 
-type BotOption = { id: string; label: string };
+type BotOption = { id: string; label: string; url?: string };
 
 // Variedad: el asistente no repite siempre la misma frase.
 function pick<T>(options: readonly T[]): T {
@@ -70,13 +70,52 @@ function pick<T>(options: readonly T[]): T {
  *  con códigos automáticos — si no, no hay nada que entregarle. */
 // El asistente ya no entrega códigos (están en «Códigos») ni vende: solo
 // atiende problemas con cuentas. Para hablar con una persona → WhatsApp.
-function menuOptions(_phone: string): BotOption[] {
+// El cliente no escribe: solo elige. Cada reporte termina en WhatsApp con
+// el mensaje ya armado (cuenta + problema).
+const PROBLEMS: Record<string, { label: string; text: string }> = {
+  nosub: { label: "📺 Mi cuenta dice «sin suscripción»", text: "dice sin suscripción" },
+  login: { label: "🔒 No puedo ingresar a mi cuenta",   text: "no puedo ingresar" },
+  other: { label: "⚠️ Otro problema con mi cuenta",       text: "tiene otro problema" },
+};
+const SUPPORT_WA = "51963081436";
+
+function menuOptions(phone: string): BotOption[] {
   return [
-    { id: "issue", label: "⚠️ Tengo un problema con mi cuenta" },
-    { id: "human", label: "💬 Hablar con un asesor (WhatsApp)" },
+    ...Object.entries(PROBLEMS).map(([id, p]) => ({ id: `rep:${id}`, label: p.label })),
+    ...(listClientCodesAccounts(phone).length ? [{ id: "opencodes", label: "🔑 Necesito un código" }] : []),
   ];
 }
-const WHATSAPP_OPTION: BotOption = { id: "whatsapp", label: "💬 Abrir WhatsApp" };
+
+function whatsappUrl(text: string): string {
+  return "https://wa.me/" + SUPPORT_WA + "?text=" + encodeURIComponent(text);
+}
+
+function showReportAccounts(chat: Chat, phone: string, problem: string): void {
+  const p = PROBLEMS[problem];
+  if (!p) return showMenu(chat);
+  const accounts = activeAccounts(phone);
+  if (accounts.length <= 1) return finishReport(chat, phone, problem, accounts[0] ?? null);
+  say(chat.id, "¿Con cuál de tus cuentas? 👇", [
+    ...accounts.slice(0, 12).map((a, i) => ({ id: `rpa:${problem}|${i}`, label: accountLabel(a.platform, a.email) })),
+    BACK_OPTION,
+  ]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+}
+
+function finishReport(chat: Chat, phone: string, problem: string, account: { platform: string; email: string } | null): void {
+  const p = PROBLEMS[problem];
+  if (!p) return showMenu(chat);
+  const local = phone.replace(/\D/g, "").slice(-9);
+  const text = account
+    ? `Hola, mi cuenta de ${account.platform} (${account.email}) ${p.text}. Mi número: ${local}`
+    : `Hola, mi cuenta ${p.text}. Mi número: ${local}`;
+  say(chat.id, "Listo 🙌. Toca el botón y te abrimos WhatsApp con tu reporte ya escrito; un asesor te atiende por ahí.", [
+    { id: "whatsapp", label: "💬 Enviar reporte por WhatsApp", url: whatsappUrl(text) },
+    BACK_OPTION,
+  ]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+}
+const WHATSAPP_OPTION: BotOption = { id: "whatsapp", label: "💬 Abrir WhatsApp", url: "https://wa.me/51963081436?text=" + encodeURIComponent("Hola, necesito ayuda 🙏") };
 
 function offerWhatsapp(chat: Chat, text = "Con gusto 😊. Un asesor te atiende por WhatsApp: toca el botón y te abrimos el chat 👇"): void {
   say(chat.id, text, [WHATSAPP_OPTION, BACK_OPTION]);
@@ -87,9 +126,8 @@ const HUMAN_OPTION: BotOption = { id: "human", label: "👤 Hablar con un asesor
 const DONE_OPTION: BotOption  = { id: "done",  label: "✅ Listo, gracias" };
 
 const GREETINGS = [
-  "¡Hola, qué gusto saludarte! 👋 Soy Manguito, el asistente de Liordark 🥭\nEstoy aquí para ayudarte en lo que necesites. ¿Qué te trae por aquí hoy?",
-  "¡Hola! 😊 Bienvenido(a) a Liordark 🥭, soy Manguito, tu asistente.\nCuéntame, ¿en qué te puedo dar una mano?",
-  "¡Hey, hola! 👋 Qué bueno tenerte por aquí. Soy Manguito 🥭 y con gusto te ayudo.\n¿Qué necesitas hoy?",
+  "¡Hola! 👋 Soy Manguito, el asistente de Liordark 🥭\n¿Qué problema tiene tu cuenta? Elige una opción 👇",
+  "¡Hola! 😊 Soy Manguito 🥭. Cuéntame qué pasa con tu cuenta eligiendo una opción 👇",
 ];
 const THANKS = [
   "¡Fue un gusto ayudarte! 🥭 Gracias por confiar en Liordark. Cierro este chat por ahora; cuando necesites algo, aquí estaremos para ti 💛",
@@ -537,9 +575,8 @@ async function handleOption(chat: Chat, phone: string, optionId: string): Promis
     setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
     return;
   }
-  if (optionId === "issue")    return startIssue(chat, phone);
   if (optionId === "buycombo") return confirmCombo(chat);
-  if (optionId === "human") return offerWhatsapp(chat);
+  if (optionId === "human" || optionId === "issue") return offerWhatsapp(chat);
   if (optionId === "whatsapp") {
     say(chat.id, "¡Listo! Te abrí WhatsApp 💬. Si no se abrió, escríbenos al +51 963 081 436.", [DONE_OPTION, BACK_OPTION]);
     setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
@@ -557,6 +594,11 @@ async function handleOption(chat: Chat, phone: string, optionId: string): Promis
   if (optionId === "done") return closeWithThanks(chat.id, pick(THANKS));
 
   const [kind, rest = ""] = splitOnce(optionId, ":");
+  if (kind === "rep") return showReportAccounts(chat, phone, rest);
+  if (kind === "rpa") {
+    const [problem = "", idx = ""] = rest.split("|");
+    return finishReport(chat, phone, problem, activeAccounts(phone)[Number(idx)] ?? null);
+  }
   // Botones viejos de códigos (mensajes anteriores): también van a «Códigos».
   if (kind === "code" || kind === "dev" || kind === "go" || kind === "retry") return showCodeAccounts(chat, phone);
   if (kind === "products") return showProducts(chat, Math.max(1, Number(rest) || 1));

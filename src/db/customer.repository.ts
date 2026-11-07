@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
-import { checkLockout, nextLockoutState, type LockoutCheck } from "../services/login-lockout.service";
+import { checkLockout, nextCustomerLockoutState, type LockoutCheck } from "../services/login-lockout.service";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB — ver tables.sql (customers)
@@ -117,7 +117,7 @@ export function recordCustomerLoginFailure(phone: string): void {
   const customer = findCustomerByPhone(phone);
   if (!customer) return;
   const row = db.prepare(`SELECT failed_login_count AS n FROM customers WHERE id = ?`).get(customer.id) as { n: number };
-  const { failedLoginCount, lockedUntil } = nextLockoutState(row.n);
+  const { failedLoginCount, lockedUntil } = nextCustomerLockoutState(row.n);
   db.prepare(`UPDATE customers SET failed_login_count = ?, locked_until = ? WHERE id = ?`)
     .run(failedLoginCount, lockedUntil, customer.id);
 }
@@ -243,4 +243,10 @@ export function listCustomersForPinRecovery(): { id: number; phone: string; pass
 export function savePinRecovery(id: number, pin: string | null): void {
   if (pin) db.prepare(`UPDATE customers SET password_plain = ?, pin_recovery = 'found' WHERE id = ? AND password_plain = ''`).run(pin, id);
   else db.prepare(`UPDATE customers SET pin_recovery = 'not_found' WHERE id = ?`).run(id);
+}
+
+/** Admin / ataque detectado: PIN nuevo de 4 números (visible en el panel). */
+export function resetCustomerPin(id: number, hash: string, pin: string): void {
+  db.prepare(`UPDATE customers SET password_hash = ?, password_plain = ?, pin_recovery = '', failed_login_count = 0, locked_until = NULL WHERE id = ?`)
+    .run(hash, pin, id);
 }

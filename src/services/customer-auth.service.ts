@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
 import { findCustomerById, isCustomerSuspended } from "../db/customer.repository";
-import { isPhoneBlocked } from "../db/security.repository";
+import { isPhoneBlocked, customerSessionsValidAfter } from "../db/security.repository";
 
 // ─────────────────────────────────────────────────────────────
 // SESIÓN DE CLIENTE (tienda web) — mismo patrón de token firmado que
@@ -45,6 +45,10 @@ export function verifyCustomerSessionToken(token: string | undefined): number | 
   } catch {
     return null;
   }
+
+  // Sesión cerrada desde el panel (reset de PIN) o por un ataque detectado.
+  const issuedAt = expiry - SESSION_TTL_MS;
+  if (issuedAt < customerSessionsValidAfter(customerId)) return null;
 
   return customerId;
 }
