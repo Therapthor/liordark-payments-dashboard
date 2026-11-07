@@ -234,10 +234,8 @@
       currentPhone = me.phone || "";
       customerHasEmail = !!me.hasEmail || isEmailConfirmedLocally(currentPhone);
       if (me.hasEmail) markEmailConfirmedLocally(currentPhone);
-      // Códigos — página de autoservicio retirada por ahora: los códigos
-      // solo se piden por el chat de soporte (asistente automático, ver
-      // support-bot.service.ts). GET /codes responde 403.
-      document.getElementById("topbar-codes-btn").hidden = true;
+      // Códigos: el botón solo aparece si tiene alguna cuenta con códigos.
+      await refreshCodesAvailability();
     } catch (err) {
       // Si /auth/me falla, nos quedamos con lo último confirmado en este
       // navegador (no hay forma de saber el teléfono todavía) — nunca
@@ -263,9 +261,16 @@
     // actualizar, en vez de volver siempre al catálogo — los datos se
     // recargan igual (loadDashboardAccounts/loadCodesAccounts arriba),
     // solo no se pierde dónde estaba parado.
+    // liordark.com/#codigos (botón «Volver a Códigos» del visor).
+    if (location.hash === "#codigos" && hasCodesAccounts) {
+      history.replaceState(null, "", location.pathname + location.search);
+      switchPage("codes");
+      return;
+    }
     try {
       const savedPage = localStorage.getItem(STORE_PAGE_KEY);
-      if (savedPage && VALID_STORE_PAGES.includes(savedPage) && savedPage !== "catalog") switchPage(savedPage);
+      if (savedPage && VALID_STORE_PAGES.includes(savedPage) && savedPage !== "catalog"
+          && (savedPage !== "codes" || hasCodesAccounts)) switchPage(savedPage);
     } catch { /* localStorage bloqueado — se queda en Catálogo, default normal */ }
   }
 
@@ -1582,103 +1587,70 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // CÓDIGOS — en pruebas, solo CODES_TEST_PHONE (ver onAuthenticated)
+  // CÓDIGOS — el cliente elige una de sus cuentas con código y se abre la
+  // consulta (liordark.com/codigo/…), que revisa cada 30 s. Máximo 3
+  // consultas por cuenta al día; si ya hay una abierta, se retoma.
   // ─────────────────────────────────────────────────────────────
 
-  // 2FA por TOTP — no hace falta "Pedir código": siempre hay uno vigente,
-  // solo rota cada 30s (ver utils/totp.util.ts en el backend).
-  function totpCardHtml(a) {
-    return `
-      <div class="renewal-account-card" data-account-id="${a.accountId}">
-        <div class="renewal-account-head">
-          <span class="renewal-account-platform">${escapeHtml(a.platform)}</span>
-          <span class="renewal-account-status">${escapeHtml(a.expiresAt ? "Vence: " + a.expiresAt : "")}</span>
-        </div>
-        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
-        <div class="codes-totp-row">
-          <span class="codes-code" data-code="${escapeHtml(a.totp.code)}" data-seconds-remaining="${a.totp.secondsRemaining}" title="Clic para copiar">${escapeHtml(a.totp.code)}</span>
-          <span class="codes-timer" data-role="totp-ring"><span class="codes-timer-num"></span></span>
-        </div>
-      </div>
-    `;
+  let hasCodesAccounts = false;
+
+  function codesTheme(platform) {
+    return /netflix/i.test(platform) ? "netflix"
+      : /disney/i.test(platform) ? "disney"
+      : /prime|amazon/i.test(platform) ? "prime"
+      : /crunchy/i.test(platform) ? "crunchy"
+      : /chatgpt|gpt|openai/i.test(platform) ? "chatgpt" : "other";
+  }
+
+  function fmtDayMonth(iso) {
+    const [y, m, d] = String(iso || "").split("-");
+    return d && m && y ? `${d}/${m}/${y}` : "";
   }
 
   function codesCardHtml(a) {
-    if (a.totp) return totpCardHtml(a);
+    const canOpen = !!a.openUrl || a.remaining > 0;
+    const label = a.openUrl ? "Continuar consulta" : a.remaining > 0 ? (a.is2fa ? "Ver código 2FA" : "Ver código") : "Sin consultas hoy";
+    const dots = Array.from({ length: a.limit }, (_, i) => `<i class="${i < a.used ? "used" : ""}"></i>`).join("");
     return `
-      <div class="renewal-account-card" data-account-id="${a.accountId}">
-        <div class="renewal-account-head">
-          <span class="renewal-account-platform">${escapeHtml(a.platform)}</span>
-          <span class="renewal-account-status">${escapeHtml(a.expiresAt ? "Vence: " + a.expiresAt : "")}</span>
-        </div>
-        <div class="renewal-account-email">${escapeHtml(a.email)}</div>
-
-        <div class="codes-search" data-role="search" hidden>
-          <div class="codes-radar" data-role="radar">
-            <div class="codes-radar-ring"></div>
-            <span class="codes-radar-icon">🔑</span>
-            <span class="codes-radar-badge" data-role="badge"></span>
+      <div class="codes-acc codes-acc-${codesTheme(a.platform)}" data-account-id="${a.accountId}">
+        <div class="codes-acc-main">
+          <span class="codes-acc-dot"></span>
+          <div class="codes-acc-info">
+            <b>${escapeHtml(a.platform)}</b>
+            <span>${escapeHtml(a.email)}${a.profileName ? " · " + escapeHtml(a.profileName) : ""}</span>
+            ${a.expiresAt ? `<span class="codes-acc-exp">Vence: ${escapeHtml(fmtDayMonth(a.expiresAt))}</span>` : ""}
           </div>
-          <div class="codes-status" data-role="status"></div>
-          <div class="codes-status-sub" data-role="status-sub"></div>
-          <div class="codes-otp" data-role="otp"></div>
-          <button class="btn-primary btn-sm codes-copy-btn" data-role="copy" type="button" hidden>📋 Copiar código</button>
-          <a class="btn-primary btn-sm codes-open-link-btn" data-role="open-link" href="#" target="_blank" rel="noopener" hidden>🔗 Abrir enlace</a>
-          <p class="codes-fail-msg" data-role="fail-msg" hidden>No encontramos ningún código nuevo.</p>
-          <button class="codes-retry-btn" data-role="retry" type="button" hidden>🔄 Volver a intentar</button>
-          <a class="codes-whatsapp-btn" data-role="whatsapp" href="#" target="_blank" rel="noopener" hidden>💬 No llegó — avisar por WhatsApp</a>
-          <button class="codes-close-btn" data-role="close" type="button" hidden>✕ Cerrar</button>
         </div>
-
-        <div class="renewal-account-footer" data-role="footer">
-          <button class="btn-primary btn-sm codes-request-btn" type="button">Pedir código</button>
+        <div class="codes-acc-foot">
+          <span class="codes-acc-count" title="Consultas usadas hoy"><span class="codes-acc-dots">${dots}</span> ${a.used} de ${a.limit} hoy</span>
+          <button class="btn-primary codes-open-btn" type="button" ${canOpen ? "" : "disabled"}>${label}</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
-  const TOTP_PERIOD_SECONDS = 30;
-  let totpRefreshTimeout = null;
-
-  // Cuenta regresiva circular del código TOTP (ver codes.js del panel,
-  // mismo patrón) — cuando el más próximo rota, recarga sola la lista.
-  function startTotpTimer(el, remainingSeconds, totalSeconds) {
-    let remaining = remainingSeconds;
-    const numEl = el.querySelector(".codes-timer-num");
-    const tick = () => {
-      el.style.setProperty("--pct", String(Math.max(0, (remaining / totalSeconds) * 100)));
-      numEl.textContent = remaining + "s";
-    };
-    tick();
-    const interval = setInterval(() => {
-      remaining = Math.max(0, remaining - 1);
-      tick();
-      if (remaining <= 0) clearInterval(interval);
-    }, 1000);
+  async function refreshCodesAvailability() {
+    try {
+      const { accounts } = await api("/codes");
+      hasCodesAccounts = !!(accounts && accounts.length);
+    } catch { hasCodesAccounts = false; }
+    document.getElementById("topbar-codes-btn").hidden = !hasCodesAccounts;
+    return hasCodesAccounts;
   }
 
   async function loadCodesAccounts() {
     const list  = document.getElementById("codes-list");
     const empty = document.getElementById("codes-empty");
-    if (totpRefreshTimeout) { clearTimeout(totpRefreshTimeout); totpRefreshTimeout = null; }
+    list.innerHTML = `<p class="muted small">Cargando…</p>`;
     try {
       const { accounts } = await api("/codes");
       if (!accounts || accounts.length === 0) {
         list.innerHTML = "";
+        empty.textContent = "Ninguna de tus cuentas activas tiene códigos disponibles.";
         empty.hidden = false;
-      } else {
-        empty.hidden = true;
-        list.innerHTML = accounts.map(codesCardHtml).join("");
-        list.querySelectorAll("[data-role='totp-ring']").forEach(el => {
-          const seconds = Number(el.closest(".renewal-account-card")?.querySelector(".codes-code")?.dataset.secondsRemaining) || TOTP_PERIOD_SECONDS;
-          startTotpTimer(el, seconds, TOTP_PERIOD_SECONDS);
-        });
-        const totpAccounts = accounts.filter(a => a.totp);
-        if (totpAccounts.length > 0) {
-          const soonest = Math.min(...totpAccounts.map(a => a.totp.secondsRemaining));
-          totpRefreshTimeout = setTimeout(loadCodesAccounts, (soonest + 1) * 1000);
-        }
+        return;
       }
+      empty.hidden = true;
+      list.innerHTML = accounts.map(codesCardHtml).join("");
     } catch (err) {
       list.innerHTML = "";
       empty.textContent = err.message;
@@ -1686,149 +1658,30 @@
     }
   }
 
-  // El backend ya reintenta solo hasta 3 veces (~27s) antes de responder —
-  // acá solo se simula el avance "Intento 1/2/3" mientras se espera esa
-  // única respuesta, para que no se sienta una barra de carga ciega.
-  const CODES_SIMULATED_ATTEMPTS = 3;
-  const CODES_SIMULATED_STEP_MS = 9000;
-
-  async function runCodesSearch(card, accountId) {
-    const radar     = card.querySelector("[data-role='radar']");
-    const badge     = card.querySelector("[data-role='badge']");
-    const status    = card.querySelector("[data-role='status']");
-    const statusSub = card.querySelector("[data-role='status-sub']");
-    const otp       = card.querySelector("[data-role='otp']");
-    const copyBtn   = card.querySelector("[data-role='copy']");
-    const openLinkBtn = card.querySelector("[data-role='open-link']");
-    const failMsg   = card.querySelector("[data-role='fail-msg']");
-    const retryBtn  = card.querySelector("[data-role='retry']");
-    const waBtn     = card.querySelector("[data-role='whatsapp']");
-    const closeBtn  = card.querySelector("[data-role='close']");
-
-    radar.className = "codes-radar";
-    badge.className = "codes-radar-badge";
-    badge.textContent = "";
-    otp.innerHTML = "";
-    copyBtn.hidden = true;
-    copyBtn.textContent = "📋 Copiar código";
-    openLinkBtn.hidden = true;
-    failMsg.hidden = true;
-    retryBtn.hidden = true;
-    waBtn.hidden = true;
-    closeBtn.hidden = true;
-
-    let step = 1;
-    status.innerHTML = `Buscando tu código<span class="codes-dots"><span></span><span></span><span></span></span>`;
-    statusSub.textContent = `Intento ${step} de ${CODES_SIMULATED_ATTEMPTS}`;
-    const ticker = setInterval(() => {
-      step = Math.min(step + 1, CODES_SIMULATED_ATTEMPTS);
-      statusSub.textContent = `Intento ${step} de ${CODES_SIMULATED_ATTEMPTS}`;
-    }, CODES_SIMULATED_STEP_MS);
-
-    let result;
-    try {
-      result = await api("/codes/" + accountId + "/request", { method: "POST" });
-    } catch (err) {
-      clearInterval(ticker);
-      radar.classList.add("failed");
-      badge.textContent = "✕";
-      badge.className = "codes-radar-badge error show";
-      status.textContent = "No se pudo consultar";
-      statusSub.textContent = "";
-      failMsg.textContent = err.message || "Intenta de nuevo en un rato.";
-      failMsg.hidden = false;
-      retryBtn.hidden = false;
-      waBtn.hidden = false;
-      closeBtn.hidden = false;
-      return;
-    }
-    clearInterval(ticker);
-
-    if (result.link) {
-      radar.classList.add("done");
-      badge.textContent = "✓";
-      badge.className = "codes-radar-badge ok show";
-      status.textContent = "¡Enlace encontrado!";
-      statusSub.textContent = result.received ? "Recibido: " + result.received : "";
-      openLinkBtn.href = result.link;
-      openLinkBtn.hidden = false;
-      closeBtn.hidden = false;
-    } else if (result.code) {
-      radar.classList.add("done");
-      badge.textContent = "✓";
-      badge.className = "codes-radar-badge ok show";
-      status.textContent = "¡Código encontrado!";
-      statusSub.textContent = result.received ? "Recibido: " + result.received : "";
-      String(result.code).split("").forEach((d, i) => {
-        const span = document.createElement("span");
-        span.textContent = d;
-        span.style.animationDelay = (i * 0.07) + "s";
-        otp.appendChild(span);
-      });
-      copyBtn.hidden = false;
-      copyBtn.onclick = () => {
-        navigator.clipboard?.writeText(result.code).then(() => {
-          copyBtn.textContent = "✅ Copiado";
-          setTimeout(() => { copyBtn.textContent = "📋 Copiar código"; }, 1300);
-        }).catch(() => alert("No se pudo copiar. Código: " + result.code));
-      };
-      closeBtn.hidden = false;
-    } else {
-      radar.classList.add("failed");
-      badge.textContent = "✕";
-      badge.className = "codes-radar-badge error show";
-      status.textContent = "No encontramos tu código";
-      statusSub.textContent = "";
-      failMsg.hidden = false;
-      retryBtn.hidden = false;
-      waBtn.hidden = false;
-      closeBtn.hidden = false;
-    }
-  }
+  // Si el hash cambia a #codigos sin recargar la página.
+  window.addEventListener("hashchange", () => {
+    if (location.hash !== "#codigos" || !isAuthenticated || !hasCodesAccounts) return;
+    history.replaceState(null, "", location.pathname + location.search);
+    switchPage("codes");
+  });
 
   function initCodesView() {
     document.getElementById("codes-list").addEventListener("click", async (e) => {
-      const totpCode = e.target.closest(".codes-code");
-      if (totpCode) {
-        navigator.clipboard?.writeText(totpCode.dataset.code).then(() => {
-          const original = totpCode.textContent;
-          totpCode.classList.add("copied");
-          totpCode.textContent = "¡Copiado!";
-          setTimeout(() => { totpCode.textContent = original; totpCode.classList.remove("copied"); }, 1200);
-        }).catch(() => {});
-        return;
+      const btn = e.target.closest(".codes-open-btn");
+      if (!btn || btn.disabled) return;
+      const card = btn.closest("[data-account-id]");
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = "Abriendo…";
+      try {
+        const { url } = await api("/codes/" + card.dataset.accountId + "/open", { method: "POST" });
+        location.href = url;
+      } catch (err) {
+        alert(err.message || "No se pudo abrir la consulta.");
+        btn.textContent = original;
+        loadCodesAccounts();
       }
-
-      const closeBtn = e.target.closest("[data-role='close']");
-      if (closeBtn) {
-        closeBtn.closest(".renewal-account-card").querySelector("[data-role='search']").hidden = true;
-        return;
-      }
-
-      const requestBtn = e.target.closest(".codes-request-btn");
-      const retryBtn    = e.target.closest("[data-role='retry']");
-      if (!requestBtn && !retryBtn) return;
-
-      const card = (requestBtn || retryBtn).closest(".renewal-account-card");
-      const accountId = card.dataset.accountId;
-      const searchEl  = card.querySelector("[data-role='search']");
-      const footerEl  = card.querySelector("[data-role='footer']");
-
-      searchEl.hidden = false;
-      footerEl.hidden = true;
-      waBtnSetPlatform(card);
-
-      await runCodesSearch(card, accountId);
-
-      footerEl.hidden = false;
     });
-  }
-
-  function waBtnSetPlatform(card) {
-    const waBtn = card.querySelector("[data-role='whatsapp']");
-    const platform = card.querySelector(".renewal-account-platform")?.textContent || "";
-    const text = encodeURIComponent(`Hola, no me llegó el código de mi cuenta de ${platform}. ¿Me ayudas?`);
-    waBtn.href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + text;
   }
 
   function initCheckoutModal() {
@@ -1879,7 +1732,18 @@
   // de Prime Video/Crunchyroll) en <a> clickeables — escapa primero, así
   // que lo que arme la URL sigue siendo texto plano seguro.
   function linkifyText(raw) {
-    return escapeHtml(raw).replace(/(https?:\/\/[^\s<]+)/g, url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+    // Seguro contra inyección: la URL se corta en comillas/espacios y todo
+    // (texto y href) se escapa — un mensaje nunca puede crear atributos.
+    const text = String(raw ?? "");
+    const re = /https?:\/\/[^\s<>"'`]+/g;
+    let out = "", last = 0, m;
+    while ((m = re.exec(text))) {
+      const url = m[0];
+      out += escapeHtml(text.slice(last, m.index)) +
+        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+      last = m.index + url.length;
+    }
+    return out + escapeHtml(text.slice(last));
   }
 
   function fmtChatTime(sqliteUTC) {
@@ -2010,7 +1874,12 @@
       // Cierre de venta: abre la compra en la tienda (el asistente deja su
       // mensaje en el chat por si el cliente vuelve).
       const opt = btn.dataset.opt || "";
-      if (opt.startsWith("buynow:") || opt === "buycombo") {
+      if (opt === "opencodes") {
+        setTimeout(async () => {
+          closeChatModal();
+          if (await refreshCodesAvailability()) switchPage("codes");
+        }, 600);
+      } else if (opt.startsWith("buynow:") || opt === "buycombo") {
         setTimeout(() => {
           closeChatModal();
           if (opt === "buycombo") openComboBuilder();

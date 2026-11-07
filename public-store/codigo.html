@@ -88,10 +88,10 @@
     <div class="center">
       <div class="spinner"></div>
       <h1>Esperando tu código…</h1>
-      <p class="muted" id="waiting-text">Pide el código en la app y luego toca Actualizar.</p>
+      <p class="muted" id="waiting-text">Pide el código en la app y espera aquí: revisamos cada 30 segundos.</p>
       <p class="muted" id="waiting-slow" hidden style="background:#FFF1D6;border-radius:12px;padding:10px 12px;color:#5C4A39"></p>
     </div>
-    <button class="btn orange" id="refresh-btn">Actualizar</button>
+    <button class="btn orange" id="refresh-btn" disabled>Buscando…</button>
   </section>
 
   <!-- 2 · Llegó -->
@@ -128,9 +128,9 @@
     <div class="center">
       <div class="ok-circle" id="closed-icon">✓</div>
       <h1 id="closed-title">¡Listo, disfruta!</h1>
-      <p class="muted" id="closed-text">Este link ya se cerró. Si necesitas otro código, pídelo por soporte.</p>
+      <p class="muted" id="closed-text">Esta consulta ya se cerró. Si necesitas otro código, vuelve a «Códigos» en tu cuenta.</p>
     </div>
-    <a class="btn light" href="https://liordark.com">Ir a Mis cuentas</a>
+    <a class="btn light" id="back-btn" href="https://liordark.com/#codigos">Volver a Códigos</a>
   </section>
 </main>
 
@@ -141,7 +141,7 @@
   const api = (path, opts = {}) => fetch("/api/code-link/" + encodeURIComponent(token) + path, { method: opts.method || "GET" })
     .then(async r => ({ status: r.status, data: await r.json().catch(() => ({})) }));
 
-  let expiresAt = null, skew = 0, timerId = null, autoId = null, lastValue = "", platform = "";
+  let expiresAt = null, skew = 0, timerId = null, lastValue = "", platform = "";
   let waitMinutes = 1, createdAt = null;
 
   function show(id) {
@@ -156,7 +156,7 @@
   }
 
   function showClosed(state) {
-    clearInterval(timerId); clearInterval(autoId);
+    clearInterval(timerId);
     const timer = document.getElementById("timer");
     timer.className = "pill off";
     timer.textContent = state === "expired" ? "Vencido" : "Cerrado";
@@ -164,7 +164,7 @@
       document.getElementById("closed-label").textContent = "VENCIDO";
       document.getElementById("closed-icon").textContent = "⏱";
       document.getElementById("closed-title").textContent = "Este link ya venció";
-      document.getElementById("closed-text").textContent = "Si todavía necesitas tu código, pide uno nuevo por soporte.";
+      document.getElementById("closed-text").textContent = "Si todavía necesitas tu código, abre una consulta nueva desde «Códigos» en tu cuenta.";
     }
     show("s-closed");
   }
@@ -173,8 +173,24 @@
     if (!expiresAt) return;
     const left = Math.max(0, Math.floor((expiresAt - (Date.now() + skew)) / 1000));
     document.getElementById("timer").textContent = "Vence en " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
-    if (left <= 0) showClosed("expired");
+    if (left <= 0) { showClosed("expired"); return; }
     slowHint();
+    paintCooldown();
+  }
+
+  // Cada consulta al proveedor deja 30 s de espera antes de la siguiente
+  // (automática mientras espera; el botón muestra el contador y no deja
+  // adelantarla). El servidor también lo frena.
+  const COOLDOWN_MS = 30_000;
+  let nextCheckAt = 0, checking = false;
+  function paintCooldown() {
+    const left = Math.max(0, Math.ceil((nextCheckAt - Date.now()) / 1000));
+    const b1 = document.getElementById("refresh-btn");
+    const b2 = document.getElementById("refresh-btn2");
+    b1.disabled = b2.disabled = checking || left > 0;
+    b1.textContent = checking ? "Buscando…" : left > 0 ? "Buscamos de nuevo en " + left + " s" : "Buscar ahora";
+    b2.textContent = checking ? "Buscando…" : left > 0 ? "¿No te sirvió? Buscar otro en " + left + " s" : "¿No te sirvió? Buscar otro";
+    if (!checking && left <= 0 && !document.getElementById("s-waiting").hidden) check(false);
   }
 
   function applyInfo(d) {
@@ -205,7 +221,7 @@
         "<b>No pidas otro código</b>: esta página se actualiza sola. Espera hasta " +
         Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + ".";
     } else {
-      el.textContent = "Si todavía no llega, pide un código nuevo en la app y toca Actualizar.";
+      el.textContent = "Si todavía no llega, pide un código nuevo en la app: lo seguimos buscando cada 30 segundos.";
     }
   }
 
@@ -240,8 +256,10 @@
   }
 
   async function check(manual) {
-    const btns = [document.getElementById("refresh-btn"), document.getElementById("refresh-btn2")];
-    btns.forEach(b => { b.disabled = true; });
+    if (checking) return;
+    if (manual && Date.now() < nextCheckAt) return;
+    checking = true;
+    paintCooldown();
     try {
       const { status, data } = await api("/check", { method: "POST" });
       applyInfo(data);
@@ -269,13 +287,15 @@
       } else if (data.status === "advisor") {
         show("s-advisor");
       } else {
-        if (manual) toast("Aún no llega. Intenta en unos segundos.");
+        if (manual) toast("Aún no llega. Seguimos buscando.");
         show("s-waiting");
       }
     } catch {
       toast("Sin conexión. Intenta de nuevo.");
     } finally {
-      btns.forEach(b => { b.disabled = false; });
+      checking = false;
+      nextCheckAt = Date.now() + COOLDOWN_MS;
+      paintCooldown();
     }
   }
 
@@ -294,6 +314,13 @@
     showClosed("closed");
   });
 
+  // Abierto desde «Códigos» de la tienda: el botón final vuelve ahí.
+  if (!/[?&]from=tienda\b/.test(location.search)) {
+    const back = document.getElementById("back-btn");
+    back.textContent = "Ir a liordark.com";
+    back.href = "https://liordark.com";
+  }
+
   (async () => {
     if (!token) { showClosed("expired"); return; }
     const { status, data } = await api("").catch(() => ({ status: 0, data: {} }));
@@ -301,14 +328,12 @@
     applyInfo(data);
     if (data.state !== "active") { showClosed(data.state); return; }
     document.getElementById("waiting-text").textContent = /netflix/i.test(platform)
-      ? "Pide el código en Netflix («Usar un código de inicio de sesión») y luego toca Actualizar."
+      ? "Pide el código en Netflix («Usar un código de inicio de sesión») y espera aquí: revisamos cada 30 segundos."
       : waitMinutes > 1
         ? "Pide el código en la app de " + platform + " una sola vez y espera aquí."
-        : "Pide el código en la app de " + platform + " y luego toca Actualizar.";
+        : "Pide el código en la app de " + platform + " y espera aquí: revisamos cada 30 segundos.";
     tick(); timerId = setInterval(tick, 1000);
     await check(false);
-    // Mientras espera, se revisa solo cada 15 s.
-    autoId = setInterval(() => { if (!document.getElementById("s-waiting").hidden) check(false); }, 15000);
   })();
 })();
 </script>

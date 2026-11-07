@@ -17,11 +17,10 @@ import { normalizePeruPhone } from "../utils/phone.util";
 import {
   listClientCodesAccounts,
   getAccountCodeSource,
-  getLastSeenCodeForEmail,
-  saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeWithRetries, isSensitiveResult, skipsRepeatedCodes } from "../services/codes-lookup.service";
-import { getCurrentTotp } from "../utils/totp.util";
+import { TOTP_SOURCE_ID } from "../services/codes-lookup.service";
+import { createCodeLink, countClientLinksToday, findOpenClientLink } from "../db/code-links.repository";
+import { codeWaitMinutes } from "./code-viewer.routes";
 import {
   createCustomerNotification,
   listCustomerNotifications,
@@ -42,15 +41,8 @@ import {
   isSupportBotEnabledFor, startSupportBot, notifyCustomerMessage, recordCustomerChoice, getBotTotpForCustomer,
 } from "../services/support-bot.service";
 import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
+import { isSafeEmail, cleanEmail } from "../utils/email.util";
 
-// Códigos — en pruebas, solo para este celular (a pedido explícito). Se
-// quita esta restricción cuando se dé por probado.
-// Página "Códigos" de autoservicio — apagada por ahora (abusaban de ella).
-const CLIENT_CODES_PAGE_ENABLED = false;
-const CODES_TEST_PHONE = "977430941";
-function isCodesTestUser(phone: string): boolean {
-  return phone.replace(/\D/g, "").slice(-9) === CODES_TEST_PHONE;
-}
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
 // (GET /api/stock/catalog y /combos) — sellableCount ya excluye
@@ -139,7 +131,7 @@ router.post("/renewals/checkout", async (req, res) => {
   // mensaje de confirmación (la API de Meta exige el número completo).
   const phone          = normalizePeruPhone(String(req.body?.phone ?? ""));
   const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
-  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientEmail    = cleanEmail(req.body?.clientEmail);
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
   if (phone.length < 9 || !platform) {
@@ -274,7 +266,7 @@ router.post("/renew/:token/checkout", async (req, res) => {
     return res.status(410).json({ message: "Este link ya venció. Entra a liordark.com para renovar." });
   }
 
-  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientEmail    = cleanEmail(req.body?.clientEmail);
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
   const { status, body } = await renewalCheckout(payload.phone, payload.platform, clientEmail, clientPassword);
   res.status(status).json(body);
@@ -327,7 +319,7 @@ router.post("/renew-code/:code/checkout", async (req, res) => {
     return res.status(400).json({ message: "Elige una de las cuentas del link." });
   }
 
-  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientEmail    = cleanEmail(req.body?.clientEmail);
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
   const { status, body } = await renewalCheckout(link.phone, platform, clientEmail, clientPassword);
   res.status(status).json(body);
@@ -469,87 +461,76 @@ router.get("/payment-methods", (_req, res) => {
 router.use(requireCustomerSession);
 
 // ─────────────────────────────────────────────────────────────
-// CÓDIGOS — en pruebas, solo para CODES_TEST_PHONE. El cliente ve sus
-// cuentas con "🔑 Código" habilitado (Accesos) mientras sigan activas, y
-// puede pedir el código las veces que quiera — sin tope: si en 3
-// intentos (ver lookupCodeWithRetries) no llega, se le ofrece avisar
-// por WhatsApp, pero eso no bloquea volver a intentar después.
+// CÓDIGOS — el cliente ve sus cuentas activas con código y toca la que
+// necesita: se abre una consulta (el mismo visor de liordark.com/codigo/…,
+// que revisa al proveedor cada 30 s). Máximo CODES_PER_ACCOUNT_PER_DAY
+// consultas por cuenta al día; si ya hay una abierta se reutiliza (no
+// gasta otra). El cliente nunca elige qué se consulta ni a quién: solo
+// el id de una cuenta que sea suya; el resto lo decide el servidor.
 // ─────────────────────────────────────────────────────────────
 
-router.get("/codes", async (req, res) => {
+const CODES_PER_ACCOUNT_PER_DAY = 3;
+
+function codesAccountsFor(phone: string) {
+  const seen = new Set<number>();
+  return listClientCodesAccounts(phone).filter(a => {
+    if (seen.has(a.accountId)) return false;
+    seen.add(a.accountId);
+    return !!getAccountCodeSource(a.accountId);
+  });
+}
+
+router.get("/codes", (req, res) => {
   const customerId = (req as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
 
-  // Retirado por ahora: los códigos solo se piden por el chat de soporte
-  // (el asistente decide qué entregar, ver support-bot.service.ts).
-  if (!CLIENT_CODES_PAGE_ENABLED || !isCodesTestUser(customer.phone)) {
-    return res.status(403).json({ message: "Los códigos ahora se piden por el chat de soporte 💬" });
-  }
-
-  // Cuentas con 2FA (TOTP) no piden código — se calcula al vuelo, sin
-  // consultar nada externo, y rota solo cada 30s (ver totp.util.ts).
-  const accounts = await Promise.all(listClientCodesAccounts(customer.phone).map(async a => {
-    const { totpSecret, ...rest } = a;
-    return { ...rest, totp: totpSecret ? await getCurrentTotp(totpSecret) : null };
-  }));
-
-  res.json({ accounts });
+  const accounts = codesAccountsFor(customer.phone).map(a => {
+    const used = countClientLinksToday(a.accountId, customer.phone);
+    const open = findOpenClientLink(a.accountId, customer.phone);
+    return {
+      accountId:   a.accountId,
+      platform:    a.platform,
+      email:       a.email,
+      profileName: a.profileName || "",
+      expiresAt:   a.expiresAt,
+      is2fa:       getAccountCodeSource(a.accountId) === TOTP_SOURCE_ID,
+      used,
+      limit:       CODES_PER_ACCOUNT_PER_DAY,
+      remaining:   Math.max(0, CODES_PER_ACCOUNT_PER_DAY - used),
+      openUrl:     open ? "/codigo/" + open.token + "?from=tienda" : null,
+    };
+  });
+  res.json({ accounts, limit: CODES_PER_ACCOUNT_PER_DAY });
 });
 
-// Consulta en vivo (con reintentos, hasta ~1 minuto) a la página del
-// proveedor — no lee caché, porque esa página es la fuente de verdad del
-// momento. El código de 6 dígitos de Netflix (cambio de datos de la
-// cuenta) y las sub-acciones sensibles de "con opciones" quedan
-// guardados para el admin pero nunca se le entregan al cliente acá (ver
-// codes-lookup.service.ts).
-router.post("/codes/:accountId/request", async (req, res) => {
+router.post("/codes/:accountId/open", (req, res) => {
   const customerId = (req as unknown as RequestWithCustomer).customerId;
   const customer   = findCustomerById(customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
 
-  // Retirado por ahora: los códigos solo se piden por el chat de soporte
-  // (el asistente decide qué entregar, ver support-bot.service.ts).
-  if (!CLIENT_CODES_PAGE_ENABLED || !isCodesTestUser(customer.phone)) {
-    return res.status(403).json({ message: "Los códigos ahora se piden por el chat de soporte 💬" });
-  }
-
   const accountId = Number(req.params.accountId);
-  const account   = listClientCodesAccounts(customer.phone).find(a => a.accountId === accountId);
-  if (!account) {
-    return res.status(404).json({ message: "No encontramos esa cuenta activa para tu celular." });
+  const account = codesAccountsFor(customer.phone).find(a => a.accountId === accountId);
+  if (!account) return res.status(404).json({ message: "Esa cuenta no tiene códigos disponibles en tu perfil." });
+
+  // Ya hay una consulta abierta para esta cuenta: se reutiliza.
+  const open = findOpenClientLink(accountId, customer.phone);
+  if (open) return res.json({ url: "/codigo/" + open.token + "?from=tienda", reused: true });
+
+  const used = countClientLinksToday(accountId, customer.phone);
+  if (used >= CODES_PER_ACCOUNT_PER_DAY) {
+    return res.status(429).json({
+      message: `Ya usaste tus ${CODES_PER_ACCOUNT_PER_DAY} consultas de hoy para esta cuenta. Mañana se renuevan; si es urgente, escríbenos por Soporte.`,
+    });
   }
 
-  const sourceId = getAccountCodeSource(accountId);
-  if (!sourceId) {
-    return res.status(409).json({ message: "Esta cuenta todavía no tiene configurada de dónde sacar el código. Avísanos por soporte." });
-  }
-
-  const exclude = skipsRepeatedCodes(sourceId) ? getLastSeenCodeForEmail(account.email) : null;
-  const result = await lookupCodeWithRetries(sourceId, account.email, exclude);
-
-  if (result.found && result.value) {
-    const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
-    saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });
-  }
-
-  // El de 6 dígitos de Netflix "sin opciones" es el de cambio de datos de
-  // la cuenta — más delicado, nunca se entrega al cliente. En Disney+ (y
-  // en las sub-acciones sensibles de "con opciones") el filtro es
-  // distinto, ya cubierto por isSensitiveResult. Queda guardado arriba
-  // para que el admin lo vea igual.
-  const isNetflixSensitive6Digits = sourceId === "netflix_sin_opciones" && result.kind === "code" && result.value?.length === 6;
-  if (result.found && (isNetflixSensitive6Digits || isSensitiveResult(result))) {
-    return res.json({ code: null, link: null, receivedAt: null });
-  }
-
-  res.json({
-    code:       result.found && result.kind === "code" ? result.value : null,
-    link:       result.found && result.kind === "link" ? result.value : null,
-    receivedAt: result.found ? new Date().toISOString() : null,
-    // Hora en que le llegó el correo al proveedor, si la fuente la da.
-    received:   result.found ? (result.providerReceivedAt ?? null) : null,
+  const sourceId = getAccountCodeSource(accountId)!;
+  const isTotp = sourceId === TOTP_SOURCE_ID;
+  const minutes = isTotp ? 2 : codeWaitMinutes(sourceId, account.platform) > 1 ? 8 : 5;
+  const link = createCodeLink({
+    accountId, email: account.email, sourceId, clientPhone: customer.phone, createdBy: "client", minutes,
   });
+  res.json({ url: "/codigo/" + link.token + "?from=tienda", reused: false, remaining: CODES_PER_ACCOUNT_PER_DAY - used - 1 });
 });
 
 // GET /api/store/dashboard — cuentas activas del cliente logueado, con
@@ -596,7 +577,7 @@ router.post("/account/email", (req, res) => {
   }
 
   const email = String(req.body?.email ?? "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isSafeEmail(email)) {
     return res.status(400).json({ message: "Ingresa un correo válido." });
   }
 
@@ -681,7 +662,7 @@ router.post("/checkout", async (req, res) => {
 
   const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
   const comboId        = req.body?.comboId ? Number(req.body.comboId) : undefined;
-  const clientEmail    = req.body?.clientEmail ? String(req.body.clientEmail).trim() : undefined;
+  const clientEmail    = cleanEmail(req.body?.clientEmail);
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
   // Planes por meses (GEMINI): 1, 3, 6 o 12 meses — el precio sale del plan,
@@ -798,6 +779,10 @@ router.post("/checkout", async (req, res) => {
 // "💬 Soporte" de la barra abre esto en vez de WhatsApp (ver app.js).
 // ─────────────────────────────────────────────────────────────
 
+const CHAT_TEXT_MAX = 1500;
+const CHAT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"]);
+const CHAT_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm", "video/3gpp"]);
+
 const chatUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 function requireChatUser(req: any, res: any): { phone: string } | null {
@@ -880,6 +865,7 @@ router.post("/chat/messages", (req, res) => {
 
   const text = String(req.body?.text ?? "").trim();
   if (!text) return res.status(400).json({ message: "Escribe un mensaje." });
+  if (text.length > CHAT_TEXT_MAX) return res.status(400).json({ message: `El mensaje es muy largo (máximo ${CHAT_TEXT_MAX} caracteres).` });
 
   const message = addMessage(chat.id, "customer", { type: "text", text });
   emitChatEvent({ type: "message", chatId: chat.id, message });
@@ -904,8 +890,9 @@ router.post("/chat/messages/media", chatUpload.single("file"), async (req, res) 
   const file = (req as any).file as Express.Multer.File | undefined;
   if (!file) return res.status(400).json({ message: "Falta el archivo." });
 
-  const isImage = file.mimetype.startsWith("image/");
-  const isVideo = file.mimetype.startsWith("video/");
+  // Solo formatos comunes — nada de SVG/HTML disfrazados de imagen.
+  const isImage = CHAT_IMAGE_TYPES.has(file.mimetype);
+  const isVideo = CHAT_VIDEO_TYPES.has(file.mimetype);
   if (!isImage && !isVideo) return res.status(400).json({ message: "Solo se pueden enviar fotos o videos." });
 
   try {

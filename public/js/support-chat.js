@@ -44,14 +44,25 @@
   }
 
   function escapeHtml(s) {
-    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
   // Convierte links sueltos en el texto del chat (ej. el link de código
   // de Prime Video/Crunchyroll) en <a> clickeables — escapa primero, así
   // que lo que arme la URL sigue siendo texto plano seguro.
   function linkifyText(raw) {
-    return escapeHtml(raw).replace(/(https?:\/\/[^\s<]+)/g, url => `<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+    // Seguro contra inyección: la URL se corta en comillas/espacios y todo
+    // (texto y href) se escapa — un mensaje nunca puede crear atributos.
+    const text = String(raw ?? "");
+    const re = /https?:\/\/[^\s<>"'`]+/g;
+    let out = "", last = 0, m;
+    while ((m = re.exec(text))) {
+      const url = m[0];
+      out += escapeHtml(text.slice(last, m.index)) +
+        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+      last = m.index + url.length;
+    }
+    return out + escapeHtml(text.slice(last));
   }
 
   // Celulares de Perú son siempre 9 dígitos — si el proveedor quedó

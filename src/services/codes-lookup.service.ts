@@ -86,10 +86,19 @@ export function parsePallyResultPage(html: string, preferCode = false): CodeLook
   // años tipo "© 2026"). Con preferCode (código de inicio de sesión de
   // Netflix) se busca ANTES que cualquier enlace: el correo del código
   // también trae enlaces (ayuda, etc.) y antes se devolvía el enlace.
-  const text = decodeHtmlEntities(wrapper.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "))
+  // El texto sale del correo ya decodificado (incluye el correo original
+  // que Pally a veces trae incrustado en un <iframe srcdoc>, que antes se
+  // perdía al quitar las etiquetas). Se prefiere el número que aparece
+  // justo después de "código"/"code".
+  const text = decodeHtmlEntities(extra.emailHtml.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "))
     .replace(/c[oó]digo de \d+ d[ií]gitos/gi, " ");
-  const codes = [...text.matchAll(/(?<![\d/:.-])\d{4,8}(?![\d/:.-])/g)].map(m => m[0]).filter(d => !/^(19|20)\d\d$/.test(d));
-  const code = preferCode ? (codes.find(d => d.length === 4) ?? codes[0]) : codes[0];
+  const notYear = (d: string) => !/^(19|20)\d\d$/.test(d);
+  const codes = [...text.matchAll(/(?<![\d/:.-])\d{4,8}(?![\d/:.-])/g)].map(m => m[0]).filter(notYear);
+  const nearRaw = text.match(/(?:c[oó]digo|code)[^\d]{0,80}?(?<![\d/:.-])(\d{4,8})(?![\d/:.-])/i)?.[1];
+  const near = nearRaw && notYear(nearRaw) ? nearRaw : undefined;
+  const code = preferCode
+    ? (near && near.length === 4 ? near : (codes.find(d => d.length === 4) ?? near ?? codes[0]))
+    : (near ?? codes[0]);
   if (preferCode && code) return { found: true, kind: "code", value: code, ...extra };
 
   // 1) Enlace: el primer <a href> del cuerpo que no sea del propio sitio.
@@ -106,6 +115,10 @@ export function parsePallyResultPage(html: string, preferCode = false): CodeLook
   if (subject) console.warn("Pally: resultado sin enlace ni código reconocible — asunto:", subject);
   return { found: false, kind: null, value: null, ...extra };
 }
+
+// Código de acceso de Pally: solo vive en el servidor (nunca se manda al
+// navegador). Se puede cambiar con PROVIDER_ACCESS_CODE en .env.production.
+const PALLY_ACCESS_CODE = process.env.PROVIDER_ACCESS_CODE || "gustavo";
 
 async function fetchFromPallyDigital(tipo: string, email: string, accessCode: string): Promise<CodeLookupResult> {
   const url = `https://codes.pally.digital/index.php?tipo=${encodeURIComponent(tipo)}`;
@@ -146,13 +159,13 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
 // "PallyStore sin opciones" — primera fuente configurada (ver
 // access_accounts.code_source = "netflix_sin_opciones").
 function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
-  return fetchFromPallyDigital("netflix", email, "gustavo");
+  return fetchFromPallyDigital("netflix", email, PALLY_ACCESS_CODE);
 }
 
 // Disney+ — mismo sitio (tipo=disney), sin menú de opciones, igual que
 // Netflix "sin opciones".
 function lookupDisneySinOpciones(email: string): Promise<CodeLookupResult> {
-  return fetchFromPallyDigital("disney", email, "gustavo");
+  return fetchFromPallyDigital("disney", email, PALLY_ACCESS_CODE);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -249,7 +262,7 @@ async function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult
   for (const action of CON_OPCIONES_ACTIONS) {
     let result: CodeLookupResult;
     try {
-      result = await fetchFromPallyDigitalConOpciones(email, "gustavo", action.accion);
+      result = await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion);
     } catch {
       continue;
     }
@@ -321,7 +334,8 @@ export async function lookupCodeAction(sourceId: string, email: string, actionId
   if (sourceId === "netflix_con_opciones" && actionId === LOGIN_COMBO_ACTION.id) {
     for (const id of LOGIN_COMBO_IDS) {
       const action = CON_OPCIONES_ACTIONS.find(a => a.id === id)!;
-      const result = await fetchFromPallyDigitalConOpciones(email, "gustavo", action.accion).catch(() => null);
+      const raw = await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion).catch(() => null);
+      const result = raw ? withFallbackExtraction(raw) : null;
       if (result?.found) return { ...result, sourceAction: action.id };
     }
     return { found: false, kind: null, value: null };
@@ -329,7 +343,7 @@ export async function lookupCodeAction(sourceId: string, email: string, actionId
   if (sourceId === "netflix_con_opciones" && actionId) {
     const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);
     if (!action) return { found: false, kind: null, value: null };
-    const result = await fetchFromPallyDigitalConOpciones(email, "gustavo", action.accion);
+    const result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
     return result.found ? { ...result, sourceAction: action.id } : result;
   }
   return lookupCode(sourceId, email);
@@ -691,7 +705,17 @@ export function codeSourceLabel(sourceId: string | null): string {
 export async function lookupCode(sourceId: string, email: string): Promise<CodeLookupResult> {
   const source = SOURCES[sourceId];
   if (!source) return { found: false, kind: null, value: null };
-  return source.lookup(email);
+  return withFallbackExtraction(await source.lookup(email));
+}
+
+/** Si la fuente trajo el correo pero su lector no reconoció nada, se
+ *  intenta con el lector genérico (código junto a "código"/"code", botón
+ *  de confirmar o número en su propia caja). Los filtros de qué se le
+ *  entrega al cliente se aplican después, igual que siempre. */
+function withFallbackExtraction(result: CodeLookupResult): CodeLookupResult {
+  if (result.found || !result.emailHtml) return result;
+  const generic = extractCodeFromEmailHtml(result.emailHtml, result.providerReceivedAt, { anyButtonFallback: false });
+  return generic.found ? { ...result, ...generic, emailHtml: result.emailHtml } : result;
 }
 
 /**

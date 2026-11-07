@@ -16,6 +16,7 @@ import { listAccessClientStats } from "../db/access.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { limaTodayISO } from "../services/access.service";
 import { checkLockout } from "../services/login-lockout.service";
+import { isSafeEmail, cleanEmail } from "../utils/email.util";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -142,7 +143,7 @@ router.post("/:id/email", (req, res) => {
     return res.status(404).json({ message: "Cliente no encontrado." });
   }
   const email = String(req.body?.email ?? "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isSafeEmail(email)) {
     return res.status(400).json({ message: "Ingresa un correo válido." });
   }
   const updated = setCustomerEmail(id, email);

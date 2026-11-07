@@ -193,28 +193,24 @@ function showMenu(chat: Chat, text = pick(["¿En qué más te puedo ayudar? 😊
   setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
 }
 
+// Los códigos ya no se entregan por el chat: el cliente los ve él mismo en
+// la sección «Códigos» de liordark.com (3 consultas por cuenta al día).
+const OPEN_CODES_OPTION: BotOption = { id: "opencodes", label: "🔑 Ir a Códigos" };
+
 function showCodeAccounts(chat: Chat, phone: string): void {
-  const codesAccounts = listClientCodesAccounts(phone);
-  const autoIds = new Set<number>();
-  const options: BotOption[] = [];
-  for (const a of codesAccounts) {
-    if (autoIds.has(a.accountId)) continue;
-    autoIds.add(a.accountId);
-    options.push({ id: `code:${a.accountId}`, label: accountLabel(a.platform, a.email) });
-  }
-  // Solo cuentas con códigos automáticos: las demás no se atienden por acá.
-  if (options.length === 0) {
+  if (listClientCodesAccounts(phone).length === 0) {
     say(chat.id,
       "Por ahora tus cuentas no tienen entrega automática de códigos 🙏. Si necesitas ayuda con algo más, con gusto te atiendo.",
       [HUMAN_OPTION, BACK_OPTION]);
     setBotState(chat.id, "menu", chat.botContext);
     return;
   }
-  say(chat.id, pick([
-    "¡Claro, te ayudo con eso! 🔑 ¿De cuál de tus cuentas necesitas el código?",
-    "¡Por supuesto! 😊 Elige la cuenta para la que necesitas el código 👇",
-  ]), [...options, BACK_OPTION]);
-  setBotState(chat.id, "code_pick", chat.botContext);
+  say(chat.id,
+    "¡Claro! 🔑 Ahora tus códigos los ves tú mismo, al instante, en la sección «Códigos» de tu cuenta: " +
+    "eliges la cuenta y te mostramos el código apenas llega (revisamos cada 30 segundos). " +
+    "Toca el botón para ir 👇",
+    [OPEN_CODES_OPTION, HUMAN_OPTION, BACK_OPTION]);
+  setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -530,6 +526,11 @@ function matchProductByText(text: string): string | null {
 async function handleOption(chat: Chat, phone: string, optionId: string): Promise<void> {
   if (optionId === "menu")     return showMenu(chat);
   if (optionId === "code")     return showCodeAccounts(chat, phone);
+  if (optionId === "opencodes") {
+    say(chat.id, "¡Listo! Te abrí «Códigos» 🔑. Si necesitas algo más, aquí estoy 😊", [DONE_OPTION, BACK_OPTION]);
+    setBotState(chat.id, "menu", { ...chat.botContext, misses: 0 });
+    return;
+  }
   if (optionId === "issue")    return startIssue(chat, phone);
   if (optionId === "products") return showProducts(chat);
   if (optionId === "buycombo") return confirmCombo(chat);
@@ -539,12 +540,8 @@ async function handleOption(chat: Chat, phone: string, optionId: string): Promis
   if (optionId === "done") return closeWithThanks(chat.id, pick(THANKS));
 
   const [kind, rest = ""] = splitOnce(optionId, ":");
-  if (kind === "code")  return askLoginDevice(chat, phone, Number(rest));
-  if (kind === "dev") {
-    const [id = "", device = ""] = rest.split("|");
-    return guideLoginDevice(chat, phone, Number(id), device);
-  }
-  if (kind === "go" || kind === "retry") return startCodeLookup(chat, phone, Number(rest));
+  // Botones viejos de códigos (mensajes anteriores): también van a «Códigos».
+  if (kind === "code" || kind === "dev" || kind === "go" || kind === "retry") return showCodeAccounts(chat, phone);
   if (kind === "products") return showProducts(chat, Math.max(1, Number(rest) || 1));
   if (kind === "buy")      return showPitch(chat, rest);
   if (kind === "buynow")   return confirmPurchase(chat, rest);

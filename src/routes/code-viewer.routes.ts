@@ -122,8 +122,9 @@ codeViewerAdminRoutes.get("/link/:token", (req, res) => {
 
 export const codeLinkRoutes = Router();
 
-// Para no martillar al proveedor: como mucho una consulta cada 6 s por link.
-const CHECK_MIN_INTERVAL_MS = 6000;
+// Para no martillar al proveedor: como mucho una consulta cada 25 s por
+// link (el visor revisa cada 30 s); entre medio se responde lo último.
+const CHECK_MIN_INTERVAL_MS = 25_000;
 const lastChecks = new Map<string, { at: number; body: unknown }>();
 
 // Un correo que llegó bastante antes de que se creara el link es el código

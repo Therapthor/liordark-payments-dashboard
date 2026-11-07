@@ -60,6 +60,7 @@ import {
   countUnseenFullAccountsForWholesaler,
 } from "../db/wholesale-full-account.repository";
 import { plansFor, planFor, planExpiresAt, money } from "../services/plans.service";
+import { isSafeEmail, cleanEmail } from "../utils/email.util";
 
 // ─────────────────────────────────────────────────────────────
 // PANEL MAYORISTA (mayorista.liordark.com) — todo detrás de sesión de
@@ -183,7 +184,7 @@ router.post("/purchase", (req, res) => {
       return res.status(400).json({ message: `Compra "${platform}" de una en una — cada una necesita su propia activación.` });
     }
     const email = String(rawEmails[platform] ?? "").trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!isSafeEmail(email)) {
       return res.status(400).json({ message: `Falta un correo válido para activar "${platform}".` });
     }
     emailByPlatform[platform] = email;

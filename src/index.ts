@@ -136,6 +136,20 @@ const noCacheHeaders = {
     res.setHeader("Cache-Control", LONG_CACHE_EXT.test(filePath) ? "public, max-age=604800" : "no-cache"),
 };
 const storeStatic     = express.static(path.resolve(process.cwd(), "public-store"), noCacheHeaders);
+const PANEL_CSP = [
+  "default-src 'self'",
+  "script-src 'self' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline' https:",
+  "font-src 'self' https: data:",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' blob: https:",
+  "connect-src 'self'",
+  "frame-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
 const panelStatic      = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
 const wholesaleStatic  = express.static(path.resolve(process.cwd(), "public-wholesale"), noCacheHeaders);
 
@@ -163,6 +177,13 @@ app.use((req, res, next) => {
   } else if (host === "mayorista.liordark.com") {
     wholesaleStatic(req, res, next);
   } else {
+    // Panel admin: el navegador solo ejecuta nuestros propios scripts — si
+    // algún texto de un cliente se colara como HTML, igual no puede correr
+    // código (onmouseover, <script>…) ni mandar datos a otro sitio.
+    res.setHeader("Content-Security-Policy", PANEL_CSP);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "same-origin");
     panelStatic(req, res, next);
   }
 });

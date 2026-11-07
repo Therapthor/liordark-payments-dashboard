@@ -5,7 +5,7 @@ import { db } from "./db";
 
 export type CodeLink = {
   token: string; accountId: number; email: string; sourceId: string; clientPhone: string;
-  createdBy: "admin" | "bot"; createdAt: string; expiresAt: string; openedAt: string | null; closedAt: string | null;
+  createdBy: "admin" | "bot" | "client"; createdAt: string; expiresAt: string; openedAt: string | null; closedAt: string | null;
 };
 
 const TOKEN_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -25,7 +25,7 @@ export function sqliteDate(s: string | null): Date | null {
 }
 
 export function createCodeLink(p: {
-  accountId: number; email: string; sourceId: string; clientPhone: string; createdBy: "admin" | "bot"; minutes: number;
+  accountId: number; email: string; sourceId: string; clientPhone: string; createdBy: "admin" | "bot" | "client"; minutes: number;
 }): CodeLink {
   let token = "";
   for (let i = 0; i < 10; i++) token += TOKEN_CHARS[crypto.randomInt(TOKEN_CHARS.length)];
@@ -70,6 +70,35 @@ export function countBotLinksToday(clientPhone: string): number {
     WHERE created_by = 'bot' AND substr(client_phone, -9) = ? AND created_at >= ?
   `).get(digits, startSql) as { n: number };
   return r.n;
+}
+
+function limaMidnightUtcSql(): string {
+  const now = new Date();
+  const lima = new Date(now.getTime() - 5 * 3600_000);
+  const start = new Date(Date.UTC(lima.getUTCFullYear(), lima.getUTCMonth(), lima.getUTCDate(), 5, 0, 0));
+  return start.toISOString().slice(0, 19).replace("T", " ");
+}
+
+/** Consultas que el cliente abrió hoy (día de Lima) desde «Códigos» para esta cuenta. */
+export function countClientLinksToday(accountId: number, clientPhone: string): number {
+  const digits = clientPhone.replace(/\D/g, "").slice(-9);
+  const r = db.prepare(`
+    SELECT COUNT(*) AS n FROM code_links
+    WHERE created_by = 'client' AND account_id = ? AND substr(client_phone, -9) = ? AND created_at >= ?
+  `).get(accountId, digits, limaMidnightUtcSql()) as { n: number };
+  return r.n;
+}
+
+/** La consulta de «Códigos» que sigue abierta (no vencida ni cerrada), si hay. */
+export function findOpenClientLink(accountId: number, clientPhone: string): CodeLink | null {
+  const digits = clientPhone.replace(/\D/g, "").slice(-9);
+  const r = db.prepare(`
+    SELECT * FROM code_links
+    WHERE created_by = 'client' AND account_id = ? AND substr(client_phone, -9) = ?
+      AND closed_at IS NULL AND expires_at > datetime('now')
+    ORDER BY created_at DESC LIMIT 1
+  `).get(accountId, digits);
+  return r ? toLink(r) : null;
 }
 
 /** Limpieza: links de más de 7 días. */
