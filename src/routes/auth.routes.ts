@@ -85,7 +85,7 @@ router.post("/login", (req, res) => {
 
   if (!trusted && realIp && isPanelIpBlocked(ip)) {
     noteFailure(now, ip);
-    res.status(403).json({ message: BLOCKED_MSG });
+    res.status(403).json({ message: BLOCKED_MSG, blocked: true, ip });
     return;
   }
 
@@ -122,7 +122,7 @@ router.post("/login", (req, res) => {
       fails.delete(key);
       blockPanelIp(ip, `${count} contraseñas incorrectas`);
       console.warn(`⛔ Panel: IP ${ip} bloqueada para siempre (${count} contraseñas incorrectas)`);
-      res.status(403).json({ message: BLOCKED_MSG });
+      res.status(403).json({ message: BLOCKED_MSG, blocked: true, ip });
       return;
     }
     // Sin IP real (no debería pasar detrás de nginx): solo espera de 15 min.
@@ -216,6 +216,14 @@ router.post("/logout", (req, res) => {
   revokeAdminSession(req.cookies?.[SESSION_COOKIE]);
   res.clearCookie(SESSION_COOKIE);
   res.json({ ok: true });
+});
+
+// ¿Esta conexión está bloqueada en el login? (para mostrar el GAME OVER
+// apenas abre la página). Los dispositivos de confianza nunca lo ven.
+router.get("/login-status", (req, res) => {
+  const ip = clientIp(req);
+  const blocked = !isTrustedDevice(req.cookies?.[TRUSTED_COOKIE]) && isPublicIp(ip) && isPanelIpBlocked(ip);
+  res.json(blocked ? { blocked: true, ip } : { blocked: false });
 });
 
 router.get("/me", (req, res) => {

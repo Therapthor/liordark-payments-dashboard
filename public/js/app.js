@@ -203,6 +203,11 @@
   function showLogin() {
     document.getElementById("login-screen").hidden = false;
     document.getElementById("app").hidden = true;
+    // Conexión ya bloqueada: GAME OVER de entrada.
+    fetch("/api/auth/login-status", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d && d.blocked && window.LiordarkGameOver) window.LiordarkGameOver.show(d.ip); })
+      .catch(() => {});
   }
   function showApp() {
     document.getElementById("login-screen").hidden = true;
@@ -231,6 +236,12 @@
         body: JSON.stringify({ password }),
       });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 403 && data?.blocked && window.LiordarkGameOver) {
+        window.LiordarkGameOver.show(data.ip);
+        errorEl.textContent = data.message || "Conexión bloqueada.";
+        errorEl.hidden = false;
+        return;
+      }
       if (!res.ok) throw new Error(data?.message || "Contraseña incorrecta");
       showApp();
       boot();

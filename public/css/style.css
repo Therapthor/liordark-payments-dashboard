@@ -1489,3 +1489,25 @@ button, input {
 .sl-state.paid { background: rgba(47,158,91,.18); color: #2f9e5b; }
 .sl-state.expired, .sl-state.cancelled { background: rgba(192,57,43,.12); color: #c0392b; }
 .sl-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ─── GAME OVER (conexión bloqueada en el login del panel) ─── */
+.gameover { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; text-align: center;
+  background-color: #231d16;
+  background-image: linear-gradient(#2d261e 1px, transparent 1px), linear-gradient(90deg, #2d261e 1px, transparent 1px);
+  background-size: 32px 32px; }
+.gameover[hidden] { display: none; }
+.gameover svg { image-rendering: pixelated; shape-rendering: crispEdges; overflow: visible; max-width: 100%; height: auto; }
+.gameover .go-ip { margin: 0; font: 700 13px/1.5 ui-monospace, "Courier New", monospace; color: #b99a63; letter-spacing: .5px; }
+.gameover .go-back { margin-top: 18px; background: none; border: 0; color: #6f604a; font: 12px/1.4 ui-monospace, monospace; text-decoration: underline; cursor: pointer; }
+.gameover .go-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.go-blink { animation: goBlink 1s steps(1) infinite; }
+@keyframes goBlink { 50% { opacity: 0; } }
+.go-hop { animation: goHop 1.2s steps(1) infinite; }
+@keyframes goHop { 0%, 60% { transform: translateY(0); } 70% { transform: translateY(-2px); } 80% { transform: translateY(-3px); } 90% { transform: translateY(-1px); } }
+.go-pop .go-fist { animation: goFist 1.4s steps(1) infinite; }
+.go-pop .go-finger { animation: goFinger 1.4s steps(1) infinite; }
+@keyframes goFist { 0%, 25% { opacity: 1; } 26%, 100% { opacity: 0; } }
+@keyframes goFinger { 0%, 25% { opacity: 0; } 26%, 100% { opacity: 1; } }
+.go-glint { animation: goGlint 2s steps(1) infinite; }
+@keyframes goGlint { 0%, 70% { opacity: 1; } 71%, 85% { opacity: 0; } 86% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .go-blink, .go-hop, .go-glint { animation: none; } }
