@@ -75,9 +75,18 @@ export function setWholesalerStatus(id: number, status: "active" | "disabled"): 
   `).run(status, status, id);
 }
 
+// Sesiones de mayorista: un token emitido antes de esta marca ya no vale.
+// Se mueve al cambiar la contraseña, así sale cualquier intruso (auditoría M6).
+try { db.exec(`ALTER TABLE wholesalers ADD COLUMN sessions_valid_after INTEGER NOT NULL DEFAULT 0`); } catch { /* ya existe */ }
+
+export function wholesalerSessionsValidAfter(id: number): number {
+  const r = db.prepare(`SELECT sessions_valid_after AS v FROM wholesalers WHERE id = ?`).get(id) as { v: number } | undefined;
+  return r?.v ?? 0;
+}
+
 export function setWholesalerPassword(id: number, passwordHash: string, passwordPlain: string): Wholesaler | null {
-  db.prepare(`UPDATE wholesalers SET password_hash = ?, password_plain = ? WHERE id = ?`)
-    .run(passwordHash, passwordPlain, id);
+  db.prepare(`UPDATE wholesalers SET password_hash = ?, password_plain = ?, sessions_valid_after = ? WHERE id = ?`)
+    .run(passwordHash, passwordPlain, Date.now(), id);
   return findWholesalerById(id);
 }
 

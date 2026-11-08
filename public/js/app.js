@@ -945,12 +945,18 @@
     // lo único que se ve en modo compacto; el resto sigue en el HTML para
     // que la búsqueda por celular (que busca en la base, no en pantalla)
     // no se vea afectada por si está compactado o no.
-    const summary = (o.message.split("\n")[0] || o.message).trim();
+    // El texto lleva datos que escribió el cliente (correo, «contraseña» de
+    // YouTube…): se escapa TODO y solo se vuelven a permitir las etiquetas
+    // de formato del bot, sin atributos (<b>, <i>, <u>, <s>, <code>, <pre>).
+    const decode = (t) => String(t ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+    const safe = (t) => escapeHtml(decode(t)).replace(/&lt;(\/?)(b|i|u|s|code|pre)&gt;/g, "<$1$2>");
+    const message = String(o.message ?? "");
+    const summary = (message.split("\n")[0] || message).trim();
     li.innerHTML = `
       <span class="feed-badge matched"></span>
       <div class="feed-main">
-        <div class="orders-approved-summary">${summary}</div>
-        <div class="orders-approved-text">${o.message}</div>
+        <div class="orders-approved-summary">${safe(summary)}</div>
+        <div class="orders-approved-text">${safe(message)}</div>
         <div class="feed-time">${fmtTime(o.createdAt)}</div>
       </div>
     `;

@@ -9,12 +9,18 @@ import {
   listPasskeys, deletePasskey,
 } from "../db/security.repository";
 import { requireAuth } from "../middleware/auth.middleware";
-import { clientIp, ipHeadersSummary, isPublicIp } from "../services/security.service";
+import { clientIp, ipHeadersSummary, isPublicIp, isAdminHost } from "../services/security.service";
 import { registrationOptions, registerPasskey, loginOptions, verifyPasskeyLogin } from "../services/passkey.service";
 import { env } from "../config/env";
 import axios from "axios";
 
 const router = Router();
+
+// Login y llaves del admin: solo en el dominio del panel (ver isAdminHost).
+router.use((req, res, next) => {
+  if (!isAdminHost(req)) { res.status(404).json({ message: "No encontrado" }); return; }
+  next();
+});
 
 // Contraseña incorrecta:
 //  · desde un dispositivo nuevo: a la 2.ª, esa IP queda bloqueada PARA

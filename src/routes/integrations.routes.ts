@@ -1,3 +1,4 @@
+import { sameSecret } from "../utils/safe-compare.util";
 import { Router } from "express";
 import { env } from "../config/env";
 import { createAccountsBulk } from "../db/access.repository";
@@ -16,7 +17,7 @@ const router = Router();
 
 router.post("/telegram-add", (req, res) => {
   const key = req.header("x-bot-key");
-  if (!key || key !== env.DASHBOARD_API_KEY) {
+  if (!sameSecret(key, env.DASHBOARD_API_KEY)) {
     res.status(401).json({ message: "No autorizado" });
     return;
   }

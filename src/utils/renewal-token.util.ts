@@ -1,3 +1,4 @@
+import { sameSecret } from "./safe-compare.util";
 import crypto from "crypto";
 import { env } from "../config/env";
 
@@ -27,7 +28,7 @@ export function createRenewalToken(phone: string, platform: string): string {
 export function verifyRenewalToken(token: string): RenewalTokenPayload | null {
   const [json, signature] = String(token).split(".");
   if (!json || !signature) return null;
-  if (sign(json) !== signature) return null;
+  if (!sameSecret(signature, sign(json))) return null;
 
   try {
     const payload = JSON.parse(Buffer.from(json, "base64url").toString("utf8")) as RenewalTokenPayload;

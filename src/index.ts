@@ -1,5 +1,5 @@
+import { loginRateLimit } from "./utils/rate-limit.util";
 import express from "express";
-import cors from "cors";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import path from "path";
@@ -53,6 +53,7 @@ import { disableInactiveWholesalers } from "./db/wholesaler.repository";
 import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
 import { runExpireChatMedia } from "./jobs/expiry-chat-media.job";
 import { runSupportBotSweep } from "./services/support-bot.service";
+import { findSuspiciousApprovedOrders } from "./db/orders.repository";
 
 const app = express();
 
@@ -65,7 +66,17 @@ app.use(compression({
     return compression.filter(req, res);
   },
 }));
-app.use(cors({ origin: true, credentials: true }));
+// Sin CORS: la tienda, el mayorista y el panel llaman a su propio dominio,
+// y el bot habla servidor a servidor. Antes se aceptaba CUALQUIER origen con
+// cookies (auditoría M1).
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=15552000");
+  next();
+});
 app.use(express.json());
 app.use(cookieParser());
 
@@ -79,6 +90,11 @@ apiRouter.use((_req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
 });
+// Límite de intentos por IP en los logins (solo POST).
+apiRouter.use("/auth/login", loginRateLimit("admin", 30, 10 * 60_000));
+apiRouter.use("/auth/passkey/login", loginRateLimit("admin-llave", 60, 10 * 60_000));
+apiRouter.use("/store/auth", loginRateLimit("tienda", 60, 10 * 60_000));
+apiRouter.use("/wholesaler/auth/login", loginRateLimit("mayorista", 30, 10 * 60_000));
 apiRouter.use("/auth", authRoutes);
 apiRouter.use("/live", requireAuth, liveRoutes);
 apiRouter.use("/stats", requireAuth, statsRoutes);
@@ -145,7 +161,7 @@ const noCacheHeaders = {
 const storeStatic     = express.static(path.resolve(process.cwd(), "public-store"), noCacheHeaders);
 const PANEL_CSP = [
   "default-src 'self'",
-  "script-src 'self' https://cdn.jsdelivr.net",
+  "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https:",
   "font-src 'self' https: data:",
   "img-src 'self' data: blob: https:",
@@ -157,6 +173,9 @@ const PANEL_CSP = [
   "form-action 'self'",
   "frame-ancestors 'self'",
 ].join("; ");
+// Tienda y mayorista: nadie más puede meterlas en un iframe (clic engañoso
+// para gastar saldo) y no se cargan plugins ni <base> ajenos (auditoría M2).
+const SITE_CSP = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
 const panelStatic      = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
 const wholesaleStatic  = express.static(path.resolve(process.cwd(), "public-wholesale"), noCacheHeaders);
 
@@ -186,8 +205,10 @@ app.get(/^\/cambiar-pin\/[A-Za-z0-9]{6,20}\/?$/, (req, res, next) => {
 app.use((req, res, next) => {
   const host = req.hostname;
   if (host === "liordark.com" || host === "www.liordark.com") {
+    res.setHeader("Content-Security-Policy", SITE_CSP);
     storeStatic(req, res, next);
   } else if (host === "mayorista.liordark.com") {
+    res.setHeader("Content-Security-Policy", SITE_CSP);
     wholesaleStatic(req, res, next);
   } else {
     // Panel admin: el navegador solo ejecuta nuestros propios scripts — si
@@ -209,6 +230,12 @@ const server = app.listen(env.PORT, () => {
     if (r.payments || r.orders) console.log(`🧹 Pagos falsos quitados de la contabilidad: ${r.payments} pago(s), ${r.orders} pedido(s) aprobado(s)`);
   } catch (err: any) { console.error("⚠️ limpieza de pagos falsos:", err?.message); }
   try { runPendingFraudCleanups(); } catch (err: any) { console.error("⚠️ limpieza de fraude:", err?.message); }
+  try {
+    const bad = findSuspiciousApprovedOrders();
+    console.log(bad.length
+      ? `🚨 Aprobados con HTML sospechoso: ${bad.length} (ids ${bad.map(b => b.id).join(", ")}) — ya no se ejecutan en el panel`
+      : "✅ Aprobados: ningún texto con código sospechoso");
+  } catch (err: any) { console.error("⚠️ revisión de aprobados:", err?.message); }
   try { applyPendingPasswordRotation(); } catch (err: any) { console.error("⚠️ cambio de contraseña:", err?.message); }
   try {
     const n = scanPastChatMessages();

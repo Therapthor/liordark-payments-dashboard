@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
@@ -218,7 +219,7 @@ router.post("/purchase", (req, res) => {
     totalCents += Math.round(price * 100);
   }
 
-  const orderRef = "wholesale:" + wholesalerId + ":" + Date.now();
+  const orderRef = "wholesale:" + wholesalerId + ":" + Date.now() + ":" + crypto.randomUUID().slice(0, 8);
   const deduction = applyWholesalerCreditChange(wholesalerId, -totalCents, "purchase_profile", orderRef, "system");
   if (!deduction.ok) {
     return res.status(402).json({ message: deduction.error });
@@ -289,6 +290,7 @@ router.post("/full-account-orders", (req, res) => {
   const wholesalerId = wid(req);
   const platform      = String(req.body?.platform ?? "").trim().toUpperCase();
   const quantity       = Math.max(1, Number(req.body?.quantity) || 1);
+  if (!Number.isInteger(quantity) || quantity > 20) return res.status(400).json({ message: "La cantidad debe ser un número entero entre 1 y 20." });
   const clientPhone    = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
 
   if (!platform) return res.status(400).json({ message: "Falta la plataforma." });
@@ -302,7 +304,7 @@ router.post("/full-account-orders", (req, res) => {
   const unitPriceCents = Math.round(unitPrice * 100);
   const totalCents = unitPriceCents * quantity;
 
-  const orderRef = "wholesale-full:" + wholesalerId + ":" + Date.now();
+  const orderRef = "wholesale-full:" + wholesalerId + ":" + Date.now() + ":" + crypto.randomUUID().slice(0, 8);
   const deduction = applyWholesalerCreditChange(wholesalerId, -totalCents, "purchase_full_account", orderRef, "system");
   if (!deduction.ok) return res.status(402).json({ message: deduction.error });
 
@@ -368,7 +370,7 @@ router.post("/clients/:profileId/renew", (req, res) => {
   }
   const priceCents = Math.round(price * 100);
 
-  const orderRef = "wholesale-renew:" + wholesalerId + ":" + profileId + ":" + Date.now();
+  const orderRef = "wholesale-renew:" + wholesalerId + ":" + profileId + ":" + Date.now() + ":" + crypto.randomUUID().slice(0, 8);
   const deduction = applyWholesalerCreditChange(wholesalerId, -priceCents, "renewal", orderRef, "system");
   if (!deduction.ok) return res.status(402).json({ message: deduction.error });
 

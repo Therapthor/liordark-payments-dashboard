@@ -2,7 +2,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
-import { findWholesalerById } from "../db/wholesaler.repository";
+import { findWholesalerById, wholesalerSessionsValidAfter } from "../db/wholesaler.repository";
 
 // ─────────────────────────────────────────────────────────────
 // SESIÓN DE MAYORISTA — mismo patrón de token firmado que
@@ -44,6 +44,9 @@ export function verifyWholesalerSessionToken(token: string | undefined): number 
   } catch {
     return null;
   }
+
+  // Contraseña cambiada desde el panel: las sesiones anteriores ya no valen.
+  if (expiry - SESSION_TTL_MS < wholesalerSessionsValidAfter(wholesalerId)) return null;
 
   return wholesalerId;
 }

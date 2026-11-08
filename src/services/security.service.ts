@@ -74,6 +74,14 @@ export function isPublicIp(ip: string): boolean {
   return true;
 }
 
+// La API del administrador solo responde en el dominio del panel. En
+// liordark.com y mayorista.liordark.com (otros bloques de nginx, que pueden
+// dejar pasar cabeceras de IP inventadas) no existe (auditoría A3).
+const NON_ADMIN_HOSTS = new Set(["liordark.com", "www.liordark.com", "mayorista.liordark.com"]);
+export function isAdminHost(req: Request): boolean {
+  return !NON_ADMIN_HOSTS.has(String(req.hostname || "").toLowerCase());
+}
+
 function cleanIp(v: unknown): string {
   return String(v ?? "").trim().replace(/^::ffff:/, "").replace(/[^0-9a-fA-F.:]/g, "").slice(0, 64);
 }

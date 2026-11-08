@@ -2,9 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import {
   SESSION_COOKIE, TRUSTED_COOKIE, verifySessionToken, isTrustedDevice, setTrustedDeviceCookie,
 } from "../services/auth.service";
-import { clientIp } from "../services/security.service";
+import { clientIp, isAdminHost } from "../services/security.service";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!isAdminHost(req)) {
+    res.status(404).json({ message: "No encontrado" });
+    return;
+  }
   const token = req.cookies?.[SESSION_COOKIE];
   if (!verifySessionToken(token, clientIp(req))) {
     res.status(401).json({ message: "No autenticado" });

@@ -13,10 +13,12 @@ import {
   WHOLESALER_SESSION_COOKIE,
   verifyWholesalerSessionToken,
 } from "../services/wholesaler-auth.service";
+import { oneAtATime, phoneKey } from "../utils/one-at-a-time.util";
 
 // Sin /register acá — la cuenta la crea siempre el admin desde el panel
 // (ver src/routes/wholesalers-admin.routes.ts), nunca self-registro.
 const router = Router();
+const passwordLock = oneAtATime(phoneKey);
 
 function setSessionCookie(res: import("express").Response, wholesalerId: number): void {
   const { token, expires } = createWholesalerSessionToken(wholesalerId);
@@ -28,7 +30,7 @@ function setSessionCookie(res: import("express").Response, wholesalerId: number)
   });
 }
 
-router.post("/login", async (req, res) => {
+router.post("/login", passwordLock(async (req, res) => {
   const phone    = String(req.body?.phone ?? "");
   const password = String(req.body?.password ?? "");
 
@@ -52,7 +54,7 @@ router.post("/login", async (req, res) => {
   recordWholesalerLoginSuccess(wholesaler.id);
   setSessionCookie(res, wholesaler.id);
   res.json({ ok: true, phone: wholesaler.phone, displayName: wholesaler.displayName });
-});
+}));
 
 router.post("/logout", (_req, res) => {
   res.clearCookie(WHOLESALER_SESSION_COOKIE);

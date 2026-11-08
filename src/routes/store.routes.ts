@@ -95,6 +95,15 @@ function customComboDiscountRate(itemCount: number): number {
 // notificaciones) sigue detrás de sesión de cliente, como pidió el negocio.
 // ─────────────────────────────────────────────────────────────
 
+// «Contraseña» de la cuenta propia del cliente (YouTube Premium): se ve en
+// el panel y en Telegram, así que nunca puede llevar HTML (< >) ni
+// caracteres de control. Máximo 64.
+const BAD_CLIENT_PASSWORD = "La contraseña no puede tener los símbolos < ni > y debe tener como máximo 64 caracteres.";
+function isSafeClientPassword(v: unknown): boolean {
+  const s = String(v);
+  return s.length <= 64 && !/[<>\u0000-\u001f\u007f]/.test(s);
+}
+
 const router = Router();
 
 // ─────────────────────────────────────────────────────────────
@@ -106,10 +115,17 @@ const router = Router();
 // precio (para saber cuánto pagar).
 // ─────────────────────────────────────────────────────────────
 
-router.get("/renewals", (req, res) => {
-  const phone = String(req.query.phone ?? "").replace(/\D/g, "");
+// Con sesión y SOLO el celular de esa sesión: antes era público por
+// ?phone= y cualquiera veía correos y vencimientos de otro (auditoría A2).
+function sessionPhone(req: any): string {
+  const c = findCustomerById((req as RequestWithCustomer).customerId);
+  return c ? normalizePeruPhone(c.phone) : "";
+}
+
+router.get("/renewals", requireCustomerSession, (req, res) => {
+  const phone = sessionPhone(req).replace(/\D/g, "");
   if (phone.length < 9) {
-    return res.status(400).json({ message: "Ingresa un celular válido." });
+    return res.status(401).json({ message: "Sesión inválida." });
   }
 
   const accounts = listRenewalAccountsByPhone(phone).map(a => ({
@@ -120,14 +136,17 @@ router.get("/renewals", (req, res) => {
   res.json({ accounts });
 });
 
-router.post("/renewals/checkout", async (req, res) => {
+router.post("/renewals/checkout", requireCustomerSession, async (req, res) => {
   // Normalizado ACÁ (con el "51" si hace falta) antes de mandarlo al bot —
   // si no, un cliente que tipeó su celular sin el prefijo terminaría con
   // una orden/perfil sin el prefijo, y WhatsApp nunca le llegaría el
   // mensaje de confirmación (la API de Meta exige el número completo).
-  const phone          = normalizePeruPhone(String(req.body?.phone ?? ""));
+  const phone          = sessionPhone(req);
   const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
   const clientEmail    = cleanEmail(req.body?.clientEmail);
+  if (req.body?.clientPassword && !isSafeClientPassword(req.body.clientPassword)) {
+    return res.status(400).json({ message: BAD_CLIENT_PASSWORD });
+  }
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
   if (phone.length < 9 || !platform) {
@@ -263,6 +282,9 @@ router.post("/renew/:token/checkout", async (req, res) => {
   }
 
   const clientEmail    = cleanEmail(req.body?.clientEmail);
+  if (req.body?.clientPassword && !isSafeClientPassword(req.body.clientPassword)) {
+    return res.status(400).json({ message: BAD_CLIENT_PASSWORD });
+  }
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
   const { status, body } = await renewalCheckout(payload.phone, payload.platform, clientEmail, clientPassword);
   res.status(status).json(body);
@@ -316,6 +338,9 @@ router.post("/renew-code/:code/checkout", async (req, res) => {
   }
 
   const clientEmail    = cleanEmail(req.body?.clientEmail);
+  if (req.body?.clientPassword && !isSafeClientPassword(req.body.clientPassword)) {
+    return res.status(400).json({ message: BAD_CLIENT_PASSWORD });
+  }
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
   const { status, body } = await renewalCheckout(link.phone, platform, clientEmail, clientPassword);
   res.status(status).json(body);
@@ -671,6 +696,9 @@ router.post("/checkout", async (req, res) => {
   const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
   const comboId        = req.body?.comboId ? Number(req.body.comboId) : undefined;
   const clientEmail    = cleanEmail(req.body?.clientEmail);
+  if (req.body?.clientPassword && !isSafeClientPassword(req.body.clientPassword)) {
+    return res.status(400).json({ message: BAD_CLIENT_PASSWORD });
+  }
   const clientPassword = req.body?.clientPassword ? String(req.body.clientPassword) : undefined;
 
   // Planes por meses (GEMINI): 1, 3, 6 o 12 meses — el precio sale del plan,

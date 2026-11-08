@@ -1,3 +1,4 @@
+import { sameSecret } from "../utils/safe-compare.util";
 import { Router } from "express";
 import { env } from "../config/env";
 import { listCatalogProducts } from "../db/catalog.repository";
@@ -50,7 +51,7 @@ const router = Router();
 
 router.use((req, res, next) => {
   const key = req.header("x-bot-key");
-  if (!key || key !== env.DASHBOARD_API_KEY) {
+  if (!sameSecret(key, env.DASHBOARD_API_KEY)) {
     res.status(401).json({ message: "No autorizado" });
     return;
   }

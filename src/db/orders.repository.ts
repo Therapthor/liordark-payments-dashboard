@@ -36,3 +36,18 @@ export function searchApprovedOrders(term: string, limit: number): ApprovedOrder
     id: row.id, message: row.message, createdAt: row.created_at,
   }));
 }
+
+/**
+ * Aprobados con HTML peligroso guardado (iframe, script, eventos on…=,
+ * javascript:). Desde el arreglo del 8-nov el panel ya no los ejecuta;
+ * esto solo avisa en el log si alguien lo intentó (auditoría C1).
+ */
+export function findSuspiciousApprovedOrders(): { id: number; createdAt: string }[] {
+  return (db.prepare(`
+    SELECT id, created_at FROM orders_log
+    WHERE lower(message) LIKE '%<iframe%' OR lower(message) LIKE '%<script%' OR lower(message) LIKE '%srcdoc%'
+       OR lower(message) LIKE '%javascript:%' OR lower(message) LIKE '%onerror=%' OR lower(message) LIKE '%onload=%'
+       OR lower(message) LIKE '%<img%' OR lower(message) LIKE '%<svg%'
+    ORDER BY id DESC LIMIT 50
+  `).all() as any[]).map(r => ({ id: r.id, createdAt: r.created_at }));
+}

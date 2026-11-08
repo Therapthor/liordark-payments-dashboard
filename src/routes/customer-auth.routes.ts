@@ -22,8 +22,10 @@ import {
 import { isPhoneBlocked, isIpBlocked, countRegistrationsFromIp, logRegistration, ipLoginFailures, setIpLoginFailures, phoneHasAccounts } from "../db/security.repository";
 import { checkLockout, nextCustomerLockoutState, lockoutDurationText } from "../services/login-lockout.service";
 import { clientIp, isPublicIp } from "../services/security.service";
+import { oneAtATime, phoneKey } from "../utils/one-at-a-time.util";
 
 const router = Router();
+const pinLock = oneAtATime(phoneKey);
 
 function setSessionCookie(res: import("express").Response, customerId: number): void {
   const { token, expires } = createCustomerSessionToken(customerId);
@@ -88,7 +90,7 @@ function registrationDenied(req: import("express").Request, phone: string): stri
   return null;
 }
 
-router.post("/login", async (req, res) => {
+router.post("/login", pinLock(async (req, res) => {
   const phone    = String(req.body?.phone ?? "");
   const password = String(req.body?.password ?? "");
   if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
@@ -116,7 +118,7 @@ router.post("/login", async (req, res) => {
   rememberCustomerPlain(customer.id, password);
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone });
-});
+}));
 
 // POST /guest — "Comprar sin cuenta": única forma de crear cuenta ahora
 // (ya no hay registro aparte) — el cliente pone su celular y crea su
@@ -154,7 +156,7 @@ router.post("/guest", async (req, res) => {
 //   - si el celular ya tiene cuenta → inicia sesión con su PIN/contraseña
 //     (mismo bloqueo por intentos fallidos que /login);
 //   - si es nuevo → crea la cuenta con ese PIN de 4 dígitos (igual que /guest).
-router.post("/quick", async (req, res) => {
+router.post("/quick", pinLock(async (req, res) => {
   const phone = String(req.body?.phone ?? "");
   const pin   = String(req.body?.password ?? "");
 
@@ -201,7 +203,7 @@ router.post("/quick", async (req, res) => {
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone, created: true });
-});
+}));
 
 router.post("/logout", (_req, res) => {
   res.clearCookie(CUSTOMER_SESSION_COOKIE);
