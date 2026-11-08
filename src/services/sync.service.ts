@@ -43,6 +43,7 @@ async function backfill(): Promise<void> {
   try {
     const res = await axios.get(env.BOT_BASE_URL + "/api/yape/payments", {
       params: { limit: 500 },
+      headers: { "x-dashboard-key": env.DASHBOARD_API_KEY },
       timeout: 15_000,
     });
     const rows = (res.data?.data ?? []) as BotPaymentRow[];
@@ -113,6 +114,7 @@ function mapBotStatus(status: string): string {
     case "CONFIRMADO":  return "matched";
     case "EXPIRADO":    return "expired";
     case "SIN_CODIGO":  return "no_code";
+    case "NO_VERIFICADO": return "unverified";
     case "PENDIENTE":
     default:            return "pending";
   }

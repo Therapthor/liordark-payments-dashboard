@@ -8,6 +8,7 @@ import {
 import { requireAuth } from "../middleware/auth.middleware";
 import { clientIp } from "../services/security.service";
 import { env } from "../config/env";
+import axios from "axios";
 
 const router = Router();
 
@@ -78,6 +79,29 @@ router.post("/sessions/revoke-others", requireAuth, (req, res) => {
 });
 
 // Cambiar la contraseña: pide la actual; cierra las demás sesiones.
+// Enlace con clave para la app que reenvía las notificaciones de Yape al
+// bot. Sin la clave, el bot ya no confirma pedidos solo (ver bot:
+// yape-key.service.ts).
+async function yapeLink(path: string, method: "get" | "post") {
+  const r = await axios.request({
+    url: env.BOT_BASE_URL + "/api/dashboard/" + path, method,
+    headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 10_000,
+  });
+  const { key, required, publicBase } = r.data as { key: string; required: boolean; publicBase: string };
+  const base = String(publicBase || "").replace(/\/+$/, "");
+  return { key, required, url: base ? `${base}/api/yape/payment?key=${key}` : "" };
+}
+
+router.get("/yape-link", requireAuth, async (_req, res) => {
+  try { res.json(await yapeLink("yape-key", "get")); }
+  catch (err: any) { res.status(502).json({ message: "No se pudo consultar al bot: " + (err?.response?.status || err?.message) }); }
+});
+
+router.post("/yape-link/rotate", requireAuth, async (_req, res) => {
+  try { res.json(await yapeLink("yape-key/rotate", "post")); }
+  catch (err: any) { res.status(502).json({ message: "No se pudo consultar al bot: " + (err?.response?.status || err?.message) }); }
+});
+
 router.post("/password", requireAuth, (req, res) => {
   const current = String(req.body?.current ?? "");
   const next    = String(req.body?.next ?? "");

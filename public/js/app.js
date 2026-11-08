@@ -382,11 +382,12 @@
     if (status === "matched")  return "Confirmado";
     if (status === "expired")  return "Expirado";
     if (status === "no_code")  return "Sin código";
+    if (status === "unverified") return "⚠️ Sin verificar (no llegó por tu app)";
     return "Pendiente";
   }
   function statusClass(status) {
     if (status === "matched") return "matched";
-    if (status === "expired") return "expired";
+    if (status === "expired" || status === "unverified") return "expired";
     return "pending"; // agrupa "pending" y "no_code" en amarillo
   }
 

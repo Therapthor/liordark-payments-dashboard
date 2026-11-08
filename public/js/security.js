@@ -111,5 +111,32 @@
   }
 
   init();
-  window.LiordarkSecurity = { load };
+  // ─── Enlace con clave para la app de Yape ───
+  function paintYape(d) {
+    const input = document.getElementById("sec-yape-url");
+    input.value = d.url || ("Clave: " + d.key + "  (agrégala al enlace de tu app como ?key=…)");
+    document.getElementById("sec-yape-state").textContent = d.required
+      ? "✅ Tu app ya usa la clave: los avisos sin clave se rechazan."
+      : "⚠️ Tu app todavía no usa la clave. Pon este enlace en la app; mientras tanto, revisa y aprueba a mano los pedidos.";
+  }
+
+  async function loadYape() {
+    try { paintYape(await api("/yape-link")); }
+    catch (err) { document.getElementById("sec-yape-state").textContent = "⚠️ " + err.message; }
+  }
+
+  document.getElementById("sec-yape-copy").addEventListener("click", async () => {
+    const v = document.getElementById("sec-yape-url").value;
+    try { await navigator.clipboard.writeText(v); alert("Enlace copiado."); }
+    catch { document.getElementById("sec-yape-url").select(); }
+  });
+
+  document.getElementById("sec-yape-rotate").addEventListener("click", async () => {
+    if (!confirm("¿Cambiar la clave? Tendrás que poner el enlace nuevo en la app de Yape; el anterior deja de funcionar.")) return;
+    try { paintYape(await api("/yape-link/rotate", { method: "POST" })); }
+    catch (err) { alert(err.message); }
+  });
+
+  const loadAll = () => { load(); loadYape(); };
+  window.LiordarkSecurity = { load: loadAll };
 })();
