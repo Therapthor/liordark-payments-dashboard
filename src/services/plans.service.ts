@@ -50,14 +50,17 @@ export function money(n: number): string {
 
 // El catálogo (WhatsApp, renovaciones, tarjeta de la tienda) usa el precio
 // del plan mensual — se mantiene alineado con esta tabla en cada arranque.
+// Con planes, el título no lleva la duración ("Canva Pro Anual" → "Canva Pro"):
+// la elige el cliente.
 export function syncPlanCatalogPrices(): void {
-  const rows = db.prepare(`SELECT id, platform FROM catalog_products`).all() as { id: number; platform: string }[];
+  const rows = db.prepare(`SELECT id, platform, title FROM catalog_products`).all() as { id: number; platform: string; title: string }[];
   for (const r of rows) {
     const plans = plansFor(r.platform);
     if (!plans) continue;
     const monthly = plans[0]!;
-    db.prepare(`UPDATE catalog_products SET price = ?, wholesale_price = ? WHERE id = ?`)
-      .run(money(monthly.price), money(monthly.wholesalePrice), r.id);
+    const title = String(r.title ?? "").replace(/\s+anual\s*$/i, "").trim() || r.title;
+    db.prepare(`UPDATE catalog_products SET price = ?, wholesale_price = ?, title = ? WHERE id = ?`)
+      .run(money(monthly.price), money(monthly.wholesalePrice), title, r.id);
   }
 }
 

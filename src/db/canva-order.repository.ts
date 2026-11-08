@@ -1,8 +1,7 @@
 import { db } from "./db";
 
 // ─────────────────────────────────────────────────────────────
-// BITÁCORA DE ACTIVACIÓN MANUAL (CANVA, GEMINI AI PRO, ...) — reemplaza
-// el registro en la hoja 'CANVA ANUAL'. La tabla sigue llamándose
+// BITÁCORA DE ACTIVACIÓN MANUAL (CANVA, GEMINI AI PRO, ...). La tabla sigue llamándose
 // canva_orders_log por ser la original, pero ahora registra cualquier
 // plataforma que se activa a mano con el correo del cliente.
 //

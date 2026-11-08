@@ -38,13 +38,9 @@ import { findCustomerByPhone } from "../db/customer.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 
 // ─────────────────────────────────────────────────────────────
-// API DE STOCK — consumida por el bot de WhatsApp/Telegram, NO por el
-// navegador. Autenticada con x-bot-key (misma llave compartida que ya
-// usa /api/integrations), no con la sesión de login del panel.
-//
-// Reemplaza, endpoint por endpoint, lo que el bot hoy hace contra Google
-// Sheets (LISTA_PRODUCTOS + hojas de plataforma). Mientras el bot no
-// llame a esto, no cambia nada de lo que ya funciona.
+// API DE STOCK — consumida por el bot de WhatsApp, NO por el navegador.
+// Autenticada con x-bot-key (llave compartida), no con la sesión de
+// login del panel.
 // ─────────────────────────────────────────────────────────────
 
 const router = Router();
@@ -213,7 +209,7 @@ router.get("/all-client-phones", (_req, res) => {
   res.json({ phones: listAllClientPhones() });
 });
 
-// ── BITÁCORA DE PEDIDOS (reemplaza PEDIDOS_PENDIENTES de Sheets) ──
+// ── BITÁCORA DE PEDIDOS ──
 
 const VALID_ORDER_TYPES: OrderType[] = ["Compra", "Renovación", "Compra sin stock", "Recarga mayorista"];
 
@@ -237,7 +233,7 @@ router.post("/pending-orders/:orderName/mark-assigned", (req, res) => {
   res.json({ success: true });
 });
 
-// ── BITÁCORA DE RENOVACIONES (reemplaza RENOVACIONES_CLIENTES de Sheets) ──
+// ── BITÁCORA DE RENOVACIONES ──
 
 router.post("/renewals", (req, res) => {
   const { orderName, phone, platform } = req.body ?? {};

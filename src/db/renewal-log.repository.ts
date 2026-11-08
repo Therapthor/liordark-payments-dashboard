@@ -7,7 +7,7 @@ function last9(phone: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// BITÁCORA DE RENOVACIONES — reemplaza RENOVACIONES_CLIENTES de Sheets
+// BITÁCORA DE RENOVACIONES
 //
 // Solo registro para seguimiento del admin. La fecha de vencimiento real
 // se actualiza aparte (cuenta nueva vía sellProfile, o el botón "Renovar"

@@ -12,7 +12,6 @@ import liveRoutes from "./routes/live.routes";
 import statsRoutes from "./routes/stats.routes";
 import historyRoutes from "./routes/history.routes";
 import accessRoutes from "./routes/access.routes";
-import integrationsRoutes from "./routes/integrations.routes";
 import ordersRoutes from "./routes/orders.routes";
 import catalogRoutes from "./routes/catalog.routes";
 import paymentMethodRoutes from "./routes/payment-method.routes";
@@ -108,8 +107,6 @@ apiRouter.use("/renewals", requireAuth, renewalsRoutes);
 apiRouter.use("/bot-flow", requireAuth, botFlowRoutes);
 // Sin requireAuth — se autentica con su propia clave compartida (x-bot-key),
 // para que el bot pueda llamarla como servidor-a-servidor, sin sesión de navegador.
-apiRouter.use("/integrations", integrationsRoutes);
-// Igual que integrations — su propio candado (x-bot-key) adentro del router.
 apiRouter.use("/stock", stockRoutes);
 // ─── Tienda web (liordark.com) — clientes, no admins. Login propio,
 // separado del de arriba (requireAuth es el del panel de administración). ──

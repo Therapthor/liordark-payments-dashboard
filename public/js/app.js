@@ -753,7 +753,7 @@
     return li;
   }
 
-  // Renovación — mismas 3 opciones que Telegram (más "limpiar").
+  // Renovación — 3 opciones (más "limpiar").
   function renderRenewalOrder(o) {
     const li = document.createElement("li");
     li.className = "feed-item";
@@ -902,7 +902,7 @@
       const orderName = btn.dataset.order;
       const act       = btn.dataset.act; // "approve" | "reject" | "clear" | "renew-message-only"
 
-      // Sin confirmación — igual que los botones de Telegram, para poder
+      // Sin confirmación, para poder
       // procesar rápido. Ojo al tocar: aprobar/rechazar/solo-mensaje sí
       // afectan al cliente. El spinner es solo para saber que está
       // procesando (antes no había ninguna señal de que el clic sí hizo

@@ -96,7 +96,7 @@ function customComboDiscountRate(itemCount: number): number {
 // ─────────────────────────────────────────────────────────────
 
 // «Contraseña» de la cuenta propia del cliente (YouTube Premium): se ve en
-// el panel y en Telegram, así que nunca puede llevar HTML (< >) ni
+// el panel, así que nunca puede llevar HTML (< >) ni
 // caracteres de control. Máximo 64.
 const BAD_CLIENT_PASSWORD = "La contraseña no puede tener los símbolos < ni > y debe tener como máximo 64 caracteres.";
 function isSafeClientPassword(v: unknown): boolean {

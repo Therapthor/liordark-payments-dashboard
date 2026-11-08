@@ -323,10 +323,9 @@ export function listPlatforms(): PlatformSummary[] {
 }
 
 export function listAccountsByPlatform(platform: string): AccessAccountWithProfiles[] {
-  // id DESC como desempate: las cuentas migradas desde Sheets se insertaron
-  // todas en una sola transacción (mismo created_at exacto), así que sin
-  // este desempate el orden entre ellas queda indefinido. El id ascendente
-  // sí refleja el orden real en que se agregaron (orden de fila en Sheets).
+  // id como desempate: las cuentas importadas de una vez comparten el mismo
+  // created_at exacto, así que sin esto el orden entre ellas queda
+  // indefinido. El id sí refleja el orden real en que se agregaron.
   const rows = db.prepare(`
     SELECT * FROM access_accounts WHERE platform = ? ORDER BY created_at DESC, id DESC
   `).all(platform.trim().toUpperCase()) as any[];
@@ -498,7 +497,7 @@ export function markPasswordChanged(accountId: number): void {
 }
 
 // ─────────────────────────────────────────────────────────────
-// STOCK — usado por la API que consume el bot de WhatsApp (Telegram/venta)
+// STOCK — usado por la API que consume el bot de WhatsApp (venta)
 //
 // sellProfile es la operación crítica: tiene que ser imposible que dos
 // ventas simultáneas se lleven el mismo perfil. Como better-sqlite3 es

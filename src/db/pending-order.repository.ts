@@ -1,7 +1,7 @@
 import { db } from "./db";
 
 // ─────────────────────────────────────────────────────────────
-// BITÁCORA DE PEDIDOS — reemplaza PEDIDOS_PENDIENTES de Sheets
+// BITÁCORA DE PEDIDOS
 //
 // Registro puro para seguimiento del admin (qué pedidos quedaron sin
 // stock, si ya se les asignó cuenta). No decide nada de la venta real —
@@ -23,7 +23,7 @@ export function createPendingOrder(params: {
   `).run(params.orderName, params.phone, params.platform, params.orderType);
 }
 
-/** Devuelve found=false si el order_name no existe (igual que antes con Sheets). */
+/** Devuelve found=false si el order_name no existe. */
 export function confirmPendingOrderPayment(orderName: string): { found: boolean } {
   const result = db.prepare(`
     UPDATE pending_orders_log SET payment_confirmed = 1 WHERE order_name = ?

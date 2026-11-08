@@ -51,8 +51,8 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // MENSAJES DE WHATSAPP — mismo formato/emojis que las fórmulas
-  // de Google Sheets, para no romper la costumbre de los clientes.
+  // MENSAJES DE WHATSAPP — mismo formato/emojis de siempre, para no
+  // romper la costumbre de los clientes.
   // ─────────────────────────────────────────────────────────────
 
   // Celulares de Perú son siempre 9 dígitos — si viene sin el prefijo "51"

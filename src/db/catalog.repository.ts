@@ -3,7 +3,7 @@ import { db } from "./db";
 // ─────────────────────────────────────────────────────────────
 // CATÁLOGO PROPIO DEL PANEL (Configuración > Catálogo)
 //
-// Independiente del catálogo del bot (Google Sheets). Alimenta el
+// Catálogo de la tienda y del bot. Alimenta el
 // desplegable de plataforma en Accesos. Editar/agregar/quitar acá
 // todavía NO cambia nada en WhatsApp — es la base para cuando se
 // decida conectarlo más adelante.

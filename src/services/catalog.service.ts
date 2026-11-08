@@ -4,7 +4,7 @@ import { env } from "../config/env";
 // ─────────────────────────────────────────────────────────────
 // CATÁLOGO DE PLATAFORMAS — proxy cacheado a GET /api/dashboard/platforms
 // del bot, para el desplegable de "agregar cuentas" en Accesos.
-// Cache corta en memoria: evita pegarle a Sheets (vía el bot) en
+// Cache corta en memoria: evita pegarle al bot en
 // cada apertura del modal.
 // ─────────────────────────────────────────────────────────────
 

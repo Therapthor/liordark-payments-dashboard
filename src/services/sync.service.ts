@@ -253,15 +253,15 @@ function handleBotEvent(evt: any): void {
 
   if (evt?.type === "order_approved") {
     // El bot no guarda las órdenes una vez entregadas — acá quedan para
-    // siempre, mismo texto exacto que ya se manda al canal de Telegram.
+    // siempre.
     insertApprovedOrder(evt.message, evt.createdAt);
     emitDashboardEvent({ type: "order_approved", message: evt.message, createdAt: evt.createdAt });
     return;
   }
 
   if (evt?.type === "order_needs_review") {
-    // Un pedido cayó a revisión manual — para combos ya no hay Telegram
-    // que avise, así que esto es lo único que le hace ruido al admin.
+    // Un pedido cayó a revisión manual — esto es lo que le hace ruido al
+    // admin.
     emitDashboardEvent({ type: "order_needs_review", orderName: evt.orderName, platform: evt.platform });
   }
 }

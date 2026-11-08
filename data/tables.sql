@@ -49,8 +49,7 @@ CREATE TABLE IF NOT EXISTS monthly_totals (
 );
 
 -- Historial permanente de órdenes aprobadas (el bot no las guarda una
--- vez entregadas — acá quedan para siempre). Mismo texto exacto que ya
--- se manda al canal "confirmadas" de Telegram.
+-- vez entregadas — acá quedan para siempre). Se ven en "Aprobados".
 CREATE TABLE IF NOT EXISTS orders_log (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   message     TEXT NOT NULL,
@@ -61,8 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_log_created ON orders_log(created_at);
 -- ═══════════════════════════════════════════════════════════════════
 -- PANEL ACCESOS — cuentas y perfiles de clientes.
 --
--- Vive solo acá, independiente de Google Sheets y del bot, mientras
--- se prepara el traspaso. Una cuenta (ej. un correo de NETFLIX) tiene
+-- Vive solo acá. Una cuenta (ej. un correo de NETFLIX) tiene
 -- N perfiles (5 si la plataforma usa perfiles, 1 si es cuenta única
 -- como CANVA/CAPCUT PRO). El vencimiento es UNO solo por cuenta,
 -- compartido por todos los clientes que tiene asignados — se renueva
@@ -128,8 +126,7 @@ CREATE TABLE IF NOT EXISTS access_accounts_history (
 CREATE INDEX IF NOT EXISTS idx_access_history_platform ON access_accounts_history(platform);
 CREATE INDEX IF NOT EXISTS idx_access_history_email    ON access_accounts_history(email);
 
--- Bitácora de pedidos (reemplaza PEDIDOS_PENDIENTES de Sheets, que ya
--- llegó a su límite de filas). Registro puro para seguimiento del admin —
+-- Bitácora de pedidos. Registro puro para seguimiento del admin —
 -- no decide si el cliente recibe su cuenta o no, eso ya lo maneja
 -- access_accounts/access_profiles. order_name es la clave natural, igual
 -- que el código de orden que ya usa el bot.
@@ -145,7 +142,7 @@ CREATE TABLE IF NOT EXISTS pending_orders_log (
 );
 CREATE INDEX IF NOT EXISTS idx_pending_orders_order_name ON pending_orders_log(order_name);
 
--- Bitácora de renovaciones (reemplaza RENOVACIONES_CLIENTES de Sheets).
+-- Bitácora de renovaciones.
 -- Registro para seguimiento del admin — la fecha de vencimiento real ya
 -- se actualiza sola vía access_accounts (cuenta nueva) o el botón
 -- "Renovar" del panel (misma cuenta), esto es solo el historial.
@@ -231,8 +228,7 @@ CREATE TABLE IF NOT EXISTS sms_renewal_links (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Bitácora de activación manual (CANVA, GEMINI AI PRO, ...) — reemplaza
--- el registro que se hacía en la hoja 'CANVA ANUAL'. Estas plataformas no
+-- Bitácora de activación manual (CANVA, GEMINI AI PRO, ...). Estas plataformas no
 -- usan el modelo de stock (access_accounts): el admin activa el plan a
 -- mano con el correo del cliente, y esto solo queda como registro de esa
 -- aprobación.

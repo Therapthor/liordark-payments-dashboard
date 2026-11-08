@@ -68,8 +68,8 @@ router.post("/sweep", async (_req, res) => {
 // POST /api/orders/:orderName/<accion>
 //
 // Proxy directo al endpoint equivalente del bot — la lógica de
-// aprobar/rechazar/etc. vive ahí (reusa lo mismo que los botones de
-// Telegram). Acá solo se reenvía la acción con la clave compartida.
+// aprobar/rechazar/etc. vive ahí. Acá solo se reenvía la acción con la
+// clave compartida.
 // ─────────────────────────────────────────────────────────────
 
 const ALLOWED_ACTIONS = new Set(["approve", "reject", "clear", "renew-message-only"]);
