@@ -3,6 +3,7 @@ import axios from "axios";
 import { listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
 import { listCombos, type Combo } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
+import { plansFor, money } from "./plans.service";
 
 // ─────────────────────────────────────────────────────────────
 // PDF DEL CATÁLOGO — para el soporte de WhatsApp, mientras la tienda
@@ -31,6 +32,11 @@ const PAGE_W     = PAGE_RIGHT - PAGE_LEFT;
 const CONTENT_BOTTOM = 760;
 const CARD_H     = 92;
 const IMG_SIZE   = 66;
+
+function plansNote(platform: string): string | undefined {
+  const plans = plansFor(platform);
+  return plans ? plans.map(pl => pl.label + " S/ " + money(pl.price)).join(" · ") : undefined;
+}
 
 function isAnnual(item: { title: string; keywords?: string }): boolean {
   const haystack = (item.title + " " + (item.keywords ?? "")).toLowerCase();
@@ -199,8 +205,10 @@ export async function generateCatalogPdf(): Promise<Buffer> {
         title:       p.title,
         price:       p.price,
         subtitle:    p.description,
-        note:        p.hasProfiles ? "Incluye perfil individual" : undefined,
-        annual:      isAnnual(p),
+        // Con planes por meses (Gemini, Canva) el precio es el de 1 mes y la
+        // línea chica lista los planes; nunca lleva el sello "ANUAL".
+        note:        plansNote(p.platform) ?? (p.hasProfiles ? "Incluye perfil individual" : undefined),
+        annual:      !plansFor(p.platform) && isAnnual(p),
         imgBuffer,
         fallbackTag: platform.slice(0, 3).toUpperCase(),
       });

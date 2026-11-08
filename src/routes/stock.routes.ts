@@ -18,7 +18,7 @@ import {
   setAccountExpiry,
   setAccountPlanMonths,
 } from "../db/access.repository";
-import { findPlanOrder, planFor } from "../services/plans.service";
+import { findPlanOrder, planFor, plansFor } from "../services/plans.service";
 import { renewAccount, accountStatus, daysLeft, limaTodayISO, addDaysISO } from "../services/access.service";
 import {
   createPendingOrder,
@@ -261,9 +261,10 @@ router.post("/renewals/:orderName/confirm", (req, res) => {
 // llamándose "canva-orders" por compatibilidad con el bot, pero ya es
 // genérico para cualquier plataforma de activación manual. ──
 
-// CANVA se vende anual; el resto (ej. GEMINI AI PRO, YOUTUBE PREMIUM) mensual.
+// Sin plan elegido (pedido por WhatsApp o renovación al precio del
+// catálogo, que es el del plan mensual): 1 mes.
 function manualActivationPlanDays(platform: string): number {
-  return /canva/i.test(platform) ? 365 : 30;
+  return plansFor(platform)?.[0]?.days ?? 30;
 }
 
 router.post("/canva-orders", (req, res) => {
@@ -277,7 +278,7 @@ router.post("/canva-orders", (req, res) => {
   const platformTag = typeof platform === "string" && platform.trim() ? platform : "CANVA ANUAL";
   logCanvaOrder({ orderName, phone, clientEmail: email, platform: platformTag });
 
-  // Plan por meses (GEMINI): lo eligió el cliente al crear el pedido web.
+  // Plan por meses (GEMINI, CANVA): lo eligió el cliente al crear el pedido web.
   const planOrder = findPlanOrder(String(orderName));
   const plan = planOrder ? planFor(platformTag, planOrder.months) : null;
   const planDays = plan ? plan.days : manualActivationPlanDays(platformTag);

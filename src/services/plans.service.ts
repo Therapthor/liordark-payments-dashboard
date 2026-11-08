@@ -3,7 +3,7 @@ import { addDaysISO, limaTodayISO } from "./access.service";
 
 // ─────────────────────────────────────────────────────────────
 // PLANES POR MESES — plataformas de activación manual que se venden por
-// duración (hoy: GEMINI AI PRO). Cada compra es una cuenta individual,
+// duración (hoy: GEMINI AI PRO y CANVA PRO). Cada compra es una cuenta individual,
 // así que su vencimiento sale directo del plan elegido.
 // El mayorista paga S/ 1 menos en cada plan.
 // ─────────────────────────────────────────────────────────────
@@ -23,9 +23,13 @@ function plan(months: number, price: number): PlanOption {
 }
 
 const GEMINI_PLANS: PlanOption[] = [plan(1, 6), plan(3, 15), plan(6, 25), plan(12, 49.9)];
+const CANVA_PLANS:  PlanOption[] = [plan(1, 5), plan(3, 10), plan(6, 15), plan(12, 25)];
 
 export function plansFor(platform: string | null | undefined): PlanOption[] | null {
-  return /gemini/i.test(String(platform ?? "")) ? GEMINI_PLANS : null;
+  const p = String(platform ?? "");
+  if (/gemini/i.test(p)) return GEMINI_PLANS;
+  if (/canva/i.test(p))  return CANVA_PLANS;
+  return null;
 }
 
 /** El plan elegido; si la plataforma no tiene planes o los meses no existen, null. */
