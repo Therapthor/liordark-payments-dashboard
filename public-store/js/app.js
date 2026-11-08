@@ -249,6 +249,13 @@
     initVisibilityResync();
     await loadCatalog();
 
+    if (pendingSaleCode) {
+      const code = pendingSaleCode;
+      pendingSaleCode = null;
+      await openSaleLink(code);
+      return;
+    }
+
     if (pendingAfterAuth) {
       const action = pendingAfterAuth;
       pendingAfterAuth = null;
@@ -297,6 +304,14 @@
     updateEmailBanner();
     switchPage("catalog");
     await loadCatalog();
+    if (pendingSaleCode) {
+      const code = pendingSaleCode;
+      pendingSaleCode = null;
+      clearSaleParam();
+      let state = "expired";
+      try { state = (await api("/sale-link-status/" + encodeURIComponent(code))).state; } catch { /* sin red */ }
+      showSaleNotice(state);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -821,8 +836,8 @@
     renderComboBuilderCatalog();
   }
 
-  function openComboBuilder() {
-    comboBuilderCart = [];
+  function openComboBuilder(preset) {
+    comboBuilderCart = Array.isArray(preset) ? preset.slice() : [];
     document.getElementById("build-combo-error").hidden = true;
     document.getElementById("build-combo-manual-email").value = "";
     document.getElementById("build-combo-manual-password").value = "";
@@ -844,8 +859,9 @@
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
       const order = await api("/checkout", {
         method: "POST",
-        body: { customComboPlatforms: platforms, clientEmail, clientPassword },
+        body: { customComboPlatforms: platforms, clientEmail, clientPassword, saleLink: activeSaleCode || undefined },
       });
+      activeSaleCode = null;
 
       await ensureYapeInfo();
       document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
@@ -931,7 +947,7 @@
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  function openProductDetail({ kind, id }) {
+  function openProductDetail({ kind, id, presetMonths }) {
     const item = kind === "combo"
       ? cachedCombos.find(c => c.id === id)
       : cachedProducts.find(p => p.platform === id);
@@ -951,7 +967,7 @@
 
     // Planes por meses (GEMINI): 1, 3, 6 o 12 meses — cambia el precio.
     const plans = kind === "platform" && Array.isArray(item.plans) ? item.plans : null;
-    let selectedPlan = plans ? plans[0] : null;
+    let selectedPlan = plans ? (plans.find(pl => pl.months === Number(presetMonths)) || plans[0]) : null;
     const plansBox = document.getElementById("detail-plans");
     plansBox.hidden = !plans;
     const renderPlans = () => {
@@ -1309,7 +1325,9 @@
     try {
       beforeAccounts = cachedDashboard.length ? cachedDashboard : (await api("/dashboard")).accounts || [];
       const body = kind === "combo" ? { comboId: id } : { platform: id, clientEmail, clientPassword, months };
+      if (activeSaleCode) body.saleLink = activeSaleCode;
       const order = await api("/checkout", { method: "POST", body });
+      activeSaleCode = null;
 
       await ensureYapeInfo();
 
@@ -1817,6 +1835,104 @@
   // ─────────────────────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────────────────────
+  // LINK DE VENTA — liordark.com/v/<código> deja la sesión abierta y
+  // vuelve acá con ?venta=<código>: se muestra el pedido que armó el
+  // admin y se abre listo para pagar. La orden queda ligada al link.
+  // ─────────────────────────────────────────────────────────────
+
+  let pendingSaleCode = null;
+  let activeSaleCode = null;
+  try {
+    const v = new URLSearchParams(location.search).get("venta");
+    if (v && /^[A-Za-z0-9]{8,20}$/.test(v)) pendingSaleCode = v;
+  } catch { /* sin URLSearchParams */ }
+
+  function clearSaleParam() {
+    try { history.replaceState(null, "", location.pathname + location.hash); } catch { /* nada */ }
+  }
+
+  function showSaleModal({ icon, title, text, order, pin, button, onGo }) {
+    document.getElementById("sale-icon").textContent = icon;
+    document.getElementById("sale-title").textContent = title;
+    document.getElementById("sale-text").textContent = text || "";
+    const orderBox = document.getElementById("sale-order");
+    orderBox.hidden = !order;
+    if (order) {
+      document.getElementById("sale-order-title").textContent = order.title;
+      document.getElementById("sale-order-price").textContent = "S/ " + order.price;
+    }
+    document.getElementById("sale-pin").hidden = !pin;
+    document.getElementById("sale-pin-code").textContent = pin || "";
+    const go = document.getElementById("sale-go");
+    go.textContent = button;
+    const modal = document.getElementById("sale-modal");
+    const close = () => { modal.hidden = true; };
+    go.onclick = () => { close(); if (onGo) onGo(); };
+    document.getElementById("sale-close").onclick = close;
+    modal.hidden = false;
+  }
+
+  function showSaleNotice(state) {
+    if (state === "paid") {
+      showSaleModal({ icon: "✅", title: "Este pedido ya está pagado", text: "Inicia sesión con tu celular y PIN para ver tu cuenta en «Mis cuentas».", button: "Entendido" });
+    } else if (state === "pending" || state === "opened") {
+      showSaleModal({ icon: "🔗", title: "Abre tu link otra vez", text: "No pudimos abrir tu sesión. Vuelve a tocar el link que te enviamos por WhatsApp.", button: "Entendido" });
+    } else {
+      showSaleModal({
+        icon: "⌛", title: "Este link ya no sirve",
+        text: state === "cancelled" ? "Este pedido fue anulado. Escríbenos por WhatsApp si necesitas uno nuevo." : "El link venció. Escríbenos por WhatsApp y te mandamos uno nuevo.",
+        button: "Escribir por WhatsApp",
+        onGo: () => { window.open("https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent("Hola, mi link de pedido ya no sirve. ¿Me mandan uno nuevo?"), "_blank", "noopener"); },
+      });
+    }
+  }
+
+  async function openSaleLink(code) {
+    clearSaleParam();
+    let sale;
+    try { sale = await api("/sale-link/" + encodeURIComponent(code)); }
+    catch {
+      let state = "expired";
+      try { state = (await api("/sale-link-status/" + encodeURIComponent(code))).state; } catch { /* nada */ }
+      showSaleNotice(state);
+      return;
+    }
+    if (sale.state === "paid") {
+      switchPage("dashboard");
+      showSaleModal({ icon: "✅", title: "¡Pedido pagado!", text: "Tu cuenta ya está en «Mis cuentas».", button: "Ver mis cuentas" });
+      return;
+    }
+    if (sale.state !== "pending" && sale.state !== "opened") { showSaleNotice(sale.state); return; }
+
+    const openOrder = () => {
+      activeSaleCode = code;
+      switchPage("catalog");
+      if (sale.kind === "combo") {
+        openProductDetail({ kind: "combo", id: Number(sale.comboId) });
+      } else if (sale.kind === "custom") {
+        openComboBuilder(sale.platforms);
+      } else {
+        openProductDetail({ kind: "platform", id: sale.platforms[0], presetMonths: sale.months });
+      }
+    };
+    const exists = sale.kind === "combo"
+      ? cachedCombos.some(c => c.id === Number(sale.comboId))
+      : sale.platforms.every(p => cachedProducts.some(x => x.platform === p));
+    if (!exists) {
+      showSaleModal({ icon: "😕", title: "Ese producto ya no está disponible", text: "Escríbenos por WhatsApp y te ayudamos.", button: "Entendido" });
+      return;
+    }
+    showSaleModal({
+      icon: "🥭", title: "¡Tu pedido está listo!",
+      text: "Revisa tu pedido y paga con Yape. Apenas pagues, tu cuenta aparece en «Mis cuentas».",
+      order: { title: sale.title, price: sale.price },
+      pin: sale.pin,
+      button: "Ver mi pedido y pagar",
+      onGo: openOrder,
+    });
+  }
 
   async function init() {
     initAuthToggle();

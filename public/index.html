@@ -392,6 +392,45 @@
           <button class="config-subnav-item active" data-customers-section="web">Web</button>
           <button class="config-subnav-item" data-customers-section="registro">Registro</button>
           <button class="config-subnav-item" data-customers-section="blocked">Bloqueados <span id="customers-blocked-count"></span></button>
+          <button class="config-subnav-item" data-customers-section="ventas">🔗 Links de venta</button>
+        </div>
+
+        <div id="customers-section-ventas" hidden>
+          <div class="panel">
+            <div class="panel-header"><h2>🔗 Nuevo link de venta</h2></div>
+            <p class="panel-hint">Para pedidos que llegan por WhatsApp: pon el celular y el producto. Se crea la cuenta del cliente (si no tiene) y el link lo deja dentro de su cuenta, listo para pagar con Yape. El pago se confirma solo y la cuenta queda en «Mis cuentas». No se mezcla con los pagos pendientes.</p>
+            <div class="sl-form">
+              <label class="sl-label" for="sl-phone">Celular del cliente</label>
+              <input id="sl-phone" type="tel" inputmode="numeric" maxlength="12" placeholder="9XX XXX XXX" autocomplete="off">
+              <p class="panel-hint" id="sl-phone-hint"></p>
+
+              <label class="sl-label">Producto <span class="panel-hint">(toca uno; varios = combo armado con descuento)</span></label>
+              <div class="sl-chips" id="sl-products"></div>
+              <label class="sl-label">o un combo del catálogo</label>
+              <div class="sl-chips" id="sl-combos"></div>
+              <div id="sl-plans" hidden></div>
+
+              <div class="sl-preview" id="sl-preview" hidden><span id="sl-preview-title"></span><b id="sl-preview-price"></b></div>
+              <p class="form-error" id="sl-error" hidden></p>
+              <button class="btn-primary" id="sl-create" type="button" disabled>Generar link</button>
+            </div>
+
+            <div class="sl-result" id="sl-result" hidden>
+              <p class="sl-result-title">✅ Link listo <span id="sl-result-new"></span></p>
+              <div class="sec-pw-row">
+                <input type="text" id="sl-result-url" readonly>
+                <button class="btn-secondary btn-sm" id="sl-copy" type="button">📋 Copiar</button>
+              </div>
+              <a class="btn-primary sl-wa" id="sl-wa" target="_blank" rel="noopener">💬 Enviar por WhatsApp</a>
+              <pre class="sl-message" id="sl-message"></pre>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top:20px">
+            <div class="panel-header"><h2>Links enviados</h2></div>
+            <p class="panel-hint">«Pagado» aparece solo cuando llega el Yape de ese pedido. Los links vencen a las 48 horas.</p>
+            <ul id="sl-list" class="sec-sessions"></ul>
+          </div>
         </div>
 
         <div id="customers-section-web">
@@ -1556,6 +1595,7 @@
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>
+  <script src="js/sale-links.js"></script>
   <script src="js/passkey.js"></script>
   <script src="js/security.js"></script>
   <script src="js/wholesalers.js"></script>

@@ -36,6 +36,8 @@ import { plansFor, planFor, savePlanOrder, money } from "../services/plans.servi
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { suspiciousReason, autoBlockCustomer, clientIp } from "../services/security.service";
 import { CUSTOMER_SESSION_COOKIE } from "../services/customer-auth.service";
+import { saleLinkStatus, saleLinkForCustomer } from "./sale-links.routes";
+import { findSaleLink, saleLinkState, isSaleLinkUsable, addSaleLinkOrder } from "../db/sale-links.repository";
 
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -452,7 +454,19 @@ router.get("/payment-methods", (_req, res) => {
   res.json({ methods: listPaymentMethods().filter(m => m.active) });
 });
 
+// Link de venta: estado público (vencido/pagado/anulado), sin datos del pedido.
+router.get("/sale-link-status/:code", (req, res) => {
+  res.json(saleLinkStatus(String(req.params.code)));
+});
+
 router.use(requireCustomerSession);
+
+// Link de venta: el pedido armado por el admin (solo si es de este cliente).
+router.get("/sale-link/:code", (req, res) => {
+  const data = saleLinkForCustomer(String(req.params.code), (req as unknown as RequestWithCustomer).customerId);
+  if (!data) return res.status(404).json({ message: "Este link no es de tu cuenta." });
+  res.json(data);
+});
 
 // ─────────────────────────────────────────────────────────────
 // CÓDIGOS — el cliente ve sus cuentas activas con código y toca la que
@@ -761,6 +775,14 @@ router.post("/checkout", async (req, res) => {
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     if (plan && platform && response.data?.orderName) savePlanOrder(String(response.data.orderName), platform, plan.months);
+    // Compra que vino de un link de venta: la orden queda ligada al link
+    // (el panel lo marca «Pagado» cuando llega el Yape de esa orden).
+    if (req.body?.saleLink && response.data?.orderName) {
+      const sl = findSaleLink(String(req.body.saleLink));
+      if (sl && sl.customerId === customerId && isSaleLinkUsable(saleLinkState(sl))) {
+        addSaleLinkOrder(sl.code, String(response.data.orderName));
+      }
+    }
     res.json({ orderName: response.data.orderName, amount: response.data.amount });
   } catch (err: any) {
     const message = err?.response?.data?.message || "No se pudo crear la orden. Intenta de nuevo.";

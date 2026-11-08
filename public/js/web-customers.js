@@ -393,6 +393,8 @@
         document.getElementById("customers-section-web").hidden     = section !== "web";
         document.getElementById("customers-section-registro").hidden = section !== "registro";
         document.getElementById("customers-section-blocked").hidden  = section !== "blocked";
+        document.getElementById("customers-section-ventas").hidden   = section !== "ventas";
+        if (section === "ventas" && window.LiordarkSaleLinks) window.LiordarkSaleLinks.open();
       });
     });
   }

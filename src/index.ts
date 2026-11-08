@@ -32,6 +32,7 @@ import courseAdminRoutes from "./routes/course-admin.routes";
 import { codeViewerAdminRoutes, codeLinkRoutes } from "./routes/code-viewer.routes";
 import { cleanOldCodeLinks } from "./db/code-links.repository";
 import { pinLinkAdminRoutes, pinLinkRoutes } from "./routes/pin-link.routes";
+import { saleLinksAdminRoutes, openSaleLinkPage } from "./routes/sale-links.routes";
 import { cleanPinLinks } from "./db/pin-links.repository";
 import { mergeDuplicateCustomers } from "./db/customer.repository";
 import { runPinRecovery } from "./services/pin-recovery.service";
@@ -99,6 +100,7 @@ apiRouter.use("/stock", stockRoutes);
 apiRouter.use("/store/auth", customerAuthRoutes);
 apiRouter.use("/store", storeRoutes);
 apiRouter.use("/customers", requireAuth, pinLinkAdminRoutes);
+apiRouter.use("/sale-links", requireAuth, saleLinksAdminRoutes);
 apiRouter.use("/customers", requireAuth, customersRoutes);
 // ─── Mayorista (mayorista.liordark.com) — login propio, separado tanto
 // del de clientitos como del de admin.
@@ -165,6 +167,12 @@ app.get(/^\/codigo\/[A-Za-z0-9]{6,20}\/?$/, (req, res, next) => {
   if (host === "mayorista.liordark.com") return next();
   res.setHeader("Cache-Control", "no-cache");
   res.sendFile(CODE_LINK_PAGE);
+});
+
+// liordark.com/v/<código> — link de venta: entra a su cuenta y abre el pedido.
+app.get(/^\/v\/[A-Za-z0-9]{8,20}\/?$/, (req, res, next) => {
+  if (req.hostname !== "liordark.com" && req.hostname !== "www.liordark.com" && env.NODE_ENV === "production") return next();
+  openSaleLinkPage(req, res);
 });
 
 // liordark.com/cambiar-pin/<token> — el cliente cambia su PIN.

@@ -1466,3 +1466,14 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 
 /* Soporte: opción que abre WhatsApp (enlace con forma de botón) */
 .chat-bot-option-link { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* ─── Link de venta (pedido preparado por WhatsApp) ─── */
+.sale-card { text-align: center; }
+.sale-icon { font-size: 44px; line-height: 1; margin: 4px 0 6px; animation: saleBounce 1.6s ease-in-out infinite; }
+@keyframes saleBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.sale-order { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0; padding: 12px 14px; border-radius: 14px; background: rgba(255, 166, 43, .12); border: 1px solid rgba(255, 166, 43, .45); text-align: left; }
+.sale-order span { font-weight: 600; }
+.sale-order b { font-size: 18px; white-space: nowrap; }
+.sale-pin { margin: 4px 0 14px; padding: 12px; border-radius: 14px; border: 1px dashed rgba(0,0,0,.2); }
+.sale-pin p { margin: 0 0 8px; font-size: 14px; }
+.sale-pin-code { font: 800 30px/1.1 ui-monospace, Menlo, monospace; letter-spacing: 8px; margin: 4px 0 8px; }

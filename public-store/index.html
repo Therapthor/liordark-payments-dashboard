@@ -316,6 +316,26 @@
   </div>
 
   <!-- ═══════════ MODAL: recordatorio de vencimiento por correo ═══════════ -->
+  <!-- Link de venta (liordark.com/v/…): pedido preparado por WhatsApp -->
+  <div id="sale-modal" class="modal-backdrop" hidden>
+    <div class="modal-card sale-card">
+      <button class="modal-close" id="sale-close" type="button" aria-label="Cerrar">✕</button>
+      <div class="sale-icon" id="sale-icon">🥭</div>
+      <h2 id="sale-title">¡Tu pedido está listo!</h2>
+      <p class="muted small" id="sale-text"></p>
+      <div class="sale-order" id="sale-order" hidden>
+        <span id="sale-order-title"></span>
+        <b id="sale-order-price"></b>
+      </div>
+      <div class="sale-pin" id="sale-pin" hidden>
+        <p>Ya tienes tu cuenta en liordark.com. Para volver a entrar usa tu celular y este PIN:</p>
+        <div class="sale-pin-code" id="sale-pin-code"></div>
+        <p class="muted small">Guárdalo (toma captura). Puedes cambiarlo cuando quieras pidiéndolo por WhatsApp.</p>
+      </div>
+      <button class="btn-primary btn-block" id="sale-go" type="button">Ver mi pedido</button>
+    </div>
+  </div>
+
   <div id="email-reminder-modal" class="modal-backdrop" hidden>
     <div class="modal-card">
       <button class="modal-close" id="email-reminder-close" type="button" aria-label="Cerrar">✕</button>
