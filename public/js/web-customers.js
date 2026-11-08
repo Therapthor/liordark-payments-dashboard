@@ -72,6 +72,7 @@
         <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
         <div class="web-customer-actions">
           <button class="btn-secondary btn-sm web-customer-access-btn" type="button">🔑 Dar acceso web (link por WhatsApp)</button>
+          <button class="btn-danger btn-sm web-customer-fraud-btn" type="button">🚨 Fraude</button>
         </div>`;
       return div;
     }
@@ -124,6 +125,7 @@
         ${emailArea}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
         <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
+        <button class="btn-danger btn-sm web-customer-fraud-btn" type="button" title="Borra su cuenta, bloquea el número y libera todas sus cuentas">🚨 Fraude</button>
       </div>`;
     return div;
   }
@@ -154,6 +156,20 @@
       const r = await api(`/create-access`, { method: "POST", body: JSON.stringify({ phone }) });
       await load();
       openPinLink(r.id, r.phone);
+    } catch (err) { alert(err.message); }
+  }
+
+  // 🚨 Fraude: borra la cuenta, bloquea el número y libera todas sus cuentas.
+  async function markFraud(phone) {
+    if (!confirm(`¿Marcar ${localPhone(phone)} como FRAUDE?\n\nSe borra su cuenta web, se bloquea el número y se le quitan TODAS sus cuentas (los perfiles quedan libres).`)) return;
+    try {
+      const r = await api("/fraud", { method: "POST", body: JSON.stringify({ phone }) });
+      const list = [...r.released.map(p => `• ${p.platform} · ${p.email}${p.profileName ? " · " + p.profileName : ""}`),
+                    ...r.overridesRemoved.map(o => `• ${o.platform} · ${o.email} (reemplazo)`)];
+      alert(list.length
+        ? `Listo. Se liberaron ${list.length} cuenta(s) — cámbiales la contraseña:\n\n${list.join("\n")}`
+        : "Listo. Cuenta borrada y número bloqueado (no tenía cuentas asignadas).");
+      await load();
     } catch (err) { alert(err.message); }
   }
 
@@ -274,6 +290,7 @@
       if (e.target.closest(".web-customer-resetpin-btn")) resetPin(id);
       if (e.target.closest(".web-customer-access-btn")) createAccess(row.dataset.phone);
       if (e.target.closest(".web-customer-pinlink-btn")) openPinLink(id, row.dataset.phone);
+      if (e.target.closest(".web-customer-fraud-btn")) markFraud(row.dataset.phone);
     });
   }
 

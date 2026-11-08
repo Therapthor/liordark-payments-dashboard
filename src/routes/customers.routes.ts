@@ -23,6 +23,7 @@ import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { blockPhone, unblockPhone, unblockIp, listBlockedPhones, isPhoneBlocked } from "../db/security.repository";
 import crypto from "crypto";
 import { revokeCustomerSessions, listSecurityEvents, listBlockedIps, setIpLoginFailures } from "../db/security.repository";
+import { banForFraud } from "../services/security.service";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -190,6 +191,15 @@ router.post("/create-access", async (req, res) => {
   const pin = String(crypto.randomInt(10000)).padStart(4, "0");
   const customer = createCustomer(phone, await hashPassword(pin), pin, true);
   res.json({ ok: true, id: customer.id, phone: customer.phone, existed: false });
+});
+
+// 🚨 Fraude: borra la cuenta, bloquea el número y libera todos sus perfiles.
+router.post("/fraud", (req, res) => {
+  const phone = String(req.body?.phone ?? "").replace(/\D/g, "");
+  if (phone.length < 9) return res.status(400).json({ message: "Celular inválido." });
+  const reason = String(req.body?.reason ?? "").trim().slice(0, 200) || "Fraude (marcado por el admin)";
+  try { res.json({ ok: true, ...banForFraud(phone, reason) }); }
+  catch (err: any) { res.status(400).json({ message: err?.message || "No se pudo completar." }); }
 });
 
 // Intentos de ataque detectados e IPs bloqueadas.

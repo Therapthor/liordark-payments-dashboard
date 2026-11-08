@@ -27,9 +27,11 @@ function holdersWithoutWebAccess(): { phone: string; firstSeenAt: string | null 
     WHERE client_phone != '' AND wholesaler_id IS NULL GROUP BY client_phone
   `).all() as { phone: string; firstSeenAt: string | null }[];
 
-  const registered = new Set(
-    (db.prepare(`SELECT phone FROM customers`).all() as { phone: string }[]).map(r => last9(r.phone))
-  );
+  const registered = new Set([
+    ...(db.prepare(`SELECT phone FROM customers`).all() as { phone: string }[]).map(r => last9(r.phone)),
+    // Números bloqueados (fraude/baneo): nunca se les crea usuario.
+    ...(db.prepare(`SELECT phone9 FROM blocked_phones`).all() as { phone9: string }[]).map(r => r.phone9),
+  ]);
   const byPhone = new Map<string, string | null>();
   for (const r of rows) {
     const d = last9(r.phone);

@@ -2,7 +2,7 @@ import type { Request } from "express";
 import { db } from "../db/db";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import { blockIp, logSecurityEvent, revokeCustomerSessions } from "../db/security.repository";
+import { blockIp, blockPhone, logSecurityEvent, revokeCustomerSessions, getAdminSetting, setAdminSetting } from "../db/security.repository";
 import { findChatByPhone, closeChat } from "../db/support-chat.repository";
 import { findCustomerByPhone, resetCustomerPin } from "../db/customer.repository";
 import { deleteChatMedia } from "./cloudinary.service";
@@ -129,4 +129,79 @@ export function scanPastChatMessages(): number {
     blocked++;
   }
   return blocked;
+}
+
+// ─────────────────────────────────────────────────────────────
+// FRAUDE — borra la cuenta web del número, lo bloquea (no puede volver a
+// entrar ni registrarse) y libera TODOS los perfiles/reemplazos que tenía.
+// Deja en «Intentos de ataque» la lista de cuentas que tuvo, para cambiar
+// sus contraseñas. Lo usa el botón «🚨 Fraude» de Clientes.
+// ─────────────────────────────────────────────────────────────
+
+export type FraudResult = {
+  phone: string;
+  customerDeleted: boolean;
+  released: { platform: string; email: string; profileName: string }[];
+  overridesRemoved: { platform: string; email: string }[];
+};
+
+export function banForFraud(phone: string, reason: string): FraudResult {
+  const d = String(phone || "").replace(/\D/g, "").slice(-9);
+  if (d.length !== 9) throw new Error("Celular inválido.");
+
+  return db.transaction((): FraudResult => {
+    const profiles = db.prepare(`
+      SELECT p.id AS id, a.platform AS platform, a.email AS email, p.profile_name AS profileName
+      FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id
+      WHERE substr(p.client_phone, -9) = ?
+    `).all(d) as { id: number; platform: string; email: string; profileName: string }[];
+    const release = db.prepare(`
+      UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', expires_override = NULL,
+        updated_at = datetime('now') WHERE id = ?
+    `);
+    for (const p of profiles) release.run(p.id);
+
+    const overrides = db.prepare(`
+      SELECT id, platform, email FROM manual_account_overrides WHERE substr(client_phone, -9) = ?
+    `).all(d) as { id: number; platform: string; email: string }[];
+    db.prepare(`DELETE FROM manual_account_overrides WHERE substr(client_phone, -9) = ?`).run(d);
+
+    const customer = findCustomerByPhone(d);
+    if (customer) {
+      revokeCustomerSessions(customer.id);
+      db.prepare(`DELETE FROM customers WHERE substr(phone, -9) = ?`).run(d);
+    }
+
+    const list = [
+      ...profiles.map(p => `${p.platform} · ${p.email}${p.profileName ? " · " + p.profileName : ""}`),
+      ...overrides.map(o => `${o.platform} · ${o.email} (reemplazo)`),
+    ];
+    const evidence = list.length
+      ? "Perfiles liberados — cámbiales la contraseña:\n" + list.join("\n")
+      : "No tenía perfiles asignados.";
+    blockPhone({ phone: "51" + d, reason, evidence, source: "admin" });
+    logSecurityEvent({
+      phone: "51" + d, ip: "", reason, evidence,
+      action: "Cuenta borrada, número bloqueado y " + list.length + " perfil(es) liberado(s)",
+    });
+
+    return {
+      phone: d, customerDeleted: !!customer,
+      released: profiles.map(p => ({ platform: p.platform, email: p.email, profileName: p.profileName })),
+      overridesRemoved: overrides.map(o => ({ platform: o.platform, email: o.email })),
+    };
+  })();
+}
+
+/** Una sola vez: el número que se llevó 3 cuentas con pagos Yape falsos (8-nov-2026). */
+export function runPendingFraudCleanups(): void {
+  const cases = [{ marker: "fraud_902524991", phone: "902524991", reason: "Pagos Yape falsos (8-nov): 3 pedidos sin pagar" }];
+  for (const c of cases) {
+    if (getAdminSetting(c.marker)) continue;
+    const r = banForFraud(c.phone, c.reason);
+    setAdminSetting(c.marker, new Date().toISOString());
+    console.log(`🚨 Fraude ${c.phone}: cuenta ${r.customerDeleted ? "borrada" : "no existía"}, ` +
+      `${r.released.length} perfil(es) liberado(s), ${r.overridesRemoved.length} reemplazo(s) quitado(s): ` +
+      r.released.map(p => p.platform + " " + p.email).join(" | "));
+  }
 }
