@@ -39,6 +39,7 @@ import { ensureWebAccessForAccountHolders } from "./services/web-access.service"
 import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
 import { applyPendingPasswordRotation } from "./services/auth.service";
 import { scanPastChatMessages, runPendingFraudCleanups } from "./services/security.service";
+import { removeFakePayments } from "./db/payments.repository";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -195,6 +196,10 @@ app.use((req, res, next) => {
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);
   try { mergeDuplicateCustomers(); } catch (err: any) { console.error("⚠️ fusión de clientes:", err?.message); }
+  try {
+    const r = removeFakePayments();
+    if (r.payments || r.orders) console.log(`🧹 Pagos falsos quitados de la contabilidad: ${r.payments} pago(s), ${r.orders} pedido(s) aprobado(s)`);
+  } catch (err: any) { console.error("⚠️ limpieza de pagos falsos:", err?.message); }
   try { runPendingFraudCleanups(); } catch (err: any) { console.error("⚠️ limpieza de fraude:", err?.message); }
   try { applyPendingPasswordRotation(); } catch (err: any) { console.error("⚠️ cambio de contraseña:", err?.message); }
   try {

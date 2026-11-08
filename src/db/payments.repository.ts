@@ -25,6 +25,7 @@ export function upsertPayment(p: {
   orderName?:   string | undefined;
   createdAt:    string;
 }): boolean {
+  if (isFakePayment(p.id, p.senderName)) return false; // pago falso: nunca se guarda
   const existing = db.prepare(`SELECT 1 FROM payments WHERE id = ?`).get(p.id);
 
   db.prepare(`
@@ -39,6 +40,30 @@ export function upsertPayment(p: {
   );
 
   return !existing;
+}
+
+// ─── Pagos falsos del ataque del 8-nov-2026 ───
+// Avisos de Yape inventados (nunca entró ese dinero). No cuentan en la
+// contabilidad: se borran al arrancar y la sincronización con el bot
+// nunca los vuelve a traer.
+const FAKE_PAYMENT_IDS = new Set([2407, 2408, 2409, 2410, 2411, 2412, 2413]);
+const FAKE_SENDERS = new Set(["TEST CYBERSTRIKE", "TEST2", "MULTI", "MATCHTEST", "PROBE NONEXIST"]);
+
+export function isFakePayment(id: number, senderName: string): boolean {
+  return FAKE_PAYMENT_IDS.has(id) && FAKE_SENDERS.has(String(senderName || "").trim().toUpperCase());
+}
+
+/** Borra los pagos falsos y los «pedidos aprobados» del atacante. */
+export function removeFakePayments(): { payments: number; orders: number } {
+  const ids = [...FAKE_PAYMENT_IDS];
+  const rows = db.prepare(`SELECT id, sender_name AS s FROM payments WHERE id IN (${ids.map(() => "?").join(",")})`)
+    .all(...ids) as { id: number; s: string }[];
+  let payments = 0;
+  for (const r of rows) {
+    if (isFakePayment(r.id, r.s)) payments += db.prepare(`DELETE FROM payments WHERE id = ?`).run(r.id).changes;
+  }
+  const orders = db.prepare(`DELETE FROM orders_log WHERE message LIKE '%51902524991%'`).run().changes;
+  return { payments, orders };
 }
 
 export function updatePaymentStatus(id: number, status: string): void {
