@@ -62,7 +62,86 @@ db.exec(`
     locked_until TEXT,
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  -- IPs bloqueadas para siempre SOLO en el login del panel (2 contraseñas
+  -- mal). No afecta la tienda: en Perú muchos celulares comparten IP.
+  CREATE TABLE IF NOT EXISTS panel_blocked_ips (
+    ip         TEXT PRIMARY KEY,
+    reason     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  -- Llaves de acceso del panel (Face ID / huella). Solo la clave pública.
+  CREATE TABLE IF NOT EXISTS admin_passkeys (
+    id           TEXT PRIMARY KEY,
+    public_key   TEXT NOT NULL,
+    counter      INTEGER NOT NULL DEFAULT 0,
+    transports   TEXT NOT NULL DEFAULT '',
+    name         TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT
+  );
 `);
+
+// ── IPs bloqueadas en el login del panel (permanente) ──
+
+export function isPanelIpBlocked(ip: string): boolean {
+  if (!ip) return false;
+  return !!db.prepare(`SELECT 1 FROM panel_blocked_ips WHERE ip = ?`).get(ip);
+}
+
+export function blockPanelIp(ip: string, reason: string): void {
+  if (!ip) return;
+  db.prepare(`INSERT OR IGNORE INTO panel_blocked_ips (ip, reason) VALUES (?, ?)`).run(ip, reason);
+}
+
+export function unblockPanelIp(ip: string): void {
+  db.prepare(`DELETE FROM panel_blocked_ips WHERE ip = ?`).run(ip);
+}
+
+export function listPanelBlockedIps(): { ip: string; reason: string; createdAt: string }[] {
+  return (db.prepare(`SELECT * FROM panel_blocked_ips ORDER BY created_at DESC LIMIT 500`).all() as any[])
+    .map(r => ({ ip: r.ip, reason: r.reason, createdAt: r.created_at }));
+}
+
+export function countPanelBlockedIps(): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM panel_blocked_ips`).get() as { n: number }).n;
+}
+
+// ── Llaves de acceso (passkeys) del panel ──
+
+export type AdminPasskey = {
+  id: string; publicKey: string; counter: number; transports: string[];
+  name: string; createdAt: string; lastUsedAt: string | null;
+};
+
+function toPasskey(r: any): AdminPasskey {
+  return {
+    id: r.id, publicKey: r.public_key, counter: r.counter,
+    transports: String(r.transports || "").split(",").filter(Boolean),
+    name: r.name, createdAt: r.created_at, lastUsedAt: r.last_used_at ?? null,
+  };
+}
+
+export function listPasskeys(): AdminPasskey[] {
+  return (db.prepare(`SELECT * FROM admin_passkeys ORDER BY created_at`).all() as any[]).map(toPasskey);
+}
+
+export function getPasskey(id: string): AdminPasskey | null {
+  const r = db.prepare(`SELECT * FROM admin_passkeys WHERE id = ?`).get(id);
+  return r ? toPasskey(r) : null;
+}
+
+export function addPasskey(p: { id: string; publicKey: string; counter: number; transports: string[]; name: string }): void {
+  db.prepare(`INSERT INTO admin_passkeys (id, public_key, counter, transports, name) VALUES (?, ?, ?, ?, ?)`)
+    .run(p.id, p.publicKey, p.counter, p.transports.join(","), p.name);
+}
+
+export function touchPasskey(id: string, counter: number): void {
+  db.prepare(`UPDATE admin_passkeys SET counter = ?, last_used_at = datetime('now') WHERE id = ?`).run(counter, id);
+}
+
+export function deletePasskey(id: string): boolean {
+  return db.prepare(`DELETE FROM admin_passkeys WHERE id = ?`).run(id).changes === 1;
+}
 
 // Sesiones de clientes: un token emitido antes de esta marca ya no vale
 // (se usa al resetear el PIN o al detectar un ataque).

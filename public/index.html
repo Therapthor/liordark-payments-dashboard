@@ -17,6 +17,8 @@
       <p class="login-sub">Liordark</p>
       <input id="login-password" type="password" placeholder="Contraseña" autocomplete="current-password" required />
       <button type="submit">Entrar</button>
+      <div class="login-or" id="login-passkey-or" hidden><span>o</span></div>
+      <button type="button" id="login-passkey" class="login-passkey" hidden>🔑 Entrar con llave de acceso</button>
       <p id="login-error" class="login-error" hidden>Contraseña incorrecta</p>
     </form>
   </div>
@@ -569,6 +571,24 @@
         </div>
 
         <div id="config-section-security" class="config-section" hidden>
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-header"><h2>🔑 Llaves de acceso (Face ID)</h2></div>
+            <p class="panel-hint">Entra al panel con Face ID o huella, sin escribir la contraseña. La llave queda en tu iPhone (llavero de iCloud). En la PC, toca «Entrar con llave de acceso» y escanea el código QR con el iPhone.</p>
+            <ul id="sec-passkeys" class="sec-sessions"></ul>
+            <form id="sec-passkey-form" class="sec-password-form" autocomplete="off">
+              <input type="text" id="sec-pk-name" placeholder="Nombre (ej. Mi iPhone)" maxlength="60">
+              <input type="password" id="sec-pk-password" placeholder="Contraseña del panel (para confirmar)" autocomplete="current-password" required>
+              <button class="btn-primary" type="submit">🔑 Agregar llave de acceso</button>
+              <p class="form-error" id="sec-pk-msg" hidden></p>
+            </form>
+            <p class="panel-hint">Hazlo desde el iPhone (Safari) para que la llave quede en él.</p>
+          </div>
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-header"><h2>⛔ Conexiones bloqueadas del login</h2></div>
+            <p class="panel-hint">Una conexión (IP) que escribe 2 veces mal la contraseña queda bloqueada para siempre en el login del panel. Tu llave de acceso y los dispositivos donde ya entraste funcionan igual. Solo afecta al panel, no a la tienda.</p>
+            <p class="panel-hint" id="sec-blocked-total"></p>
+            <ul id="sec-blocked-ips" class="sec-sessions"></ul>
+          </div>
           <div class="panel" style="margin-bottom:16px">
             <div class="panel-header"><h2>🔑 Enlace de la app de Yape</h2></div>
             <p class="panel-hint">Cópialo y pégalo en la app <b>Liordark Yape</b> del celular (paso 1). La app guarda la clave cifrada y firma cada Yape; los avisos sin firma quedan «Sin verificar» y no confirman pedidos. No compartas este enlace con nadie.</p>
@@ -1536,6 +1556,7 @@
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/web-customers.js"></script>
+  <script src="js/passkey.js"></script>
   <script src="js/security.js"></script>
   <script src="js/wholesalers.js"></script>
   <script src="js/soportes.js"></script>

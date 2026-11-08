@@ -101,6 +101,10 @@ button, input {
 .login-card button:hover { background: var(--accent-dim); }
 
 .login-error { color: var(--critical); font-size: 13px; margin: 0; }
+.login-or { display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 12px; }
+.login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.login-card button.login-passkey { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
+.login-card button.login-passkey:hover { background: var(--surface-raised); }
 
 /* ─────────────────────────────────────────────────────────────
    LAYOUT GENERAL

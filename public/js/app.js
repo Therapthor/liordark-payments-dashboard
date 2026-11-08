@@ -225,15 +225,43 @@
     const errorEl = document.getElementById("login-error");
     errorEl.hidden = true;
     try {
-      await api("/auth/login", { method: "POST", body: JSON.stringify({ password }) });
+      const res = await fetch("/api/auth/login", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Contraseña incorrecta");
       showApp();
       boot();
     } catch (err) {
-      const msg = err && err.message;
-      errorEl.textContent = !msg || msg === "No autenticado" ? "Contraseña incorrecta" : msg;
+      errorEl.textContent = (err && err.message) || "Contraseña incorrecta";
       errorEl.hidden = false;
     }
   });
+
+  // Entrar con llave de acceso (Face ID / huella).
+  (() => {
+    const btn = document.getElementById("login-passkey");
+    if (!btn || !window.LiordarkPasskey || !window.LiordarkPasskey.supported()) return;
+    btn.hidden = false;
+    document.getElementById("login-passkey-or").hidden = false;
+    btn.addEventListener("click", async () => {
+      const errorEl = document.getElementById("login-error");
+      errorEl.hidden = true;
+      btn.disabled = true;
+      try {
+        await window.LiordarkPasskey.login();
+        showApp();
+        boot();
+      } catch (err) {
+        errorEl.textContent = (err && err.message) || "No se pudo usar la llave de acceso.";
+        errorEl.hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
 
   document.getElementById("logout-btn").addEventListener("click", async () => {
     await api("/auth/logout", { method: "POST" }).catch(() => {});

@@ -137,6 +137,80 @@
     catch (err) { alert(err.message); }
   });
 
-  const loadAll = () => { load(); loadYape(); };
+  // ─── Llaves de acceso (Face ID) ───
+  async function loadPasskeys() {
+    const list = document.getElementById("sec-passkeys");
+    try {
+      const { passkeys } = await api("/passkeys");
+      list.innerHTML = passkeys.map(p => `
+        <li class="sec-session">
+          <div>
+            <b>🔑 ${escapeHtml(p.name)}</b>
+            <span>agregada ${escapeHtml(fmt(p.createdAt))} · ${p.lastUsedAt ? "último uso " + escapeHtml(fmt(p.lastUsedAt)) : "aún sin usar"}</span>
+          </div>
+          <button class="btn-secondary btn-sm" data-pk-delete="${escapeHtml(p.id)}" type="button">Borrar</button>
+        </li>`).join("") || `<li class="feed-empty">Aún no tienes llaves de acceso.</li>`;
+    } catch (err) {
+      list.innerHTML = `<li class="feed-empty">${escapeHtml(err.message)}</li>`;
+    }
+  }
+
+  document.getElementById("sec-passkeys").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-pk-delete]");
+    if (!btn) return;
+    if (!confirm("¿Borrar esta llave de acceso? Ya no podrás entrar con ella.")) return;
+    try { await api("/passkeys/" + encodeURIComponent(btn.dataset.pkDelete) + "/delete", { method: "POST" }); }
+    catch (err) { alert(err.message); }
+    loadPasskeys();
+  });
+
+  document.getElementById("sec-passkey-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById("sec-pk-msg");
+    msg.hidden = false; msg.style.color = ""; msg.textContent = "Sigue los pasos de Face ID…";
+    const name = document.getElementById("sec-pk-name").value.trim() || deviceName(navigator.userAgent);
+    const password = document.getElementById("sec-pk-password").value;
+    try {
+      if (!window.LiordarkPasskey || !window.LiordarkPasskey.supported()) throw new Error("Este navegador no admite llaves de acceso.");
+      await window.LiordarkPasskey.register(password, name);
+      e.target.reset();
+      msg.style.color = "var(--success, #2f9e5b)";
+      msg.textContent = "✅ Llave agregada. La próxima vez toca «Entrar con llave de acceso».";
+      loadPasskeys();
+    } catch (err) {
+      msg.textContent = err.message;
+    }
+  });
+
+  // ─── Conexiones bloqueadas del login ───
+  async function loadBlocked() {
+    const list = document.getElementById("sec-blocked-ips");
+    const total = document.getElementById("sec-blocked-total");
+    try {
+      const r = await api("/panel-blocked-ips");
+      total.textContent = r.total ? `${r.total} bloqueada(s)${r.total > r.ips.length ? ` · mostrando las ${r.ips.length} más recientes` : ""}.` : "";
+      list.innerHTML = r.ips.map(b => `
+        <li class="sec-session">
+          <div>
+            <b>IP ${escapeHtml(b.ip)}</b>
+            <span>${escapeHtml(b.reason)} · ${escapeHtml(fmt(b.createdAt))}</span>
+          </div>
+          <button class="btn-secondary btn-sm" data-unblock="${escapeHtml(b.ip)}" type="button">Desbloquear</button>
+        </li>`).join("") || `<li class="feed-empty">Ninguna conexión bloqueada.</li>`;
+    } catch (err) {
+      list.innerHTML = `<li class="feed-empty">${escapeHtml(err.message)}</li>`;
+    }
+  }
+
+  document.getElementById("sec-blocked-ips").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-unblock]");
+    if (!btn) return;
+    if (!confirm(`¿Desbloquear la IP ${btn.dataset.unblock}? Podrá volver a intentar la contraseña.`)) return;
+    try { await api("/panel-blocked-ips/unblock", { method: "POST", body: JSON.stringify({ ip: btn.dataset.unblock }) }); }
+    catch (err) { alert(err.message); }
+    loadBlocked();
+  });
+
+  const loadAll = () => { load(); loadYape(); loadPasskeys(); loadBlocked(); };
   window.LiordarkSecurity = { load: loadAll };
 })();

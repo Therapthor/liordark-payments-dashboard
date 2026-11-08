@@ -5,19 +5,28 @@ import {
 } from "../services/auth.service";
 import {
   listAdminSessions, revokeAdminSession, revokeAdminSessionById, revokeAllAdminSessions, currentSessionShortId,
-  logSecurityEvent,
+  logSecurityEvent, isPanelIpBlocked, blockPanelIp, unblockPanelIp, listPanelBlockedIps, countPanelBlockedIps,
+  listPasskeys, deletePasskey,
 } from "../db/security.repository";
 import { requireAuth } from "../middleware/auth.middleware";
-import { clientIp, ipHeadersSummary } from "../services/security.service";
+import { clientIp, ipHeadersSummary, isPublicIp } from "../services/security.service";
+import { registrationOptions, registerPasskey, loginOptions, verifyPasskeyLogin } from "../services/passkey.service";
 import { env } from "../config/env";
 import axios from "axios";
 
 const router = Router();
 
-// Intentos fallidos por IP: 5 seguidos → 15 min sin poder intentar.
-const MAX_FAILS = 5;
+// Contraseña incorrecta:
+//  · desde un dispositivo nuevo: a la 2.ª, esa IP queda bloqueada PARA
+//    SIEMPRE en el login del panel (se desbloquea en Configuración >
+//    Seguridad). Solo el panel: la tienda no se toca.
+//  · desde un dispositivo de confianza (ya entró antes): 5 seguidas → 15 min.
+// La llave de acceso (Face ID) entra siempre, aunque la IP esté bloqueada.
+const MAX_FAILS_NEW = 2;
+const MAX_FAILS_TRUSTED = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const fails = new Map<string, { count: number; lockedUntil: number }>();
+const BLOCKED_MSG = "Esta conexión quedó bloqueada por contraseñas incorrectas. Entra con tu llave de acceso o desde un dispositivo donde ya iniciaste sesión.";
 
 // Intentos fallidos de TODAS las IPs juntas. El 8-nov alguien probó
 // contraseñas con una IP distinta (inventada) en cada intento, así el
@@ -62,20 +71,34 @@ function setCookie(res: import("express").Response, token: string, expires: Date
   });
 }
 
+function openSession(req: import("express").Request, res: import("express").Response, ip: string): void {
+  const { token, expires } = createSessionToken(ip, String(req.headers["user-agent"] ?? ""));
+  setCookie(res, token, expires);
+  if (!isTrustedDevice(req.cookies?.[TRUSTED_COOKIE])) setTrustedDeviceCookie(res);
+}
+
 router.post("/login", (req, res) => {
   const now = Date.now();
   const ip = clientIp(req);
   const trusted = isTrustedDevice(req.cookies?.[TRUSTED_COOKIE]);
+  const realIp = isPublicIp(ip);
+
+  if (!trusted && realIp && isPanelIpBlocked(ip)) {
+    noteFailure(now, ip);
+    res.status(403).json({ message: BLOCKED_MSG });
+    return;
+  }
 
   if (!trusted && countRecentFails(now) >= SHIELD_FAILS) {
     noteFailure(now, ip); // mientras sigan probando, sigue cerrado
     res.status(429).json({
-      message: "Por seguridad, ahora solo se puede entrar desde un dispositivo donde ya iniciaste sesión. Prueba de nuevo en 15 min.",
+      message: "Por seguridad, ahora solo se puede entrar con tu llave de acceso o desde un dispositivo donde ya iniciaste sesión. Prueba de nuevo en 15 min.",
     });
     return;
   }
 
-  const f = fails.get(ip);
+  const key = (trusted ? "t:" : "n:") + ip;
+  const f = fails.get(key);
   if (f && f.lockedUntil > now) {
     const min = Math.ceil((f.lockedUntil - now) / 60000);
     res.status(429).json({ message: `Demasiados intentos. Prueba de nuevo en ${min} min.` });
@@ -85,18 +108,107 @@ router.post("/login", (req, res) => {
   const password = req.body?.password;
   if (typeof password !== "string" || password.length > 200 || !checkPassword(password)) {
     const count = (f?.count ?? 0) + 1;
-    fails.set(ip, { count, lockedUntil: count >= MAX_FAILS ? now + LOCK_MS : 0 });
-    noteFailure(now, ip);
-    console.warn(`⚠️ Intento fallido de acceso al panel desde ${ip || "?"} (${count})`);
+    console.warn(`⚠️ Intento fallido de acceso al panel desde ${ip || "?"} (${count})${trusted ? " — dispositivo de confianza" : ""}`);
     if (headerSamples < 5) { headerSamples++; console.warn(`🔎 Origen: ${ipHeadersSummary(req)}`); }
-    res.status(401).json({ message: "Contraseña incorrecta" });
+
+    if (trusted) {
+      fails.set(key, { count, lockedUntil: count >= MAX_FAILS_TRUSTED ? now + LOCK_MS : 0 });
+      res.status(401).json({ message: "Contraseña incorrecta" });
+      return;
+    }
+
+    noteFailure(now, ip);
+    if (count >= MAX_FAILS_NEW && realIp) {
+      fails.delete(key);
+      blockPanelIp(ip, `${count} contraseñas incorrectas`);
+      console.warn(`⛔ Panel: IP ${ip} bloqueada para siempre (${count} contraseñas incorrectas)`);
+      res.status(403).json({ message: BLOCKED_MSG });
+      return;
+    }
+    // Sin IP real (no debería pasar detrás de nginx): solo espera de 15 min.
+    fails.set(key, { count, lockedUntil: count >= MAX_FAILS_NEW ? now + LOCK_MS : 0 });
+    res.status(401).json({ message: "Contraseña incorrecta. Un intento más y esta conexión queda bloqueada." });
     return;
   }
 
-  fails.delete(ip);
-  const { token, expires } = createSessionToken(ip, String(req.headers["user-agent"] ?? ""));
-  setCookie(res, token, expires);
-  if (!trusted) setTrustedDeviceCookie(res);
+  fails.delete(key);
+  openSession(req, res, ip);
+  res.json({ ok: true });
+});
+
+// ── Llave de acceso (Face ID / huella) ──
+
+router.post("/passkey/login/options", async (_req, res) => {
+  try { res.json(await loginOptions(res)); }
+  catch (err: any) { res.status(400).json({ message: err?.message || "No disponible" }); }
+});
+
+router.post("/passkey/login/verify", async (req, res) => {
+  const ip = clientIp(req);
+  const name = await verifyPasskeyLogin(req, res, req.body?.response);
+  if (!name) {
+    console.warn(`⚠️ Llave de acceso no válida desde ${ip || "?"}`);
+    res.status(401).json({ message: "No se pudo verificar la llave de acceso. Vuelve a intentarlo." });
+    return;
+  }
+  for (const k of ["n:" + ip, "t:" + ip]) fails.delete(k);
+  openSession(req, res, ip);
+  console.log(`🔑 Panel: entrada con llave de acceso «${name}» desde ${ip || "?"}`);
+  res.json({ ok: true });
+});
+
+// Agregar una llave pide la contraseña: una sesión robada no puede
+// dejarse una llave propia para volver a entrar.
+let regFails: number[] = [];
+
+router.post("/passkey/register/options", requireAuth, async (req, res) => {
+  const now = Date.now();
+  regFails = regFails.filter(t => now - t < LOCK_MS);
+  if (regFails.length >= 5) {
+    res.status(429).json({ message: "Demasiados intentos. Prueba de nuevo en 15 min." });
+    return;
+  }
+  const password = req.body?.password;
+  if (typeof password !== "string" || password.length > 200 || !checkPassword(password)) {
+    regFails.push(now);
+    res.status(400).json({ message: "La contraseña no es correcta." });
+    return;
+  }
+  try { res.json(await registrationOptions(res)); }
+  catch (err: any) { res.status(400).json({ message: err?.message || "No se pudo empezar" }); }
+});
+
+router.post("/passkey/register/verify", requireAuth, async (req, res) => {
+  try {
+    await registerPasskey(req, res, req.body?.response, String(req.body?.name ?? ""));
+    console.log(`🔑 Panel: llave de acceso nueva registrada desde ${clientIp(req) || "?"}`);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(400).json({ message: err?.message || "No se pudo registrar la llave." });
+  }
+});
+
+router.get("/passkeys", requireAuth, (_req, res) => {
+  res.json({
+    passkeys: listPasskeys().map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt })),
+  });
+});
+
+router.post("/passkeys/:id/delete", requireAuth, (req, res) => {
+  deletePasskey(String(req.params.id));
+  res.json({ ok: true });
+});
+
+// ── IPs bloqueadas en el login del panel ──
+
+router.get("/panel-blocked-ips", requireAuth, (_req, res) => {
+  res.json({ total: countPanelBlockedIps(), ips: listPanelBlockedIps().slice(0, 100) });
+});
+
+router.post("/panel-blocked-ips/unblock", requireAuth, (req, res) => {
+  const ip = String(req.body?.ip ?? "").slice(0, 64);
+  unblockPanelIp(ip);
+  for (const k of ["n:" + ip, "t:" + ip]) fails.delete(k);
   res.json({ ok: true });
 });
 

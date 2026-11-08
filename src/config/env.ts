@@ -37,6 +37,11 @@ export const env = {
   DASHBOARD_PASSWORD: getEnv("DASHBOARD_PASSWORD"),
   SESSION_SECRET: getEnv("SESSION_SECRET"),
 
+  // Llaves de acceso (Face ID / huella) del panel: dominio y origen donde
+  // se registran. Solo se cambian para probar en local.
+  PANEL_RP_ID:  process.env.PANEL_RP_ID || "panel.liordark.com",
+  PANEL_ORIGIN: process.env.PANEL_ORIGIN || `https://${process.env.PANEL_RP_ID || "panel.liordark.com"}`,
+
   // Mismas credenciales que ya usa el bot — el panel sube ahí la imagen
   // principal del menú de WhatsApp (Configuración > Flujo).
   CLOUDINARY_CLOUD_NAME:   getEnv("CLOUDINARY_CLOUD_NAME", false),
