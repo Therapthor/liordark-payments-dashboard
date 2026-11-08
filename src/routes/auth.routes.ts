@@ -1,12 +1,14 @@
 import { Router } from "express";
 import {
   checkPassword, createSessionToken, SESSION_COOKIE, verifySessionToken, setPanelPassword,
+  TRUSTED_COOKIE, isTrustedDevice, setTrustedDeviceCookie, resetTrustedDevices,
 } from "../services/auth.service";
 import {
   listAdminSessions, revokeAdminSession, revokeAdminSessionById, revokeAllAdminSessions, currentSessionShortId,
+  logSecurityEvent,
 } from "../db/security.repository";
 import { requireAuth } from "../middleware/auth.middleware";
-import { clientIp } from "../services/security.service";
+import { clientIp, ipHeadersSummary } from "../services/security.service";
 import { env } from "../config/env";
 import axios from "axios";
 
@@ -16,6 +18,40 @@ const router = Router();
 const MAX_FAILS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const fails = new Map<string, { count: number; lockedUntil: number }>();
+
+// Intentos fallidos de TODAS las IPs juntas. El 8-nov alguien probó
+// contraseñas con una IP distinta (inventada) en cada intento, así el
+// bloqueo por IP no lo frenaba. Con 10 fallos en 15 min el login queda
+// abierto solo para dispositivos donde ya se entró antes (cookie firmada);
+// mientras sigan llegando intentos, sigue cerrado para los demás.
+const SHIELD_FAILS = 10;
+const SHIELD_WINDOW_MS = 15 * 60 * 1000;
+let recentFails: number[] = [];
+let shieldLoggedAt = 0;
+let headerSamples = 0;
+
+function countRecentFails(now: number): number {
+  recentFails = recentFails.filter(t => now - t < SHIELD_WINDOW_MS).slice(-200);
+  return recentFails.length;
+}
+
+function noteFailure(now: number, ip: string): void {
+  recentFails.push(now);
+  if (fails.size > 5000) {
+    for (const [k, v] of fails) if (v.lockedUntil < now) fails.delete(k);
+    if (fails.size > 5000) fails.clear();
+  }
+  const n = countRecentFails(now);
+  if (n >= SHIELD_FAILS && now - shieldLoggedAt > SHIELD_WINDOW_MS) {
+    shieldLoggedAt = now;
+    console.warn(`🛡️ Panel: ${n} contraseñas fallidas en 15 min — el login queda solo para dispositivos de confianza`);
+    logSecurityEvent({
+      phone: "", ip, reason: "Panel: prueban contraseñas en masa",
+      evidence: `${n} intentos fallidos en 15 min desde IPs distintas`,
+      action: "Login del panel solo desde dispositivos donde ya entraste",
+    });
+  }
+}
 
 function setCookie(res: import("express").Response, token: string, expires: Date): void {
   res.cookie(SESSION_COOKIE, token, {
@@ -27,10 +63,21 @@ function setCookie(res: import("express").Response, token: string, expires: Date
 }
 
 router.post("/login", (req, res) => {
+  const now = Date.now();
   const ip = clientIp(req);
+  const trusted = isTrustedDevice(req.cookies?.[TRUSTED_COOKIE]);
+
+  if (!trusted && countRecentFails(now) >= SHIELD_FAILS) {
+    noteFailure(now, ip); // mientras sigan probando, sigue cerrado
+    res.status(429).json({
+      message: "Por seguridad, ahora solo se puede entrar desde un dispositivo donde ya iniciaste sesión. Prueba de nuevo en 15 min.",
+    });
+    return;
+  }
+
   const f = fails.get(ip);
-  if (f && f.lockedUntil > Date.now()) {
-    const min = Math.ceil((f.lockedUntil - Date.now()) / 60000);
+  if (f && f.lockedUntil > now) {
+    const min = Math.ceil((f.lockedUntil - now) / 60000);
     res.status(429).json({ message: `Demasiados intentos. Prueba de nuevo en ${min} min.` });
     return;
   }
@@ -38,8 +85,10 @@ router.post("/login", (req, res) => {
   const password = req.body?.password;
   if (typeof password !== "string" || password.length > 200 || !checkPassword(password)) {
     const count = (f?.count ?? 0) + 1;
-    fails.set(ip, { count, lockedUntil: count >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
+    fails.set(ip, { count, lockedUntil: count >= MAX_FAILS ? now + LOCK_MS : 0 });
+    noteFailure(now, ip);
     console.warn(`⚠️ Intento fallido de acceso al panel desde ${ip || "?"} (${count})`);
+    if (headerSamples < 5) { headerSamples++; console.warn(`🔎 Origen: ${ipHeadersSummary(req)}`); }
     res.status(401).json({ message: "Contraseña incorrecta" });
     return;
   }
@@ -47,6 +96,7 @@ router.post("/login", (req, res) => {
   fails.delete(ip);
   const { token, expires } = createSessionToken(ip, String(req.headers["user-agent"] ?? ""));
   setCookie(res, token, expires);
+  if (!trusted) setTrustedDeviceCookie(res);
   res.json({ ok: true });
 });
 
@@ -75,6 +125,8 @@ router.post("/sessions/:id/revoke", requireAuth, (req, res) => {
 
 router.post("/sessions/revoke-others", requireAuth, (req, res) => {
   const closed = revokeAllAdminSessions(req.cookies?.[SESSION_COOKIE]);
+  resetTrustedDevices();
+  setTrustedDeviceCookie(res); // este dispositivo sigue siendo de confianza
   res.json({ ok: true, closed });
 });
 
@@ -110,6 +162,8 @@ router.post("/password", requireAuth, (req, res) => {
   if (!/[a-zA-Z]/.test(next) || !/\d/.test(next)) return res.status(400).json({ message: "Usa letras y números en la nueva contraseña." });
   setPanelPassword(next);
   const closed = revokeAllAdminSessions(req.cookies?.[SESSION_COOKIE]);
+  resetTrustedDevices();
+  setTrustedDeviceCookie(res);
   res.json({ ok: true, closed });
 });
 

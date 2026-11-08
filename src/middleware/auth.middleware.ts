@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { SESSION_COOKIE, verifySessionToken } from "../services/auth.service";
+import {
+  SESSION_COOKIE, TRUSTED_COOKIE, verifySessionToken, isTrustedDevice, setTrustedDeviceCookie,
+} from "../services/auth.service";
 import { clientIp } from "../services/security.service";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
@@ -8,5 +10,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({ message: "No autenticado" });
     return;
   }
+  // Los dispositivos con sesión abierta quedan como de confianza.
+  if (!isTrustedDevice(req.cookies?.[TRUSTED_COOKIE])) setTrustedDeviceCookie(res);
   next();
 }

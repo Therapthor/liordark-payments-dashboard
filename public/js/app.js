@@ -228,7 +228,9 @@
       await api("/auth/login", { method: "POST", body: JSON.stringify({ password }) });
       showApp();
       boot();
-    } catch {
+    } catch (err) {
+      const msg = err && err.message;
+      errorEl.textContent = !msg || msg === "No autenticado" ? "Contraseña incorrecta" : msg;
       errorEl.hidden = false;
     }
   });

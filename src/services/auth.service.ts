@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import type { Response } from "express";
 import { env } from "../config/env";
 import {
   createAdminSession, validateAdminSession, getAdminSetting, setAdminSetting, revokeAllAdminSessions,
@@ -38,6 +39,52 @@ export function checkPassword(input: string): boolean {
   const b = Buffer.from(env.DASHBOARD_PASSWORD);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+// ── Dispositivos de confianza ──
+// Cada navegador que entra al panel recibe una cookie firmada (1 año). Si
+// alguien prueba contraseñas en masa cambiando de IP, el login se cierra
+// para todos MENOS para esos dispositivos: el dueño sigue entrando.
+
+export const TRUSTED_COOKIE = "ldp_trusted";
+const TRUSTED_SECRET_KEY = "trusted_device_secret";
+const TRUSTED_DAYS = 365;
+let trustedSecret: string | null = null;
+
+function getTrustedSecret(): string {
+  if (trustedSecret) return trustedSecret;
+  let s = getAdminSetting(TRUSTED_SECRET_KEY);
+  if (!s) { s = crypto.randomBytes(32).toString("hex"); setAdminSetting(TRUSTED_SECRET_KEY, s); }
+  trustedSecret = s;
+  return s;
+}
+
+function trustedMac(id: string): Buffer {
+  return crypto.createHmac("sha256", getTrustedSecret()).update(id).digest();
+}
+
+export function isTrustedDevice(token: unknown): boolean {
+  if (typeof token !== "string") return false;
+  const m = /^([0-9a-f]{32})\.([0-9a-f]{64})$/.exec(token);
+  if (!m) return false;
+  return crypto.timingSafeEqual(Buffer.from(m[2]!, "hex"), trustedMac(m[1]!));
+}
+
+export function setTrustedDeviceCookie(res: Response): void {
+  const id = crypto.randomBytes(16).toString("hex");
+  res.cookie(TRUSTED_COOKIE, `${id}.${trustedMac(id).toString("hex")}`, {
+    httpOnly: true,
+    secure:   env.NODE_ENV === "production",
+    sameSite: "strict",
+    expires:  new Date(Date.now() + TRUSTED_DAYS * 86_400_000),
+  });
+}
+
+/** Anula todos los dispositivos de confianza (al cerrar las demás sesiones
+ *  o cambiar la contraseña). Cada uno vuelve a serlo al iniciar sesión. */
+export function resetTrustedDevices(): void {
+  trustedSecret = crypto.randomBytes(32).toString("hex");
+  setAdminSetting(TRUSTED_SECRET_KEY, trustedSecret);
 }
 
 export function setPanelPassword(plain: string): void {

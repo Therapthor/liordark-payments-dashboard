@@ -74,11 +74,32 @@ export function isPublicIp(ip: string): boolean {
   return true;
 }
 
-/** IP real del cliente detrás de nginx (último salto de X-Forwarded-For). */
+function cleanIp(v: unknown): string {
+  return String(v ?? "").trim().replace(/^::ffff:/, "").replace(/[^0-9a-fA-F.:]/g, "").slice(0, 64);
+}
+
+/**
+ * IP real del cliente.
+ *  · Conexión directa (no viene de nginx): la del socket; las cabeceras las
+ *    escribe quien llama y no valen.
+ *  · Desde nginx: X-Real-IP (nginx la pisa con la IP real). X-Forwarded-For
+ *    queda de respaldo: el 8-nov se vio que en producción llega tal cual la
+ *    manda el cliente (IPs inventadas para saltarse el bloqueo).
+ */
 export function clientIp(req: Request): string {
-  const xff = String(req.headers["x-forwarded-for"] ?? "").split(",").map(s => s.trim()).filter(Boolean);
-  const ip = xff.length ? xff[xff.length - 1]! : String(req.headers["x-real-ip"] ?? req.ip ?? "");
-  return ip.replace(/^::ffff:/, "").slice(0, 64);
+  const sock = cleanIp(req.socket?.remoteAddress);
+  if (sock && isPublicIp(sock)) return sock;
+  const real = cleanIp(String(req.headers["x-real-ip"] ?? "").split(",")[0]);
+  if (real) return real;
+  const xff = String(req.headers["x-forwarded-for"] ?? "").split(",").map(cleanIp).filter(Boolean);
+  return xff.length ? xff[xff.length - 1]! : sock;
+}
+
+/** Resumen de las cabeceras de IP (para revisar en los logs cómo llegan). */
+export function ipHeadersSummary(req: Request): string {
+  const clean = (v: unknown) => String(v ?? "").replace(/[^0-9a-fA-F.:, ]/g, "").slice(0, 120);
+  const host = String(req.hostname ?? "").replace(/[^a-zA-Z0-9.-]/g, "").slice(0, 60);
+  return `host=${host} socket=${clean(req.socket?.remoteAddress)} x-real-ip=${clean(req.headers["x-real-ip"])} xff=${clean(req.headers["x-forwarded-for"])}`;
 }
 
 /**
