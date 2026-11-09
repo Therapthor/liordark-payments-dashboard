@@ -324,6 +324,7 @@
     }
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "codes" && window.LiordarkCodes) window.LiordarkCodes.load();
+    if (view === "codes" && window.LiordarkCodesInbox) window.LiordarkCodesInbox.open();
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "course" && window.LiordarkCourse) window.LiordarkCourse.load();
@@ -644,6 +645,7 @@
   }
 
   let evtSource = null;
+  let lastCodeChimeAt = 0;
   function connectLive() {
     if (evtSource) evtSource.close();
     evtSource = new EventSource("/api/live/stream");
@@ -692,6 +694,16 @@
       if (evt.type === "support_report") {
         playReviewAlertChime();
         if (window.LiordarkSoportes) window.LiordarkSoportes.load();
+      }
+
+      // Códigos: llegó un correo nuevo a la bandeja / un cliente espera de más.
+      if (evt.type === "code_inbox" || evt.type === "code_stuck") {
+        if (evt.type === "code_stuck") playReviewAlertChime();
+        else if (evt.item && evt.item.value && Date.now() - lastCodeChimeAt > 20_000) {
+          lastCodeChimeAt = Date.now();
+          playCustomerChime();
+        }
+        if (window.LiordarkCodesInbox) window.LiordarkCodesInbox.onLive(evt);
       }
     };
   }

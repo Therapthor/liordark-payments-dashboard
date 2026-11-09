@@ -48,7 +48,8 @@ import {
   getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
+import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -405,7 +406,41 @@ router.post("/accounts/:id/totp-secret", (req, res) => {
 });
 
 router.get("/code-sources", (_req, res) => {
-  res.json({ sources: listCodeSources() });
+  res.json({ sources: listCodeSources().map(s => ({ ...s, watched: LIST_SOURCES.includes(s.id) })) });
+});
+
+// ── BANDEJA DE CÓDIGOS (ver services/codes-brain.service.ts) ──
+
+router.get("/codes/inbox", (req, res) => {
+  res.json({
+    items: listInbox({
+      limit: Number(req.query.limit) || 150,
+      q: typeof req.query.q === "string" ? req.query.q : "",
+      sourceId: typeof req.query.source === "string" && req.query.source ? req.query.source : "",
+      onlyCodes: req.query.onlyCodes === "1",
+    }),
+    watcher: watcherInfo(),
+  });
+});
+
+router.get("/codes/inbox/:id", (req, res) => {
+  const found = getInboxHtml(Number(req.params.id));
+  if (!found) { res.status(404).json({ message: "Ese correo ya no está en la bandeja." }); return; }
+  res.json(found);
+});
+
+router.get("/codes/health", (_req, res) => {
+  res.json({ sources: sourcesHealth(), watcher: watcherInfo() });
+});
+
+router.get("/codes/activity", (req, res) => {
+  res.json({ rows: listActivity({ limit: Number(req.query.limit) || 150, onlyProblems: req.query.problems === "1" }) });
+});
+
+// «Revisar ahora» del vigilante (no espera a los 2 minutos).
+router.post("/codes/watch-now", async (_req, res) => {
+  const { checked } = await runCodeWatch();
+  res.json({ checked, watcher: watcherInfo() });
 });
 
 router.get("/codes", async (_req, res) => {
@@ -457,7 +492,7 @@ router.post("/codes/lookup", async (req, res) => {
   const email = String(req.body?.email || "").trim();
   if (!email) { res.status(400).json({ message: "Falta el correo." }); return; }
 
-  const found = await lookupAnySourceWithRetries(email, getLastSeenCodeForEmail(email));
+  const found = await withLookupContext({ origin: "busqueda" }, () => lookupAnySourceWithRetries(email, getLastSeenCodeForEmail(email)));
   if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null }); return; }
 
   res.json({
@@ -485,7 +520,8 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
     ? "codigo_login"
     : (typeof req.body?.actionId === "string" ? req.body.actionId : undefined);
   const exclude = skipsRepeatedCodes(account.codeSource) ? getLastSeenCodeForEmail(account.email) : null;
-  let result = await lookupCodeActionWithRetries(account.codeSource, account.email, actionId, exclude);
+  let result = await withLookupContext({ origin: "panel", accountId },
+    () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude));
   if (codeOnly && result.found && !isLoginCode(result)) {
     result = { found: false, kind: null, value: null };
   }

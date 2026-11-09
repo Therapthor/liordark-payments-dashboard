@@ -9,7 +9,7 @@ import {
 } from "../db/codes.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import {
-  TOTP_SOURCE_ID, isAdminOnlyResult, lookupCodeForClientWithRetries, skipsRepeatedCodes,
+  TOTP_SOURCE_ID, isAdminOnlyResult, lookupCodeForClientWithRetries, skipsRepeatedCodes, withLookupContext,
   type CodeLookupResult,
 } from "./codes-lookup.service";
 import { deleteChatMedia } from "./cloudinary.service";
@@ -399,7 +399,8 @@ async function startCodeLookup(chat: Chat, phone: string, accountId: number): Pr
   const exclude = skipsRepeatedCodes(sourceId) ? getLastSeenCodeForEmail(account.email) : null;
   let result: CodeLookupResult;
   try {
-    result = await lookupCodeForClientWithRetries(sourceId, account.email, exclude);
+    result = await withLookupContext({ origin: "asistente", accountId },
+      () => lookupCodeForClientWithRetries(sourceId, account.email, exclude));
   } catch {
     result = { found: false, kind: null, value: null };
   }

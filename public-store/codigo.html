@@ -90,6 +90,11 @@
       <h1>Esperando tu código…</h1>
       <p class="muted" id="waiting-text">Pide el código en la app y espera aquí: revisamos cada 30 segundos.</p>
       <p class="muted" id="waiting-slow" hidden style="background:#FFF1D6;border-radius:12px;padding:10px 12px;color:#5C4A39"></p>
+      <p class="muted" id="waiting-note" hidden style="background:#F3EEE6;border-radius:12px;padding:10px 12px;color:#5C4A39"></p>
+      <div id="waiting-escalated" hidden style="background:#E6F6EC;border-radius:12px;padding:10px 12px;color:#1F5133;font-size:14px;line-height:1.45">
+        🙋 <b>Ya avisamos a un asesor.</b> Está revisando tu código y te escribe si hace falta. Puedes seguir esperando aquí.
+        <a href="https://wa.me/51963081436?text=Hola%2C%20estoy%20esperando%20mi%20c%C3%B3digo" target="_blank" rel="noopener" style="display:block;margin-top:6px;color:#1F5133;font-weight:700">Escribir por WhatsApp</a>
+      </div>
       <p class="muted" id="waiting-blocked" hidden style="background:#FDE8E8;border-radius:12px;padding:10px 12px;color:#7A2E2E">🔒 El último correo no es un código de inicio de sesión (es de cambio de datos de la cuenta), por eso no se muestra. Pide el código de <b>inicio de sesión</b> y espera aquí.</p>
     </div>
     <button class="btn orange" id="refresh-btn" disabled>Buscando…</button>
@@ -278,7 +283,13 @@
         document.getElementById("copy-btn").hidden = isLink;
         const a = document.getElementById("found-link");
         a.hidden = !isLink;
-        if (isLink) a.href = data.value;
+        if (isLink) {
+          a.href = data.value;
+          // Netflix «Estoy de viaje»: el enlace abre la página con el código (vence en 15 min).
+          const travel = /travel\/verify/i.test(data.value);
+          a.textContent = travel ? "Obtener mi código de Netflix" : "Abrir enlace";
+          if (travel) document.getElementById("found-meta").textContent += " · el enlace vence en 15 min";
+        }
         const frame = document.getElementById("mail");
         document.getElementById("mail-toggle").hidden = !data.html;
         if (data.html) frame.srcdoc = data.html;
@@ -292,6 +303,10 @@
         show("s-waiting");
       } else {
         if (manual) toast("Aún no llega. Seguimos buscando.");
+        const note = document.getElementById("waiting-note");
+        note.hidden = !data.note;
+        if (data.note) note.textContent = data.note;
+        document.getElementById("waiting-escalated").hidden = !data.escalated;
         show("s-waiting");
       }
     } catch {
@@ -331,7 +346,7 @@
     if (status === 404 || status === 0) { showClosed("expired"); return; }
     applyInfo(data);
     if (data.state !== "active") { showClosed(data.state); return; }
-    document.getElementById("waiting-text").textContent = /netflix/i.test(platform)
+    document.getElementById("waiting-text").textContent = data.hint ? data.hint : /netflix/i.test(platform)
       ? "Pide el código en Netflix («Usar un código de inicio de sesión») y espera aquí: revisamos cada 30 segundos."
       : waitMinutes > 1
         ? "Pide el código en la app de " + platform + " una sola vez y espera aquí."

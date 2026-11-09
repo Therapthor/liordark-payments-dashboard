@@ -237,19 +237,66 @@
       <!-- ═══════════ VISTA: CÓDIGOS ═══════════ -->
       <section id="view-codes" class="view" hidden>
         <div class="codes-page">
-          <h2 class="codes-page-title">🔑 Códigos</h2>
+          <header class="cx-head">
+            <div class="cx-head-text">
+              <h2 class="cx-title">Códigos</h2>
+              <p class="cx-sub">Todo lo que llega a los correos de tus cuentas, en un solo lugar.</p>
+            </div>
+            <div class="cx-live" id="cx-live">
+              <span class="cx-live-dot" aria-hidden="true"></span>
+              <span id="cx-watch-text">Vigilando…</span>
+              <button type="button" id="cx-watch-now" class="cx-ghost-btn">Revisar ahora</button>
+            </div>
+          </header>
 
-          <form id="codes-search-form" class="codes-search-form">
-            <input id="codes-search-email" type="search" placeholder="Escribe el correo (o parte) para encontrar la cuenta" autocomplete="off" />
-            <button type="submit" class="codes-search-btn">Buscar</button>
-          </form>
+          <div id="cx-alerts" class="cx-alerts"></div>
+          <div id="cx-health" class="cx-health" aria-label="Estado de cada fuente"></div>
+          <article id="cx-hero" class="cx-hero" hidden></article>
 
-          <div id="codes-search-banner" class="codes-banner" hidden></div>
+          <nav class="cx-tabs" role="tablist">
+            <button type="button" class="cx-tab active" role="tab" data-cx-tab="inbox">Bandeja <span id="cx-inbox-count" class="cx-count"></span></button>
+            <button type="button" class="cx-tab" role="tab" data-cx-tab="accounts">Cuentas <span id="cx-accounts-count" class="cx-count"></span></button>
+            <button type="button" class="cx-tab" role="tab" data-cx-tab="activity">Actividad <span id="cx-problems-count" class="cx-count warn" hidden></span></button>
+          </nav>
 
-          <p class="codes-list-title">Todas las cuentas · toca el código para copiarlo</p>
-          <div id="codes-accounts-list" class="codes-accounts-list"></div>
-          <p id="codes-accounts-empty" class="codes-accounts-empty" hidden>Ninguna cuenta tiene el código habilitado todavía. Se activa en Accesos, al editar la cuenta.</p>
+          <section id="cx-pane-inbox" class="cx-pane" role="tabpanel">
+            <div class="cx-filters">
+              <input id="cx-inbox-search" type="search" placeholder="Buscar por correo, asunto o código" autocomplete="off" />
+              <select id="cx-inbox-source" aria-label="Fuente"><option value="">Todas las fuentes</option></select>
+              <label class="cx-toggle"><input type="checkbox" id="cx-only-codes" /> Solo con código</label>
+            </div>
+            <div id="cx-inbox-list" class="cx-grid"></div>
+            <p id="cx-inbox-empty" class="cx-empty" hidden>Todavía no llegó ningún correo. Las cuentas de Gralexander se revisan solas cada 2 minutos; las demás aparecen aquí apenas alguien consulta un código.</p>
+          </section>
+
+          <section id="cx-pane-accounts" class="cx-pane" role="tabpanel" hidden>
+            <form id="codes-search-form" class="codes-search-form">
+              <input id="codes-search-email" type="search" placeholder="Escribe el correo (o parte) para encontrar la cuenta" autocomplete="off" />
+              <button type="submit" class="codes-search-btn">Buscar</button>
+            </form>
+            <div id="codes-search-banner" class="codes-banner" hidden></div>
+            <p class="codes-list-title">Cuentas con código · toca el código para copiarlo</p>
+            <div id="codes-accounts-list" class="codes-accounts-list"></div>
+            <p id="codes-accounts-empty" class="codes-accounts-empty" hidden>Ninguna cuenta tiene el código habilitado todavía. Se activa en Accesos, al editar la cuenta.</p>
+          </section>
+
+          <section id="cx-pane-activity" class="cx-pane" role="tabpanel" hidden>
+            <div class="cx-filters">
+              <p class="cx-hint">Cada consulta a un proveedor y lo que respondió de verdad.</p>
+              <label class="cx-toggle"><input type="checkbox" id="cx-only-problems" /> Solo problemas</label>
+            </div>
+            <ol id="cx-activity-list" class="cx-timeline"></ol>
+            <p id="cx-activity-empty" class="cx-empty" hidden>Sin consultas registradas todavía.</p>
+          </section>
         </div>
+
+        <dialog id="cx-mail" class="cx-mail">
+          <div class="cx-mail-head">
+            <div class="cx-mail-title"><strong id="cx-mail-subject"></strong><span id="cx-mail-meta"></span></div>
+            <button type="button" class="cx-ghost-btn" id="cx-mail-close">Cerrar</button>
+          </div>
+          <iframe id="cx-mail-frame" sandbox="allow-popups allow-popups-to-escape-sandbox" title="Correo completo"></iframe>
+        </dialog>
       </section>
 
       <!-- ═══════════ VISTA: MAYORISTAS ═══════════ -->
@@ -1591,6 +1638,7 @@
 
   <script src="js/access.js"></script>
   <script src="js/codes.js"></script>
+  <script src="js/codes-inbox.js"></script>
   <script src="js/code-viewer.js"></script>
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>

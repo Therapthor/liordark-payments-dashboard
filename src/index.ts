@@ -29,6 +29,7 @@ import supportReportsRoutes from "./routes/support-reports.routes";
 import courseRoutes from "./routes/course.routes";
 import courseAdminRoutes from "./routes/course-admin.routes";
 import { codeViewerAdminRoutes, codeLinkRoutes } from "./routes/code-viewer.routes";
+import { startCodeBrain } from "./services/codes-brain.service";
 import { cleanOldCodeLinks } from "./db/code-links.repository";
 import { pinLinkAdminRoutes, pinLinkRoutes } from "./routes/pin-link.routes";
 import { saleLinksAdminRoutes, openSaleLinkPage } from "./routes/sale-links.routes";
@@ -256,6 +257,8 @@ const server = app.listen(env.PORT, () => {
     .then(seedCatalogIfEmpty)
     .catch((err: any) => console.error("⚠️ No se pudo sembrar el catálogo del panel:", err?.message));
   try { syncPlanCatalogPrices(); } catch (err: any) { console.error("⚠️ precios de planes:", err?.message); }
+  // Códigos: registro de consultas, bandeja y vigilante de fuentes con lista.
+  try { startCodeBrain(); } catch (err: any) { console.error("⚠️ cerebro de códigos:", err?.message); }
   seedPaymentMethodsIfEmpty();
   seedBotFlowConfigIfEmpty();
 

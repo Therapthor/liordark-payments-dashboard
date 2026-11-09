@@ -1,4 +1,5 @@
 import axios from "axios";
+import { AsyncLocalStorage } from "async_hooks";
 import { env } from "../config/env";
 
 // ─────────────────────────────────────────────────────────────
@@ -29,7 +30,105 @@ export type CodeLookupResult = {
   // Nunca se manda al cliente sin pasar por sanitizeEmailHtml.
   emailHtml?: string;
   subject?: string;
+  // Lo que dice la página del proveedor cuando no hay nada (ej. «Aún no
+  // hay códigos recientes») — para saber QUÉ pasó, no solo que no hubo.
+  providerMessage?: string;
+  // La sesión con el proveedor había vencido y se volvió a entrar sola.
+  relogged?: boolean;
+  // El proveedor marca el correo como vencido (latinocol: «Caducado»).
+  expired?: boolean;
+  // Fuentes que listan TODOS los correos recientes (latinocol): la lista
+  // completa, para la bandeja del panel. ref = id del correo en el proveedor.
+  items?: ListedEmail[];
+  providerRef?: string;
 };
+
+export type ListedEmail = { ref: string; subject: string; receivedAt?: string; expired?: boolean };
+
+// ─────────────────────────────────────────────────────────────
+// ERRORES DEL PROVEEDOR — antes cualquier falla se tragaba y se veía como
+// «todavía no llega». Ahora se distingue: sesión, error del proveedor
+// (con el mensaje que muestra su página), red/tiempo agotado.
+// ─────────────────────────────────────────────────────────────
+
+export type ProviderProblemKind = "session" | "provider" | "network" | "timeout";
+
+export class ProviderError extends Error {
+  constructor(public kind: ProviderProblemKind, message: string) { super(message); }
+}
+
+/** Cualquier error de una consulta → tipo + mensaje entendible. */
+export function describeLookupError(err: any): { kind: ProviderProblemKind; message: string } {
+  if (err instanceof ProviderError) return { kind: err.kind, message: err.message };
+  const code = String(err?.code || "");
+  const status = Number(err?.response?.status || 0);
+  if (code === "ECONNABORTED" || code === "ETIMEDOUT" || /timeout/i.test(String(err?.message))) {
+    return { kind: "timeout", message: "El proveedor no respondió a tiempo." };
+  }
+  if (status >= 500) return { kind: "provider", message: `La página del proveedor está caída (error ${status}).` };
+  if (status === 403 || status === 429) return { kind: "provider", message: `El proveedor bloqueó la consulta (error ${status}).` };
+  if (status) return { kind: "provider", message: `El proveedor respondió error ${status}.` };
+  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|socket hang up|EHOSTUNREACH/i.test(code + " " + err?.message)) {
+    return { kind: "network", message: "No se pudo conectar con la página del proveedor." };
+  }
+  return { kind: "provider", message: String(err?.message || "Error desconocido del proveedor.").slice(0, 200) };
+}
+
+/** Texto visible de una página (sin etiquetas), recortado. */
+function pageText(html: string, max = 200): string {
+  return decodeHtmlEntities(String(html || "")
+    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+/** Mensaje destacado de una página (alertas / errores), o null. */
+function pageAlert(html: string): string | null {
+  const m = String(html || "").match(/<(div|p|span|strong)\b[^>]*class\s*=\s*["'][^"']*\b(alert|error|danger|warning|mensaje|message|aviso)\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>/i);
+  const text = m ? pageText(m[3] ?? "", 200) : "";
+  return text || null;
+}
+
+// ── Contexto de cada consulta (quién la pidió) + observador ──
+// El «cerebro» (codes-brain.service.ts) se suscribe para registrar cada
+// consulta, guardar lo que llega en la bandeja y medir la salud de cada
+// fuente — sin que cada lugar que consulta tenga que acordarse.
+
+export type LookupOrigin = "cliente" | "panel" | "busqueda" | "asistente" | "vigilante";
+export type LookupContext = { origin: LookupOrigin; accountId?: number | null };
+export type LookupEvent = {
+  sourceId: string; email: string; ctx: LookupContext; ms: number;
+  result?: CodeLookupResult; error?: { kind: ProviderProblemKind; message: string };
+};
+
+const lookupContext = new AsyncLocalStorage<LookupContext>();
+const lookupObservers: ((e: LookupEvent) => void)[] = [];
+
+export function withLookupContext<T>(ctx: LookupContext, fn: () => Promise<T>): Promise<T> {
+  return lookupContext.run(ctx, fn);
+}
+
+export function onLookup(fn: (e: LookupEvent) => void): void {
+  lookupObservers.push(fn);
+}
+
+async function observed(sourceId: string, email: string, run: () => Promise<CodeLookupResult>): Promise<CodeLookupResult> {
+  const ctx = lookupContext.getStore() ?? { origin: "panel" };
+  const started = Date.now();
+  const notify = (e: Omit<LookupEvent, "sourceId" | "email" | "ctx" | "ms">) => {
+    for (const fn of lookupObservers) {
+      try { fn({ sourceId, email, ctx, ms: Date.now() - started, ...e }); } catch (err: any) { console.error("⚠️ observador de códigos:", err?.message); }
+    }
+  };
+  try {
+    const result = await run();
+    notify({ result });
+    return result;
+  } catch (err) {
+    notify({ error: describeLookupError(err) });
+    throw err;
+  }
+}
 
 const NOT_FOUND_MARKER = "Aún no hay códigos recientes";
 
@@ -136,7 +235,7 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
 
   const html: string = String(res.data);
   if (html.includes(NOT_FOUND_MARKER)) {
-    return { found: false, kind: null, value: null };
+    return { found: false, kind: null, value: null, providerMessage: NOT_FOUND_MARKER };
   }
 
   const parsed = parsePallyResultPage(html, tipo === "netflix");
@@ -145,7 +244,7 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
   // Formato anterior: el código (o enlace) dentro del primer <strong>.
   const match = html.match(/<strong[^>]*>([\s\S]*?)<\/strong>/i);
   const raw = match ? match[1].replace(/<[^>]+>/g, "").trim() : "";
-  if (!raw) return { found: false, kind: null, value: null };
+  if (!raw) return pallyUnknownPage(html);
 
   const linkMatch = raw.match(/https?:\/\/\S+/i);
   if (linkMatch) return { found: true, kind: "link", value: linkMatch[0] };
@@ -208,8 +307,9 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
   });
 
   const html: string = String(res.data);
-  if (NOT_FOUND_MARKERS_CON_OPCIONES.some(marker => html.includes(marker))) {
-    return { found: false, kind: null, value: null };
+  const notFound = NOT_FOUND_MARKERS_CON_OPCIONES.find(marker => html.includes(marker));
+  if (notFound) {
+    return { found: false, kind: null, value: null, providerMessage: notFound };
   }
 
   const parsed = parsePallyResultPage(html, accion === "tg_4");
@@ -235,7 +335,18 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
   const bodyLink = bodyHtml.match(/https?:\/\/(?![^"'\s<>]*(?:pally\.digital|cdn\.|bootstrap))\S+/i);
   if (bodyLink) return { found: true, kind: "link", value: bodyLink[0].replace(/["'<>].*$/, "") };
 
-  return { found: false, kind: null, value: null };
+  return pallyUnknownPage(html);
+}
+
+// Página de Pally sin código y sin el aviso de «no hay códigos»: puede ser
+// un error suyo (clave de acceso, correo no autorizado, mantenimiento…).
+// Si trae una alerta se reporta como error del proveedor con su texto.
+const PALLY_PROBLEM_RE = /(incorrect|inv[aá]lid|no autoriz|no permitid|bloquead|suspendid|mantenimiento|error|denegad|expirad|vencid|no tiene acceso|l[ií]mite)/i;
+
+function pallyUnknownPage(html: string): CodeLookupResult {
+  const alert = pageAlert(html);
+  if (alert && PALLY_PROBLEM_RE.test(alert)) throw new ProviderError("provider", "Pally: " + alert);
+  return { found: false, kind: null, value: null, providerMessage: alert ?? "Pally no mostró ningún código." };
 }
 
 type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion: string };
@@ -259,16 +370,21 @@ const LOGIN_COMBO_IDS = ["codigo_login"];
  *  con la primera que responda algo — una sola llamada sirve tanto para
  *  el cliente (más abajo se filtran las sensibles) como para el admin. */
 async function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult> {
+  let lastError: unknown = null;
+  let lastNotFound: CodeLookupResult | null = null;
   for (const action of CON_OPCIONES_ACTIONS) {
     let result: CodeLookupResult;
     try {
       result = await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion);
-    } catch {
+    } catch (err) {
+      lastError = err;
       continue;
     }
     if (result.found) return { ...result, sourceAction: action.id };
+    lastNotFound = result;
   }
-  return { found: false, kind: null, value: null };
+  if (!lastNotFound && lastError) throw lastError;
+  return lastNotFound ?? { found: false, kind: null, value: null };
 }
 
 /** true si el resultado vino de una de las 3 sub-acciones sensibles de
@@ -331,22 +447,27 @@ export function listSourceActions(sourceId: string | null): { id: string; label:
 /** Consulta puntual de UNA sub-acción específica — para fuentes sin
  *  sub-acciones (actionId ausente o no aplica), cae a la consulta normal. */
 export async function lookupCodeAction(sourceId: string, email: string, actionId?: string): Promise<CodeLookupResult> {
-  if (sourceId === "netflix_con_opciones" && actionId === LOGIN_COMBO_ACTION.id) {
-    for (const id of LOGIN_COMBO_IDS) {
-      const action = CON_OPCIONES_ACTIONS.find(a => a.id === id)!;
-      const raw = await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion).catch(() => null);
-      const result = raw ? withFallbackExtraction(raw) : null;
-      if (result?.found) return { ...result, sourceAction: action.id };
-    }
-    return { found: false, kind: null, value: null };
-  }
   if (sourceId === "netflix_con_opciones" && actionId) {
-    const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);
-    if (!action) return { found: false, kind: null, value: null };
-    const result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
-    return result.found ? { ...result, sourceAction: action.id } : result;
+    return observed(sourceId, email, () => lookupConOpcionesAction(email, actionId));
   }
   return lookupCode(sourceId, email);
+}
+
+async function lookupConOpcionesAction(email: string, actionId: string): Promise<CodeLookupResult> {
+  if (actionId === LOGIN_COMBO_ACTION.id) {
+    let last: CodeLookupResult = { found: false, kind: null, value: null };
+    for (const id of LOGIN_COMBO_IDS) {
+      const action = CON_OPCIONES_ACTIONS.find(a => a.id === id)!;
+      const result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
+      if (result.found) return { ...result, sourceAction: action.id };
+      last = result;
+    }
+    return last;
+  }
+  const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);
+  if (!action) return { found: false, kind: null, value: null };
+  const result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
+  return result.found ? { ...result, sourceAction: action.id } : result;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -389,7 +510,7 @@ async function smLogin(login: SmLogin): Promise<string> {
   // Un login correcto redirige al visor; uno rechazado vuelve al login.
   const location = String(res.headers.location ?? "");
   if (res.status < 300 || res.status >= 400 || location.includes("/auth/login")) {
-    throw new Error(`Streaming Market rechazó el usuario ${login.user}.`);
+    throw new ProviderError("session", `Streaming Market rechazó el usuario ${login.user} (¿cambió la contraseña?).`);
   }
   cookie = smSessionCookie(res.headers["set-cookie"]) ?? cookie;
   return cookie;
@@ -410,6 +531,7 @@ function smParseVisor(html: string): CodeLookupResult {
 
 async function smLookupOnce(email: string, login: SmLogin, allowRelogin: boolean): Promise<CodeLookupResult> {
   let cookie = smCookies.get(login.user);
+  const relogged = !allowRelogin;
   if (!cookie) {
     cookie = await smLogin(login);
     smCookies.set(login.user, cookie);
@@ -423,31 +545,39 @@ async function smLookupOnce(email: string, login: SmLogin, allowRelogin: boolean
   if (check.status !== 200 || typeof check.data !== "object" || check.data === null) {
     smCookies.delete(login.user);
     if (allowRelogin) return smLookupOnce(email, login, false);
-    throw new Error("Streaming Market no aceptó la sesión.");
+    throw new ProviderError("session", "Streaming Market no aceptó la sesión ni después de volver a entrar.");
   }
-  if (!check.data.encontrado) return SM_NOT_FOUND;
+  if (!check.data.encontrado) {
+    return { ...SM_NOT_FOUND, providerMessage: "Streaming Market: aún no llegó ningún código a este correo.", ...(relogged ? { relogged } : {}) };
+  }
 
   const res = await axios.post(`${SM_BASE}/visor/buscar`, query.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: cookie }, timeout: 15_000,
   });
-  return smParseVisor(String(res.data));
+  const parsed = smParseVisor(String(res.data));
+  return relogged ? { ...parsed, relogged } : parsed;
 }
 
 // Prueba con cada usuario configurado hasta que alguno tenga el correo —
 // así no hace falta elegir a mano con qué usuario va cada cuenta.
 async function smLookupAnyLogin(email: string): Promise<CodeLookupResult> {
   if (env.STREAMING_MARKET_LOGINS.length === 0) {
-    throw new Error("No hay usuarios de Streaming Market configurados en el servidor.");
+    throw new ProviderError("session", "No hay usuarios de Streaming Market configurados en el servidor.");
   }
+  let lastNotFound: CodeLookupResult | null = null;
+  let lastError: unknown = null;
   for (const login of env.STREAMING_MARKET_LOGINS) {
     try {
       const result = await smLookupOnce(email, login, true);
       if (result.found) return result;
-    } catch {
+      lastNotFound = result;
+    } catch (err) {
       // Un usuario caído o rechazado no frena a los demás.
+      lastError = err;
     }
   }
-  return SM_NOT_FOUND;
+  if (!lastNotFound && lastError) throw lastError;
+  return lastNotFound ?? SM_NOT_FOUND;
 }
 
 function lookupStreamingMarket(email: string): Promise<CodeLookupResult> {
@@ -567,12 +697,32 @@ async function lookupVegamig(email: string): Promise<CodeLookupResult> {
 // { success, details: { subject, date }, html } con el último correo.
 // Credenciales en .env.production: JOSEB_USER / JOSEB_PASSWORD.
 
-const JB_BASE = "https://joseb.shop";
+// JOSEB_BASE_URL solo sirve para pruebas locales con un José falso.
+const JB_BASE = process.env.JOSEB_BASE_URL || "https://joseb.shop";
 const JB_NETFLIX_CATEGORY = "1";
 const JB_DISNEY_CATEGORY  = "3"; // confirmado con una búsqueda real (nov-2026)
 const JB_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 let jbCookie: string | null = null;
+let jbCookieAt = 0;
 let jbQueue: Promise<unknown> = Promise.resolve();
+
+// José corta la sesión cuando pasa un rato sin uso (es lo que pasa en su
+// web si se deja abierta: «error, vuelve a iniciar sesión»). Antes solo se
+// volvía a entrar si la respuesta NO era JSON — si José avisaba con un JSON
+// de error, se tomaba como «no llegó» y el cliente esperaba para siempre.
+// Ahora: se renueva la sesión antes de que venza y ante cualquier aviso de
+// sesión, y su mensaje queda registrado tal cual.
+const JB_SESSION_MAX_MS = 12 * 60 * 1000;
+const JB_AUTH_RE = /(sesi[oó]n|session|login|inicia|autentic|autoriz|token|expir|vencid|acceso denegado|unauthori[sz]ed|forbidden|csrf)/i;
+const JB_NOT_FOUND_RE = /(no se encontr|no hay|sin resultados|not found|ning[uú]n (correo|mensaje|resultado)|no existen|no tiene correos|no se hallaron)/i;
+
+type JbResponse = { data: any; raw: string; status: number };
+
+function jbMessage(r: JbResponse): string {
+  const d = r.data;
+  if (d && typeof d === "object") return String(d.message ?? d.error ?? d.msg ?? d.mensaje ?? "").trim();
+  return pageText(r.raw, 160);
+}
 
 function jbSessionCookie(setCookie: string[] | string | undefined): string | null {
   const list = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
@@ -590,11 +740,17 @@ async function jbLogin(): Promise<string> {
       timeout: 15_000, maxRedirects: 0, validateStatus: () => true,
     });
   cookie = jbSessionCookie(res.headers["set-cookie"]) ?? cookie;
-  if (!cookie.includes("PHPSESSID")) throw new Error("José Streaming no devolvió sesión.");
+  let loginData: any = null;
+  try { loginData = typeof res.data === "string" ? JSON.parse(res.data) : res.data; } catch { /* página */ }
+  if (loginData && typeof loginData === "object" && loginData.success === false) {
+    throw new ProviderError("session", "José Streaming rechazó el usuario: " + String(loginData.message ?? loginData.error ?? "sin detalle"));
+  }
+  if (res.status >= 500) throw new ProviderError("provider", `José Streaming está caído (error ${res.status}).`);
+  if (!cookie.includes("PHPSESSID")) throw new ProviderError("session", "José Streaming no devolvió sesión al entrar.");
   return cookie;
 }
 
-async function jbSearch(email: string, cookie: string, category: string): Promise<any> {
+async function jbSearch(email: string, cookie: string, category: string): Promise<JbResponse> {
   const boundary = "----LiordarkBoundary" + Math.random().toString(16).slice(2);
   const body =
     `--${boundary}\r\nContent-Disposition: form-data; name="categoria_id"\r\n\r\n${category}\r\n` +
@@ -607,7 +763,11 @@ async function jbSearch(email: string, cookie: string, category: string): Promis
     },
     timeout: 20_000, maxRedirects: 0, validateStatus: () => true, responseType: "text", transformResponse: r => r,
   });
-  try { return JSON.parse(String(res.data)); } catch { return null; } // null = sesión vencida (devuelve HTML/redirección)
+  const raw = String(res.data ?? "");
+  let data: any = null;   // null = no vino JSON (sesión vencida: HTML/redirección)
+  try { data = JSON.parse(raw); } catch { /* página */ }
+  if (data === null && res.status >= 500) throw new ProviderError("provider", `José Streaming está caído (error ${res.status}).`);
+  return { data, raw, status: res.status };
 }
 
 /** Adjunta el correo completo de José (para el visor). */
@@ -644,14 +804,55 @@ export function parseJosebDisneyResponse(data: any): CodeLookupResult {
   return withEmail({ found: true, kind: "code", value: code, ...(received ? { providerReceivedAt: received } : {}) }, data);
 }
 
+async function jbFreshLogin(): Promise<string> {
+  jbCookie = await jbLogin();
+  jbCookieAt = Date.now();
+  return jbCookie;
+}
+
+/** Respuesta de búsqueda → el JSON de José, con dos marcas propias:
+ *  __relogged (se renovó la sesión) y __notFoundMessage (su aviso de
+ *  «no hay correos»). Lanza ProviderError si José da un error real. */
 async function jbLookupOnce(email: string, category: string): Promise<any> {
-  if (!jbCookie) jbCookie = await jbLogin();
-  let data = await jbSearch(email, jbCookie, category);
-  if (data === null) {            // sesión vencida: se vuelve a entrar una vez
-    jbCookie = await jbLogin();
-    data = await jbSearch(email, jbCookie, category);
+  let relogged = false;
+  if (!jbCookie || Date.now() - jbCookieAt > JB_SESSION_MAX_MS) await jbFreshLogin();
+  let r = await jbSearch(email, jbCookie!, category);
+
+  const looksLikeSession = (x: JbResponse) => {
+    if (x.data === null) return true;
+    if (x.data?.success === true) return false;
+    const msg = jbMessage(x);
+    if (msg && JB_NOT_FOUND_RE.test(msg)) return false;
+    // Sin mensaje: solo si la sesión ya tiene unos minutos (recién entrado, se le cree).
+    return msg ? JB_AUTH_RE.test(msg) : Date.now() - jbCookieAt > 2 * 60 * 1000;
+  };
+  if (looksLikeSession(r)) {
+    await jbFreshLogin();
+    relogged = true;
+    r = await jbSearch(email, jbCookie!, category);
   }
-  return data;
+
+  if (r.data === null) {
+    throw new ProviderError("session", "José Streaming no aceptó la sesión ni después de volver a entrar" +
+      (pageText(r.raw, 100) ? ": «" + pageText(r.raw, 100) + "»" : "."));
+  }
+  if (r.data.success !== true) {
+    const msg = jbMessage(r);
+    if (!msg || JB_NOT_FOUND_RE.test(msg)) {
+      return { ...r.data, __notFoundMessage: msg ? "José Streaming: " + msg : "José Streaming: no hay correos recientes.", __relogged: relogged };
+    }
+    throw new ProviderError(JB_AUTH_RE.test(msg) ? "session" : "provider", "José Streaming: " + msg);
+  }
+  return { ...r.data, __relogged: relogged };
+}
+
+/** Agrega al resultado el aviso de José y si se renovó la sesión. */
+function jbDecorate(result: CodeLookupResult, data: any): CodeLookupResult {
+  return {
+    ...result,
+    ...(!result.found && data?.__notFoundMessage ? { providerMessage: data.__notFoundMessage } : {}),
+    ...(data?.__relogged ? { relogged: true } : {}),
+  };
 }
 
 // Las búsquedas se hacen de a una (misma sesión para Netflix y Disney+).
@@ -662,12 +863,198 @@ function jbQueued(email: string, category: string): Promise<any> {
 }
 
 async function lookupJosebNetflix(email: string): Promise<CodeLookupResult> {
-  return parseJosebResponse(await jbQueued(email, JB_NETFLIX_CATEGORY));
+  const data = await jbQueued(email, JB_NETFLIX_CATEGORY);
+  return jbDecorate(parseJosebResponse(data), data);
 }
 
 async function lookupJosebDisney(email: string): Promise<CodeLookupResult> {
-  return parseJosebDisneyResponse(await jbQueued(email, JB_DISNEY_CATEGORY));
+  const data = await jbQueued(email, JB_DISNEY_CATEGORY);
+  return jbDecorate(parseJosebDisneyResponse(data), data);
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// GRALEXANDER (latinocol.com) — Netflix «Estoy de viaje». Páginas
+// públicas (sin usuario): se escribe el correo y listan TODOS los correos
+// recientes de esa dirección (se borran cada día a las 24:00). El correo
+// trae el botón «Obtener código» (vence en 15 min) que muestra el código
+// de acceso temporal.
+//  · Outlook (joma.latinocol.com): POST index.php → tabla HTML con
+//    Asunto / Fecha / Vence («Caducado») y el id del correo; el cuerpo en
+//    index4_body_prueba.php?email=…&id=….
+//  · Yurama (jomayaa.latinocol.com): POST search_emails.php (multipart) →
+//    JSON { emails: [{ subject, time, number, account_index }], error };
+//    el cuerpo en redirect_to_view_email.php?email_number=…&account_index=….
+// ─────────────────────────────────────────────────────────────
+
+const LC_OUTLOOK = "https://joma.latinocol.com";
+const LC_YURAMA  = "https://jomayaa.latinocol.com";
+const LC_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+const lcCookies = new Map<string, string>();
+
+function lcHeaders(base: string, extra: Record<string, string> = {}): Record<string, string> {
+  const cookie = lcCookies.get(base);
+  return { "User-Agent": LC_UA, Referer: base + "/", ...(cookie ? { Cookie: cookie } : {}), ...extra };
+}
+
+function lcKeepCookie(base: string, setCookie: string[] | string | undefined): void {
+  const list = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  const sid = list.map(c => c.match(/PHPSESSID=([^;]+)/)?.[1]).find(Boolean);
+  if (sid) lcCookies.set(base, "PHPSESSID=" + sid);
+}
+
+function cellText(html: string): string {
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+/** Tabla de joma.latinocol.com → correos (más nuevo primero). Exportado para pruebas. */
+export function parseLatinocolOutlookList(html: string): ListedEmail[] {
+  const items: ListedEmail[] = [];
+  for (const row of String(html || "").matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const inner = row[1] ?? "";
+    const ref = inner.match(/data-id\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!ref) continue;
+    const cells = [...inner.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(c => cellText(c[1] ?? ""));
+    items.push({
+      ref: decodeHtmlEntities(ref),
+      subject: cells[0] ?? "",
+      ...(cells[1] ? { receivedAt: cells[1] } : {}),
+      expired: /caducad|vencid|expirad/i.test(cells[2] ?? ""),
+    });
+  }
+  return sortNewestFirst(items);
+}
+
+function sortNewestFirst(items: ListedEmail[]): ListedEmail[] {
+  return items
+    .map((it, i) => ({ it, i, t: parseProviderDate(it.receivedAt)?.getTime() ?? null }))
+    .sort((a, b) => (a.t !== null && b.t !== null ? b.t - a.t : a.i - b.i))
+    .map(x => x.it);
+}
+
+/** El correo listado → código/enlace (el resultado lleva el correo completo). */
+function listedEmailResult(item: ListedEmail, emailHtml: string, items: ListedEmail[]): CodeLookupResult {
+  const r = extractCodeFromEmailHtml(emailHtml, item.receivedAt, { anyButtonFallback: false });
+  return {
+    ...r,
+    emailHtml,
+    subject: item.subject,
+    ...(item.receivedAt ? { providerReceivedAt: item.receivedAt } : {}),
+    ...(item.expired ? { expired: true } : {}),
+    providerRef: item.ref,
+    items,
+    ...(r.found ? {} : { providerMessage: `Llegó «${item.subject}», pero no trae código ni enlace.` }),
+  };
+}
+
+async function lcOutlookList(email: string): Promise<{ items: ListedEmail[]; html: string }> {
+  const res = await axios.post(`${LC_OUTLOOK}/index.php`, new URLSearchParams({ email }).toString(), {
+    headers: lcHeaders(LC_OUTLOOK, { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" }),
+    timeout: 25_000, responseType: "text", transformResponse: r => r,
+  });
+  lcKeepCookie(LC_OUTLOOK, res.headers["set-cookie"]);
+  const html = String(res.data ?? "");
+  return { items: parseLatinocolOutlookList(html), html };
+}
+
+// Un correo ya llegado no cambia: su contenido se guarda en memoria (así el
+// vigilante no lo vuelve a bajar cada 2 minutos).
+const lcBodyCache = new Map<string, string>();
+async function cachedBody(key: string, fetch: () => Promise<string>): Promise<string> {
+  const hit = lcBodyCache.get(key);
+  if (hit !== undefined) return hit;
+  const body = await fetch();
+  if (body.trim()) {
+    lcBodyCache.set(key, body);
+    if (lcBodyCache.size > 400) lcBodyCache.delete(lcBodyCache.keys().next().value!);
+  }
+  return body;
+}
+
+async function lcOutlookBody(email: string, ref: string): Promise<string> {
+  return cachedBody("outlook|" + email.toLowerCase() + "|" + ref, () => lcOutlookBodyFetch(email, ref));
+}
+
+async function lcOutlookBodyFetch(email: string, ref: string): Promise<string> {
+  const res = await axios.get(`${LC_OUTLOOK}/index4_body_prueba.php`, {
+    params: { email, id: ref }, headers: lcHeaders(LC_OUTLOOK), timeout: 25_000, responseType: "text", transformResponse: r => r,
+  });
+  lcKeepCookie(LC_OUTLOOK, res.headers["set-cookie"]);
+  return String(res.data ?? "");
+}
+
+async function lookupLatinocolOutlook(email: string): Promise<CodeLookupResult> {
+  const { items, html } = await lcOutlookList(email);
+  if (!items.length) {
+    const said = pageAlert(html) ?? pageText(html, 160);
+    return { found: false, kind: null, value: null, items: [], providerMessage: said ? "Gralexander Outlook: " + said : "Gralexander Outlook: no llegó ningún correo hoy a esta dirección." };
+  }
+  const newest = items[0]!;
+  return listedEmailResult(newest, await lcOutlookBody(email, newest.ref), items);
+}
+
+/** Respuesta JSON de jomayaa → correos (más nuevo primero). Exportado para pruebas. */
+export function parseLatinocolYuramaList(data: any): ListedEmail[] {
+  const list = Array.isArray(data?.emails) ? data.emails : [];
+  const items: ListedEmail[] = list
+    .filter((e: any) => e && e.number !== undefined && e.account_index !== undefined)
+    .map((e: any) => ({
+      ref: `${e.number}|${e.account_index}`,
+      subject: decodeHtmlEntities(String(e.subject ?? "")).trim(),
+      ...(e.time ? { receivedAt: String(e.time).trim() } : {}),
+    }));
+  // Sin fecha legible: el número de correo más alto es el más nuevo.
+  const byNumber = [...items].sort((a, b) => Number(b.ref.split("|")[0]) - Number(a.ref.split("|")[0]));
+  return items.some(i => parseProviderDate(i.receivedAt)) ? sortNewestFirst(items) : byNumber;
+}
+
+async function lcYuramaBody(ref: string, email = ""): Promise<string> {
+  return cachedBody("yurama|" + email.toLowerCase() + "|" + ref, () => lcYuramaBodyFetch(ref));
+}
+
+async function lcYuramaBodyFetch(ref: string): Promise<string> {
+  const [number, account] = ref.split("|");
+  const res = await axios.get(`${LC_YURAMA}/redirect_to_view_email.php`, {
+    params: { email_number: number, account_index: account }, headers: lcHeaders(LC_YURAMA), timeout: 25_000,
+    responseType: "text", transformResponse: r => r,
+  });
+  lcKeepCookie(LC_YURAMA, res.headers["set-cookie"]);
+  return String(res.data ?? "");
+}
+
+async function lookupLatinocolYurama(email: string): Promise<CodeLookupResult> {
+  const boundary = "----LiordarkBoundary" + Math.random().toString(16).slice(2);
+  const body = `--${boundary}\r\nContent-Disposition: form-data; name="email"\r\n\r\n${email}\r\n--${boundary}--\r\n`;
+  const res = await axios.post(`${LC_YURAMA}/search_emails.php`, body, {
+    headers: lcHeaders(LC_YURAMA, { "Content-Type": `multipart/form-data; boundary=${boundary}`, Accept: "application/json, */*" }),
+    timeout: 25_000, responseType: "text", transformResponse: r => r,
+  });
+  lcKeepCookie(LC_YURAMA, res.headers["set-cookie"]);
+  const raw = String(res.data ?? "");
+  let data: any = null;
+  try { data = JSON.parse(raw); } catch { /* página */ }
+  if (!data || typeof data !== "object") {
+    throw new ProviderError("provider", "Gralexander Yurama respondió algo inesperado" + (pageText(raw, 100) ? ": «" + pageText(raw, 100) + "»" : "."));
+  }
+  const items = parseLatinocolYuramaList(data);
+  if (!items.length) {
+    const said = String(data.error ?? "").trim();
+    return { found: false, kind: null, value: null, items: [], providerMessage: "Gralexander Yurama: " + (said || "no hay correos recientes.") };
+  }
+  const newest = items[0]!;
+  return listedEmailResult(newest, await lcYuramaBody(newest.ref, email), items);
+}
+
+/** Cuerpo de UN correo de la lista (para la bandeja: los demás correos
+ *  recientes de la misma dirección, no solo el más nuevo). */
+export async function fetchListedEmail(sourceId: string, email: string, item: ListedEmail): Promise<CodeLookupResult | null> {
+  if (sourceId === "latinocol_outlook") return listedEmailResult(item, await lcOutlookBody(email, item.ref), []);
+  if (sourceId === "latinocol_yurama") return listedEmailResult(item, await lcYuramaBody(item.ref, email), []);
+  return null;
+}
+
+/** Fuentes que listan todos los correos recientes (las vigila el panel solo). */
+export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama"];
 
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
@@ -679,6 +1066,8 @@ const SOURCES: Record<string, Source> = {
   vegamig_web:          { label: "Vegamig — Prime Video / Crunchyroll", lookup: lookupVegamig },
   joseb_netflix:        { label: "José Streaming — Netflix", lookup: lookupJosebNetflix },
   joseb_disney:         { label: "José Streaming — Disney+", lookup: lookupJosebDisney },
+  latinocol_outlook:    { label: "Gralexander Outlook — Netflix", lookup: lookupLatinocolOutlook },
+  latinocol_yurama:     { label: "Gralexander Yurama — Netflix", lookup: lookupLatinocolYurama },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -705,7 +1094,7 @@ export function codeSourceLabel(sourceId: string | null): string {
 export async function lookupCode(sourceId: string, email: string): Promise<CodeLookupResult> {
   const source = SOURCES[sourceId];
   if (!source) return { found: false, kind: null, value: null };
-  return withFallbackExtraction(await source.lookup(email));
+  return observed(sourceId, email, async () => withFallbackExtraction(await source.lookup(email)));
 }
 
 /** Si la fuente trajo el correo pero su lector no reconoció nada, se
@@ -730,7 +1119,7 @@ export async function lookupAnySource(
   for (const [id, source] of Object.entries(SOURCES)) {
     let result: CodeLookupResult;
     try {
-      result = await source.lookup(email);
+      result = await lookupCode(id, email);
     } catch {
       continue;
     }
@@ -759,7 +1148,8 @@ export type SeenCode = { value: string; providerReceivedAt?: string };
 
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
   return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix" || sourceId === "joseb_disney"
-    || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones";
+    || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones"
+    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama";
 }
 
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {
@@ -918,10 +1308,25 @@ const MONTHS: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4,
 export function parseProviderDate(raw: string | undefined | null): Date | null {
   const s = String(raw ?? "").trim();
   if (!s) return null;
+  const dmyAmpm = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?$/i);
+  if (dmyAmpm) {
+    const [, d, m, y, hh, mm, ss, ap] = dmyAmpm;
+    let h = Number(hh) % 12;
+    if (/p/i.test(ap ?? "")) h += 12;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), h + 5, Number(mm), Number(ss ?? 0)));
+  }
   const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (dmy) {
     const [, d, m, y, hh, mm, ss] = dmy;
     return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh) + 5, Number(mm), Number(ss ?? 0)));
+  }
+  const ampm = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?$/i)
+    ?? null;
+  if (ampm) {
+    const [, y, m, d, hh, mm, ss, ap] = ampm;
+    let h = Number(hh) % 12;
+    if (/p/i.test(ap ?? "")) h += 12;
+    return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), h + 5, Number(mm), Number(ss ?? 0)));
   }
   const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (ymd) {

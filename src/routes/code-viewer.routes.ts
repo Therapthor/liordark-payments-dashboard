@@ -7,8 +7,10 @@ import {
 } from "../db/code-links.repository";
 import {
   lookupCodeAction, codeSourceLabel, isLoginCodeOnlySource, isLoginCode, isAdminOnlyResult, isAccountChangeResult,
-  sanitizeEmailHtml, parseProviderDate, TOTP_SOURCE_ID, type CodeLookupResult,
+  sanitizeEmailHtml, parseProviderDate, describeLookupError, withLookupContext, LIST_SOURCES, TOTP_SOURCE_ID,
+  type CodeLookupResult, type LookupOrigin,
 } from "../services/codes-lookup.service";
+import { alertClientWaiting } from "../services/codes-brain.service";
 import { getCurrentTotp } from "../utils/totp.util";
 
 // ─────────────────────────────────────────────────────────────
@@ -28,13 +30,21 @@ function limaTime(d: Date): string {
   return d.toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "numeric", minute: "2-digit" });
 }
 
-async function fetchOnce(sourceId: string, email: string): Promise<CodeLookupResult> {
+type Problem = { kind: string; message: string } | null;
+
+/** Una consulta, anotada en el registro con quién la pidió. Si el proveedor
+ *  falla, se devuelve el problema (antes se tragaba y parecía «no llegó»). */
+async function fetchOnce(
+  sourceId: string, email: string, origin: LookupOrigin, accountId: number
+): Promise<{ result: CodeLookupResult; problem: Problem }> {
   const actionId = sourceId === "netflix_con_opciones" ? "codigo_login" : undefined;
   try {
-    return await lookupCodeAction(sourceId, email, actionId);
+    const result = await withLookupContext({ origin, accountId }, () => lookupCodeAction(sourceId, email, actionId));
+    return { result, problem: null };
   } catch (err: any) {
-    console.error("⚠️ visor de códigos:", sourceId, err?.message);
-    return { found: false, kind: null, value: null };
+    const problem = describeLookupError(err);
+    console.error("⚠️ visor de códigos:", sourceId, problem.message);
+    return { result: { found: false, kind: null, value: null }, problem };
   }
 }
 
@@ -68,7 +78,7 @@ codeViewerAdminRoutes.post("/:accountId/fetch", async (req, res) => {
     return res.json({ ...base, totp });
   }
 
-  const result = await fetchOnce(sourceId, account.email);
+  const { result, problem } = await fetchOnce(sourceId, account.email, "panel", accountId);
   if (result.found && result.value) {
     saveIncomingCode({
       accountId, code: result.value,
@@ -78,6 +88,7 @@ codeViewerAdminRoutes.post("/:accountId/fetch", async (req, res) => {
   res.json({
     ...base,
     found: result.found, kind: result.kind, value: result.value,
+    problem, providerMessage: result.providerMessage ?? null, expired: !!result.expired, relogged: !!result.relogged,
     accountChange: isAccountChangeResult(result),
     subject: result.subject ?? null,
     ...receivedInfo(result),
@@ -134,8 +145,26 @@ const OLD_EMAIL_MARGIN_MS = 10 * 60 * 1000;
 
 /** Minutos que suele tardar el correo en llegar (Disney+ es lento). */
 export function codeWaitMinutes(sourceId: string, platform: string): number {
-  // Disney+ y PallyStore tardan en recibir el correo.
+  // Disney+ y PallyStore tardan en recibir el correo; Gralexander pide 2-3 min.
+  if (LIST_SOURCES.includes(sourceId)) return 3;
   return /disney|netflix_sin_opciones|netflix_con_opciones/i.test(sourceId) || /disney/i.test(platform) ? 4 : 1;
+}
+
+/** Qué tiene que pedir el cliente en la app (depende del proveedor). */
+function clientHint(sourceId: string, platform: string): string {
+  if (LIST_SOURCES.includes(sourceId)) {
+    return "En la TV o app de Netflix elige «Estoy de viaje» y pide el código de acceso temporal. Luego espera aquí: llega en 2 o 3 minutos.";
+  }
+  if (/netflix/i.test(platform)) return "Pide el código en Netflix («Usar un código de inicio de sesión») y espera aquí: revisamos cada 30 segundos.";
+  return codeWaitMinutes(sourceId, platform) > 1
+    ? `Pide el código en la app de ${platform} una sola vez y espera aquí.`
+    : `Pide el código en la app de ${platform} y espera aquí: revisamos cada 30 segundos.`;
+}
+
+// Si el código no llega en este tiempo, se avisa al admin y se le dice al
+// cliente que un asesor ya está atento (así nunca queda a la deriva).
+function escalateAfterMinutes(sourceId: string, platform: string): number {
+  return Math.max(3, codeWaitMinutes(sourceId, platform) + 2);
 }
 
 function linkInfo(link: CodeLink) {
@@ -144,6 +173,7 @@ function linkInfo(link: CodeLink) {
     state: codeLinkState(link),
     platform: account?.platform ?? "",
     waitMinutes: codeWaitMinutes(link.sourceId, account?.platform ?? ""),
+    hint: clientHint(link.sourceId, account?.platform ?? ""),
     createdAt: sqliteDate(link.createdAt)?.toISOString() ?? null,
     expiresAt: sqliteDate(link.expiresAt)?.toISOString() ?? null,
     serverNow: new Date().toISOString(),
@@ -178,15 +208,35 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
   const cached = lastChecks.get(link.token);
   if (cached && Date.now() - cached.at < CHECK_MIN_INTERVAL_MS) return res.json(cached.body);
 
-  const result = await fetchOnce(link.sourceId, link.email);
+  const { result, problem } = await fetchOnce(link.sourceId, link.email, "cliente", link.accountId);
   const info = receivedInfo(result);
   const created = sqliteDate(link.createdAt);
   const when = info.receivedAtIso ? new Date(info.receivedAtIso) : null;
-  const isOld = !!(when && created && when.getTime() < created.getTime() - OLD_EMAIL_MARGIN_MS);
+  const isOld = !!(when && created && when.getTime() < created.getTime() - OLD_EMAIL_MARGIN_MS) || !!result.expired;
+  const platform = getAccountById(link.accountId)?.platform ?? "";
+
+  // Qué le decimos al cliente mientras espera (lo que de verdad pasa).
+  const wrongSource = !result.found && /no est[aá] vinculad|no registrad|no pertenece/i.test(result.providerMessage ?? "");
+  const waitingNote = problem
+    ? "La página del proveedor está lenta ahora mismo. Reintentamos solos, no tienes que hacer nada."
+    : wrongSource
+      ? "Estamos revisando un detalle de esta cuenta con un asesor."
+      : result.found && isOld
+        ? "El último código que llegó es anterior a tu pedido o ya venció. Pide uno nuevo y espera aquí."
+        : `Todavía no llega el correo de ${platform || "la plataforma"}. Revisamos cada 30 segundos.`;
+  const minutesWaiting = created ? Math.floor((Date.now() - created.getTime()) / 60000) : 0;
+  const shouldEscalate = wrongSource || minutesWaiting >= escalateAfterMinutes(link.sourceId, platform);
 
   let body: Record<string, unknown>;
   if (!result.found || !result.value || isOld) {
-    body = { status: "waiting" };
+    body = { status: "waiting", note: waitingNote, providerState: problem ? "problem" : wrongSource ? "account" : "no_email" };
+    if (shouldEscalate) {
+      alertClientWaiting({
+        token: link.token, accountId: link.accountId, email: link.email, sourceId: link.sourceId,
+        platform, clientPhone: link.clientPhone, minutes: minutesWaiting,
+      });
+      body.escalated = true;
+    }
   } else if (isAccountChangeResult(result)) {
     // Cambio de contraseña/correo/teléfono: nunca al cliente. Sigue
     // esperando por si luego llega el de inicio de sesión.

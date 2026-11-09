@@ -326,6 +326,7 @@
     try {
       const { accounts } = await api("/codes");
       cachedAccounts = accounts;
+      if (window.LiordarkCodesInbox) window.LiordarkCodesInbox.setAccountsCount(accounts.length);
       renderAccountsList();
     } catch { /* se reintenta al volver a entrar a la vista */ }
   }

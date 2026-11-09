@@ -13,7 +13,11 @@ export type DashboardLiveEvent =
   | { type: "order_approved"; message: string; createdAt: string }
   | { type: "customer_registered"; phone: string; isGuest: boolean }
   | { type: "order_needs_review"; orderName: string; platform: string }
-  | { type: "support_report"; id: number; platform: string };
+  | { type: "support_report"; id: number; platform: string }
+  // Bandeja de códigos: llegó un correo nuevo (ver codes-brain.service.ts).
+  | { type: "code_inbox"; item: unknown }
+  // Un cliente lleva varios minutos esperando su código sin que llegue.
+  | { type: "code_stuck"; accountId: number; email: string; platform: string; clientPhone: string; minutes: number; message: string };
 
 export function onDashboardEvent(listener: (evt: DashboardLiveEvent) => void): () => void {
   emitter.on("event", listener);
