@@ -1,3 +1,4 @@
+import http from "http";
 import { loginRateLimit } from "./utils/rate-limit.util";
 import express from "express";
 import cookieParser from "cookie-parser";
@@ -221,7 +222,20 @@ app.use((req, res, next) => {
   }
 });
 
-const server = app.listen(env.PORT, () => {
+// Solo por dentro del servidor: la única entrada desde internet es nginx
+// (HTTPS). Antes el panel también respondía directo en la IP pública, sin
+// cifrar y sin pasar por nginx. LISTEN_HOST=0.0.0.0 lo vuelve a abrir.
+const LISTEN_HOST = process.env.LISTEN_HOST || "127.0.0.1";
+// nginx llama a «localhost», que puede ser IPv4 (127.0.0.1) o IPv6 (::1):
+// se escucha en los dos para que ninguna llamada falle.
+let serverV6: http.Server | null = null;
+if (LISTEN_HOST === "127.0.0.1") {
+  serverV6 = http.createServer(app);
+  serverV6.on("error", (err: NodeJS.ErrnoException) => console.warn("⚠️ sin IPv6 local (::1):", err.code));
+  serverV6.listen(env.PORT, "::1");
+}
+
+const server = app.listen(env.PORT, LISTEN_HOST, () => {
   console.log(`🚀 Panel corriendo en http://localhost:${env.PORT}`);
   try { mergeDuplicateCustomers(); } catch (err: any) { console.error("⚠️ fusión de clientes:", err?.message); }
   try {
@@ -423,6 +437,7 @@ async function shutdown(signal: string): Promise<void> {
   console.log(`\n🛑 ${signal} recibido — cerrando...`);
 
   stopSync();
+  serverV6?.close();
   server.close();
 
   try {
