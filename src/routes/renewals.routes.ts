@@ -148,8 +148,10 @@ function groupExpiringByPhone(clients: { profileId: number; clientPhone: string;
 router.get("/sms/days", (_req, res) => {
   const today = limaTodayISOLocal();
   const tomorrow = addDaysISOLocal(today, 1);
+  // Los avisos salen solo 1 día antes: el mismo día que vence ya no se
+  // puede renovar (ver renewalCheckout), así que no hay fila "Hoy".
+  void today;
   const days = [
-    { date: today, label: "Hoy" },
     { date: tomorrow, label: "Mañana" },
   ].map(d => {
     const clients = listUnSmsRemindedExpiringClientsForDate(d.date);

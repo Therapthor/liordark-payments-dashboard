@@ -400,12 +400,13 @@ function maskName(name: string): string {
 // ─────────────────────────────────────────────────────────────
 // RENOVAR CON UN SOLO LINK — liordark.com/renovar
 // El mismo enlace para todos (difusión o SMS): el cliente escribe su
-// celular y entra directo a su link de pago con TODAS sus cuentas por
-// vencer (mismo descuento por 2 o más y mismo pago Yape automático que el
+// celular y entra directo a su link de pago con TODAS sus cuentas que
+// vencen en los próximos 3 días (los avisos salen 1 día antes; por su
+// cuenta puede adelantarse hasta 3 días). Mismo descuento por 2 o más y mismo pago Yape automático que el
 // 💬 Reno-manual). Solo se muestra plataforma, días y precio — nunca
 // correos ni contraseñas — y con límite de intentos por conexión.
 // ─────────────────────────────────────────────────────────────
-const SELF_RENEW_WINDOW_DAYS = 15;
+const SELF_RENEW_WINDOW_DAYS = 3;
 const renewLookupLimit = loginRateLimit("renew-lookup", 10, 10 * 60 * 1000);
 
 router.post("/renew-lookup", renewLookupLimit, (req, res) => {
@@ -421,10 +422,17 @@ router.post("/renew-lookup", renewLookupLimit, (req, res) => {
   });
   if (soon.length === 0) {
     const alreadyPaid = all.some(c => c.reason === "Ya pagó su renovación");
+    const later = all
+      .filter(c => c.eligible)
+      .map(c => daysLeft(c.expiresAt))
+      .filter((d): d is number => d !== null && d > SELF_RENEW_WINDOW_DAYS)
+      .sort((a, b) => a - b)[0];
     return res.status(404).json({
       message: alreadyPaid
         ? "Ya renovaste tus cuentas. ¡Gracias! 🥭"
-        : "No encontramos cuentas por renovar con ese número. Revisa que sea el número con el que compraste.",
+        : later !== undefined
+          ? `Tu cuenta vence en ${later} días. Podrás renovarla desde ${SELF_RENEW_WINDOW_DAYS} días antes de que venza. 🥭`
+          : "No encontramos cuentas por renovar con ese número. Revisa que sea el número con el que compraste.",
     });
   }
   cleanOldPayLinks();
