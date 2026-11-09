@@ -1694,3 +1694,10 @@ button, input {
 .cx-pane > .cx-hint { margin-bottom: 10px; }
 .cx-act-msg a { color: var(--cx-amber); font-weight: 700; }
 @media (max-width: 600px) { .cx-act { flex-wrap: wrap; } .cx-act > .cx-ghost-btn { width: 100%; } }
+
+/* Link único de renovación (Renovaciones) */
+.self-renew-card { border: 1px solid var(--border, #e5e5e5); border-radius: 12px; padding: 12px 14px; margin: 10px 0 18px; display: flex; flex-direction: column; gap: 8px; }
+.self-renew-head { display: flex; flex-direction: column; gap: 2px; }
+.self-renew-head .panel-hint { margin: 0; }
+.self-renew-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.self-renew-row code { font-size: 14px; font-weight: 700; padding: 6px 10px; border-radius: 8px; background: rgba(255,122,26,.12); }

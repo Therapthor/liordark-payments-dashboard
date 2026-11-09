@@ -1369,6 +1369,18 @@
     `).join("");
   }
 
+  // Link único de renovación: copiar el link o el mensaje listo para la difusión.
+  const SELF_RENEW_MSG = "🥭 Hola! Tu servicio vence pronto. Renueva en 1 minuto, escribe tu número aquí 👉 https://liordark.com/renovar\n2 o más cuentas juntas: 10% de descuento.";
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-self-renew-copy], #self-renew-copy-msg");
+    if (!b) return;
+    const text = b.id === "self-renew-copy-msg" ? SELF_RENEW_MSG : b.dataset.selfRenewCopy;
+    try { await navigator.clipboard.writeText(text); } catch { window.prompt("Copia el texto:", text); return; }
+    const old = b.textContent;
+    b.textContent = "¡Copiado!";
+    setTimeout(() => { b.textContent = old; }, 1500);
+  });
+
   async function loadSmsDays() {
     try {
       const { days } = await api("/renewals/sms/days");

@@ -258,6 +258,7 @@ db.exec(`
 `);
 // Selección del cliente en el link (qué ítems paga en cada orden).
 ensureColumn("renewal_pay_links", "current_keys", "current_keys TEXT");
+ensureColumn("renewal_pay_links", "origin", "origin TEXT NOT NULL DEFAULT 'admin'");
 ensureColumn("renewal_pay_link_orders", "keys_json", "keys_json TEXT");
 ensureColumn("renewal_pay_link_orders", "paid_at", "paid_at TEXT");
 

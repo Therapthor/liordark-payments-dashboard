@@ -29,7 +29,8 @@ import {
 } from "../db/customer-notifications.repository";
 import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
-import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection, MULTI_DISCOUNT_MIN, MULTI_DISCOUNT_PCT } from "../db/renewal-pay-links.repository";
+import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection, MULTI_DISCOUNT_MIN, MULTI_DISCOUNT_PCT, listPayLinkCandidates, findOrCreateSelfPayLink, cleanOldPayLinks } from "../db/renewal-pay-links.repository";
+import { loginRateLimit } from "../utils/rate-limit.util";
 import { listReportableAccounts, reportNoSubscription } from "../services/support-reports.service";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
@@ -382,12 +383,54 @@ function publicPayLinkBody(view: Extract<PayLinkView, { link: unknown }>, extra:
     expiresAt: link.expiresAt,
     discountMin: MULTI_DISCOUNT_MIN, discountPct: MULTI_DISCOUNT_PCT,
     items: states.map(s => ({
-      key: s.key, kind: s.kind, label: s.label, profileName: s.profileName,
+      // Link abierto solo con el número (liordark.com/renovar): el nombre
+      // del perfil va tapado, por si alguien prueba un número ajeno.
+      key: s.key, kind: s.kind, label: s.label, profileName: link.origin === "self" ? maskName(s.profileName) : s.profileName,
       price: s.price, daysLeft: daysLeft(s.expiresAt), paid: s.paid,
     })),
     ...extra,
   };
 }
+
+function maskName(name: string): string {
+  const n = String(name || "").trim();
+  return n ? n.slice(0, 2) + "•••" : "";
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENOVAR CON UN SOLO LINK — liordark.com/renovar
+// El mismo enlace para todos (difusión o SMS): el cliente escribe su
+// celular y entra directo a su link de pago con TODAS sus cuentas por
+// vencer (mismo descuento por 2 o más y mismo pago Yape automático que el
+// 💬 Reno-manual). Solo se muestra plataforma, días y precio — nunca
+// correos ni contraseñas — y con límite de intentos por conexión.
+// ─────────────────────────────────────────────────────────────
+const SELF_RENEW_WINDOW_DAYS = 15;
+const renewLookupLimit = loginRateLimit("renew-lookup", 10, 10 * 60 * 1000);
+
+router.post("/renew-lookup", renewLookupLimit, (req, res) => {
+  const digits = String(req.body?.phone ?? "").replace(/\D/g, "");
+  const last9 = digits.slice(-9);
+  if (last9.length < 9 || !last9.startsWith("9")) {
+    return res.status(400).json({ message: "Escribe tu número de celular (9 dígitos, empieza con 9)." });
+  }
+  const all = listPayLinkCandidates(last9, daysLeft);
+  const soon = all.filter(c => {
+    const left = daysLeft(c.expiresAt);
+    return c.eligible && left !== null && left <= SELF_RENEW_WINDOW_DAYS;
+  });
+  if (soon.length === 0) {
+    const alreadyPaid = all.some(c => c.reason === "Ya pagó su renovación");
+    return res.status(404).json({
+      message: alreadyPaid
+        ? "Ya renovaste tus cuentas. ¡Gracias! 🥭"
+        : "No encontramos cuentas por renovar con ese número. Revisa que sea el número con el que compraste.",
+    });
+  }
+  cleanOldPayLinks();
+  const link = findOrCreateSelfPayLink("51" + last9, soon);
+  res.json({ code: link.code });
+});
 
 // GET ?order=<orderName> → además dice si ESA orden ya se pagó (la página
 // lo consulta cada 4s mientras muestra el monto).

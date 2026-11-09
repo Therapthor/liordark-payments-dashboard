@@ -32,7 +32,7 @@
   }
 
   function showState(id) {
-    ["renew-loading", "renew-error", "renew-blocked", "renew-picker", "renew-form", "renew-ready", "renew-pack", "renew-success"].forEach(s => {
+    ["renew-lookup", "renew-loading", "renew-error", "renew-blocked", "renew-picker", "renew-form", "renew-ready", "renew-pack", "renew-success"].forEach(s => {
       document.getElementById(s).hidden = s !== id;
     });
   }
@@ -367,12 +367,47 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // UN SOLO LINK PARA TODOS (liordark.com/renovar): el cliente escribe su
+  // celular y pasa directo a su link de pago con todo lo que vence.
+  // ─────────────────────────────────────────────────────────────
+  function initLookup() {
+    const form = document.getElementById("renew-lookup");
+    const input = document.getElementById("renew-lookup-phone");
+    const errEl = document.getElementById("renew-lookup-error");
+    const btn = document.getElementById("renew-lookup-btn");
+    let saved = "";
+    try { saved = localStorage.getItem("renew_phone") || ""; } catch { /* sin almacenamiento */ }
+    if (saved) input.value = saved;
+    showState("renew-lookup");
+    input.focus();
+    input.addEventListener("input", () => { errEl.hidden = true; });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const digits = input.value.replace(/\D/g, "").slice(-9);
+      if (digits.length !== 9 || digits[0] !== "9") {
+        errEl.textContent = "Escribe tu número de 9 dígitos (empieza con 9).";
+        errEl.hidden = false;
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Buscando…";
+      try {
+        const { code: packCode } = await api("/renew-lookup", { method: "POST", body: { phone: digits } });
+        try { localStorage.setItem("renew_phone", digits); } catch { /* sin almacenamiento */ }
+        location.href = "/renovar.html?pack=" + encodeURIComponent(packCode);
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.hidden = false;
+        btn.disabled = false;
+        btn.textContent = "Ver mis cuentas";
+      }
+    });
+  }
+
   async function init() {
     if (pack) return initPack();
-    if (!token && !code) {
-      showError("Este link no es válido. Entra a liordark.com para renovar.");
-      return;
-    }
+    if (!token && !code) return initLookup();
 
     try {
       const info = await api(renewBase);

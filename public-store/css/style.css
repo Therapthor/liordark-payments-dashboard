@@ -1477,3 +1477,17 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .sale-pin { margin: 4px 0 14px; padding: 12px; border-radius: 14px; border: 1px dashed rgba(0,0,0,.2); }
 .sale-pin p { margin: 0 0 8px; font-size: 14px; }
 .sale-pin-code { font: 800 30px/1.1 ui-monospace, Menlo, monospace; letter-spacing: 8px; margin: 4px 0 8px; }
+
+/* liordark.com/renovar — el cliente escribe su número */
+.renew-lookup { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.renew-lookup-field {
+  display: flex; align-items: center; gap: 8px; border: 1.5px solid var(--border); border-radius: 12px;
+  padding: 0 12px; background: var(--card);
+}
+.renew-lookup-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,26,.15); }
+.renew-lookup-prefix { font-weight: 700; color: var(--muted); font-size: 15px; }
+.renew-lookup-field input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 13px 0;
+  font-family: inherit; font-size: 18px; letter-spacing: 1px; color: var(--text);
+}
+.renew-lookup .form-error { margin: 0; }

@@ -48,6 +48,7 @@ export type PayLink = {
   currentAmount:  string | null;
   currentOrderAt: string | null;
   currentKeys:    string[];
+  origin:         "admin" | "self"; // self = lo abrió el cliente desde liordark.com/renovar
 };
 
 function last9(phone: string): string {
@@ -178,7 +179,7 @@ function toItem(c: PayLinkCandidate): PayLinkItem {
   return item;
 }
 
-export function createPayLink(clientPhone: string, candidates: PayLinkCandidate[]): PayLink {
+export function createPayLink(clientPhone: string, candidates: PayLinkCandidate[], origin: "admin" | "self" = "admin"): PayLink {
   const items = candidates.map(toItem);
   const total = priceSelection(items).total;
   const expiresAt = endOfTodayLimaISO();
@@ -188,9 +189,9 @@ export function createPayLink(clientPhone: string, candidates: PayLinkCandidate[
     const exists = db.prepare(`SELECT 1 FROM renewal_pay_links WHERE code = ?`).get(code);
     if (exists) continue;
     db.prepare(`
-      INSERT INTO renewal_pay_links (code, client_phone, items_json, total, expires_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(code, clientPhone, JSON.stringify(items), total, expiresAt);
+      INSERT INTO renewal_pay_links (code, client_phone, items_json, total, expires_at, origin)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(code, clientPhone, JSON.stringify(items), total, expiresAt, origin);
     return findPayLink(code)!;
   }
   throw new Error("No se pudo generar un link único.");
@@ -220,7 +221,24 @@ function toPayLink(row: any): PayLink {
     currentAmount:  row.current_amount ?? null,
     currentOrderAt: row.current_order_at ?? null,
     currentKeys,
+    origin:         row.origin === "self" ? "self" : "admin",
   };
+}
+
+/** liordark.com/renovar: si el cliente ya abrió hoy su link con las mismas
+ *  cuentas, se reutiliza (no se crea uno nuevo cada vez que entra). */
+export function findOrCreateSelfPayLink(clientPhone: string, candidates: PayLinkCandidate[]): PayLink {
+  const keys = candidates.map(c => c.key).sort().join("|");
+  const rows = db.prepare(`
+    SELECT * FROM renewal_pay_links
+    WHERE origin = 'self' AND substr(client_phone, -9) = ? AND expires_at > ?
+    ORDER BY created_at DESC LIMIT 5
+  `).all(last9(clientPhone), new Date().toISOString()) as any[];
+  for (const row of rows) {
+    const link = toPayLink(row);
+    if (link.items.map(i => i.key).sort().join("|") === keys) return link;
+  }
+  return createPayLink(clientPhone, candidates, "self");
 }
 
 export function findPayLink(code: string): PayLink | null {

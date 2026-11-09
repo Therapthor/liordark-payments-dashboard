@@ -618,6 +618,20 @@
         <div id="sms-days-list" class="sms-days-list"></div>
         <p id="sms-summary" class="panel-hint" hidden></p>
 
+        <!-- Un solo link para todos: el cliente escribe su número y renueva
+             (ver /api/store/renew-lookup). Para difusiones y SMS. -->
+        <div class="self-renew-card">
+          <div class="self-renew-head">
+            <strong>Link único de renovación</strong>
+            <span class="panel-hint">El mismo para todos: el cliente escribe su número y ve lo que vence, con su descuento.</span>
+          </div>
+          <div class="self-renew-row">
+            <code id="self-renew-url">liordark.com/renovar</code>
+            <button type="button" class="btn-secondary btn-sm" data-self-renew-copy="https://liordark.com/renovar">Copiar link</button>
+            <button type="button" class="btn-primary btn-sm" id="self-renew-copy-msg">Copiar mensaje</button>
+          </div>
+        </div>
+
         <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
              se venden al cliente como plan anual pero Liordark las paga
              mes a mes. Se activa por cuenta al crearla/editarla en Accesos.

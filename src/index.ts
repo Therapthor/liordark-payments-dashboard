@@ -188,6 +188,15 @@ app.get(/^\/codigo\/[A-Za-z0-9]{6,20}\/?$/, (req, res, next) => {
   res.sendFile(CODE_LINK_PAGE);
 });
 
+// liordark.com/renovar — el mismo link de renovación para todos (el cliente
+// escribe su número; ver /api/store/renew-lookup).
+const RENEW_PAGE = path.resolve(process.cwd(), "public-store/renovar.html");
+app.get(/^\/renovar\/?$/, (req, res, next) => {
+  if (req.hostname === "mayorista.liordark.com" || req.hostname === "panel.liordark.com") return next();
+  res.setHeader("Cache-Control", "no-cache");
+  res.sendFile(RENEW_PAGE);
+});
+
 // liordark.com/v/<código> — link de venta: entra a su cuenta y abre el pedido.
 app.get(/^\/v\/[A-Za-z0-9]{8,20}\/?$/, (req, res, next) => {
   if (req.hostname !== "liordark.com" && req.hostname !== "www.liordark.com" && env.NODE_ENV === "production") return next();
