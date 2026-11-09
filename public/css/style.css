@@ -747,17 +747,6 @@ button, input {
 .cx-btn.copied { background: var(--cx-good); }
 .cx-ghost-btn:focus-visible, .cx-btn:focus-visible, .cx-tab:focus-visible, .cx-code:focus-visible, .cx-mini:focus-visible { outline: 2px solid var(--cx-amber); outline-offset: 2px; }
 
-/* Avisos de cliente esperando */
-.cx-alerts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.cx-alerts:empty { display: none; }
-.cx-alert { display: flex; gap: 12px; align-items: flex-start; background: linear-gradient(120deg, #3b1d14, var(--csurf)); border: 1px solid #6b2f22;
-  border-radius: 14px; padding: 12px 14px; animation: cxIn .35s ease-out; }
-.cx-alert-icon { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--cx-bad); color: #fff; font-size: 15px; }
-.cx-alert strong { font-size: 13.5px; }
-.cx-alert p { margin: 3px 0 0; font-size: 12.5px; color: #f1c9bd; }
-.cx-alert .cx-alert-mail { color: var(--cmuted); font-family: var(--cx-mono); font-size: 11.5px; }
-.cx-alert .cx-ghost-btn { margin-left: auto; flex: none; }
-
 /* Salud de las fuentes */
 .cx-health { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-bottom: 16px; }
 .cx-src-chip { display: flex; gap: 10px; align-items: flex-start; background: var(--csurf); border: 1px solid var(--cx-line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
@@ -899,7 +888,7 @@ button, input {
   .cx-src-chip { scroll-snap-align: start; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cx-live-dot, .cx-card.arrived, .cx-hero.arrived, .cx-alert { animation: none; }
+  .cx-live-dot, .cx-card.arrived, .cx-hero.arrived { animation: none; }
 }
 .codes-page-title { font-size: 18px; margin: 0 0 14px; color: var(--ctext); }
 

@@ -54,7 +54,8 @@
   body.themed .btn.light { background: transparent; color: var(--t-text); border: 1px solid var(--t-line); }
   body.themed .link { color: var(--t-muted); }
   body.themed .ok-circle { background: var(--t-line); color: var(--t-accent); }
-  body.themed #waiting-slow { background: var(--t-line) !important; color: var(--t-text) !important; }
+  .wait-status { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); min-height: 19px; }
+  body.themed .wait-status { color: var(--t-muted); }
   body.themed .mail { border-color: var(--t-line); background: var(--t-box); }
   body.themed .toast { background: var(--t-accent); color: var(--t-on-accent); }
   /* Netflix: negro, rojo, blanco */
@@ -89,13 +90,7 @@
       <div class="spinner"></div>
       <h1>Esperando tu código…</h1>
       <p class="muted" id="waiting-text">Pide el código en la app y espera aquí: revisamos cada 30 segundos.</p>
-      <p class="muted" id="waiting-slow" hidden style="background:#FFF1D6;border-radius:12px;padding:10px 12px;color:#5C4A39"></p>
-      <p class="muted" id="waiting-note" hidden style="background:#F3EEE6;border-radius:12px;padding:10px 12px;color:#5C4A39"></p>
-      <div id="waiting-escalated" hidden style="background:#E6F6EC;border-radius:12px;padding:10px 12px;color:#1F5133;font-size:14px;line-height:1.45">
-        🙋 <b>Ya avisamos a un asesor.</b> Está revisando tu código y te escribe si hace falta. Puedes seguir esperando aquí.
-        <a href="https://wa.me/51963081436?text=Hola%2C%20estoy%20esperando%20mi%20c%C3%B3digo" target="_blank" rel="noopener" style="display:block;margin-top:6px;color:#1F5133;font-weight:700">Escribir por WhatsApp</a>
-      </div>
-      <p class="muted" id="waiting-blocked" hidden style="background:#FDE8E8;border-radius:12px;padding:10px 12px;color:#7A2E2E">🔒 El último correo no es un código de inicio de sesión (es de cambio de datos de la cuenta), por eso no se muestra. Pide el código de <b>inicio de sesión</b> y espera aquí.</p>
+      <p class="wait-status" id="waiting-status"></p>
     </div>
     <button class="btn orange" id="refresh-btn" disabled>Buscando…</button>
   </section>
@@ -213,21 +208,23 @@
     if (d.createdAt) createdAt = new Date(d.createdAt).getTime();
   }
 
-  // Disney+ tarda hasta ~4 min: se muestra cuánto falta para que no pidan
-  // otro código (cada código nuevo invalida el anterior).
+  // Una sola línea de estado: lo que diga el servidor (código vencido,
+  // reconectando) o, si no, cuánto suele tardar. Cada código nuevo invalida
+  // el anterior: por eso se pide no pedir otro antes de tiempo.
+  let serverNote = "";
   function slowHint() {
-    const el = document.getElementById("waiting-slow");
-    if (waitMinutes <= 1 || !createdAt) { el.hidden = true; return; }
+    const el = document.getElementById("waiting-status");
+    if (serverNote) { el.textContent = serverNote; return; }
+    if (!createdAt) { el.textContent = ""; return; }
     const waited = Math.max(0, Math.floor((Date.now() + skew - createdAt) / 1000));
     const total = waitMinutes * 60;
-    el.hidden = false;
-    if (waited < total) {
+    if (waitMinutes > 1 && waited < total) {
       const left = total - waited;
-      el.innerHTML = "⏳ El correo de " + platform + " puede tardar hasta <b>" + waitMinutes + " minutos</b>. " +
-        "<b>No pidas otro código</b>: esta página se actualiza sola. Espera hasta " +
-        Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + ".";
+      el.textContent = "Puede tardar hasta " + waitMinutes + " min (" + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + "). No pidas otro código.";
+    } else if (waited >= Math.max(total, 180)) {
+      el.textContent = "¿Aún no llega? Pide un código nuevo en la app y espera aquí.";
     } else {
-      el.textContent = "Si todavía no llega, pide un código nuevo en la app: lo seguimos buscando cada 30 segundos.";
+      el.textContent = "";
     }
   }
 
@@ -299,14 +296,13 @@
       } else if (data.status === "advisor") {
         show("s-advisor");
       } else if (data.status === "blocked") {
-        document.getElementById("waiting-blocked").hidden = false;
+        serverNote = "Ese correo no es de inicio de sesión. Pide el código de inicio de sesión en la app.";
+        slowHint();
         show("s-waiting");
       } else {
         if (manual) toast("Aún no llega. Seguimos buscando.");
-        const note = document.getElementById("waiting-note");
-        note.hidden = !data.note;
-        if (data.note) note.textContent = data.note;
-        document.getElementById("waiting-escalated").hidden = !data.escalated;
+        serverNote = data.note || "";
+        slowHint();
         show("s-waiting");
       }
     } catch {

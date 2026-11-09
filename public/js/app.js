@@ -696,10 +696,9 @@
         if (window.LiordarkSoportes) window.LiordarkSoportes.load();
       }
 
-      // Códigos: llegó un correo nuevo a la bandeja / un cliente espera de más.
-      if (evt.type === "code_inbox" || evt.type === "code_stuck") {
-        if (evt.type === "code_stuck") playReviewAlertChime();
-        else if (evt.item && evt.item.value && Date.now() - lastCodeChimeAt > 20_000) {
+      // Códigos: llegó un correo nuevo a la bandeja.
+      if (evt.type === "code_inbox") {
+        if (evt.item && evt.item.value && Date.now() - lastCodeChimeAt > 20_000) {
           lastCodeChimeAt = Date.now();
           playCustomerChime();
         }

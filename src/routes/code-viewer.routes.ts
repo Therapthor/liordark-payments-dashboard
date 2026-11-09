@@ -153,7 +153,7 @@ export function codeWaitMinutes(sourceId: string, platform: string): number {
 /** Qué tiene que pedir el cliente en la app (depende del proveedor). */
 function clientHint(sourceId: string, platform: string): string {
   if (LIST_SOURCES.includes(sourceId)) {
-    return "En la TV o app de Netflix elige «Estoy de viaje» y pide el código de acceso temporal. Luego espera aquí: llega en 2 o 3 minutos.";
+    return "En la TV o app de Netflix elige «Estoy de viaje» y pide el código de acceso temporal. Luego espera aquí.";
   }
   if (/netflix/i.test(platform)) return "Pide el código en Netflix («Usar un código de inicio de sesión») y espera aquí: revisamos cada 30 segundos.";
   return codeWaitMinutes(sourceId, platform) > 1
@@ -217,25 +217,24 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
 
   // Qué le decimos al cliente mientras espera (lo que de verdad pasa).
   const wrongSource = !result.found && /no est[aá] vinculad|no registrad|no pertenece/i.test(result.providerMessage ?? "");
+  // Solo cuando aporta algo; si no, la página muestra cuánto suele tardar.
   const waitingNote = problem
-    ? "La página del proveedor está lenta ahora mismo. Reintentamos solos, no tienes que hacer nada."
-    : wrongSource
-      ? "Estamos revisando un detalle de esta cuenta con un asesor."
-      : result.found && isOld
-        ? "El último código que llegó es anterior a tu pedido o ya venció. Pide uno nuevo y espera aquí."
-        : `Todavía no llega el correo de ${platform || "la plataforma"}. Revisamos cada 30 segundos.`;
+    ? "Reconectando con el proveedor… sigue esperando aquí."
+    : result.found && isOld
+      ? "El último código ya venció. Pide uno nuevo en la app y espera aquí."
+      : "";
   const minutesWaiting = created ? Math.floor((Date.now() - created.getTime()) / 60000) : 0;
   const shouldEscalate = wrongSource || minutesWaiting >= escalateAfterMinutes(link.sourceId, platform);
 
   let body: Record<string, unknown>;
   if (!result.found || !result.value || isOld) {
-    body = { status: "waiting", note: waitingNote, providerState: problem ? "problem" : wrongSource ? "account" : "no_email" };
+    body = { status: "waiting", note: waitingNote };
+    // Para el panel (Actividad): queda anotado si un cliente espera de más.
     if (shouldEscalate) {
       alertClientWaiting({
         token: link.token, accountId: link.accountId, email: link.email, sourceId: link.sourceId,
         platform, clientPhone: link.clientPhone, minutes: minutesWaiting,
       });
-      body.escalated = true;
     }
   } else if (isAccountChangeResult(result)) {
     // Cambio de contraseña/correo/teléfono: nunca al cliente. Sigue

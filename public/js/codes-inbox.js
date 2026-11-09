@@ -245,19 +245,6 @@
     } catch { /* nada */ }
   }
 
-  // ── Avisos: cliente esperando ──
-  function pushAlert(evt) {
-    const box = $("cx-alerts");
-    const el = document.createElement("div");
-    el.className = "cx-alert";
-    el.innerHTML = `
-      <span class="cx-alert-icon" aria-hidden="true">☎</span>
-      <div><strong>Cliente esperando su código · ${esc(evt.platform)}</strong><p>${esc(evt.message)}</p><p class="cx-alert-mail">${esc(evt.email)}</p></div>
-      <button type="button" class="cx-ghost-btn" data-dismiss>Listo</button>`;
-    box.prepend(el);
-    while (box.children.length > 4) box.lastElementChild.remove();
-  }
-
   // ── Correo completo ──
   async function openMail(id) {
     const dlg = $("cx-mail");
@@ -310,10 +297,6 @@
       lastIds.add(it.id);
       renderInbox();
     }
-    if (evt.type === "code_stuck") {
-      pushAlert(evt);
-      if (tab === "activity") loadActivity();
-    }
   }
 
   let ticker = null;
@@ -336,9 +319,7 @@
       const c = e.target.closest("[data-copy]");
       if (c) { copy(c.dataset.copy, c); return; }
       const m = e.target.closest("[data-mail]");
-      if (m) { openMail(m.dataset.mail); return; }
-      const d = e.target.closest("[data-dismiss]");
-      if (d) d.closest(".cx-alert")?.remove();
+      if (m) openMail(m.dataset.mail);
     });
     $("cx-mail-close").addEventListener("click", () => $("cx-mail").close());
     $("cx-mail").addEventListener("click", e => { if (e.target === $("cx-mail")) $("cx-mail").close(); });

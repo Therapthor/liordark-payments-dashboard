@@ -426,7 +426,7 @@ export function startCodeBrain(): void {
   setInterval(clean, 6 * 60 * 60 * 1000);
 }
 
-// ── Cliente esperando de más: avisar al admin (una vez por link) ──
+// ── Cliente esperando de más: se anota en Actividad (una vez por link) ──
 
 const stuckAlerted = new Set<string>();
 
@@ -440,9 +440,5 @@ export function alertClientWaiting(params: {
   const message = `Cliente ${params.clientPhone || "(link del panel)"} espera su código hace ${params.minutes} min` +
     (problem ? ` — el proveedor tuvo un problema: ${problem.message}` : " — el proveedor no muestra ningún correo nuevo");
   logCodeEvent({ sourceId: params.sourceId, email: params.email, accountId: params.accountId, origin: "cliente", status: "client_waiting", message });
-  emitDashboardEvent({
-    type: "code_stuck", accountId: params.accountId, email: params.email, platform: params.platform,
-    clientPhone: params.clientPhone, minutes: params.minutes, message,
-  });
   return true;
 }
