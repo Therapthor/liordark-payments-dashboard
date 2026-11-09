@@ -229,6 +229,12 @@ export function parsePallyResultPage(html: string, preferCode = false): CodeLook
 // navegador). Se puede cambiar con PROVIDER_ACCESS_CODE en .env.production.
 const PALLY_ACCESS_CODE = process.env.PROVIDER_ACCESS_CODE || "gustavo";
 
+// Pally no contesta al toque: su página se queda esperando hasta que llega
+// el correo (suele tardar 10–40 s) y recién ahí devuelve el código. Antes se
+// cortaba a los 15 s y salía «no respondió» justo antes de que llegara. Se
+// le da hasta 55 s (por debajo del minuto que nginx espera al panel).
+const PALLY_TIMEOUT_MS = 55_000;
+
 async function fetchFromPallyDigital(tipo: string, email: string, accessCode: string): Promise<CodeLookupResult> {
   const url = `https://codes.pally.digital/index.php?tipo=${encodeURIComponent(tipo)}`;
   const body = new URLSearchParams({
@@ -240,7 +246,7 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
 
   const res = await axios.post(url, body.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 15_000,
+    timeout: PALLY_TIMEOUT_MS,
   });
 
   const html: string = String(res.data);
@@ -313,7 +319,7 @@ async function fetchFromPallyDigitalConOpciones(email: string, accessCode: strin
 
   const res = await axios.post(url, body.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    timeout: 15_000,
+    timeout: PALLY_TIMEOUT_MS,
   });
 
   const html: string = String(res.data);

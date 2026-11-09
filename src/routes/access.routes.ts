@@ -51,7 +51,7 @@ import {
 import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
-import { lanesStatus } from "../services/codes-lanes";
+import { lanesStatus, laneIdOf } from "../services/codes-lanes";
 import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -532,8 +532,10 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
     ? (req.body?.actionId === "link_login" ? "link_login" : "codigo_login")
     : (typeof req.body?.actionId === "string" ? req.body.actionId : undefined);
   const exclude = skipsRepeatedCodes(account.codeSource) ? getLastSeenCodeForEmail(account.email) : null;
+  // Pally ya espera el correo por su cuenta (10–40 s): una sola consulta.
+  const attempts = laneIdOf(account.codeSource) === "pally" ? 1 : undefined;
   let result = await withLookupContext({ origin: "panel", accountId },
-    () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude));
+    () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude, attempts));
   if (codeOnly && result.found && !isLoginCode(result) && !loginLinkOf(result)) {
     result = { found: false, kind: null, value: null };
   }

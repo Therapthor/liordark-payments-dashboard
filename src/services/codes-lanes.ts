@@ -38,12 +38,14 @@ export function laneIdOf(sourceId: string): string {
 const COOLDOWN_FIRST_MS = 20_000;
 const COOLDOWN_MAX_MS = 120_000;
 
-/** Bloqueo o lentitud del proveedor (no «no hay código»): la fila espera. */
+/** El proveedor BLOQUEÓ (no solo tardó): la fila espera antes de seguir.
+ *  Tardar no es bloquear — Pally a propósito se queda esperando el correo
+ *  10–40 s; si eso pausara la fila, el código llegaría todavía más tarde. */
 function isThrottle(err: any): boolean {
   const status = err?.response?.status;
-  if (status === 429 || status === 403 || status === 503 || status === 502) return true;
-  if (err?.code === "ECONNABORTED" || err?.code === "ETIMEDOUT" || err?.code === "ECONNRESET") return true;
-  return /timeout|l[ií]mite|demasiad|too many|bloquead|intenta (m[aá]s )?tarde|espera/i.test(String(err?.message ?? ""));
+  if (status === 429 || status === 403 || status === 503) return true;
+  if (/timeout|ECONNABORTED|ETIMEDOUT/i.test(String(err?.code ?? "") + " " + String(err?.message ?? ""))) return false;
+  return /l[ií]mite|demasiad|too many|bloquead|intenta (m[aá]s )?tarde/i.test(String(err?.message ?? ""));
 }
 
 type Job = { key: string; priority: LanePriority; at: number; run: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void };
