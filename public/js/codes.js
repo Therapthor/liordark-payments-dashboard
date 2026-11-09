@@ -260,7 +260,9 @@
     // elige puntualmente qué consultar en vez de probarlas todas a ciegas.
     // Fuente con una sola opción (ej. Pally Netflix: solo «Código 4
     // dígitos») → solo su botón, sin desplegable ni "Consultar" genérico.
-    const singleAction = a.sourceActions && a.sourceActions.length === 1;
+    // Pally con opciones: «Código» y «Link» como botones (una consulta cada uno).
+    const QUICK_IDS = ["codigo_login", "link_login"];
+    const singleAction = a.sourceActions && (a.sourceActions.length === 1 || a.sourceActions.every(act => QUICK_IDS.includes(act.id)));
     const actionSelect = a.sourceActions && !singleAction
       ? `<select class="codes-action-select">${a.sourceActions.map(act => `<option value="${escapeHtml(act.id)}">${escapeHtml(act.label)}</option>`).join("")}</select>`
       : "";
@@ -268,9 +270,8 @@
     // o solo el enlace de inicio de sesión (sin tocar el desplegable).
     const hasAction = id => (a.sourceActions || []).some(act => act.id === id);
     const quickBtns = [
-      hasAction("inicio_sesion") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="inicio_sesion">🔑 Código o link de inicio de sesión</button>` : "",
-      hasAction("codigo_login") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="codigo_login">🔢 Código 4 dígitos</button>` : "",
-      hasAction("link_login")   ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="link_login">🔗 Enlace</button>` : "",
+      hasAction("codigo_login") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="codigo_login">🔢 Código de inicio de sesión</button>` : "",
+      hasAction("link_login")   ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="link_login">🔗 Link de inicio de sesión</button>` : "",
     ].join("");
     const genericBtn = singleAction ? "" :
       `<button type="button" class="codes-consult-btn" ${a.codeSource ? "" : "disabled title='Sin fuente configurada'"}>Consultar</button>`;

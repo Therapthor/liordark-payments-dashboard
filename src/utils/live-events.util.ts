@@ -16,6 +16,7 @@ export type DashboardLiveEvent =
   | { type: "support_report"; id: number; platform: string }
   // Bandeja de códigos: llegó un correo nuevo (ver codes-brain.service.ts).
   | { type: "code_inbox"; item: unknown }
+  | { type: "code_request"; request: unknown }
   // Un cliente lleva varios minutos esperando su código sin que llegue.;
 
 export function onDashboardEvent(listener: (evt: DashboardLiveEvent) => void): () => void {

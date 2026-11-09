@@ -253,12 +253,20 @@
           <article id="cx-hero" class="cx-hero" hidden></article>
 
           <nav class="cx-tabs" role="tablist">
-            <button type="button" class="cx-tab active" role="tab" data-cx-tab="inbox">Bandeja <span id="cx-inbox-count" class="cx-count"></span></button>
+            <button type="button" class="cx-tab active" role="tab" data-cx-tab="requests">Pendientes <span id="cx-req-count" class="cx-count"></span></button>
+            <button type="button" class="cx-tab" role="tab" data-cx-tab="inbox">Bandeja <span id="cx-inbox-count" class="cx-count"></span></button>
             <button type="button" class="cx-tab" role="tab" data-cx-tab="accounts">Cuentas <span id="cx-accounts-count" class="cx-count"></span></button>
             <button type="button" class="cx-tab" role="tab" data-cx-tab="activity">Actividad <span id="cx-problems-count" class="cx-count warn" hidden></span></button>
           </nav>
 
-          <section id="cx-pane-inbox" class="cx-pane" role="tabpanel">
+          <section id="cx-pane-requests" class="cx-pane" role="tabpanel">
+            <p class="cx-hint">Cada cliente que abre su link queda en fila: el servidor lo busca solo, una consulta a la vez por proveedor, hasta que llega su código o link de inicio de sesión.</p>
+            <div id="cx-lanes" class="cx-lanes" hidden></div>
+            <ol id="cx-req-list" class="cx-timeline"></ol>
+            <p id="cx-req-empty" class="cx-empty" hidden>Ningún pedido de código en las últimas 24 horas.</p>
+          </section>
+
+          <section id="cx-pane-inbox" class="cx-pane" role="tabpanel" hidden>
             <div class="cx-filters">
               <input id="cx-inbox-search" type="search" placeholder="Buscar por correo, asunto o código" autocomplete="off" />
               <select id="cx-inbox-source" aria-label="Fuente"><option value="">Todas las fuentes</option></select>

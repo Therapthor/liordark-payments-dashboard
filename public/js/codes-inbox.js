@@ -245,6 +245,77 @@
     } catch { /* nada */ }
   }
 
+  // ── Pendientes: pedidos de clientes y fila de cada proveedor ──
+  let requests = [], lanes = [];
+  const mmss = (sec) => Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0");
+  const REQ_STATE = {
+    searching:  { icon: "⌛", cls: "wait", text: "Buscando" },
+    found:      { icon: "✓", cls: "ok",   text: "Llegó · el cliente lo está viendo" },
+    delivered:  { icon: "✓", cls: "ok",   text: "Entregado" },
+    unresolved: { icon: "!", cls: "bad",  text: "Se venció sin código" },
+    closed:     { icon: "•", cls: "wait", text: "Cerrado sin código" },
+  };
+  const LAST_STATE = {
+    not_found: "Aún no llega", old: "Solo hay uno viejo o vencido", problem: "El proveedor falló", not_login: "Llegó un correo que no es de inicio de sesión",
+  };
+
+  function waitedSec(r) {
+    if (r.status !== "searching") return r.waitedSec;
+    const c = sqlToDate(r.createdAt);
+    return c ? Math.max(0, (Date.now() - c.getTime()) / 1000) : r.waitedSec;
+  }
+
+  function renderLanes() {
+    const box = $("cx-lanes");
+    box.innerHTML = lanes.map(l => {
+      const pause = l.cooldownUntil ? Math.max(0, Math.round((new Date(l.cooldownUntil) - Date.now()) / 1000)) : 0;
+      const cls = pause ? "warn" : l.busy || l.queued ? "busy" : "ok";
+      const text = pause ? `Pausa ${pause} s: el proveedor pidió esperar`
+        : l.busy ? `Consultando${l.queued ? " · " + l.queued + " en fila" : ""}`
+        : l.queued ? `${l.queued} en fila` : "Libre";
+      return `<span class="cx-lane ${cls}" title="${esc(l.lastError || "")}"><b>${esc(l.label)}</b> ${esc(text)}</span>`;
+    }).join("");
+    box.hidden = !lanes.length;
+  }
+
+  function renderRequests() {
+    if (!$("cx-req-list")) return;
+    const list = $("cx-req-list");
+    list.innerHTML = requests.map(r => {
+      const st = REQ_STATE[r.status] || REQ_STATE.closed;
+      const sec = waitedSec(r);
+      const last = sqlToDate(r.lastCheckAt);
+      const what = r.foundKind === "link" ? "Link" : "Código";
+      const found = r.foundValue
+        ? `<p class="cx-act-msg">${what} de inicio de sesión: ${r.foundKind === "link" ? `<a href="${esc(r.foundValue)}" target="_blank" rel="noopener">abrir link</a>` : `<b class="cx-req-code">${esc(r.foundValue)}</b>`} · llegó en ${mmss(sec)}</p>`
+        : `<p class="cx-act-msg">${esc((LAST_STATE[r.lastState] ? LAST_STATE[r.lastState] + ": " : "") + (r.lastMessage || (r.status === "searching" ? "En fila para la primera consulta…" : "")))}</p>`;
+      return `
+        <li class="cx-act ${st.cls}">
+          <span class="cx-act-icon${r.status === "searching" ? " spin" : ""}" aria-hidden="true">${st.icon}</span>
+          <div class="cx-act-body">
+            <p class="cx-act-top"><strong>${esc(st.text)}${r.status === "searching" ? " · " + mmss(sec) : ""}</strong>
+              <span class="cx-chip">${esc(r.platform || "")}</span><span class="cx-act-src">${esc(r.sourceLabel)}</span></p>
+            ${found}
+            <p class="cx-act-meta">${esc(r.email)}${r.clientPhone ? " · cliente " + esc(r.clientPhone) : ""} · ${r.attempts} búsqueda${r.attempts === 1 ? "" : "s"}${last ? " · última " + esc(ago(last)) : ""}${r.extendedMinutes ? " · link alargado " + r.extendedMinutes + " min" : ""}</p>
+          </div>
+          ${r.status === "searching" ? `<button type="button" class="cx-ghost-btn" data-rush="${esc(r.token)}"${r.checking ? " disabled" : ""}>${r.checking ? "Consultando…" : "Revisar ya"}</button>` : ""}
+        </li>`;
+    }).join("");
+    $("cx-req-empty").hidden = requests.length > 0;
+    const waiting = requests.filter(r => r.status === "searching").length;
+    $("cx-req-count").textContent = waiting ? String(waiting) : "";
+    renderLanes();
+  }
+
+  async function loadRequests() {
+    try {
+      const data = await api("/codes/requests");
+      requests = data.requests || [];
+      lanes = data.lanes || [];
+      renderRequests();
+    } catch { /* nada */ }
+  }
+
   // ── Correo completo ──
   async function openMail(id) {
     const dlg = $("cx-mail");
@@ -274,17 +345,25 @@
   }
 
   // ── Pestañas ──
-  let tab = "inbox";
+  let tab = "requests";
   function showTab(name) {
     tab = name;
     document.querySelectorAll(".cx-tab").forEach(b => b.classList.toggle("active", b.dataset.cxTab === name));
-    ["inbox", "accounts", "activity"].forEach(n => { $("cx-pane-" + n).hidden = n !== name; });
+    ["requests", "inbox", "accounts", "activity"].forEach(n => { $("cx-pane-" + n).hidden = n !== name; });
     if (name === "activity") loadActivity();
+    if (name === "requests") loadRequests();
     if (name === "accounts" && window.LiordarkCodes) window.LiordarkCodes.load();
   }
 
   // ── En vivo ──
   function onLive(evt) {
+    if (evt.type === "code_request" && evt.request) {
+      const r = evt.request;
+      const idx = requests.findIndex(x => x.token === r.token);
+      if (idx >= 0) requests[idx] = r; else requests.unshift(r);
+      requests.sort((a, b) => (b.status === "searching") - (a.status === "searching") || String(b.createdAt).localeCompare(String(a.createdAt)));
+      renderRequests();
+    }
     if (evt.type === "code_inbox" && evt.item) {
       const it = evt.item;
       const idx = items.findIndex(x => x.id === it.id);
@@ -319,15 +398,21 @@
       const c = e.target.closest("[data-copy]");
       if (c) { copy(c.dataset.copy, c); return; }
       const m = e.target.closest("[data-mail]");
-      if (m) openMail(m.dataset.mail);
+      if (m) { openMail(m.dataset.mail); return; }
+      const rush = e.target.closest("[data-rush]");
+      if (rush) {
+        rush.disabled = true; rush.textContent = "En fila…";
+        api("/codes/requests/" + encodeURIComponent(rush.dataset.rush) + "/now", { method: "POST" }).catch(() => {});
+      }
     });
     $("cx-mail-close").addEventListener("click", () => $("cx-mail").close());
     $("cx-mail").addEventListener("click", e => { if (e.target === $("cx-mail")) $("cx-mail").close(); });
   }
 
   // Al entrar a la vista: todo fresco + reloj de «hace X min».
+  let reqTicker = null;
   function open() {
-    loadInbox(); loadHealth();
+    loadInbox(); loadHealth(); loadRequests();
     if (tab === "activity") loadActivity();
     clearInterval(ticker);
     ticker = setInterval(() => {
@@ -335,6 +420,13 @@
       renderInbox(); loadHealth();
       if (tab === "activity") loadActivity();
     }, 30_000);
+    // Pendientes: reloj de espera cada segundo y estado fresco cada 10 s.
+    clearInterval(reqTicker);
+    let n = 0;
+    reqTicker = setInterval(() => {
+      if ($("view-codes").hidden || document.hidden) return;
+      if (++n % 10 === 0) loadRequests(); else if (tab === "requests") renderRequests();
+    }, 1000);
   }
 
   init();

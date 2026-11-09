@@ -48,8 +48,10 @@ import {
   getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, LOGIN_COMBO_ACTION, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
+import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
+import { lanesStatus } from "../services/codes-lanes";
 import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -430,7 +432,18 @@ router.get("/codes/inbox/:id", (req, res) => {
 });
 
 router.get("/codes/health", (_req, res) => {
-  res.json({ sources: sourcesHealth(), watcher: watcherInfo() });
+  res.json({ sources: sourcesHealth(), watcher: watcherInfo(), lanes: lanesStatus() });
+});
+
+// Pedidos de código de los clientes (pendientes primero) y la fila de cada proveedor.
+router.get("/codes/requests", (req, res) => {
+  res.json({ requests: listCodeRequests(Number(req.query.hours) || 24), lanes: lanesStatus(), typical: typicalArrivalSeconds() });
+});
+
+// «Revisar ya»: el pedido pasa adelante en su turno.
+router.post("/codes/requests/:token/now", (req, res) => {
+  rushRequest(String(req.params.token));
+  res.json({ ok: true });
 });
 
 router.get("/codes/activity", (req, res) => {
@@ -514,9 +527,9 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   if (account.codeSource === TOTP_SOURCE_ID) { res.status(409).json({ message: "Esta cuenta usa 2FA: falta pegar la clave secreta en Accesos > Editar cuenta." }); return; }
 
   const codeOnly = isLoginCodeOnlySource(account.codeSource);
-  // Netflix por Pally / José Streaming: solo código o link de inicio de sesión.
+  // Netflix por Pally con opciones: UNA opción por consulta (código o link).
   const actionId = account.codeSource === "netflix_con_opciones"
-    ? LOGIN_COMBO_ACTION.id
+    ? (req.body?.actionId === "link_login" ? "link_login" : "codigo_login")
     : (typeof req.body?.actionId === "string" ? req.body.actionId : undefined);
   const exclude = skipsRepeatedCodes(account.codeSource) ? getLastSeenCodeForEmail(account.email) : null;
   let result = await withLookupContext({ origin: "panel", accountId },

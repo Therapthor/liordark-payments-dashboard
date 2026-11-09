@@ -138,7 +138,11 @@
 (() => {
   "use strict";
   const token = location.pathname.split("/").filter(Boolean)[1] || "";
-  const api = (path, opts = {}) => fetch("/api/code-link/" + encodeURIComponent(token) + path, { method: opts.method || "GET" })
+  const api = (path, opts = {}) => fetch("/api/code-link/" + encodeURIComponent(token) + path, {
+    method: opts.method || "GET",
+    headers: opts.body ? { "Content-Type": "application/json" } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  })
     .then(async r => ({ status: r.status, data: await r.json().catch(() => ({})) }));
 
   let expiresAt = null, skew = 0, timerId = null, lastValue = "", platform = "";
@@ -177,19 +181,19 @@
     paintCooldown();
   }
 
-  // Cada consulta al proveedor deja 30 s de espera antes de la siguiente
-  // (automática mientras espera; el botón muestra el contador y no deja
-  // adelantarla). El servidor también lo frena.
-  const COOLDOWN_MS = 30_000;
-  let nextCheckAt = 0, checking = false;
+  // El servidor busca solo, por turnos con el proveedor (aunque se cierre
+  // esta página). Acá solo se lee el estado cada 5 s.
+  const POLL_MS = 5_000, MANUAL_GAP_MS = 8_000;
+  let nextPollAt = 0, manualUntil = 0, checking = false, serverChecking = false;
   function paintCooldown() {
-    const left = Math.max(0, Math.ceil((nextCheckAt - Date.now()) / 1000));
+    const busy = checking || serverChecking || Date.now() < manualUntil;
     const b1 = document.getElementById("refresh-btn");
     const b2 = document.getElementById("refresh-btn2");
-    b1.disabled = b2.disabled = checking || left > 0;
-    b1.textContent = checking ? "Buscando…" : left > 0 ? "Buscamos de nuevo en " + left + " s" : "Buscar ahora";
-    b2.textContent = checking ? "Buscando…" : left > 0 ? "¿No te sirvió? Buscar otro en " + left + " s" : "¿No te sirvió? Buscar otro";
-    if (!checking && left <= 0 && !document.getElementById("s-waiting").hidden) check(false);
+    b1.disabled = busy;
+    b1.textContent = busy ? "Buscando…" : "Buscar ahora";
+    b2.disabled = checking || Date.now() < manualUntil;
+    b2.textContent = b2.disabled ? "Buscando…" : "¿No te sirvió? Buscar otro";
+    if (!checking && Date.now() >= nextPollAt && !document.getElementById("s-waiting").hidden) check();
   }
 
   function applyInfo(d) {
@@ -237,17 +241,17 @@
     };
     paint();
     totpTick = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
-    totpTimer = setTimeout(() => check(false), left * 1000 + 600);
+    totpTimer = setTimeout(() => check(), left * 1000 + 600);
     show("s-found");
   }
 
-  async function check(manual) {
+  async function check(flags) {
     if (checking) return;
-    if (manual && Date.now() < nextCheckAt) return;
+    const manual = !!flags;
     checking = true;
     paintCooldown();
     try {
-      const { status, data } = await api("/check", { method: "POST" });
+      const { status, data } = await api("/check", { method: "POST", body: flags || {} });
       applyInfo(data);
       if (status === 410) { showClosed(data.state); return; }
       if (status !== 200) { toast(data.message || "No se pudo consultar. Intenta de nuevo."); return; }
@@ -279,12 +283,8 @@
         show("s-found");
       } else if (data.status === "advisor") {
         show("s-advisor");
-      } else if (data.status === "blocked") {
-        serverNote = "Ese correo no es de inicio de sesión. Pide el código de inicio de sesión en la app.";
-        slowHint();
-        show("s-waiting");
       } else {
-        if (manual) toast("Aún no llega. Seguimos buscando.");
+        serverChecking = !!data.checking;
         serverNote = data.note || "";
         slowHint();
         show("s-waiting");
@@ -293,13 +293,21 @@
       toast("Sin conexión. Intenta de nuevo.");
     } finally {
       checking = false;
-      nextCheckAt = Date.now() + COOLDOWN_MS;
+      nextPollAt = Date.now() + POLL_MS;
       paintCooldown();
     }
   }
 
-  document.getElementById("refresh-btn").addEventListener("click", () => check(true));
-  document.getElementById("refresh-btn2").addEventListener("click", () => check(true));
+  document.getElementById("refresh-btn").addEventListener("click", () => {
+    manualUntil = Date.now() + MANUAL_GAP_MS;
+    check({ now: 1 });
+  });
+  document.getElementById("refresh-btn2").addEventListener("click", () => {
+    manualUntil = Date.now() + MANUAL_GAP_MS;
+    lastValue = "";
+    show("s-waiting");
+    check({ again: 1 });
+  });
   document.getElementById("copy-btn").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(lastValue); toast("Copiado"); } catch { toast(lastValue); }
   });
@@ -329,7 +337,7 @@
     // Netflix manda código o link de inicio de sesión; las demás, código.
     if (/netflix/i.test(platform)) document.getElementById("waiting-title").textContent = "Esperando tu código o link de inicio de sesión…";
     tick(); timerId = setInterval(tick, 1000);
-    await check(false);
+    await check();
   })();
 })();
 </script>

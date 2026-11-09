@@ -1,6 +1,7 @@
 import axios from "axios";
 import { AsyncLocalStorage } from "async_hooks";
 import { env } from "../config/env";
+import { laneFor } from "./codes-lanes";
 
 // ─────────────────────────────────────────────────────────────
 // CÓDIGOS — fuentes externas. El proveedor comparte páginas donde se
@@ -112,8 +113,15 @@ export function onLookup(fn: (e: LookupEvent) => void): void {
   lookupObservers.push(fn);
 }
 
-async function observed(sourceId: string, email: string, run: () => Promise<CodeLookupResult>): Promise<CodeLookupResult> {
+async function observed(sourceId: string, email: string, run: () => Promise<CodeLookupResult>, actionKey = ""): Promise<CodeLookupResult> {
   const ctx = lookupContext.getStore() ?? { origin: "panel" };
+  // Fila del proveedor: una consulta a la vez (ver codes-lanes.ts).
+  const key = `${sourceId}|${email.trim().toLowerCase()}|${actionKey}`;
+  const priority = ctx.origin === "vigilante" || ctx.origin === "busqueda" ? 1 : 0;
+  return laneFor(sourceId).run(key, priority, () => observedNow(sourceId, email, run, ctx));
+}
+
+async function observedNow(sourceId: string, email: string, run: () => Promise<CodeLookupResult>, ctx: LookupContext): Promise<CodeLookupResult> {
   const started = Date.now();
   const notify = (e: Omit<LookupEvent, "sourceId" | "email" | "ctx" | "ms">) => {
     for (const fn of lookupObservers) {
@@ -362,15 +370,14 @@ const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
   { id: "link_login", label: "Link Inicio Sesión", adminOnly: false, accion: "tg_6" },
 ];
 
-// "Código o link de inicio de sesión": consulta los dos y se queda con el
-// que llegó último (el cliente pudo pedir el link después del código).
-export const LOGIN_COMBO_ACTION = { id: "inicio_sesion", label: "Código o link de inicio de sesión" };
-const LOGIN_COMBO_IDS = ["codigo_login", "link_login"];
+// Cada consulta es UNA sola opción (Pally bloquea si se le piden varias
+// seguidas). El buscador de pedidos alterna código y link por turnos.
+// "inicio_sesion" era la opción combinada de antes: ahora es el código.
+const LEGACY_COMBO_ID = "inicio_sesion";
 
-/** Consulta normal de "con opciones": código o link de inicio de sesión,
- *  el que llegó último. */
+/** Consulta normal de "con opciones": el código de inicio de sesión. */
 function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult> {
-  return lookupConOpcionesAction(email, LOGIN_COMBO_ACTION.id);
+  return lookupConOpcionesAction(email, "codigo_login");
 }
 
 /** true si el resultado vino de una de las 3 sub-acciones sensibles de
@@ -440,7 +447,7 @@ export function lookupCodeForClientWithRetries(
   sourceId: string, email: string, exclude: SeenCode | null = null
 ): Promise<CodeLookupResult> {
   if (sourceId === "netflix_con_opciones") {
-    return lookupCodeActionWithRetries(sourceId, email, LOGIN_COMBO_ACTION.id, exclude);
+    return lookupCodeActionWithRetries(sourceId, email, "codigo_login", exclude);
   }
   return lookupCodeWithRetries(sourceId, email, exclude);
 }
@@ -450,38 +457,20 @@ export function lookupCodeForClientWithRetries(
  *  todas a ciegas — null si la fuente no tiene sub-acciones. */
 export function listSourceActions(sourceId: string | null): { id: string; label: string }[] | null {
   if (sourceId !== "netflix_con_opciones") return null;
-  return [{ id: LOGIN_COMBO_ACTION.id, label: "Código o link de inicio de sesión" }];
+  return [{ id: "codigo_login", label: "Código" }, { id: "link_login", label: "Link" }];
 }
 
 /** Consulta puntual de UNA sub-acción específica — para fuentes sin
  *  sub-acciones (actionId ausente o no aplica), cae a la consulta normal. */
 export async function lookupCodeAction(sourceId: string, email: string, actionId?: string): Promise<CodeLookupResult> {
   if (sourceId === "netflix_con_opciones" && actionId) {
-    return observed(sourceId, email, () => lookupConOpcionesAction(email, actionId));
+    const id = actionId === LEGACY_COMBO_ID ? "codigo_login" : actionId;
+    return observed(sourceId, email, () => lookupConOpcionesAction(email, id), id);
   }
   return lookupCode(sourceId, email);
 }
 
 async function lookupConOpcionesAction(email: string, actionId: string): Promise<CodeLookupResult> {
-  if (actionId === LOGIN_COMBO_ACTION.id) {
-    let last: CodeLookupResult = { found: false, kind: null, value: null };
-    let best: CodeLookupResult | null = null;
-    let lastError: unknown = null;
-    for (const id of LOGIN_COMBO_IDS) {
-      const action = CON_OPCIONES_ACTIONS.find(a => a.id === id)!;
-      let result: CodeLookupResult;
-      try {
-        result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
-      } catch (err) { lastError = err; continue; }
-      if (!result.found) { last = result; continue; }
-      const tagged = { ...result, sourceAction: action.id };
-      const when = (r: CodeLookupResult) => parseProviderDate(r.providerReceivedAt)?.getTime() ?? 0;
-      if (!best || when(tagged) > when(best)) best = tagged;
-    }
-    if (best) return best;
-    if (lastError && !last.providerMessage) throw lastError;
-    return last;
-  }
   const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);
   if (!action) return { found: false, kind: null, value: null };
   const result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));

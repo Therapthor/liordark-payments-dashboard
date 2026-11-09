@@ -6,20 +6,21 @@ import {
   type CodeLink,
 } from "../db/code-links.repository";
 import {
-  lookupCodeAction, codeSourceLabel, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult, LOGIN_COMBO_ACTION,
-  sanitizeEmailHtml, parseProviderDate, describeLookupError, withLookupContext, LIST_SOURCES, TOTP_SOURCE_ID,
+  lookupCodeAction, codeSourceLabel, isAccountChangeResult,
+  sanitizeEmailHtml, parseProviderDate, describeLookupError, withLookupContext, TOTP_SOURCE_ID,
   type CodeLookupResult, type LookupOrigin,
 } from "../services/codes-lookup.service";
-import { alertClientWaiting } from "../services/codes-brain.service";
+import {
+  codeWaitMinutes, ensureCodeRequest, markClientSeen, rushRequest, searchAgain, closeCodeRequest, isChecking, foundHtml,
+} from "../services/code-requests.service";
 import { getCurrentTotp } from "../utils/totp.util";
 
 // ─────────────────────────────────────────────────────────────
 // VISOR DE CÓDIGOS — muestra el correo tal cual llegó al proveedor.
 //  · Admin (requireAuth): /api/code-viewer/...
 //  · Cliente (link temporal, sin sesión): /api/code-link/<token>
-// Una sola consulta por pedido (sin reintentos): el que mira decide
-// cuándo «Actualizar». Para Netflix (Pally con opciones) solo se consulta
-// «Código Inicio Sesión» — el resto de botones se busca a mano.
+// Panel: una consulta puntual (en la fila del proveedor). Cliente: lee su
+// pedido, que el buscador de pedidos atiende por turnos.
 // ─────────────────────────────────────────────────────────────
 
 export const CODE_LINK_MINUTES = [5, 10, 15];
@@ -35,9 +36,9 @@ type Problem = { kind: string; message: string } | null;
 /** Una consulta, anotada en el registro con quién la pidió. Si el proveedor
  *  falla, se devuelve el problema (antes se tragaba y parecía «no llegó»). */
 async function fetchOnce(
-  sourceId: string, email: string, origin: LookupOrigin, accountId: number
+  sourceId: string, email: string, origin: LookupOrigin, accountId: number, wanted?: string
 ): Promise<{ result: CodeLookupResult; problem: Problem }> {
-  const actionId = sourceId === "netflix_con_opciones" ? LOGIN_COMBO_ACTION.id : undefined;
+  const actionId = sourceId === "netflix_con_opciones" ? (wanted === "link_login" ? "link_login" : "codigo_login") : undefined;
   try {
     const result = await withLookupContext({ origin, accountId }, () => lookupCodeAction(sourceId, email, actionId));
     return { result, problem: null };
@@ -78,7 +79,7 @@ codeViewerAdminRoutes.post("/:accountId/fetch", async (req, res) => {
     return res.json({ ...base, totp });
   }
 
-  const { result, problem } = await fetchOnce(sourceId, account.email, "panel", accountId);
+  const { result, problem } = await fetchOnce(sourceId, account.email, "panel", accountId, req.body?.actionId);
   if (result.found && result.value) {
     saveIncomingCode({
       accountId, code: result.value,
@@ -131,30 +132,12 @@ codeViewerAdminRoutes.get("/link/:token", (req, res) => {
 });
 
 // ═════════ CLIENTE (link temporal) ═════════
+// La página del cliente solo LEE el pedido: el buscador de pedidos
+// (code-requests.service) consulta al proveedor por turnos, en su fila.
 
 export const codeLinkRoutes = Router();
 
-// Para no martillar al proveedor: como mucho una consulta cada 25 s por
-// link (el visor revisa cada 30 s); entre medio se responde lo último.
-const CHECK_MIN_INTERVAL_MS = 25_000;
-const lastChecks = new Map<string, { at: number; body: unknown }>();
-
-// Un correo que llegó bastante antes de que se creara el link es el código
-// viejo (el que ya se usó): se trata como «todavía no llega».
-const OLD_EMAIL_MARGIN_MS = 10 * 60 * 1000;
-
-/** Minutos que suele tardar el correo en llegar (Disney+ es lento). */
-export function codeWaitMinutes(sourceId: string, platform: string): number {
-  // Disney+ y PallyStore tardan en recibir el correo; Gralexander pide 2-3 min.
-  if (LIST_SOURCES.includes(sourceId)) return 3;
-  return /disney|netflix_sin_opciones|netflix_con_opciones/i.test(sourceId) || /disney/i.test(platform) ? 4 : 1;
-}
-
-// Si el código no llega en este tiempo, se avisa al admin y se le dice al
-// cliente que un asesor ya está atento (así nunca queda a la deriva).
-function escalateAfterMinutes(sourceId: string, platform: string): number {
-  return Math.max(3, codeWaitMinutes(sourceId, platform) + 2);
-}
+export { codeWaitMinutes };
 
 function linkInfo(link: CodeLink) {
   const account = getAccountById(link.accountId);
@@ -176,7 +159,7 @@ codeLinkRoutes.get("/:token", (req, res) => {
 });
 
 codeLinkRoutes.post("/:token/check", async (req, res) => {
-  const link = findCodeLink(String(req.params.token));
+  let link = findCodeLink(String(req.params.token));
   if (!link) return res.status(404).json({ message: "Este link no existe." });
   if (codeLinkState(link) !== "active") return res.status(410).json(linkInfo(link));
 
@@ -193,71 +176,31 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
     }
   }
 
-  const cached = lastChecks.get(link.token);
-  if (cached && Date.now() - cached.at < CHECK_MIN_INTERVAL_MS) return res.json(cached.body);
+  ensureCodeRequest(link);
+  markClientSeen(link.token);
+  if (req.body?.again) searchAgain(link.token);
+  else if (req.body?.now) rushRequest(link.token);
 
-  const { result, problem } = await fetchOnce(link.sourceId, link.email, "cliente", link.accountId);
-  const info = receivedInfo(result);
-  const created = sqliteDate(link.createdAt);
-  const when = info.receivedAtIso ? new Date(info.receivedAtIso) : null;
-  const isOld = !!(when && created && when.getTime() < created.getTime() - OLD_EMAIL_MARGIN_MS) || !!result.expired;
-  const platform = getAccountById(link.accountId)?.platform ?? "";
-
-  // Qué le decimos al cliente mientras espera (lo que de verdad pasa).
-  const wrongSource = !result.found && /no est[aá] vinculad|no registrad|no pertenece/i.test(result.providerMessage ?? "");
-  // Solo cuando aporta algo; si no, la página muestra cuánto suele tardar.
-  const waitingNote = problem
-    ? "Reconectando con el proveedor… sigue esperando aquí."
-    : result.found && isOld
-      ? `El último ${result.kind === "link" ? "link" : "código"} de inicio de sesión ya venció. Pide uno nuevo en la app y espera aquí.`
-      : "";
-  const minutesWaiting = created ? Math.floor((Date.now() - created.getTime()) / 60000) : 0;
-  const shouldEscalate = wrongSource || minutesWaiting >= escalateAfterMinutes(link.sourceId, platform);
-
+  const r = ensureCodeRequest(link);
+  link = findCodeLink(link.token) ?? link; // el buscador pudo alargarlo
   let body: Record<string, unknown>;
-  if (!result.found || !result.value || isOld) {
-    body = { status: "waiting", note: waitingNote };
-    // Para el panel (Actividad): queda anotado si un cliente espera de más.
-    if (shouldEscalate) {
-      alertClientWaiting({
-        token: link.token, accountId: link.accountId, email: link.email, sourceId: link.sourceId,
-        platform, clientPhone: link.clientPhone, minutes: minutesWaiting,
-      });
-    }
-  } else if (isAccountChangeResult(result)) {
-    // Cambio de contraseña/correo/teléfono: nunca al cliente. Sigue
-    // esperando por si luego llega el de inicio de sesión.
-    body = { status: "blocked" };
-  } else if (isLoginCodeOnlySource(link.sourceId) && !isLoginCode(result) && !loginLinkOf(result)) {
-    // Netflix: al cliente solo el código o el link de inicio de sesión.
-    body = { status: "waiting" };
-  } else if (isAdminOnlyResult(link.sourceId, result)) {
-    body = { status: "advisor" };
-  } else {
-    if (result.value) {
-      saveIncomingCode({
-        accountId: link.accountId, code: result.value,
-        snippet: result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "", source: "external",
-      });
-    }
+  if (r.status === "found" || r.status === "delivered") {
+    const when = parseProviderDate(r.foundReceivedAt);
     body = {
-      status: "found",
-      kind: result.kind,
-      value: result.value,
-      receivedAtLima: info.receivedAtLima,
-      html: result.emailHtml ? sanitizeEmailHtml(result.emailHtml, true) : null,
+      status: "found", kind: r.foundKind, value: r.foundValue,
+      receivedAtLima: when ? limaTime(when) : null,
+      html: foundHtml(link.token),
     };
+  } else {
+    body = { status: "waiting", note: r.note, checking: isChecking(link.token) || !r.lastCheckAt };
   }
-  body = { ...body, ...linkInfo(link) };
-  lastChecks.set(link.token, { at: Date.now(), body });
-  if (lastChecks.size > 500) lastChecks.clear();
-  res.json(body);
+  res.json({ ...body, ...linkInfo(link) });
 });
 
 codeLinkRoutes.post("/:token/close", (req, res) => {
   const link = findCodeLink(String(req.params.token));
   if (!link) return res.status(404).json({ message: "Este link no existe." });
   closeCodeLink(link.token);
-  lastChecks.delete(link.token);
+  closeCodeRequest(link.token);
   res.json({ ok: true });
 });

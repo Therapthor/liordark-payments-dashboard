@@ -865,6 +865,18 @@ button, input {
 .cx-act-src { font-size: 11.5px; color: var(--cmuted); }
 .cx-act-msg { font-size: 12.5px; margin-top: 3px !important; overflow-wrap: anywhere; }
 .cx-act-meta { font-size: 11px; color: var(--cmuted); margin-top: 3px !important; font-family: var(--cx-mono); overflow-wrap: anywhere; }
+.cx-lanes { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.cx-lane { font-size: 11.5px; border-radius: 999px; padding: 5px 10px; background: var(--cchip); color: var(--cmuted); border: 1px solid var(--cx-line); }
+.cx-lane b { color: var(--ctext); font-weight: 700; margin-right: 4px; }
+.cx-lane.ok b::before { content: "● "; color: var(--cx-good); }
+.cx-lane.busy b::before { content: "● "; color: var(--cx-amber); }
+.cx-lane.warn { border-color: #6b4a1e; color: var(--cx-warn); }
+.cx-lane.warn b::before { content: "● "; color: var(--cx-warn); }
+.cx-act .cx-ghost-btn { align-self: center; flex: none; }
+.cx-act.wait .cx-act-icon.spin { animation: cxPulse 1.6s ease-in-out infinite; color: var(--cx-amber); }
+.cx-req-code { font-family: var(--cx-mono); font-size: 15px; letter-spacing: 2px; color: var(--cx-amber); }
+@keyframes cxPulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .cx-act.wait .cx-act-icon.spin { animation: none; } }
 
 /* Correo completo */
 .cx-mail { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--cx-line); border-radius: 18px;
@@ -1679,3 +1691,6 @@ button, input {
 .go-glint { animation: goGlint 2s steps(1) infinite; }
 @keyframes goGlint { 0%, 70% { opacity: 1; } 71%, 85% { opacity: 0; } 86% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .go-blink, .go-hop, .go-glint { animation: none; } }
+.cx-pane > .cx-hint { margin-bottom: 10px; }
+.cx-act-msg a { color: var(--cx-amber); font-weight: 700; }
+@media (max-width: 600px) { .cx-act { flex-wrap: wrap; } .cx-act > .cx-ghost-btn { width: 100%; } }
