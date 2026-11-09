@@ -121,7 +121,9 @@ async function observed(sourceId: string, email: string, run: () => Promise<Code
     }
   };
   try {
-    const result = await run();
+    const raw = await run();
+    const loginLink = loginLinkOf(raw);
+    const result = loginLink && loginLink !== raw.value ? { ...raw, value: loginLink } : raw;
     notify({ result });
     return result;
   } catch (err) {
@@ -351,40 +353,24 @@ function pallyUnknownPage(html: string): CodeLookupResult {
 
 type ConOpcionesAction = { id: string; label: string; adminOnly: boolean; accion: string };
 
-// Orden de prueba: primero lo que se le puede entregar al cliente
-// (inicio de sesión: código de 4 dígitos o enlace), luego el resto.
-// Solo «Código Inicio Sesión» (tg_4, confirmado con captura de la página
-// real, nov-2026). Los demás botones de Pally (Definir Hogar, Código Hogar,
-// Link Contraseña, Código 6 dígitos, Link Inicio Sesión) ya no se consultan
-// nunca: si hace falta alguno, el admin lo busca a mano en la web.
+// Solo inicio de sesión: «Código Inicio Sesión» (tg_4) y «Link Inicio
+// Sesión» (tg_6). Los demás botones de Pally (Definir Hogar, Código Hogar,
+// Link Contraseña, Código 6 dígitos) no se consultan: si hace falta alguno,
+// el admin lo busca a mano en la web.
 const CON_OPCIONES_ACTIONS: ConOpcionesAction[] = [
   { id: "codigo_login", label: "Código Inicio Sesión", adminOnly: false, accion: "tg_4" },
+  { id: "link_login", label: "Link Inicio Sesión", adminOnly: false, accion: "tg_6" },
 ];
 
-// Opción combinada para el panel: "Código o link de inicio de sesión" —
-// un solo clic prueba el código de 4 dígitos y, si no hay, el enlace.
-const LOGIN_COMBO_ACTION = { id: "inicio_sesion", label: "Código o link de inicio de sesión" };
-const LOGIN_COMBO_IDS = ["codigo_login"];
+// "Código o link de inicio de sesión": consulta los dos y se queda con el
+// que llegó último (el cliente pudo pedir el link después del código).
+export const LOGIN_COMBO_ACTION = { id: "inicio_sesion", label: "Código o link de inicio de sesión" };
+const LOGIN_COMBO_IDS = ["codigo_login", "link_login"];
 
-/** Prueba las sub-acciones en orden sobre el mismo correo y se queda
- *  con la primera que responda algo — una sola llamada sirve tanto para
- *  el cliente (más abajo se filtran las sensibles) como para el admin. */
-async function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult> {
-  let lastError: unknown = null;
-  let lastNotFound: CodeLookupResult | null = null;
-  for (const action of CON_OPCIONES_ACTIONS) {
-    let result: CodeLookupResult;
-    try {
-      result = await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion);
-    } catch (err) {
-      lastError = err;
-      continue;
-    }
-    if (result.found) return { ...result, sourceAction: action.id };
-    lastNotFound = result;
-  }
-  if (!lastNotFound && lastError) throw lastError;
-  return lastNotFound ?? { found: false, kind: null, value: null };
+/** Consulta normal de "con opciones": código o link de inicio de sesión,
+ *  el que llegó último. */
+function lookupNetflixConOpciones(email: string): Promise<CodeLookupResult> {
+  return lookupConOpcionesAction(email, LOGIN_COMBO_ACTION.id);
 }
 
 /** true si el resultado vino de una de las 3 sub-acciones sensibles de
@@ -404,14 +390,14 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
   // Netflix por Pally: al cliente SOLO se le entrega automático el código
   // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
   // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
-  if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result);
+  if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result) && !loginLinkOf(result);
   const netflix6 = (sourceId === "netflix_sin_opciones" || sourceId === "joseb_netflix") && result.kind === "code" && result.value?.length === 6;
   return netflix6 || isSensitiveResult(result);
 }
 
-// Netflix por Pally y por José Streaming: solo se trabaja con el código
-// de inicio de sesión de 4 dígitos — ni enlaces, ni 6 dígitos, ni Hogar
-// (ni al cliente ni en el panel). Disney+ y ChatGPT no entran acá.
+// Netflix por Pally y por José Streaming: solo inicio de sesión — el
+// código de 4 dígitos o el link de inicio de sesión. Ni 6 dígitos, ni
+// Hogar, ni cambios de cuenta. Disney+ y ChatGPT no entran acá.
 const LOGIN_CODE_ONLY_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones", "joseb_netflix"];
 
 export function isLoginCodeOnlySource(sourceId: string | null): boolean {
@@ -422,6 +408,30 @@ export function isLoginCode(result: CodeLookupResult): boolean {
   return result.found && result.kind === "code" && /^\d{4}$/.test(result.value ?? "");
 }
 
+// Links de inicio de sesión de Netflix: «Iniciar sesión» (/ilum…) y
+// «Estoy de viaje» (travel/verify). Hogar y cambios de cuenta NO.
+const LOGIN_LINK_URL_RE = /netflix\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:ilum|login|signin|(?:account\/)?travel\/verify)\b/i;
+const LOGIN_LINK_TEXT_RE = /inici(?:ar|a) sesi[oó]n|sign[- ]?in\b|acceso temporal|temporary access/i;
+const NOT_LOGIN_LINK_RE = /update-primary-location|household|hogar|password|passwd|contrase|reset|recover|pally\.digital/i;
+
+export function isLoginLinkUrl(url: string): boolean {
+  return LOGIN_LINK_URL_RE.test(url) && !NOT_LOGIN_LINK_RE.test(url);
+}
+
+/** El link de inicio de sesión del resultado, o null. Si la fuente se quedó
+ *  con otro enlace del correo (el logo, ayuda…), lo busca entre los botones. */
+export function loginLinkOf(result: CodeLookupResult): string | null {
+  if (!result.found || result.kind !== "link") return null;
+  if (result.value && isLoginLinkUrl(result.value)) return result.value;
+  for (const m of String(result.emailHtml || "").matchAll(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = decodeHtmlEntities(m[2] ?? "").trim();
+    if (!/^https?:\/\//i.test(href) || NOT_LOGIN_LINK_RE.test(href)) continue;
+    const text = decodeHtmlEntities((m[3] ?? "").replace(/<[^>]+>/g, " "));
+    if (isLoginLinkUrl(href) || LOGIN_LINK_TEXT_RE.test(text)) return href;
+  }
+  return null;
+}
+
 /** Búsqueda para el CLIENTE (asistente del chat): en Netflix por Pally
  *  "con opciones" consulta solo «Código Inicio Sesión» (4 dígitos) — no
  *  prueba las demás opciones, así se generan muchas menos consultas al
@@ -430,7 +440,7 @@ export function lookupCodeForClientWithRetries(
   sourceId: string, email: string, exclude: SeenCode | null = null
 ): Promise<CodeLookupResult> {
   if (sourceId === "netflix_con_opciones") {
-    return lookupCodeActionWithRetries(sourceId, email, "codigo_login", exclude);
+    return lookupCodeActionWithRetries(sourceId, email, LOGIN_COMBO_ACTION.id, exclude);
   }
   return lookupCodeWithRetries(sourceId, email, exclude);
 }
@@ -440,8 +450,7 @@ export function lookupCodeForClientWithRetries(
  *  todas a ciegas — null si la fuente no tiene sub-acciones. */
 export function listSourceActions(sourceId: string | null): { id: string; label: string }[] | null {
   if (sourceId !== "netflix_con_opciones") return null;
-  // Solo «Código 4 dígitos» (enlaces y demás opciones retirados del panel).
-  return [{ id: "codigo_login", label: "Código 4 dígitos" }];
+  return [{ id: LOGIN_COMBO_ACTION.id, label: "Código o link de inicio de sesión" }];
 }
 
 /** Consulta puntual de UNA sub-acción específica — para fuentes sin
@@ -456,12 +465,21 @@ export async function lookupCodeAction(sourceId: string, email: string, actionId
 async function lookupConOpcionesAction(email: string, actionId: string): Promise<CodeLookupResult> {
   if (actionId === LOGIN_COMBO_ACTION.id) {
     let last: CodeLookupResult = { found: false, kind: null, value: null };
+    let best: CodeLookupResult | null = null;
+    let lastError: unknown = null;
     for (const id of LOGIN_COMBO_IDS) {
       const action = CON_OPCIONES_ACTIONS.find(a => a.id === id)!;
-      const result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
-      if (result.found) return { ...result, sourceAction: action.id };
-      last = result;
+      let result: CodeLookupResult;
+      try {
+        result = withFallbackExtraction(await fetchFromPallyDigitalConOpciones(email, PALLY_ACCESS_CODE, action.accion));
+      } catch (err) { lastError = err; continue; }
+      if (!result.found) { last = result; continue; }
+      const tagged = { ...result, sourceAction: action.id };
+      const when = (r: CodeLookupResult) => parseProviderDate(r.providerReceivedAt)?.getTime() ?? 0;
+      if (!best || when(tagged) > when(best)) best = tagged;
     }
+    if (best) return best;
+    if (lastError && !last.providerMessage) throw lastError;
     return last;
   }
   const action = CON_OPCIONES_ACTIONS.find(a => a.id === actionId);

@@ -6,7 +6,7 @@ import {
   type CodeLink,
 } from "../db/code-links.repository";
 import {
-  lookupCodeAction, codeSourceLabel, isLoginCodeOnlySource, isLoginCode, isAdminOnlyResult, isAccountChangeResult,
+  lookupCodeAction, codeSourceLabel, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult, LOGIN_COMBO_ACTION,
   sanitizeEmailHtml, parseProviderDate, describeLookupError, withLookupContext, LIST_SOURCES, TOTP_SOURCE_ID,
   type CodeLookupResult, type LookupOrigin,
 } from "../services/codes-lookup.service";
@@ -37,7 +37,7 @@ type Problem = { kind: string; message: string } | null;
 async function fetchOnce(
   sourceId: string, email: string, origin: LookupOrigin, accountId: number
 ): Promise<{ result: CodeLookupResult; problem: Problem }> {
-  const actionId = sourceId === "netflix_con_opciones" ? "codigo_login" : undefined;
+  const actionId = sourceId === "netflix_con_opciones" ? LOGIN_COMBO_ACTION.id : undefined;
   try {
     const result = await withLookupContext({ origin, accountId }, () => lookupCodeAction(sourceId, email, actionId));
     return { result, problem: null };
@@ -150,17 +150,6 @@ export function codeWaitMinutes(sourceId: string, platform: string): number {
   return /disney|netflix_sin_opciones|netflix_con_opciones/i.test(sourceId) || /disney/i.test(platform) ? 4 : 1;
 }
 
-/** Qué tiene que pedir el cliente en la app (depende del proveedor). */
-function clientHint(sourceId: string, platform: string): string {
-  if (LIST_SOURCES.includes(sourceId)) {
-    return "En la TV o app de Netflix elige «Estoy de viaje» y pide el código de acceso temporal. Luego espera aquí.";
-  }
-  if (/netflix/i.test(platform)) return "Pide el código en Netflix («Usar un código de inicio de sesión») y espera aquí: revisamos cada 30 segundos.";
-  return codeWaitMinutes(sourceId, platform) > 1
-    ? `Pide el código en la app de ${platform} una sola vez y espera aquí.`
-    : `Pide el código en la app de ${platform} y espera aquí: revisamos cada 30 segundos.`;
-}
-
 // Si el código no llega en este tiempo, se avisa al admin y se le dice al
 // cliente que un asesor ya está atento (así nunca queda a la deriva).
 function escalateAfterMinutes(sourceId: string, platform: string): number {
@@ -173,7 +162,6 @@ function linkInfo(link: CodeLink) {
     state: codeLinkState(link),
     platform: account?.platform ?? "",
     waitMinutes: codeWaitMinutes(link.sourceId, account?.platform ?? ""),
-    hint: clientHint(link.sourceId, account?.platform ?? ""),
     createdAt: sqliteDate(link.createdAt)?.toISOString() ?? null,
     expiresAt: sqliteDate(link.expiresAt)?.toISOString() ?? null,
     serverNow: new Date().toISOString(),
@@ -221,7 +209,7 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
   const waitingNote = problem
     ? "Reconectando con el proveedor… sigue esperando aquí."
     : result.found && isOld
-      ? "El último código ya venció. Pide uno nuevo en la app y espera aquí."
+      ? `El último ${result.kind === "link" ? "link" : "código"} de inicio de sesión ya venció. Pide uno nuevo en la app y espera aquí.`
       : "";
   const minutesWaiting = created ? Math.floor((Date.now() - created.getTime()) / 60000) : 0;
   const shouldEscalate = wrongSource || minutesWaiting >= escalateAfterMinutes(link.sourceId, platform);
@@ -240,8 +228,8 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
     // Cambio de contraseña/correo/teléfono: nunca al cliente. Sigue
     // esperando por si luego llega el de inicio de sesión.
     body = { status: "blocked" };
-  } else if (isLoginCodeOnlySource(link.sourceId) && !isLoginCode(result)) {
-    // Netflix: al cliente solo el código de 4 dígitos de inicio de sesión.
+  } else if (isLoginCodeOnlySource(link.sourceId) && !isLoginCode(result) && !loginLinkOf(result)) {
+    // Netflix: al cliente solo el código o el link de inicio de sesión.
     body = { status: "waiting" };
   } else if (isAdminOnlyResult(link.sourceId, result)) {
     body = { status: "advisor" };

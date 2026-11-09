@@ -48,7 +48,7 @@ import {
   getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, LOGIN_COMBO_ACTION, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { getCurrentTotp } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
@@ -462,9 +462,8 @@ router.get("/codes", async (_req, res) => {
       .map(g => getLatestCodeForAccount(g.id))
       .filter(c => c !== null)
       .sort((x, y) => y.receivedAt.localeCompare(x.receivedAt))[0] ?? null;
-    // Netflix por Pally / José: ya no se trabaja con enlaces — no se
-    // muestran como "último código" aunque se hayan guardado antes.
-    const latestCode = isLoginCodeOnlySource(a.codeSource) && latestCodeRaw?.code.startsWith("http") ? null : latestCodeRaw;
+    // Netflix por Pally / José: de los enlaces, solo el de inicio de sesión.
+    const latestCode = isLoginCodeOnlySource(a.codeSource) && latestCodeRaw?.code.startsWith("http") && !isLoginLinkUrl(latestCodeRaw.code) ? null : latestCodeRaw;
     return {
       ...rest,
       accountCount: group.length,
@@ -515,14 +514,14 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   if (account.codeSource === TOTP_SOURCE_ID) { res.status(409).json({ message: "Esta cuenta usa 2FA: falta pegar la clave secreta en Accesos > Editar cuenta." }); return; }
 
   const codeOnly = isLoginCodeOnlySource(account.codeSource);
-  // Netflix por Pally / José Streaming: solo el código de 4 dígitos.
+  // Netflix por Pally / José Streaming: solo código o link de inicio de sesión.
   const actionId = account.codeSource === "netflix_con_opciones"
-    ? "codigo_login"
+    ? LOGIN_COMBO_ACTION.id
     : (typeof req.body?.actionId === "string" ? req.body.actionId : undefined);
   const exclude = skipsRepeatedCodes(account.codeSource) ? getLastSeenCodeForEmail(account.email) : null;
   let result = await withLookupContext({ origin: "panel", accountId },
     () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude));
-  if (codeOnly && result.found && !isLoginCode(result)) {
+  if (codeOnly && result.found && !isLoginCode(result) && !loginLinkOf(result)) {
     result = { found: false, kind: null, value: null };
   }
   if (result.found && result.value) {

@@ -268,6 +268,7 @@
     // o solo el enlace de inicio de sesión (sin tocar el desplegable).
     const hasAction = id => (a.sourceActions || []).some(act => act.id === id);
     const quickBtns = [
+      hasAction("inicio_sesion") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="inicio_sesion">🔑 Código o link de inicio de sesión</button>` : "",
       hasAction("codigo_login") ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="codigo_login">🔢 Código 4 dígitos</button>` : "",
       hasAction("link_login")   ? `<button type="button" class="codes-consult-btn codes-quick-btn" data-action="link_login">🔗 Enlace</button>` : "",
     ].join("");

@@ -88,8 +88,7 @@
     <span class="label">ESPERANDO</span>
     <div class="center">
       <div class="spinner"></div>
-      <h1>Esperando tu código…</h1>
-      <p class="muted" id="waiting-text">Pide el código en la app y espera aquí: revisamos cada 30 segundos.</p>
+      <h1 id="waiting-title">Esperando tu código de inicio de sesión…</h1>
       <p class="wait-status" id="waiting-status"></p>
     </div>
     <button class="btn orange" id="refresh-btn" disabled>Buscando…</button>
@@ -97,7 +96,7 @@
 
   <!-- 2 · Llegó -->
   <section id="s-found" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
-    <span class="label ok">LLEGÓ TU CÓDIGO</span>
+    <span class="label ok" id="found-label">LLEGÓ TU CÓDIGO</span>
     <div class="center">
       <p class="muted" id="found-meta"></p>
       <div class="codebox" id="found-codebox"><p class="code" id="found-code"></p></div>
@@ -143,7 +142,6 @@
     .then(async r => ({ status: r.status, data: await r.json().catch(() => ({})) }));
 
   let expiresAt = null, skew = 0, timerId = null, lastValue = "", platform = "";
-  let waitMinutes = 1, createdAt = null;
 
   function show(id) {
     ["s-loading", "s-waiting", "s-found", "s-advisor", "s-closed"].forEach(s => { document.getElementById(s).hidden = s !== id; });
@@ -204,28 +202,13 @@
       : /crunchy/i.test(platform) ? "t-crunchy"
       : /chatgpt|gpt|openai/i.test(platform) ? "t-chatgpt" : "";
     document.body.className = theme ? "themed " + theme : "";
-    if (d.waitMinutes) waitMinutes = d.waitMinutes;
-    if (d.createdAt) createdAt = new Date(d.createdAt).getTime();
   }
 
-  // Una sola línea de estado: lo que diga el servidor (código vencido,
-  // reconectando) o, si no, cuánto suele tardar. Cada código nuevo invalida
-  // el anterior: por eso se pide no pedir otro antes de tiempo.
+  // Solo se muestra una línea cuando el servidor avisa algo concreto
+  // (código vencido, reconectando); si no, la pantalla queda limpia.
   let serverNote = "";
   function slowHint() {
-    const el = document.getElementById("waiting-status");
-    if (serverNote) { el.textContent = serverNote; return; }
-    if (!createdAt) { el.textContent = ""; return; }
-    const waited = Math.max(0, Math.floor((Date.now() + skew - createdAt) / 1000));
-    const total = waitMinutes * 60;
-    if (waitMinutes > 1 && waited < total) {
-      const left = total - waited;
-      el.textContent = "Puede tardar hasta " + waitMinutes + " min (" + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + "). No pidas otro código.";
-    } else if (waited >= Math.max(total, 180)) {
-      el.textContent = "¿Aún no llega? Pide un código nuevo en la app y espera aquí.";
-    } else {
-      el.textContent = "";
-    }
+    document.getElementById("waiting-status").textContent = serverNote;
   }
 
   // 2FA: el código cambia cada 30 s; se muestra cuánto le queda y se pide
@@ -272,6 +255,7 @@
         showTotp(data);
       } else if (data.status === "found") {
         const isLink = data.kind === "link";
+        document.getElementById("found-label").textContent = isLink ? "LLEGÓ TU LINK DE INICIO DE SESIÓN" : "LLEGÓ TU CÓDIGO DE INICIO DE SESIÓN";
         document.getElementById("found-meta").textContent = platform + (data.receivedAtLima ? " · llegó a las " + data.receivedAtLima : "");
         document.getElementById("found-code").textContent = isLink ? "" : data.value;
         document.getElementById("found-code").classList.toggle("long", !isLink && String(data.value).length > 4);
@@ -282,10 +266,10 @@
         a.hidden = !isLink;
         if (isLink) {
           a.href = data.value;
-          // Netflix «Estoy de viaje»: el enlace abre la página con el código (vence en 15 min).
+          // Netflix «Estoy de viaje»: el link abre la página con el código (vence en 15 min).
           const travel = /travel\/verify/i.test(data.value);
-          a.textContent = travel ? "Obtener mi código de Netflix" : "Abrir enlace";
-          if (travel) document.getElementById("found-meta").textContent += " · el enlace vence en 15 min";
+          a.textContent = "Abrir link de inicio de sesión";
+          if (travel) document.getElementById("found-meta").textContent += " · el link vence en 15 min";
         }
         const frame = document.getElementById("mail");
         document.getElementById("mail-toggle").hidden = !data.html;
@@ -342,11 +326,8 @@
     if (status === 404 || status === 0) { showClosed("expired"); return; }
     applyInfo(data);
     if (data.state !== "active") { showClosed(data.state); return; }
-    document.getElementById("waiting-text").textContent = data.hint ? data.hint : /netflix/i.test(platform)
-      ? "Pide el código en Netflix («Usar un código de inicio de sesión») y espera aquí: revisamos cada 30 segundos."
-      : waitMinutes > 1
-        ? "Pide el código en la app de " + platform + " una sola vez y espera aquí."
-        : "Pide el código en la app de " + platform + " y espera aquí: revisamos cada 30 segundos.";
+    // Netflix manda código o link de inicio de sesión; las demás, código.
+    if (/netflix/i.test(platform)) document.getElementById("waiting-title").textContent = "Esperando tu código o link de inicio de sesión…";
     tick(); timerId = setInterval(tick, 1000);
     await check(false);
   })();
