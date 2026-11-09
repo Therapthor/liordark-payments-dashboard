@@ -3,7 +3,7 @@ import axios from "axios";
 import { env } from "../config/env";
 import {
   listExpiringClients, markReminderSent, listProfilesRemindedOn, limaTodayISOLocal, addDaysISOLocal,
-  listUnSmsRemindedExpiringClientsForDate, markSmsReminderSent,
+  listUnSmsRemindedExpiringClientsForDate, listExpiringClientsForDate, markSmsReminderSent,
 } from "../db/access.repository";
 import { recordReminderSent, setReminderRunStatus, listReminderRuns } from "../db/reminder-runs.repository";
 import {
@@ -154,7 +154,8 @@ router.get("/sms/days", (_req, res) => {
   ].map(d => {
     const clients = listUnSmsRemindedExpiringClientsForDate(d.date);
     const pendingCount = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone)).length;
-    return { ...d, pendingCount };
+    const totalCount = groupExpiringByPhone(listExpiringClientsForDate(d.date)).filter(g => isValidSmsPhone(g.clientPhone)).length;
+    return { ...d, pendingCount, totalCount };
   });
   res.json({ days });
 });
@@ -170,7 +171,8 @@ router.get("/sms/days/:date/csv", (req, res) => {
     return res.status(400).json({ message: "Fecha inválida." });
   }
 
-  const clients = listUnSmsRemindedExpiringClientsForDate(date);
+  // Todos los que vencen ese día, aunque ya tengan SMS: es otro canal.
+  const clients = listExpiringClientsForDate(date);
   const groups = groupExpiringByPhone(clients).filter(g => isValidSmsPhone(g.clientPhone));
 
   const lines = [

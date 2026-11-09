@@ -1344,11 +1344,9 @@
     pending: "badge-run-pending", sending: "badge-run-sending", incomplete: "badge-run-incomplete", complete: "badge-run-complete",
   };
 
-  // El envío automático por SMS queda en pausa por ahora — el admin
-  // maneja los recordatorios a mano por difusión de WhatsApp Business,
-  // con el CSV que arma /sms/days/:date/csv. Cambiar a true reactiva el
-  // botón "Enviar" de siempre (sendSmsForDay sigue intacto, solo oculto).
-  const SMS_SEND_ENABLED = false;
+  // Por día, el admin elige a mano: CSV para la difusión de WhatsApp
+  // Business (todos los que vencen) y/o SMS (solo a los que aún no tienen).
+  const SMS_SEND_ENABLED = true;
 
   // Día por día: "Hoy" (colgados de ayer, si falló algo) y "Mañana"
   // (tanda nueva) — cada fila manda SOLO ese día, no los dos juntos.
@@ -1358,13 +1356,16 @@
       <div class="sms-day-row" data-date="${d.date}">
         <div class="sms-day-label">
           ${escapeHtml(d.label)}
-          <span class="sms-day-count">${d.pendingCount > 0 ? `${d.pendingCount} pendiente${d.pendingCount === 1 ? "" : "s"}` : "sin pendientes"}</span>
+          <span class="sms-day-count">${(d.totalCount ?? d.pendingCount) > 0
+            ? `${d.totalCount} cliente${d.totalCount === 1 ? "" : "s"} · SMS: ${d.pendingCount > 0 ? `${d.pendingCount} sin enviar` : "enviados"}`
+            : "nadie vence"}</span>
         </div>
-        ${d.pendingCount === 0
-          ? `<span class="badge badge-run-complete">✅ Hecho</span>`
-          : SMS_SEND_ENABLED
-            ? `<button class="btn-primary btn-sm sms-day-send-btn" data-date="${d.date}">Enviar</button>`
-            : `<a class="btn-secondary btn-sm" href="/api/renewals/sms/days/${d.date}/csv" download>⬇ Descargar CSV</a>`}
+        <div class="sms-day-actions">
+          ${(d.totalCount ?? 0) > 0 ? `<a class="btn-secondary btn-sm" href="/api/renewals/sms/days/${d.date}/csv" download>⬇ CSV WhatsApp</a>` : ""}
+          ${d.pendingCount > 0 && SMS_SEND_ENABLED
+            ? `<button class="btn-primary btn-sm sms-day-send-btn" data-date="${d.date}" data-count="${d.pendingCount}">📨 Enviar ${d.pendingCount} SMS</button>`
+            : (d.totalCount ?? 0) > 0 ? `<span class="badge badge-run-complete">✅ SMS enviados</span>` : ""}
+        </div>
       </div>
     `).join("");
   }
@@ -1412,6 +1413,8 @@
     document.getElementById("sms-days-list").addEventListener("click", (e) => {
       const btn = e.target.closest(".sms-day-send-btn");
       if (!btn) return;
+      const n = Number(btn.dataset.count) || 0;
+      if (!confirm(`¿Enviar ${n} SMS de recordatorio (${fmtDateLong(btn.dataset.date)})? Cada SMS cuesta créditos.`)) return;
       sendSmsForDay(btn.dataset.date, btn);
     });
   }
@@ -1491,9 +1494,8 @@
   }
 
   function initSmsReminders() {
-    document.getElementById("sms-section-hint").textContent = SMS_SEND_ENABLED
-      ? "Automático — manda un SMS a cada cliente con cuenta por vencer. Cuesta créditos por mensaje."
-      : "SMS en pausa — descarga el CSV de cada día e impórtalo como público en una difusión de WhatsApp Business.";
+    document.getElementById("sms-section-hint").textContent =
+      "Tú eliges por día: ⬇ CSV para importarlo como público en una difusión de WhatsApp Business, o 📨 SMS (cada uno con su link de renovación; cuesta créditos).";
     initSmsDays();
     document.getElementById("sms-history-btn").addEventListener("click", openSmsHistory);
   }

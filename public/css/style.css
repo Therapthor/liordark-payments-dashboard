@@ -1701,3 +1701,4 @@ button, input {
 .self-renew-head .panel-hint { margin: 0; }
 .self-renew-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .self-renew-row code { font-size: 14px; font-weight: 700; padding: 6px 10px; border-radius: 8px; background: rgba(255,122,26,.12); }
+.sms-day-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }

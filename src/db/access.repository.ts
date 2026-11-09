@@ -1195,6 +1195,13 @@ export function markReminderSent(profileId: number): void {
  * mandado no vuelve a aparecer para ese mismo ciclo.
  */
 export function listUnSmsRemindedExpiringClientsForDate(dateISO: string): ExpiringClient[] {
+  return listExpiringClientsForDate(dateISO, true);
+}
+
+/** Todos los clientes que vencen ese día (para el CSV de la difusión de
+ *  WhatsApp, aunque ya se les haya mandado SMS). onlyWithoutSms = solo a
+ *  los que todavía no se les mandó SMS. */
+export function listExpiringClientsForDate(dateISO: string, onlyWithoutSms = false): ExpiringClient[] {
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
@@ -1206,9 +1213,9 @@ export function listUnSmsRemindedExpiringClientsForDate(dateISO: string): Expiri
     WHERE p.client_phone != '' AND p.wholesaler_id IS NULL
       AND a.expires_at = @dateISO
       AND p.order_ref NOT LIKE 'combo:%'
-      AND p.sms_reminder_sent_at IS NULL
+      AND (@onlyWithoutSms = 0 OR p.sms_reminder_sent_at IS NULL)
     ORDER BY p.client_phone ASC
-  `).all({ dateISO }) as ExpiringClient[];
+  `).all({ dateISO, onlyWithoutSms: onlyWithoutSms ? 1 : 0 }) as ExpiringClient[];
 }
 
 /** Marca el SMS de vencimiento como mandado — separado de markReminderSent (WhatsApp). */
