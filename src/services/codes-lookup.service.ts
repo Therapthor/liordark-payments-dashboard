@@ -405,6 +405,8 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
   // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
   // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
   if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result) && !loginLinkOf(result);
+  // Bandeja de Disney+ (Juanpa): solo el código de acceso único (6 dígitos).
+  if (sourceId === "juanpa_disney") return !isDisneyAccessCode(result);
   const netflix6 = (sourceId === "netflix_sin_opciones" || sourceId === "joseb_netflix") && result.kind === "code" && result.value?.length === 6;
   return netflix6 || isSensitiveResult(result);
 }
@@ -1121,10 +1123,16 @@ function jsonArrayAt(s: string, start: number): string | null {
 function juanpaSubject(subject: string, body: string): string {
   const s = String(subject ?? "").trim();
   if (!s.includes("??")) return s;
+  // Primero se reparan las palabras de siempre: el <title> de algunos
+  // correos no sirve (Disney+ trae «MyDisney Email»).
+  const repaired = s
+    .replace(/([cC])\?\?digo/g, "$1ódigo").replace(/([sS])esi\?\?n/g, "$1esión").replace(/([vV])erificaci\?\?n/g, "$1erificación")
+    .replace(/([iI])nformaci\?\?n/g, "$1nformación").replace(/([cC])ontrase\?\?a/g, "$1ontraseña").replace(/([aA])cci\?\?n/g, "$1cción")
+    .replace(/\?\?nico/g, "único").replace(/\?\?ltimo/g, "último");
+  if (!repaired.includes("??")) return repaired;
   const title = decodeHtmlEntities(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "").replace(/\s+/g, " ").trim();
   if (title && !title.includes("??") && title.length < 140) return title;
-  return s.replace(/c\?\?digo/gi, "código").replace(/sesi\?\?n/gi, "sesión").replace(/verificaci\?\?n/gi, "verificación")
-    .replace(/informaci\?\?n/gi, "información").replace(/contrase\?\?a/gi, "contraseña");
+  return repaired;
 }
 
 /** Página de la bandeja → correos (más nuevo primero), o null si la página
@@ -1169,18 +1177,21 @@ export function normalizeInboxUrl(raw: unknown): string | null {
   return `https://${u.hostname.toLowerCase()}/buzon/${m[1]}`;
 }
 
-/** El link de bandeja guardado para ese correo (Accesos › Editar cuenta). */
-function juanpaInboxUrl(email: string): string | null {
+/** El link de bandeja guardado para ese correo (Accesos › Editar cuenta).
+ *  Una cuenta puesta en la OTRA bandeja de Juanpa (Netflix ↔ Disney+) no
+ *  cuenta: así el buscador del panel no lee un Disney+ como Netflix. */
+function juanpaInboxUrl(email: string, sourceId: string): string | null {
   const row = db.prepare(`
     SELECT code_inbox_url AS url FROM access_accounts
     WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND code_inbox_url != ''
-    ORDER BY (code_source = 'juanpa_bandeja') DESC, id DESC LIMIT 1
-  `).get(email) as { url: string } | undefined;
+      AND (code_source IS NULL OR code_source = ? OR code_source NOT IN ('juanpa_bandeja', 'juanpa_disney'))
+    ORDER BY (code_source = ?) DESC, id DESC LIMIT 1
+  `).get(email, sourceId, sourceId) as { url: string } | undefined;
   return row?.url ? normalizeInboxUrl(row.url) : null;
 }
 
-async function juanpaFetch(email: string): Promise<JuanpaMail[]> {
-  const url = juanpaInboxUrl(email);
+async function juanpaFetch(email: string, sourceId = "juanpa_bandeja"): Promise<JuanpaMail[]> {
+  const url = juanpaInboxUrl(email, sourceId);
   if (!url) throw new ProviderError("provider", "Juanpa: falta pegar el link de la bandeja de esta cuenta (Accesos › Editar cuenta).");
   const res = await axios.get(url, {
     headers: { "User-Agent": JP_UA, Accept: "text/html,application/xhtml+xml" },
@@ -1204,7 +1215,32 @@ async function juanpaFetch(email: string): Promise<JuanpaMail[]> {
 }
 
 async function lookupJuanpaBandeja(email: string): Promise<CodeLookupResult> {
-  return juanpaResult(await juanpaFetch(email));
+  return juanpaResult(await juanpaFetch(email, "juanpa_bandeja"));
+}
+
+// Juanpa — bandeja de Disney+: la misma página (mibalu.fun/buzon/<id>). Ahí
+// llega el «código de acceso único» de MyDisney (6 dígitos, vence en 15
+// min) con el que el cliente inicia sesión. Los números del pie (dirección,
+// código postal) tienen 4–5 dígitos y nunca cuentan.
+async function lookupJuanpaDisney(email: string): Promise<CodeLookupResult> {
+  return juanpaDisneyResult(await juanpaFetch(email, "juanpa_disney"));
+}
+
+/** Código de acceso único de Disney+ (6 dígitos). */
+export function isDisneyAccessCode(result: CodeLookupResult): boolean {
+  return result.found && result.kind === "code" && /^\d{6}$/.test(result.value ?? "");
+}
+
+/** Correos de la bandeja de Disney+ → el código de acceso más nuevo que no
+ *  sea de cambio de datos; si no hay, el correo más nuevo (lo ve el panel,
+ *  al cliente no se le entrega: ver isAdminOnlyResult). Exportado para pruebas. */
+export function juanpaDisneyResult(mails: JuanpaMail[]): CodeLookupResult {
+  if (!mails.length) {
+    return { found: false, kind: null, value: null, items: [], providerMessage: "Juanpa: la bandeja está vacía (todavía no llegó ningún correo)." };
+  }
+  const items = mails.map(m => m.item);
+  const results = mails.map(m => listedEmailResult(m.item, m.body, items));
+  return results.find(r => isDisneyAccessCode(r) && !isAccountChangeResult(r)) ?? results[0]!;
 }
 
 /** Correos de la bandeja → lo que se entrega. Exportado para pruebas. */
@@ -1225,20 +1261,20 @@ export function juanpaResult(mails: JuanpaMail[]): CodeLookupResult {
 export async function fetchListedEmail(sourceId: string, email: string, item: ListedEmail): Promise<CodeLookupResult | null> {
   if (sourceId === "latinocol_outlook") return listedEmailResult(item, await lcOutlookBody(email, item.ref), []);
   if (sourceId === "latinocol_yurama") return listedEmailResult(item, await lcYuramaBody(item.ref, email), []);
-  if (sourceId === "juanpa_bandeja") {
+  if (sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney") {
     const key = "juanpa|" + email.toLowerCase() + "|" + item.ref;
     let body = lcBodyCache.get(key);
-    if (body === undefined) body = (await juanpaFetch(email)).find(m => m.item.ref === item.ref)?.body;
+    if (body === undefined) body = (await juanpaFetch(email, sourceId)).find(m => m.item.ref === item.ref)?.body;
     return body === undefined ? null : listedEmailResult(item, body, []);
   }
   return null;
 }
 
 /** Fuentes que leen la bandeja privada del proveedor: cada cuenta lleva su link. */
-export const INBOX_LINK_SOURCES = ["juanpa_bandeja"];
+export const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney"];
 
 /** Fuentes que listan todos los correos recientes (las vigila el panel solo). */
-export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja"];
+export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja", "juanpa_disney"];
 
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
@@ -1253,6 +1289,7 @@ const SOURCES: Record<string, Source> = {
   latinocol_outlook:    { label: "Gralexander Outlook — Netflix", lookup: lookupLatinocolOutlook },
   latinocol_yurama:     { label: "Gralexander Yurama — Netflix", lookup: lookupLatinocolYurama },
   juanpa_bandeja:       { label: "Juanpa — bandeja (Netflix)", lookup: lookupJuanpaBandeja },
+  juanpa_disney:        { label: "Juanpa — bandeja (Disney+)", lookup: lookupJuanpaDisney },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -1334,7 +1371,7 @@ export type SeenCode = { value: string; providerReceivedAt?: string };
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
   return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix" || sourceId === "joseb_disney"
     || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones"
-    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja";
+    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney";
 }
 
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {

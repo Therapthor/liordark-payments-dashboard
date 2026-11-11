@@ -813,6 +813,7 @@
     const pl = String(platform || ""), pr = String(provider || "");
     if (/vega/i.test(pr) || /crunchy|prime|amazon/i.test(pl)) return "vegamig_web";
     if (/juanpa/i.test(pr) && /netflix/i.test(pl)) return "juanpa_bandeja";
+    if (/juanpa/i.test(pr) && /disney/i.test(pl)) return "juanpa_disney";
     if (/jos[eé]/i.test(pr) && /netflix/i.test(pl)) return "joseb_netflix";
     if (/jos[eé]/i.test(pr) && /disney/i.test(pl)) return "joseb_disney";
     if (/streaming\s*market|nexbol/i.test(pr)) return "streaming_market_web";
@@ -951,7 +952,7 @@
   const TOTP_SOURCE_ID = "streaming_market_2fa";
 
   // Fuentes que leen la bandeja privada que da el proveedor (link por cuenta).
-  const INBOX_LINK_SOURCES = ["juanpa_bandeja"];
+  const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney"];
 
   function syncTotpField() {
     const source = document.getElementById("account-edit-code-source").value;
