@@ -4,7 +4,7 @@ import { saveIncomingCode } from "../db/codes.repository";
 import { findCodeLink, codeLinkState, sqliteDate, type CodeLink } from "../db/code-links.repository";
 import {
   lookupCodeAction, withLookupContext, describeLookupError, parseProviderDate,
-  isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult,
+  isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult, deliversEverything,
   sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID, codeSourceLabel,
   type CodeLookupResult,
 } from "./codes-lookup.service";
@@ -193,7 +193,7 @@ function evaluate(req: CodeRequestRow, result: CodeLookupResult, problem: { mess
   if (req.baselineValue && value === req.baselineValue && (!req.baselineReceivedAt || !result.providerReceivedAt || req.baselineReceivedAt === result.providerReceivedAt)) {
     return { state: "not_found", note: "", message: "Sigue el mismo de antes; esperando uno nuevo." };
   }
-  if (isAccountChangeResult(result)) {
+  if (!deliversEverything(req.sourceId) && isAccountChangeResult(result)) {
     return { state: "not_login", note: NOT_LOGIN_NOTE, message: "Llegó un correo de cambio de datos de la cuenta (no se entrega)." };
   }
   if (isLoginCodeOnlySource(req.sourceId) && !isLoginCode(result) && !loginLinkOf(result)) {

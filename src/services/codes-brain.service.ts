@@ -1,7 +1,7 @@
 import { db } from "../db/db";
 import {
   onLookup, withLookupContext, lookupCode, fetchListedEmail, codeSourceLabel, listCodeSources,
-  isAccountChangeResult, parseProviderDate, sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID,
+  isAccountChangeResult, deliversEverything, parseProviderDate, sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID,
   type LookupEvent, type CodeLookupResult, type ListedEmail,
 } from "./codes-lookup.service";
 import { listCodesEnabledAccounts } from "../db/codes.repository";
@@ -203,7 +203,7 @@ function saveToInbox(sourceId: string, email: string, origin: string, r: CodeLoo
       if (!prev.value && r) {
         fillInbox.run({
           id: prev.id, kind: r.found ? (r.kind ?? "") : "", value, subject: r.subject ?? listed?.subject ?? "",
-          html: r.emailHtml ? r.emailHtml.slice(0, MAX_HTML) : null, accountChange: isAccountChangeResult(r) ? 1 : 0, expired,
+          html: r.emailHtml ? r.emailHtml.slice(0, MAX_HTML) : null, accountChange: !deliversEverything(sourceId) && isAccountChangeResult(r) ? 1 : 0, expired,
         });
         return value ? prev.id : null;
       }
@@ -222,7 +222,7 @@ function saveToInbox(sourceId: string, email: string, origin: string, r: CodeLoo
     subject: r?.subject ?? listed?.subject ?? "",
     kind: r?.found ? (r.kind ?? "") : "", value, ref, receivedAt,
     receivedIso: when ? when.toISOString() : null, expired,
-    accountChange: r && isAccountChangeResult(r) ? 1 : 0,
+    accountChange: r && !deliversEverything(sourceId) && isAccountChangeResult(r) ? 1 : 0,
     html: r?.emailHtml ? r.emailHtml.slice(0, MAX_HTML) : null, origin,
   });
   return Number(info.lastInsertRowid);

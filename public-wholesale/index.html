@@ -287,6 +287,62 @@
     </div>
   </div>
 
+  <!-- ═══════════ MODAL: CÓDIGOS (los que llegan al correo de la cuenta) ═══════════ -->
+  <div id="codes-modal" class="modal-backdrop" hidden>
+    <div class="modal-card codes-card">
+      <button class="modal-close" id="codes-close" type="button" aria-label="Cerrar">✕</button>
+      <div class="codes-head">
+        <div class="codes-head-main">
+          <div class="codes-platform" id="codes-platform"></div>
+          <div class="codes-sub" id="codes-sub"></div>
+        </div>
+        <span class="codes-timer" id="codes-timer"></span>
+      </div>
+
+      <div id="codes-s-loading" class="codes-state">
+        <span class="spinner spinner-lg"></span>
+        <p class="muted small">Abriendo la consulta…</p>
+      </div>
+
+      <div id="codes-s-waiting" class="codes-state" hidden>
+        <span class="spinner spinner-lg"></span>
+        <h3 id="codes-waiting-title">Esperando el código…</h3>
+        <p class="muted small">Pide el código en la app o página (botón «Enviar código») y espera aquí. Suele llegar en menos de 1 minuto.</p>
+        <p class="codes-note" id="codes-note" hidden></p>
+        <button class="btn-ghost btn-block" id="codes-now" type="button" disabled>Buscando…</button>
+      </div>
+
+      <div id="codes-s-found" class="codes-state" hidden>
+        <span class="codes-label" id="codes-found-label">LLEGÓ EL CÓDIGO</span>
+        <p class="muted small" id="codes-found-meta"></p>
+        <div class="codes-box" id="codes-box"><span id="codes-value"></span></div>
+        <div class="codes-totp-bar" id="codes-totp-bar" hidden><i></i></div>
+        <a class="btn-primary btn-block" id="codes-link" href="#" target="_blank" rel="noopener" hidden>Abrir link de inicio de sesión</a>
+        <button class="btn-primary btn-block" id="codes-copy" type="button">📋 Copiar</button>
+        <button class="codes-textbtn" id="codes-mail-toggle" type="button" hidden>Ver correo completo</button>
+        <iframe class="codes-mail" id="codes-mail" sandbox="" title="Correo completo" hidden></iframe>
+        <div class="codes-actions">
+          <button class="btn-ghost" id="codes-again" type="button">¿No sirvió? Buscar otro</button>
+          <button class="btn-ghost" id="codes-done" type="button">✅ Listo</button>
+        </div>
+      </div>
+
+      <div id="codes-s-advisor" class="codes-state" hidden>
+        <h3>Este código lo entregamos nosotros</h3>
+        <p class="muted small">Por seguridad no se muestra aquí. Escríbenos por Soporte y te lo pasamos al toque.</p>
+      </div>
+
+      <div id="codes-s-closed" class="codes-state" hidden>
+        <div class="success-check" id="codes-closed-icon">✓</div>
+        <h3 id="codes-closed-title">¡Listo!</h3>
+        <p class="muted small" id="codes-closed-text">La consulta se cerró. Si necesitas otro código, vuelve a tocar «Códigos».</p>
+        <button class="btn-ghost btn-block" id="codes-closed-btn" type="button">Cerrar</button>
+      </div>
+
+      <p class="codes-quota" id="codes-quota"></p>
+    </div>
+  </div>
+
   <!-- ═══════════ MODAL: COMPRA EXITOSA ═══════════ -->
   <div id="purchase-success-modal" class="modal-backdrop" hidden>
     <div class="modal-card">

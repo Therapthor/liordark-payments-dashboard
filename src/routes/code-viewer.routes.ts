@@ -6,7 +6,7 @@ import {
   type CodeLink,
 } from "../db/code-links.repository";
 import {
-  lookupCodeAction, codeSourceLabel, isAccountChangeResult,
+  lookupCodeAction, codeSourceLabel, isAccountChangeResult, deliversEverything,
   sanitizeEmailHtml, parseProviderDate, describeLookupError, withLookupContext, TOTP_SOURCE_ID,
   type CodeLookupResult, type LookupOrigin,
 } from "../services/codes-lookup.service";
@@ -90,7 +90,8 @@ codeViewerAdminRoutes.post("/:accountId/fetch", async (req, res) => {
     ...base,
     found: result.found, kind: result.kind, value: result.value,
     problem, providerMessage: result.providerMessage ?? null, expired: !!result.expired, relogged: !!result.relogged,
-    accountChange: isAccountChangeResult(result),
+    // Vegamig: todo se le entrega al cliente, no se avisa «cambio de datos».
+    accountChange: !deliversEverything(sourceId) && isAccountChangeResult(result),
     subject: result.subject ?? null,
     ...receivedInfo(result),
     html: result.emailHtml ? sanitizeEmailHtml(result.emailHtml, false) : null,

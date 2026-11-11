@@ -62,6 +62,10 @@ import {
 } from "../db/wholesale-full-account.repository";
 import { plansFor, planFor, planExpiresAt, money } from "../services/plans.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
+import { getAccountCodesConfig } from "../db/codes.repository";
+import { createCodeLink, countWholesalerLinksToday, findOpenWholesalerLink } from "../db/code-links.repository";
+import { codeWaitMinutes } from "../services/code-requests.service";
+import { TOTP_SOURCE_ID } from "../services/codes-lookup.service";
 
 // ─────────────────────────────────────────────────────────────
 // PANEL MAYORISTA (mayorista.liordark.com) — todo detrás de sesión de
@@ -400,12 +404,41 @@ function renewInfo(r: RenewQuoteResult) {
     : { renew: null, renewBlocked: r.message };
 }
 
+// ── CÓDIGOS ──
+// El mayorista ve el código que llega al correo de SUS cuentas sin entrar
+// a la bandeja del proveedor: se abre una consulta (el buscador del
+// servidor revisa al proveedor por turnos, igual que para el cliente en
+// liordark.com/codigo) y el panel la lee. Mismos filtros que al cliente
+// (nunca códigos de cambio de datos). Límite por día (Lima) y por venta:
+// cuenta completa 10, perfil 3. Una consulta abierta se reutiliza sin
+// gastar otra.
+const CODES_PER_DAY_FULL = 10;
+const CODES_PER_DAY_PROFILE = 3;
+
+function codesInfoFor(profileId: number, account: { id: number; hasProfiles: boolean; expiresAt: string | null }) {
+  const cfg = getAccountCodesConfig(account.id);
+  const active = !account.expiresAt || account.expiresAt >= limaTodayISO();
+  const limit = account.hasProfiles ? CODES_PER_DAY_PROFILE : CODES_PER_DAY_FULL;
+  if (!cfg.enabled || !active) return { enabled: false as const, sourceId: null, limit, used: 0, remaining: 0, open: false };
+  const used = countWholesalerLinksToday(profileId);
+  return {
+    enabled: true as const, sourceId: cfg.sourceId!, limit, used,
+    remaining: Math.max(0, limit - used), open: !!findOpenWholesalerLink(profileId),
+  };
+}
+
+/** Lo que ve el panel (sin decir de qué proveedor sale el código). */
+function publicCodesInfo(info: ReturnType<typeof codesInfoFor>) {
+  return { enabled: info.enabled, limit: info.limit, used: info.used, remaining: info.remaining, open: info.open };
+}
+
 router.get("/clients", (req, res) => {
   const wholesalerId = wid(req);
   const products = new Map<string, CatalogProduct | null>();
   const clients = listWholesalerClients(wholesalerId).map(c => ({
     ...c,
     ...renewInfo(renewQuoteFor({ platform: c.platform, hasProfiles: c.accountHasProfiles }, c.orderRef, products)),
+    codes: publicCodesInfo(codesInfoFor(c.id, { id: c.accountId, hasProfiles: c.accountHasProfiles, expiresAt: c.expiresAt })),
   }));
   res.json({
     clients,
@@ -516,6 +549,38 @@ router.post("/clients/:profileId/renew", (req, res) => {
   const renewed = renewAccount(account.id);
   notifyAdminOfRenewal(wholesalerId, account, profile.clientPhone, quote, renewed?.expiresAt ?? null);
   res.json({ ok: true, account: publicAccount(renewed ?? getAccountById(account.id)), kind: quote.kind, priceCents: quote.priceCents });
+});
+
+// Abre (o reutiliza) la consulta de códigos de este cliente → token para
+// leerla en /api/code-link/<token>/check, igual que la página del cliente.
+router.post("/clients/:profileId/codes/open", (req, res) => {
+  const wholesalerId = wid(req);
+  const found = ownProfileAndAccount(wholesalerId, Number(req.params.profileId));
+  if (!found) return res.status(404).json({ message: "Perfil no encontrado." });
+  const { profile, account } = found;
+
+  const info = codesInfoFor(profile.id, account);
+  if (!info.enabled) return res.status(409).json({ message: "Esta cuenta no tiene códigos disponibles." });
+
+  const base = { platform: account.platform, email: account.email, profileName: profile.profileName || "", limit: info.limit };
+  const open = findOpenWholesalerLink(profile.id);
+  if (open) return res.json({ ...base, token: open.token, reused: true, remaining: info.remaining });
+
+  if (info.used >= info.limit) {
+    return res.status(429).json({
+      message: `Ya usaste tus ${info.limit} consultas de hoy para esta cuenta. Mañana se renuevan; si es urgente, escríbenos por Soporte.`,
+    });
+  }
+
+  const isTotp = info.sourceId === TOTP_SOURCE_ID;
+  const minutes = isTotp ? 2 : codeWaitMinutes(info.sourceId, account.platform) > 1 ? 8 : 5;
+  const wholesaler = findWholesalerById(wholesalerId);
+  const link = createCodeLink({
+    accountId: account.id, email: account.email, sourceId: info.sourceId, clientPhone: wholesaler?.phone ?? "",
+    createdBy: "wholesaler", minutes, profileId: profile.id,
+  });
+  touchWholesalerActivity(wholesalerId);
+  res.json({ ...base, token: link.token, reused: false, remaining: Math.max(0, info.limit - info.used - 1) });
 });
 
 router.delete("/clients/:profileId", (req, res) => {

@@ -19,6 +19,13 @@ export function setAccountCodeSource(accountId: number, sourceId: string | null)
   db.prepare(`UPDATE access_accounts SET code_source = ? WHERE id = ?`).run(sourceId, accountId);
 }
 
+/** ¿Esta cuenta entrega códigos? (código habilitado + fuente configurada). */
+export function getAccountCodesConfig(accountId: number): { enabled: boolean; sourceId: string | null } {
+  const row = db.prepare(`SELECT codes_enabled, code_source FROM access_accounts WHERE id = ?`).get(accountId) as
+    { codes_enabled: number; code_source: string | null } | undefined;
+  return { enabled: !!row && row.codes_enabled === 1 && !!row.code_source, sourceId: row?.code_source ?? null };
+}
+
 export function getAccountCodeSource(accountId: number): string | null {
   const row = db.prepare(`SELECT code_source FROM access_accounts WHERE id = ?`).get(accountId) as { code_source: string | null } | undefined;
   return row?.code_source ?? null;

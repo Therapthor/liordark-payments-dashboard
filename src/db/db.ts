@@ -491,6 +491,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_code_links_phone ON code_links(client_phone, created_at);
 `);
+// Consultas de «Códigos» del panel mayorista: se cuentan por perfil (cada
+// venta tiene su propio límite diario).
+ensureColumn("code_links", "profile_id", "profile_id INTEGER");
 
 // Links para que el cliente cambie su PIN (liordark.com/cambiar-pin/<token>).
 // Valen 10 min y se usan una sola vez.

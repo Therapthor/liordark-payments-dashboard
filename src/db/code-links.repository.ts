@@ -5,7 +5,8 @@ import { db } from "./db";
 
 export type CodeLink = {
   token: string; accountId: number; email: string; sourceId: string; clientPhone: string;
-  createdBy: "admin" | "bot" | "client"; createdAt: string; expiresAt: string; openedAt: string | null; closedAt: string | null;
+  createdBy: "admin" | "bot" | "client" | "wholesaler"; createdAt: string; expiresAt: string; openedAt: string | null; closedAt: string | null;
+  profileId: number | null; // solo las del panel mayorista (límite por perfil)
 };
 
 const TOKEN_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -14,6 +15,7 @@ function toLink(r: any): CodeLink {
   return {
     token: r.token, accountId: r.account_id, email: r.email, sourceId: r.source_id, clientPhone: r.client_phone,
     createdBy: r.created_by, createdAt: r.created_at, expiresAt: r.expires_at, openedAt: r.opened_at, closedAt: r.closed_at,
+    profileId: r.profile_id ?? null,
   };
 }
 
@@ -25,14 +27,15 @@ export function sqliteDate(s: string | null): Date | null {
 }
 
 export function createCodeLink(p: {
-  accountId: number; email: string; sourceId: string; clientPhone: string; createdBy: "admin" | "bot" | "client"; minutes: number;
+  accountId: number; email: string; sourceId: string; clientPhone: string; createdBy: CodeLink["createdBy"]; minutes: number;
+  profileId?: number | null;
 }): CodeLink {
   let token = "";
   for (let i = 0; i < 10; i++) token += TOKEN_CHARS[crypto.randomInt(TOKEN_CHARS.length)];
   db.prepare(`
-    INSERT INTO code_links (token, account_id, email, source_id, client_phone, created_by, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now', ?))
-  `).run(token, p.accountId, p.email, p.sourceId, p.clientPhone.replace(/\D/g, ""), p.createdBy, `+${Math.round(p.minutes)} minutes`);
+    INSERT INTO code_links (token, account_id, email, source_id, client_phone, created_by, expires_at, profile_id)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now', ?), ?)
+  `).run(token, p.accountId, p.email, p.sourceId, p.clientPhone.replace(/\D/g, ""), p.createdBy, `+${Math.round(p.minutes)} minutes`, p.profileId ?? null);
   return findCodeLink(token) as CodeLink;
 }
 
@@ -98,6 +101,25 @@ export function findOpenClientLink(accountId: number, clientPhone: string): Code
       AND closed_at IS NULL AND expires_at > datetime('now')
     ORDER BY created_at DESC LIMIT 1
   `).get(accountId, digits);
+  return r ? toLink(r) : null;
+}
+
+/** Consultas de «Códigos» que el mayorista abrió hoy (día de Lima) para este perfil. */
+export function countWholesalerLinksToday(profileId: number): number {
+  const r = db.prepare(`
+    SELECT COUNT(*) AS n FROM code_links
+    WHERE created_by = 'wholesaler' AND profile_id = ? AND created_at >= ?
+  `).get(profileId, limaMidnightUtcSql()) as { n: number };
+  return r.n;
+}
+
+/** La consulta del mayorista que sigue abierta para este perfil, si hay. */
+export function findOpenWholesalerLink(profileId: number): CodeLink | null {
+  const r = db.prepare(`
+    SELECT * FROM code_links
+    WHERE created_by = 'wholesaler' AND profile_id = ? AND closed_at IS NULL AND expires_at > datetime('now')
+    ORDER BY created_at DESC LIMIT 1
+  `).get(profileId);
   return r ? toLink(r) : null;
 }
 

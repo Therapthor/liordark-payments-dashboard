@@ -171,7 +171,7 @@ function findDivByClass(html: string, cls: string): { start: number; end: number
   return { start: open.index, end: html.length };
 }
 
-export function parsePallyResultPage(html: string, preferCode = false): CodeLookupResult | null {
+export function parsePallyResultPage(html: string, preferCode: boolean | "disney" = false): CodeLookupResult | null {
   // El recuadro del correo (la clase también aparece antes en el <style>
   // de la página: por eso se busca el <div> con esa clase, no el texto).
   const box = findDivByClass(html, "email-body-wrapper");
@@ -206,6 +206,13 @@ export function parsePallyResultPage(html: string, preferCode = false): CodeLook
   const codes = [...text.matchAll(/(?<![\d/:.-])\d{4,8}(?![\d/:.-])/g)].map(m => m[0]).filter(notYear);
   const nearRaw = text.match(/(?:c[oó]digo|code)[^\d]{0,80}?(?<![\d/:.-])(\d{4,8})(?![\d/:.-])/i)?.[1];
   const near = nearRaw && notYear(nearRaw) ? nearRaw : undefined;
+  // Disney+: el «código de acceso único» tiene 6 dígitos. Los enlaces del
+  // correo (logo, ayuda, privacidad) y los números del pie (dirección,
+  // código postal) nunca son lo que se entrega.
+  if (preferCode === "disney") {
+    const six = codes.find(d => d.length === 6);
+    return six ? { found: true, kind: "code", value: six, ...extra } : { found: false, kind: null, value: null, ...extra };
+  }
   const code = preferCode
     ? (near && near.length === 4 ? near : (codes.find(d => d.length === 4) ?? near ?? codes[0]))
     : (near ?? codes[0]);
@@ -255,7 +262,7 @@ async function fetchFromPallyDigital(tipo: string, email: string, accessCode: st
     return { found: false, kind: null, value: null, providerMessage: NOT_FOUND_MARKER };
   }
 
-  const parsed = parsePallyResultPage(html, tipo === "netflix");
+  const parsed = parsePallyResultPage(html, tipo === "netflix" ? true : tipo === "disney" ? "disney" : false);
   if (parsed) return parsed;
 
   // Formato anterior: el código (o enlace) dentro del primer <strong>.
@@ -278,10 +285,22 @@ function lookupNetflixSinOpciones(email: string): Promise<CodeLookupResult> {
   return fetchFromPallyDigital("netflix", email, PALLY_ACCESS_CODE);
 }
 
-// Disney+ — mismo sitio (tipo=disney), sin menú de opciones, igual que
-// Netflix "sin opciones".
-function lookupDisneySinOpciones(email: string): Promise<CodeLookupResult> {
-  return fetchFromPallyDigital("disney", email, PALLY_ACCESS_CODE);
+// Disney+ — mismo sitio (tipo=disney), sin menú de opciones. A diferencia
+// de Netflix, la página de Disney NO se queda esperando el correo: si
+// todavía no llegó contesta al toque «Aún no hay códigos recientes», y el
+// panel y el cliente cortaban a los ~3 s. Acá se espera igual que en
+// Netflix: se vuelve a mirar cada 8 s hasta ~45 s (bajo el minuto que nginx
+// le da al panel) y apenas llega el código, se entrega.
+const PALLY_DISNEY_WAIT_MS = 45_000;
+const PALLY_DISNEY_EVERY_MS = 8_000;
+
+async function lookupDisneySinOpciones(email: string): Promise<CodeLookupResult> {
+  const until = Date.now() + PALLY_DISNEY_WAIT_MS;
+  for (;;) {
+    const result = await fetchFromPallyDigital("disney", email, PALLY_ACCESS_CODE);
+    if (result.found || Date.now() + PALLY_DISNEY_EVERY_MS >= until) return result;
+    await new Promise(resolve => setTimeout(resolve, PALLY_DISNEY_EVERY_MS));
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -405,8 +424,11 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
   // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
   // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
   if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result) && !loginLinkOf(result);
-  // Bandeja de Disney+ (Juanpa): solo el código de acceso único (6 dígitos).
-  if (sourceId === "juanpa_disney") return !isDisneyAccessCode(result);
+  // Vegamig (Prime Video / Crunchyroll): su página es para clientes, todo
+  // lo que llega se le entrega (decisión del negocio, nov-2026).
+  if (deliversEverything(sourceId)) return false;
+  // Disney+ por Pally y bandeja de Juanpa: solo el código de acceso único (6 dígitos).
+  if (sourceId === "juanpa_disney" || sourceId === "disney_sin_opciones") return !isDisneyAccessCode(result);
   const netflix6 = (sourceId === "netflix_sin_opciones" || sourceId === "joseb_netflix") && result.kind === "code" && result.value?.length === 6;
   return netflix6 || isSensitiveResult(result);
 }
@@ -415,6 +437,12 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
 // código de 4 dígitos o el link de inicio de sesión. Ni 6 dígitos, ni
 // Hogar, ni cambios de cuenta. Disney+ y ChatGPT no entran acá.
 const LOGIN_CODE_ONLY_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones", "joseb_netflix", "juanpa_bandeja"];
+
+/** Fuentes cuya página ya es para clientes: TODO lo que llega se entrega
+ *  (también lo que parece cambio de datos). Hoy solo Vegamig. */
+export function deliversEverything(sourceId: string | null): boolean {
+  return sourceId === "vegamig_web";
+}
 
 export function isLoginCodeOnlySource(sourceId: string | null): boolean {
   return !!sourceId && LOGIN_CODE_ONLY_SOURCES.includes(sourceId);
@@ -1316,6 +1344,9 @@ export function codeSourceLabel(sourceId: string | null): string {
 export async function lookupCode(sourceId: string, email: string): Promise<CodeLookupResult> {
   const source = SOURCES[sourceId];
   if (!source) return { found: false, kind: null, value: null };
+  // Disney por Pally ya busca su código de 6 dígitos: el lector genérico
+  // podía tomar un número del pie (dirección, código postal).
+  if (sourceId === "disney_sin_opciones") return observed(sourceId, email, () => source.lookup(email));
   return observed(sourceId, email, async () => withFallbackExtraction(await source.lookup(email)));
 }
 

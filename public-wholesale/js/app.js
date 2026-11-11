@@ -508,6 +508,9 @@
         ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
         <div class="client-card-actions">
           ${renewBtnHtml}
+          ${c.codes && c.codes.enabled
+            ? `<button class="btn-ghost btn-sm" data-act="codes" data-profile-id="${c.id}" type="button" title="Ver el código que llega al correo de esta cuenta">🔑 Códigos <span class="codes-left">${c.codes.open ? "abierta" : `${c.codes.remaining}/${c.codes.limit}`}</span></button>`
+            : ""}
           <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
           <button class="btn-danger btn-sm" data-act="delete" data-profile-id="${c.id}" type="button">🗑 Eliminar</button>
         </div>
@@ -615,8 +618,266 @@
       const act = btn.dataset.act;
       if (act === "marker") handleRenewalMarker(btn, client);
       else if (act === "renew") handleRenew(client, btn);
+      else if (act === "codes") openCodes(client, btn);
       else if (act === "send") handleSendClientAccount(client);
       else if (act === "delete") handleDeleteClient(client);
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // CÓDIGOS — el mayorista ve el código que llega al correo de su cuenta.
+  // Se abre una consulta (el servidor busca solo, por turnos con el
+  // proveedor) y acá se lee su estado cada 5 s, igual que la página de
+  // códigos del cliente. Límite diario: cuenta completa 10, perfil 3; una
+  // consulta abierta se reutiliza sin gastar otra.
+  // ─────────────────────────────────────────────────────────────
+
+  const CODES_POLL_MS = 5000;
+  const CODES_MANUAL_GAP_MS = 8000;
+  let codesState = null;
+
+  function codesApi(token, path, body) {
+    return fetch("/api/code-link/" + encodeURIComponent(token) + path, {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    }).then(async r => ({ status: r.status, data: await r.json().catch(() => ({})) }));
+  }
+
+  function codesShow(id) {
+    ["codes-s-loading", "codes-s-waiting", "codes-s-found", "codes-s-advisor", "codes-s-closed"]
+      .forEach(s => { document.getElementById(s).hidden = s !== id; });
+  }
+
+  function codesToast(text) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1800);
+  }
+
+  function codesStopTimers() {
+    if (!codesState) return;
+    clearInterval(codesState.tickId);
+    clearTimeout(codesState.totpTimer);
+    clearInterval(codesState.totpTick);
+  }
+
+  function codesShowClosed(state) {
+    if (!codesState) return;
+    codesStopTimers();
+    codesState.closed = true;
+    const timer = document.getElementById("codes-timer");
+    timer.className = "codes-timer off";
+    timer.textContent = state === "expired" ? "Vencida" : "Cerrada";
+    const expired = state === "expired";
+    document.getElementById("codes-closed-icon").textContent = expired ? "⏱" : "✓";
+    document.getElementById("codes-closed-title").textContent = expired ? "Esta consulta ya venció" : "¡Listo!";
+    document.getElementById("codes-closed-text").textContent = expired
+      ? "Si todavía necesitas el código, vuelve a tocar «Códigos» (abre una consulta nueva)."
+      : "La consulta se cerró. Si necesitas otro código, vuelve a tocar «Códigos».";
+    if (codesState.client && codesState.client.codes) codesState.client.codes.open = false;
+    document.getElementById("codes-quota").textContent =
+      `Te quedan ${codesState.remaining} de ${codesState.limit} consultas hoy para esta cuenta.`;
+    codesShow("codes-s-closed");
+  }
+
+  function codesPaintButtons() {
+    const st = codesState;
+    if (!st) return;
+    const busy = st.checking || st.serverChecking || Date.now() < st.manualUntil;
+    const now = document.getElementById("codes-now");
+    now.disabled = busy;
+    now.textContent = busy ? "Buscando…" : "Buscar ahora";
+    const again = document.getElementById("codes-again");
+    again.disabled = st.checking || Date.now() < st.manualUntil;
+    again.textContent = again.disabled ? "Buscando…" : "¿No sirvió? Buscar otro";
+  }
+
+  function codesTick() {
+    const st = codesState;
+    if (!st || st.closed) return;
+    if (st.expiresAt) {
+      const left = Math.max(0, Math.floor((st.expiresAt - (Date.now() + st.skew)) / 1000));
+      document.getElementById("codes-timer").textContent = "Vence en " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+      if (left <= 0) { codesShowClosed("expired"); return; }
+    }
+    codesPaintButtons();
+    if (!st.checking && Date.now() >= st.nextPollAt && !document.getElementById("codes-s-waiting").hidden) codesCheck();
+  }
+
+  function codesApplyInfo(d) {
+    const st = codesState;
+    if (d.serverNow) st.skew = new Date(d.serverNow).getTime() - Date.now();
+    if (d.expiresAt) st.expiresAt = new Date(d.expiresAt).getTime();
+  }
+
+  // 2FA (ChatGPT): el código cambia cada 30 s.
+  function codesShowTotp(data) {
+    const st = codesState;
+    clearTimeout(st.totpTimer);
+    clearInterval(st.totpTick);
+    document.getElementById("codes-found-label").textContent = "TU CÓDIGO DE VERIFICACIÓN (2FA)";
+    document.getElementById("codes-value").textContent = data.value;
+    document.getElementById("codes-box").classList.toggle("long", String(data.value).length > 6);
+    document.getElementById("codes-box").hidden = false;
+    document.getElementById("codes-copy").hidden = false;
+    document.getElementById("codes-link").hidden = true;
+    document.getElementById("codes-mail-toggle").hidden = true;
+    document.getElementById("codes-mail").hidden = true;
+    document.getElementById("codes-again").hidden = true;
+    st.lastValue = data.value;
+    let left = Math.max(1, Number(data.secondsRemaining) || 30);
+    const meta = document.getElementById("codes-found-meta");
+    const bar = document.getElementById("codes-totp-bar");
+    bar.hidden = false;
+    const paint = () => {
+      meta.textContent = "Cambia en " + left + " s";
+      bar.firstElementChild.style.width = (left / 30 * 100) + "%";
+      bar.classList.toggle("low", left <= 5);
+    };
+    paint();
+    st.totpTick = setInterval(() => { left = Math.max(0, left - 1); paint(); }, 1000);
+    st.totpTimer = setTimeout(() => codesCheck(), left * 1000 + 600);
+    codesShow("codes-s-found");
+  }
+
+  async function codesCheck(flags) {
+    const st = codesState;
+    if (!st || st.closed || st.checking) return;
+    const token = st.token;
+    const manual = !!flags;
+    st.checking = true;
+    codesPaintButtons();
+    try {
+      const { status, data } = await codesApi(token, "/check", flags);
+      if (codesState !== st || st.closed) return;
+      codesApplyInfo(data);
+      if (status === 410) { codesShowClosed(data.state); return; }
+      if (status !== 200) { codesToast(data.message || "No se pudo consultar. Intenta de nuevo."); return; }
+      if (data.status === "totp") {
+        codesShowTotp(data);
+      } else if (data.status === "found") {
+        const isLink = data.kind === "link";
+        document.getElementById("codes-found-label").textContent = isLink ? "LLEGÓ EL LINK DE INICIO DE SESIÓN" : "LLEGÓ EL CÓDIGO";
+        document.getElementById("codes-found-meta").textContent = data.receivedAtLima ? "Llegó a las " + data.receivedAtLima : "";
+        document.getElementById("codes-value").textContent = isLink ? "" : data.value;
+        document.getElementById("codes-box").classList.toggle("long", !isLink && String(data.value).length > 6);
+        document.getElementById("codes-box").hidden = isLink;
+        document.getElementById("codes-copy").hidden = false;
+        document.getElementById("codes-copy").textContent = isLink ? "📋 Copiar link" : "📋 Copiar";
+        document.getElementById("codes-totp-bar").hidden = true;
+        document.getElementById("codes-again").hidden = false;
+        const a = document.getElementById("codes-link");
+        a.hidden = !isLink;
+        if (isLink) a.href = data.value;
+        const frame = document.getElementById("codes-mail");
+        document.getElementById("codes-mail-toggle").hidden = !data.html;
+        if (data.html && frame.srcdoc !== data.html) frame.srcdoc = data.html;
+        if (data.value !== st.lastValue && st.lastValue && !manual) codesToast("Llegó un código nuevo");
+        st.lastValue = data.value;
+        codesShow("codes-s-found");
+      } else if (data.status === "advisor") {
+        codesShow("codes-s-advisor");
+      } else {
+        st.serverChecking = !!data.checking;
+        const note = document.getElementById("codes-note");
+        note.textContent = data.note || "";
+        note.hidden = !data.note;
+        codesShow("codes-s-waiting");
+      }
+    } catch {
+      codesToast("Sin conexión. Intenta de nuevo.");
+    } finally {
+      st.checking = false;
+      st.nextPollAt = Date.now() + CODES_POLL_MS;
+      codesPaintButtons();
+    }
+  }
+
+  function codesQuotaText(remaining, limit) {
+    return `Consultas de hoy para esta cuenta: te quedan ${remaining} de ${limit}. Mientras esta siga abierta, volver a entrar no gasta otra.`;
+  }
+
+  async function openCodes(client, btn) {
+    if (btn) btn.disabled = true;
+    let opened;
+    try {
+      opened = await api(`/clients/${client.id}/codes/open`, { method: "POST" });
+    } catch (err) {
+      alert(err.message);
+      return;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+    if (client.codes) {
+      client.codes.open = true;
+      client.codes.remaining = opened.remaining;
+      if (!opened.reused) client.codes.used = (client.codes.used || 0) + 1;
+    }
+
+    codesStopTimers();
+    codesState = {
+      token: opened.token, client, expiresAt: null, skew: 0, tickId: null, totpTimer: null, totpTick: null,
+      lastValue: "", checking: false, serverChecking: false, manualUntil: 0, nextPollAt: 0, closed: false,
+      remaining: opened.remaining, limit: opened.limit,
+    };
+    document.getElementById("codes-platform").textContent = opened.platform || client.platform;
+    document.getElementById("codes-sub").textContent =
+      (opened.email || client.email || "") + (opened.profileName ? " · Perfil: " + opened.profileName : "");
+    document.getElementById("codes-waiting-title").textContent = /netflix/i.test(opened.platform || client.platform)
+      ? "Esperando el código o link de inicio de sesión…" : "Esperando el código…";
+    document.getElementById("codes-timer").className = "codes-timer";
+    document.getElementById("codes-timer").textContent = "";
+    document.getElementById("codes-mail").hidden = true;
+    document.getElementById("codes-mail-toggle").textContent = "Ver correo completo";
+    document.getElementById("codes-note").hidden = true;
+    document.getElementById("codes-quota").textContent = codesQuotaText(opened.remaining, opened.limit);
+    codesShow("codes-s-loading");
+    document.getElementById("codes-modal").hidden = false;
+
+    codesState.tickId = setInterval(codesTick, 1000);
+    await codesCheck();
+  }
+
+  function closeCodesModal() {
+    codesStopTimers();
+    codesState = null;
+    document.getElementById("codes-modal").hidden = true;
+    if (document.querySelector(".page:not([hidden])#page-clientes")) renderClients();
+  }
+
+  function initCodesModal() {
+    document.getElementById("codes-close").addEventListener("click", closeCodesModal);
+    document.getElementById("codes-closed-btn").addEventListener("click", closeCodesModal);
+    document.getElementById("codes-now").addEventListener("click", () => {
+      if (!codesState) return;
+      codesState.manualUntil = Date.now() + CODES_MANUAL_GAP_MS;
+      codesCheck({ now: 1 });
+    });
+    document.getElementById("codes-again").addEventListener("click", () => {
+      if (!codesState) return;
+      codesState.manualUntil = Date.now() + CODES_MANUAL_GAP_MS;
+      codesState.lastValue = "";
+      document.getElementById("codes-note").hidden = true;
+      codesShow("codes-s-waiting");
+      codesCheck({ again: 1 });
+    });
+    document.getElementById("codes-copy").addEventListener("click", async () => {
+      const value = codesState ? codesState.lastValue : "";
+      if (!value) return;
+      try { await navigator.clipboard.writeText(value); codesToast("Copiado"); } catch { codesToast(value); }
+    });
+    document.getElementById("codes-mail-toggle").addEventListener("click", (e) => {
+      const frame = document.getElementById("codes-mail");
+      frame.hidden = !frame.hidden;
+      e.currentTarget.textContent = frame.hidden ? "Ver correo completo" : "Ocultar correo";
+    });
+    document.getElementById("codes-done").addEventListener("click", async () => {
+      if (!codesState) return;
+      await codesApi(codesState.token, "/close").catch(() => {});
+      codesShowClosed("closed");
     });
   }
 
@@ -1429,6 +1690,7 @@
     initLoginForm();
     initInicioPage();
     initClientsPage();
+    initCodesModal();
     initCuentasPage();
     initCreditosPage();
     initComprarPage();
