@@ -870,6 +870,7 @@
     document.getElementById("account-edit-codes-fields").hidden = !account.codesEnabled;
     document.getElementById("account-edit-code-source").value = account.totpSecret ? TOTP_SOURCE_ID : (account.codeSource || "");
     document.getElementById("account-edit-totp-secret").value = account.totpSecret || "";
+    document.getElementById("account-edit-inbox-url").value = account.codeInboxUrl || "";
     syncTotpField();
 
     document.getElementById("account-edit-modal").hidden = false;
@@ -881,9 +882,13 @@
   // sale de una clave TOTP — el campo para pegarla solo aparece con esta opción.
   const TOTP_SOURCE_ID = "streaming_market_2fa";
 
+  // Fuentes que leen la bandeja privada que da el proveedor (link por cuenta).
+  const INBOX_LINK_SOURCES = ["juanpa_bandeja"];
+
   function syncTotpField() {
-    const isTotp = document.getElementById("account-edit-code-source").value === TOTP_SOURCE_ID;
-    document.getElementById("account-edit-totp-fields").hidden = !isTotp;
+    const source = document.getElementById("account-edit-code-source").value;
+    document.getElementById("account-edit-totp-fields").hidden = source !== TOTP_SOURCE_ID;
+    document.getElementById("account-edit-inbox-fields").hidden = !INBOX_LINK_SOURCES.includes(source);
   }
 
   let codeSources = null;
@@ -935,9 +940,20 @@
         ? (document.getElementById("account-edit-totp-secret").value.trim() || null)
         : null;
 
+      const needsInbox = codesEnabled && INBOX_LINK_SOURCES.includes(codeSource || "");
+      const inboxUrl = document.getElementById("account-edit-inbox-url").value.trim();
+
       const errorEl = document.getElementById("account-edit-error");
       errorEl.hidden = true;
+      if (needsInbox && !inboxUrl) {
+        errorEl.textContent = "Pega el link de la bandeja que te dio el proveedor (https://mibalu.fun/buzon/…).";
+        errorEl.hidden = false;
+        return;
+      }
       try {
+        if (needsInbox) {
+          await api("/accounts/" + editingAccountId + "/code-inbox-url", { method: "POST", body: JSON.stringify({ url: inboxUrl }) });
+        }
         await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
         await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
         await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });

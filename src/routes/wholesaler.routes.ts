@@ -346,6 +346,13 @@ router.get("/clients", (req, res) => {
 // Renovar = consume créditos a precio mayorista y extiende la cuenta 30
 // días (comparte vencimiento con el resto de clientes de esa cuenta,
 // igual que en Accesos). Bloquea sin tocar nada si no alcanza el saldo.
+// Al mayorista solo lo que su pantalla usa — nunca la cuenta completa
+// (traía la clave 2FA, las notas, el costo del proveedor, el link de la
+// bandeja de códigos…).
+function publicAccount(a: ReturnType<typeof getAccountById>) {
+  return a ? { id: a.id, platform: a.platform, expiresAt: a.expiresAt } : null;
+}
+
 router.post("/clients/:profileId/renew", (req, res) => {
   const wholesalerId = wid(req);
   const profileId = Number(req.params.profileId);
@@ -382,13 +389,13 @@ router.post("/clients/:profileId/renew", (req, res) => {
   if (account.hasProfiles) {
     setProfileRenewal(profile.id, "yes");
     return res.json({
-      ok: true, pending: true, account,
+      ok: true, pending: true, account: publicAccount(account),
       message: "✅ Pago recibido. La renovación se activa apenas confirmemos la cuenta con el proveedor — te avisamos por aquí.",
     });
   }
 
   renewAccount(account.id);
-  res.json({ ok: true, account: getAccountById(account.id) });
+  res.json({ ok: true, account: publicAccount(getAccountById(account.id)) });
 });
 
 router.delete("/clients/:profileId", (req, res) => {

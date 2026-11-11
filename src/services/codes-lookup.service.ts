@@ -2,6 +2,7 @@ import axios from "axios";
 import { AsyncLocalStorage } from "async_hooks";
 import { env } from "../config/env";
 import { laneFor } from "./codes-lanes";
+import { db } from "../db/db";
 
 // ─────────────────────────────────────────────────────────────
 // CÓDIGOS — fuentes externas. El proveedor comparte páginas donde se
@@ -411,7 +412,7 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
 // Netflix por Pally y por José Streaming: solo inicio de sesión — el
 // código de 4 dígitos o el link de inicio de sesión. Ni 6 dígitos, ni
 // Hogar, ni cambios de cuenta. Disney+ y ChatGPT no entran acá.
-const LOGIN_CODE_ONLY_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones", "joseb_netflix"];
+const LOGIN_CODE_ONLY_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones", "joseb_netflix", "juanpa_bandeja"];
 
 export function isLoginCodeOnlySource(sourceId: string | null): boolean {
   return !!sourceId && LOGIN_CODE_ONLY_SOURCES.includes(sourceId);
@@ -627,6 +628,9 @@ function emailHtmlToText(html: string): string {
       .replace(/<br\b[^>]*>|<\/(p|div|tr|li|h\d)>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
   )
+    // Netflix rellena el correo con cientos de caracteres invisibles (͏ y
+    // guiones suaves) entre «Ingresa este código» y el número: se quitan.
+    .replace(/[\u034F\u00AD\u200B-\u200D\u2060\uFEFF]/g, "")
     .split("\n").map(l => l.replace(/[\s\u200a]+/g, " ").trim()).filter(Boolean).join("\n");
 }
 
@@ -662,6 +666,11 @@ function extractCodeFromEmailHtml(
   const text = emailHtmlToText(emailHtml);
   const extra = received ? { providerReceivedAt: received } : {};
 
+  // 0) Netflix: el código va solo en una celda con letra grande y espaciada
+  // (así no se confunde con el teléfono de ayuda «800 953 9947»).
+  const netflixCell = emailHtml.match(/letter-spacing:\s*\d+px;[^>]*>\s*(\d{4,8})\s*</i)?.[1];
+  if (netflixCell && !isYear(netflixCell)) return { found: true, kind: "code", value: netflixCell, ...extra };
+
   // 1) Código explícito ("your verification code is: 123456").
   const code = text.match(/(?:code|c[oó]digo)[^\d]{0,80}?\b(\d{4,8})\b/i)?.[1];
   if (code && !isYear(code)) return { found: true, kind: "code", value: code, ...extra };
@@ -676,6 +685,10 @@ function extractCodeFromEmailHtml(
     .filter(l => /^https?:\/\//i.test(l.href) && !VG_IGNORE_LINK.test(l.label) && !VG_IGNORE_LINK.test(l.href));
   const confirm = links.find(l => VG_CONFIRM_LINK.test(l.label)) ?? links.find(l => VG_CONFIRM_LINK.test(l.href));
   if (confirm) return { found: true, kind: "link", value: confirm.href, ...extra };
+
+  // 2b) Botón «Iniciar sesión» (Netflix manda a veces un link en vez de código).
+  const signIn = links.find(l => isLoginLinkUrl(l.href)) ?? links.find(l => LOGIN_LINK_TEXT_RE.test(l.label) && !NOT_LOGIN_LINK_RE.test(l.href));
+  if (signIn) return { found: true, kind: "link", value: signIn.href, ...extra };
 
   // 3) Número suelto en su propia caja (código sin la palabra "code").
   const loose = [...emailHtml.matchAll(/>\s*(\d{4,8})\s*</g)].map(m => m[1] ?? "").find(d => !isYear(d));
@@ -1058,16 +1071,171 @@ async function lookupLatinocolYurama(email: string): Promise<CodeLookupResult> {
   return listedEmailResult(newest, await lcYuramaBody(newest.ref, email), items);
 }
 
+// ─────────────────────────────────────────────────────────────
+// "Juanpa — bandeja" (mibalu.fun/buzon/<id>) — el proveedor da UN link de
+// bandeja por cuenta (se pega en Accesos › Editar cuenta y NUNCA se le
+// muestra al cliente: ahí también llegan los códigos de cambio de datos).
+// La página trae TODOS los correos recientes de esa dirección con su
+// contenido completo, en `let mail = [{subject, from, date, body}]`, el más
+// nuevo primero: una sola consulta, sin pedir cada correo aparte.
+// La hora viene en UTC (confirmado nov-2026: el último correo era de 8 min
+// antes de la hora del servidor de ellos).
+// ─────────────────────────────────────────────────────────────
+
+const JP_UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36";
+
+export type JuanpaMail = { item: ListedEmail; body: string };
+
+/** "11/11/2026 03:12:07" (UTC) → "2026-11-11T03:12:07Z". Si quedara en el
+ *  futuro (el proveedor cambió de zona horaria), se corrige por horas. */
+function juanpaDate(raw: string): string | undefined {
+  const m = String(raw ?? "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return undefined;
+  let t = Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0));
+  const ahead = t - Date.now();
+  if (ahead > 5 * 60_000) t -= Math.ceil(ahead / 3_600_000) * 3_600_000;
+  return new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/** El arreglo JSON que empieza en `start` (respeta textos con corchetes). */
+function jsonArrayAt(s: string, start: number): string | null {
+  if (s[start] !== "[") return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "[") depth++;
+    else if (c === "]" && --depth === 0) return s.slice(start, i + 1);
+  }
+  return null;
+}
+
+/** La página guarda el asunto con «??» en vez de tildes: se toma el del
+ *  propio correo (<title>) cuando lo trae, si no se repara lo común. */
+function juanpaSubject(subject: string, body: string): string {
+  const s = String(subject ?? "").trim();
+  if (!s.includes("??")) return s;
+  const title = decodeHtmlEntities(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "").replace(/\s+/g, " ").trim();
+  if (title && !title.includes("??") && title.length < 140) return title;
+  return s.replace(/c\?\?digo/gi, "código").replace(/sesi\?\?n/gi, "sesión").replace(/verificaci\?\?n/gi, "verificación")
+    .replace(/informaci\?\?n/gi, "información").replace(/contrase\?\?a/gi, "contraseña");
+}
+
+/** Página de la bandeja → correos (más nuevo primero), o null si la página
+ *  no es una bandeja (link vencido, error…). Exportado para pruebas. */
+export function parseJuanpaInbox(page: string): JuanpaMail[] | null {
+  const at = String(page || "").search(/let\s+mail\s*=\s*\[/);
+  if (at < 0) return null;
+  const raw = jsonArrayAt(page, page.indexOf("[", at));
+  if (!raw) return null;
+  let list: any[];
+  try { list = JSON.parse(raw); } catch { return null; }
+  if (!Array.isArray(list)) return null;
+  const mails = list
+    .filter(m => m && typeof m.body === "string")
+    .map((m, i): JuanpaMail => {
+      const body = String(m.body);
+      const date = juanpaDate(String(m.date ?? ""));
+      const subject = juanpaSubject(String(m.subject ?? ""), body);
+      const ref = (date ?? "sin-fecha") + "#" + simpleHash(String(m.subject ?? "") + "|" + String(m.date ?? "") + "|" + body.length) + (date ? "" : "#" + i);
+      return { item: { ref, subject, ...(date ? { receivedAt: date } : {}) }, body };
+    });
+  return mails
+    .map((m, i) => ({ m, i, t: m.item.receivedAt ? Date.parse(m.item.receivedAt) : null }))
+    .sort((a, b) => (a.t !== null && b.t !== null ? b.t - a.t : a.i - b.i))
+    .map(x => x.m);
+}
+
+function simpleHash(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+
+/** Link de bandeja válido (https, …/buzon/<id>) o null. */
+export function normalizeInboxUrl(raw: unknown): string | null {
+  let u: URL;
+  try { u = new URL(String(raw ?? "").trim()); } catch { return null; }
+  if (u.protocol !== "https:") return null;
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(u.hostname) || /^\d+(\.\d+){3}$/.test(u.hostname)) return null;
+  const m = u.pathname.match(/^\/buzon\/([A-Za-z0-9-]{8,80})\/?$/);
+  if (!m) return null;
+  return `https://${u.hostname.toLowerCase()}/buzon/${m[1]}`;
+}
+
+/** El link de bandeja guardado para ese correo (Accesos › Editar cuenta). */
+function juanpaInboxUrl(email: string): string | null {
+  const row = db.prepare(`
+    SELECT code_inbox_url AS url FROM access_accounts
+    WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND code_inbox_url != ''
+    ORDER BY (code_source = 'juanpa_bandeja') DESC, id DESC LIMIT 1
+  `).get(email) as { url: string } | undefined;
+  return row?.url ? normalizeInboxUrl(row.url) : null;
+}
+
+async function juanpaFetch(email: string): Promise<JuanpaMail[]> {
+  const url = juanpaInboxUrl(email);
+  if (!url) throw new ProviderError("provider", "Juanpa: falta pegar el link de la bandeja de esta cuenta (Accesos › Editar cuenta).");
+  const res = await axios.get(url, {
+    headers: { "User-Agent": JP_UA, Accept: "text/html,application/xhtml+xml" },
+    timeout: 25_000, responseType: "text", transformResponse: r => r, validateStatus: () => true,
+  });
+  if (res.status === 404) throw new ProviderError("provider", "Juanpa: el link de la bandeja ya no existe (404). Pídele el nuevo al proveedor.");
+  if (res.status >= 400) {
+    const err: any = new ProviderError("provider", `Juanpa respondió con error ${res.status}.`);
+    err.response = { status: res.status };
+    throw err;
+  }
+  const page = String(res.data ?? "");
+  const mails = parseJuanpaInbox(page);
+  if (!mails) throw new ProviderError("provider", "Juanpa: la página de la bandeja cambió o el link ya no sirve" + (pageText(page, 80) ? ` («${pageText(page, 80)}»)` : "") + ".");
+  // Ya vienen los correos completos: quedan en memoria para la bandeja.
+  for (const m of mails) {
+    lcBodyCache.set("juanpa|" + email.toLowerCase() + "|" + m.item.ref, m.body);
+    if (lcBodyCache.size > 400) lcBodyCache.delete(lcBodyCache.keys().next().value!);
+  }
+  return mails;
+}
+
+async function lookupJuanpaBandeja(email: string): Promise<CodeLookupResult> {
+  return juanpaResult(await juanpaFetch(email));
+}
+
+/** Correos de la bandeja → lo que se entrega. Exportado para pruebas. */
+export function juanpaResult(mails: JuanpaMail[]): CodeLookupResult {
+  if (!mails.length) {
+    return { found: false, kind: null, value: null, items: [], providerMessage: "Juanpa: la bandeja está vacía (todavía no llegó ningún correo)." };
+  }
+  const items = mails.map(m => m.item);
+  const results = mails.map(m => listedEmailResult(m.item, m.body, items));
+  // El más nuevo que sea de inicio de sesión (código de 4 dígitos o link);
+  // si no hay ninguno, el más nuevo (para que el panel lo vea).
+  const login = results.find(r => !isAccountChangeResult(r) && (isLoginCode(r) || !!loginLinkOf(r)));
+  return login ?? results[0]!;
+}
+
 /** Cuerpo de UN correo de la lista (para la bandeja: los demás correos
  *  recientes de la misma dirección, no solo el más nuevo). */
 export async function fetchListedEmail(sourceId: string, email: string, item: ListedEmail): Promise<CodeLookupResult | null> {
   if (sourceId === "latinocol_outlook") return listedEmailResult(item, await lcOutlookBody(email, item.ref), []);
   if (sourceId === "latinocol_yurama") return listedEmailResult(item, await lcYuramaBody(item.ref, email), []);
+  if (sourceId === "juanpa_bandeja") {
+    const key = "juanpa|" + email.toLowerCase() + "|" + item.ref;
+    let body = lcBodyCache.get(key);
+    if (body === undefined) body = (await juanpaFetch(email)).find(m => m.item.ref === item.ref)?.body;
+    return body === undefined ? null : listedEmailResult(item, body, []);
+  }
   return null;
 }
 
 /** Fuentes que listan todos los correos recientes (las vigila el panel solo). */
-export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama"];
+export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja"];
 
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
@@ -1081,6 +1249,7 @@ const SOURCES: Record<string, Source> = {
   joseb_disney:         { label: "José Streaming — Disney+", lookup: lookupJosebDisney },
   latinocol_outlook:    { label: "Gralexander Outlook — Netflix", lookup: lookupLatinocolOutlook },
   latinocol_yurama:     { label: "Gralexander Yurama — Netflix", lookup: lookupLatinocolYurama },
+  juanpa_bandeja:       { label: "Juanpa — bandeja (Netflix)", lookup: lookupJuanpaBandeja },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -1162,7 +1331,7 @@ export type SeenCode = { value: string; providerReceivedAt?: string };
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
   return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix" || sourceId === "joseb_disney"
     || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones"
-    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama";
+    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja";
 }
 
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {

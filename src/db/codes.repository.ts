@@ -31,6 +31,11 @@ export function setAccountTotpSecret(accountId: number, secret: string | null): 
   db.prepare(`UPDATE access_accounts SET totp_secret = ? WHERE id = ?`).run(secret, accountId);
 }
 
+/** Link privado de la bandeja del proveedor ('' = sin link). */
+export function setAccountCodeInboxUrl(accountId: number, url: string | null): void {
+  db.prepare(`UPDATE access_accounts SET code_inbox_url = ? WHERE id = ?`).run(url ?? "", accountId);
+}
+
 export function getAccountTotpSecret(accountId: number): string | null {
   const row = db.prepare(`SELECT totp_secret FROM access_accounts WHERE id = ?`).get(accountId) as { totp_secret: string | null } | undefined;
   return row?.totp_secret ?? null;

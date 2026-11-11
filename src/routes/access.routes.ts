@@ -43,12 +43,13 @@ import {
   setAccountCodesEnabled,
   setAccountCodeSource,
   setAccountTotpSecret,
+  setAccountCodeInboxUrl,
   listCodesEnabledAccounts,
   getLatestCodeForAccount,
   getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
@@ -407,6 +408,19 @@ router.post("/accounts/:id/totp-secret", (req, res) => {
   res.json({ account: withStatus(getAccountById(accountId)!) });
 });
 
+// Link privado de la bandeja del proveedor (Juanpa: https://…/buzon/<id>).
+// '' o null = lo quita. Nunca se le muestra al cliente.
+router.post("/accounts/:id/code-inbox-url", (req, res) => {
+  const accountId = Number(req.params.id);
+  if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const raw = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+  if (!raw) { setAccountCodeInboxUrl(accountId, null); res.json({ account: withStatus(getAccountById(accountId)!) }); return; }
+  const url = normalizeInboxUrl(raw);
+  if (!url) { res.status(400).json({ message: "El link de la bandeja debe ser como https://mibalu.fun/buzon/…" }); return; }
+  setAccountCodeInboxUrl(accountId, url);
+  res.json({ account: withStatus(getAccountById(accountId)!) });
+});
+
 router.get("/code-sources", (_req, res) => {
   res.json({ sources: listCodeSources().map(s => ({ ...s, watched: LIST_SOURCES.includes(s.id) })) });
 });
@@ -533,7 +547,9 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
     : (typeof req.body?.actionId === "string" ? req.body.actionId : undefined);
   const exclude = skipsRepeatedCodes(account.codeSource) ? getLastSeenCodeForEmail(account.email) : null;
   // Pally ya espera el correo por su cuenta (10–40 s): una sola consulta.
-  const attempts = laneIdOf(account.codeSource) === "pally" ? 1 : undefined;
+  // Bandejas (Juanpa, Gralexander): 4 intentos ≈ 40 s, bajo el minuto que
+  // nginx espera al panel (6 intentos pasaban de 60 s y salía error 504).
+  const attempts = laneIdOf(account.codeSource) === "pally" ? 1 : LIST_SOURCES.includes(account.codeSource) ? 4 : undefined;
   let result = await withLookupContext({ origin: "panel", accountId },
     () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude, attempts));
   if (codeOnly && result.found && !isLoginCode(result) && !loginLinkOf(result)) {

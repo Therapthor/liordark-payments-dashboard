@@ -50,6 +50,7 @@ export type AccessAccount = {
   codesEnabled: boolean;
   codeSource:   string | null;
   totpSecret:   string | null;
+  codeInboxUrl: string;         // link privado de la bandeja del proveedor (solo admin)
   // Corte automático del ciclo — ver runRenewalCutover en access.service.ts.
   renewalCleanupDueAt:   string | null;
   passwordChangePending: boolean;
@@ -1530,6 +1531,7 @@ function toAccount(row: any): AccessAccount {
     codesEnabled: row.codes_enabled === 1,
     codeSource:   row.code_source ?? null,
     totpSecret:   row.totp_secret ?? null,
+    codeInboxUrl: row.code_inbox_url ?? "",
     renewalCleanupDueAt:   row.renewal_cleanup_due_at ?? null,
     passwordChangePending: row.password_change_pending === 1,
     createdAt:   row.created_at,

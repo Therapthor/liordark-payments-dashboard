@@ -178,6 +178,9 @@ ensureColumn("access_accounts", "code_source", "code_source TEXT");
 // se calcula al vuelo (ver utils/totp.util.ts), sin consultar ninguna
 // página externa. NULL = esta cuenta no usa 2FA por TOTP.
 ensureColumn("access_accounts", "totp_secret", "totp_secret TEXT");
+// Link privado de la bandeja del proveedor (ej. Juanpa: mibalu.fun/buzon/…)
+// de donde se sacan los códigos. Solo el admin lo ve — nunca el cliente.
+ensureColumn("access_accounts", "code_inbox_url", "code_inbox_url TEXT NOT NULL DEFAULT ''");
 
 // Prime Video / Amazon y Crunchyroll sacan su código de Vegamig (ver
 // codes-lookup.service.ts). Toda cuenta de esas plataformas que todavía no

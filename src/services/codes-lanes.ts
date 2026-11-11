@@ -23,6 +23,7 @@ const LANES: Record<string, LaneConfig> = {
   vegamig:          { label: "Vegamig",           gapMs: 1500 },
   latinocol_outlook:{ label: "Gralexander Outlook", gapMs: 1500 },
   latinocol_yurama: { label: "Gralexander Yurama",  gapMs: 1500 },
+  juanpa:           { label: "Juanpa",              gapMs: 1500 },
   otro:             { label: "Otro",              gapMs: 1500 },
 };
 
@@ -32,6 +33,7 @@ export function laneIdOf(sourceId: string): string {
   if (sourceId === "streaming_market_web") return "streaming_market";
   if (sourceId === "vegamig_web") return "vegamig";
   if (sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama") return sourceId;
+  if (sourceId === "juanpa_bandeja") return "juanpa";
   return "otro";
 }
 
