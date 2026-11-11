@@ -70,6 +70,20 @@ export function creditWasAlreadyApplied(type: LedgerEntryType, reference: string
   return !!row;
 }
 
+/** ¿Ya hubo un movimiento así hace un momento? — evita cobrar dos veces
+ *  la misma renovación por un doble clic o dos pestañas abiertas. */
+export function hasRecentLedgerEntry(
+  wholesalerId: number, type: LedgerEntryType, referencePrefix: string, seconds: number
+): boolean {
+  const row = db.prepare(`
+    SELECT 1 FROM wholesaler_credit_ledger
+    WHERE wholesaler_id = ? AND type = ? AND substr(reference, 1, ?) = ?
+      AND created_at >= datetime('now', ?)
+    LIMIT 1
+  `).get(wholesalerId, type, referencePrefix.length, referencePrefix, `-${Math.max(1, Math.round(seconds))} seconds`);
+  return !!row;
+}
+
 export type LedgerEntry = {
   id:                number;
   wholesalerId:      number;

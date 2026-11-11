@@ -421,9 +421,16 @@
   // CLIENTES — sub-clientes del mayorista con perfil asignado.
   // ─────────────────────────────────────────────────────────────
 
+  // Marca del mayorista: ➖ sin marcar · ❌ no renueva. ✅ = renovación
+  // PAGADA (solo con «💰 Renovar»; ya no se puede poner a mano).
   const RENEWAL_ICON  = { "": "➖", yes: "✅", no: "❌" };
-  const RENEWAL_NEXT  = { "": "yes", yes: "no", no: "" };
-  const RENEWAL_TITLE = { "": "Marcar si renueva", yes: "Renueva — clic para marcar que no", no: "No renueva — clic para dejar sin marcar" };
+  const RENEWAL_TITLE = { "": "Marcar que NO renueva", yes: "Renovación pagada", no: "No renueva — clic para quitar la marca" };
+  const PAID_MESSAGE  = "✅ Esta renovación ya está pagada — se activa apenas confirmemos la cuenta con el proveedor.";
+
+  // Renovación pagada y esperando confirmación del proveedor (cuentas con perfiles).
+  function isRenewalPaid(c) {
+    return (c.renewalStatus || "") === "yes" && !!(c.renew && c.renew.pending);
+  }
 
   let cachedClients = [];
 
@@ -477,6 +484,13 @@
         </div>`;
     }
 
+    const paid = isRenewalPaid(c);
+    const fullBadgeHtml = c.renew && c.renew.kind === "cuenta_completa"
+      ? `<span class="client-kind-badge">📦 Cuenta completa</span>` : "";
+    const renewBtnHtml = paid
+      ? `<button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button" disabled>✅ Pagada</button>`
+      : `<button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button">💰 Renovar${c.renew ? ` · S/ ${escapeHtml(c.renew.price)}` : ""}</button>`;
+
     return `
       <div class="client-card" data-profile-id="${c.id}">
         <div class="client-card-head">
@@ -484,14 +498,16 @@
             <div class="client-platform">${escapeHtml(c.platform)}</div>
             <div class="client-phone">${escapeHtml(c.clientPhone)}</div>
           </div>
-          <button class="renewal-btn renewal-${status || "unset"}" data-act="marker" data-profile-id="${c.id}" title="${RENEWAL_TITLE[status]}">${RENEWAL_ICON[status]}</button>
+          <button class="renewal-btn renewal-${status || "unset"}" data-act="marker" data-profile-id="${c.id}" title="${escapeHtml(status === "yes" && !paid ? RENEWAL_TITLE[""] : RENEWAL_TITLE[status])}" type="button">${RENEWAL_ICON[status]}</button>
         </div>
+        ${fullBadgeHtml}
         ${ownBadgeHtml}
         <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
+        ${paid ? `<div class="client-paid">✅ Renovación pagada — se activa al confirmar con el proveedor</div>` : ""}
         ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
         ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
         <div class="client-card-actions">
-          <button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button">💰 Renovar</button>
+          ${renewBtnHtml}
           <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
           <button class="btn-danger btn-sm" data-act="delete" data-profile-id="${c.id}" type="button">🗑 Eliminar</button>
         </div>
@@ -511,7 +527,8 @@
   }
 
   async function handleRenewalMarker(btn, client) {
-    const next = RENEWAL_NEXT[client.renewalStatus || ""];
+    if (isRenewalPaid(client)) { alert(PAID_MESSAGE); return; }
+    const next = (client.renewalStatus || "") === "no" ? "" : "no";
     try {
       const { profile } = await api(`/clients/${client.id}/renewal-marker`, { method: "POST", body: { status: next } });
       client.renewalStatus = profile.renewalStatus;
@@ -523,20 +540,48 @@
     }
   }
 
-  async function handleRenew(client) {
-    const product   = catalogItem(client.platform);
-    const priceLine = product ? `Se descontará S/ ${product.wholesalePrice} de tu saldo.` : "Se descontará el precio mayorista de tu saldo.";
-    if (!confirm(`¿Renovar "${client.platform}" de ${client.clientPhone}?\n${priceLine}\nLa renovación se activa cuando confirmemos la cuenta con el proveedor.`)) return;
+  // El precio sale SIEMPRE del servidor (el mismo cálculo que el cobro):
+  // cuenta completa → precio de cuenta completa; perfil → precio de perfil.
+  let renewInFlight = false;
+  async function handleRenew(client, btn) {
+    if (renewInFlight) return;
+    if (client.renewBlocked && !client.renew) { alert(client.renewBlocked); return; }
+    if (isRenewalPaid(client)) { alert(PAID_MESSAGE); return; }
+
+    renewInFlight = true;
+    const originalText = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Calculando…"; }
     try {
-      const { account, pending, message } = await api(`/clients/${client.id}/renew`, { method: "POST" });
+      const quote = await api(`/clients/${client.id}/renew-quote`);
+      if (quote.alreadyPaid) { alert(PAID_MESSAGE); return; }
+
+      const what = quote.kind === "cuenta_completa" ? "la CUENTA COMPLETA de" : quote.kind === "perfil" ? "el perfil de" : "la cuenta de";
+      const after = quote.pending
+        ? "La renovación se activa cuando confirmemos la cuenta con el proveedor."
+        : "Se suman 30 días a la cuenta.";
+      if (!confirm(`¿Renovar ${what} "${client.platform}" (${client.clientPhone})?\nSe descontará S/ ${quote.price} de tu saldo.\n${after}`)) return;
+
+      if (btn) btn.textContent = "Renovando…";
+      const { account, pending, message } = await api(`/clients/${client.id}/renew`, {
+        method: "POST", body: { expectedPriceCents: quote.priceCents },
+      });
       // Cuenta con perfiles: el pago queda registrado y los días se suman
       // cuando confirmamos la cuenta con el proveedor (ver "Renovados").
-      if (pending) { alert(message || "✅ Pago recibido. La renovación se activa apenas confirmemos con el proveedor."); client.renewalStatus = "yes"; }
-      else client.expiresAt = account ? account.expiresAt : client.expiresAt;
+      if (pending) {
+        client.renewalStatus = "yes";
+        client.renew = client.renew || { kind: quote.kind, label: quote.label, price: quote.price, priceCents: quote.priceCents, pending: true };
+        alert(message || "✅ Pago recibido. La renovación se activa apenas confirmemos con el proveedor.");
+      } else {
+        if (account) client.expiresAt = account.expiresAt;
+        alert(`✅ Renovada. Nueva fecha: ${fmtDate(client.expiresAt)}.`);
+      }
       renderClients();
       await refreshBalance();
     } catch (err) {
       alert(err.message);
+    } finally {
+      renewInFlight = false;
+      if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = originalText; }
     }
   }
 
@@ -569,7 +614,7 @@
       if (!client) return;
       const act = btn.dataset.act;
       if (act === "marker") handleRenewalMarker(btn, client);
-      else if (act === "renew") handleRenew(client);
+      else if (act === "renew") handleRenew(client, btn);
       else if (act === "send") handleSendClientAccount(client);
       else if (act === "delete") handleDeleteClient(client);
     });
@@ -712,7 +757,7 @@
     return `
       <div class="alert-row" data-profile-id="${c.profileId}">
         <div>
-          <div class="alert-row-plat">${escapeHtml(c.platformTag || c.platform)}</div>
+          <div class="alert-row-plat">${escapeHtml(c.platformTag || c.platform)}${c.renew && c.renew.kind === "cuenta_completa" ? " · Cuenta completa" : ""}</div>
           <div class="alert-row-sub">${escapeHtml(c.clientPhone)} · ${escapeHtml(expiryLabel(c.expiresAt, daysLeftFor(c.expiresAt)))}</div>
         </div>
         <button class="pill-btn" data-act="home-renew" data-profile-id="${c.profileId}" type="button">Renovar</button>
@@ -762,7 +807,10 @@
       if (!btn) return;
       const c = cachedHomeExpiring.find(x => x.profileId === Number(btn.dataset.profileId));
       if (!c) return;
-      await handleRenew({ id: c.profileId, platform: c.platform, clientPhone: c.clientPhone, expiresAt: c.expiresAt });
+      await handleRenew({
+        id: c.profileId, platform: c.platform, clientPhone: c.clientPhone, expiresAt: c.expiresAt,
+        renew: c.renew, renewBlocked: c.renewBlocked,
+      }, btn);
       loadInicio();
     });
   }

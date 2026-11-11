@@ -171,6 +171,9 @@ router.post("/:id/assign-account", (req, res) => {
 
     const created = createManualActivationForWholesaler({
       platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
+      // Una cuenta completa ya lista (Netflix, Disney…) no tiene nada que
+      // activar: antes caía igual en "Activación pendiente".
+      activationPending: isManualActivationPlatform(platform),
     });
     touchWholesalerActivity(wholesalerId);
     return res.status(201).json({ ok: true, account: { platform, email: created.email } });

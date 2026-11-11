@@ -4,7 +4,7 @@ import axios from "axios";
 import { env } from "../config/env";
 import type { RequestWithWholesaler } from "../services/wholesaler-auth.service";
 import { findWholesalerById, touchWholesalerActivity } from "../db/wholesaler.repository";
-import { listLedgerForWholesaler, applyWholesalerCreditChange } from "../db/wholesaler-credit.repository";
+import { listLedgerForWholesaler, applyWholesalerCreditChange, hasRecentLedgerEntry } from "../db/wholesaler-credit.repository";
 import {
   listWholesalerAvailability,
   listWholesalerClients,
@@ -30,7 +30,7 @@ import {
   countUnreadWholesalerNotifications,
   markAllWholesalerNotificationsRead,
 } from "../db/wholesaler-notifications.repository";
-import { getCatalogProductByPlatform, listCatalogProducts } from "../db/catalog.repository";
+import { getCatalogProductByPlatform, listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
 import { insertApprovedOrder } from "../db/orders.repository";
@@ -335,17 +335,84 @@ router.post("/accounts/mark-seen", (req, res) => {
 
 // ── CLIENTES (sub-clientes del mayorista) ──
 
+// ── PRECIO DE RENOVACIÓN ──
+// Se renueva al mismo precio que se compró: la CUENTA COMPLETA (la que el
+// admin asigna en "Asignar cuenta › Cuenta completa (a mano)") al precio
+// mayorista de cuenta completa; un perfil, al de perfil. Antes todo salía
+// al precio de perfil — un mayorista lo vio al renovar su cuenta completa.
+
+type RenewKind = "perfil" | "cuenta" | "cuenta_completa";
+type RenewQuote = { kind: RenewKind; label: string; priceCents: number; pending: boolean };
+type RenewQuoteResult = { ok: true; quote: RenewQuote } | { ok: false; status: number; message: string };
+
+/** Cuenta entera (sin perfiles) de una plataforma que se vende por
+ *  perfiles = cuenta completa. No cuentan las de activación manual
+ *  (Canva/Gemini/YouTube: cada compra ya es una cuenta individual) ni lo
+ *  comprado en "Comprar" (orden "wholesale:…": se pagó como perfil). */
+function isFullAccountSale(hasProfiles: boolean, platform: string, orderRef: string, product: CatalogProduct | null): boolean {
+  if (hasProfiles || !product) return false;
+  if (isManualActivationPlatform(platform)) return false;
+  if (String(orderRef || "").startsWith("wholesale:")) return false;
+  return product.hasProfiles || Number(product.wholesaleFullPrice) > 0;
+}
+
+function renewQuoteFor(
+  account: { platform: string; hasProfiles: boolean },
+  orderRef: string,
+  products?: Map<string, CatalogProduct | null>,
+): RenewQuoteResult {
+  if (isNonRenewablePlatform(account.platform)) {
+    return { ok: false, status: 400, message: account.platform + " no es renovable — se compra nuevamente." };
+  }
+  let product: CatalogProduct | null;
+  if (products?.has(account.platform)) product = products.get(account.platform) ?? null;
+  else {
+    product = getCatalogProductByPlatform(account.platform);
+    products?.set(account.platform, product);
+  }
+  const full = isFullAccountSale(account.hasProfiles, account.platform, orderRef, product);
+  const price = Number(full ? product?.wholesaleFullPrice : product?.wholesalePrice);
+  if (!Number.isFinite(price) || price <= 0) {
+    return {
+      ok: false, status: 422,
+      message: full
+        ? `La cuenta completa de "${account.platform}" todavía no tiene precio de renovación. Escríbenos por Soporte y te la renovamos.`
+        : `"${account.platform}" no tiene precio mayorista configurado.`,
+    };
+  }
+  return {
+    ok: true,
+    quote: {
+      kind:  full ? "cuenta_completa" : account.hasProfiles ? "perfil" : "cuenta",
+      label: full ? "Cuenta completa" : account.hasProfiles ? "Perfil" : "Cuenta",
+      priceCents: Math.round(price * 100),
+      // Con perfiles: se paga y el admin la confirma con el proveedor
+      // ("Renovados"). Sin perfiles: suma los días al toque.
+      pending: account.hasProfiles,
+    },
+  };
+}
+
+/** Lo que el panel muestra de la renovación de cada cliente. */
+function renewInfo(r: RenewQuoteResult) {
+  return r.ok
+    ? { renew: { kind: r.quote.kind, label: r.quote.label, price: money(r.quote.priceCents / 100), priceCents: r.quote.priceCents, pending: r.quote.pending }, renewBlocked: null }
+    : { renew: null, renewBlocked: r.message };
+}
+
 router.get("/clients", (req, res) => {
   const wholesalerId = wid(req);
+  const products = new Map<string, CatalogProduct | null>();
+  const clients = listWholesalerClients(wholesalerId).map(c => ({
+    ...c,
+    ...renewInfo(renewQuoteFor({ platform: c.platform, hasProfiles: c.accountHasProfiles }, c.orderRef, products)),
+  }));
   res.json({
-    clients:         listWholesalerClients(wholesalerId),
+    clients,
     manualOverrides: listManualOverridesForWholesaler(wholesalerId),
   });
 });
 
-// Renovar = consume créditos a precio mayorista y extiende la cuenta 30
-// días (comparte vencimiento con el resto de clientes de esa cuenta,
-// igual que en Accesos). Bloquea sin tocar nada si no alcanza el saldo.
 // Al mayorista solo lo que su pantalla usa — nunca la cuenta completa
 // (traía la clave 2FA, las notas, el costo del proveedor, el link de la
 // bandeja de códigos…).
@@ -353,32 +420,83 @@ function publicAccount(a: ReturnType<typeof getAccountById>) {
   return a ? { id: a.id, platform: a.platform, expiresAt: a.expiresAt } : null;
 }
 
-router.post("/clients/:profileId/renew", (req, res) => {
-  const wholesalerId = wid(req);
-  const profileId = Number(req.params.profileId);
+function ownProfileAndAccount(wholesalerId: number, profileId: number) {
   const profile = getProfileById(profileId);
   // 404 (no 403) a propósito — no confirma ni niega que el perfil exista
   // si no es de este mayorista, igual que el resto de este archivo.
-  if (!profile || profile.wholesalerId !== wholesalerId) {
-    return res.status(404).json({ message: "Perfil no encontrado." });
-  }
-
+  if (!profile || profile.wholesalerId !== wholesalerId) return null;
   const account = getAccountById(profile.accountId);
-  if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
+  return account ? { profile, account } : null;
+}
 
-  if (isNonRenewablePlatform(account.platform)) {
-    return res.status(400).json({ message: account.platform + " no es renovable — se compra nuevamente." });
+// Precio exacto antes de confirmar — el mismo cálculo que el cobro.
+router.get("/clients/:profileId/renew-quote", (req, res) => {
+  const found = ownProfileAndAccount(wid(req), Number(req.params.profileId));
+  if (!found) return res.status(404).json({ message: "Perfil no encontrado." });
+  const q = renewQuoteFor(found.account, found.profile.orderRef);
+  if (!q.ok) return res.status(q.status).json({ message: q.message });
+  res.json({
+    kind: q.quote.kind, label: q.quote.label, price: money(q.quote.priceCents / 100),
+    priceCents: q.quote.priceCents, pending: q.quote.pending,
+    alreadyPaid: q.quote.pending && found.profile.renewalStatus === "yes",
+  });
+});
+
+/** Rastro en "Aprobados recientes" del panel admin — sobre todo para la
+ *  cuenta completa: suma los días al toque y hay que renovarla con el
+ *  proveedor. */
+function notifyAdminOfRenewal(
+  wholesalerId: number, account: { platform: string; email: string }, clientPhone: string,
+  quote: RenewQuote, newExpiresAt: string | null,
+): void {
+  const wholesaler = findWholesalerById(wholesalerId);
+  const next = quote.pending
+    ? "⏳ Confírmala en Accesos › Renovados cuando la renueves con el proveedor."
+    : "📅 Nueva fecha: " + (newExpiresAt ?? "—") + (quote.kind === "cuenta_completa" ? " — renuévala con el proveedor." : "");
+  const text =
+    "🔁 <b>Renovación mayorista pagada</b>\n\n" +
+    "🏪 " + (wholesaler?.displayName || "Mayorista #" + wholesalerId) + " (" + (wholesaler?.phone ?? "") + ")\n" +
+    "🎯 " + account.platform + " — " + quote.label + " · " + account.email + "\n" +
+    "👤 Cliente final: " + clientPhone + "\n" +
+    "💰 S/ " + (quote.priceCents / 100).toFixed(2) + "\n" +
+    next;
+  const createdAt = new Date().toISOString();
+  insertApprovedOrder(text, createdAt);
+  emitDashboardEvent({ type: "order_approved", message: text, createdAt });
+}
+
+// Renovar = consume créditos a precio mayorista (el de lo que se compró,
+// ver renewQuoteFor). Bloquea sin tocar nada si no alcanza el saldo.
+router.post("/clients/:profileId/renew", (req, res) => {
+  const wholesalerId = wid(req);
+  const profileId = Number(req.params.profileId);
+  const found = ownProfileAndAccount(wholesalerId, profileId);
+  if (!found) return res.status(404).json({ message: "Perfil no encontrado." });
+  const { profile, account } = found;
+
+  const q = renewQuoteFor(account, profile.orderRef);
+  if (!q.ok) return res.status(q.status).json({ message: q.message });
+  const { quote } = q;
+
+  // Se cobra exactamente lo que el mayorista vio al confirmar: si el precio
+  // cambió en el medio (catálogo editado), no se cobra y se vuelve a mostrar.
+  const expected = req.body?.expectedPriceCents;
+  if (expected !== undefined && expected !== null && Number(expected) !== quote.priceCents) {
+    return res.status(409).json({ message: `El precio cambió: ahora es S/ ${money(quote.priceCents / 100)}. Vuelve a intentarlo.` });
   }
 
-  const product = getCatalogProductByPlatform(account.platform);
-  const price = Number(product?.wholesalePrice ?? 0);
-  if (!Number.isFinite(price) || price <= 0) {
-    return res.status(422).json({ message: `"${account.platform}" no tiene precio mayorista configurado.` });
+  // Cuenta con perfiles: ya pagó este ciclo → no se cobra dos veces.
+  if (quote.pending && profile.renewalStatus === "yes") {
+    return res.status(409).json({ message: "Esta renovación ya está pagada — se activa apenas confirmemos la cuenta con el proveedor." });
   }
-  const priceCents = Math.round(price * 100);
+  // Doble clic / dos pestañas: la misma renovación recién cobrada.
+  const refPrefix = "wholesale-renew:" + wholesalerId + ":" + profileId + ":";
+  if (hasRecentLedgerEntry(wholesalerId, "renewal", refPrefix, 90)) {
+    return res.status(409).json({ message: "Esta cuenta se acaba de renovar. Si quieres sumar otro mes, inténtalo en un par de minutos." });
+  }
 
-  const orderRef = "wholesale-renew:" + wholesalerId + ":" + profileId + ":" + Date.now() + ":" + crypto.randomUUID().slice(0, 8);
-  const deduction = applyWholesalerCreditChange(wholesalerId, -priceCents, "renewal", orderRef, "system");
+  const orderRef = refPrefix + Date.now() + ":" + crypto.randomUUID().slice(0, 8);
+  const deduction = applyWholesalerCreditChange(wholesalerId, -quote.priceCents, "renewal", orderRef, "system");
   if (!deduction.ok) return res.status(402).json({ message: deduction.error });
 
   touchWholesalerActivity(wholesalerId);
@@ -386,16 +504,18 @@ router.post("/clients/:profileId/renew", (req, res) => {
   // Cuenta con perfiles: NO se suman días a la cuenta entera al pagar —
   // queda marcado "renueva" y el admin la confirma en "Renovados" cuando ya
   // la renovó con el proveedor (ver confirmCycleRenewal).
-  if (account.hasProfiles) {
+  if (quote.pending) {
     setProfileRenewal(profile.id, "yes");
+    notifyAdminOfRenewal(wholesalerId, account, profile.clientPhone, quote, null);
     return res.json({
-      ok: true, pending: true, account: publicAccount(account),
+      ok: true, pending: true, account: publicAccount(account), kind: quote.kind, priceCents: quote.priceCents,
       message: "✅ Pago recibido. La renovación se activa apenas confirmemos la cuenta con el proveedor — te avisamos por aquí.",
     });
   }
 
-  renewAccount(account.id);
-  res.json({ ok: true, account: publicAccount(getAccountById(account.id)) });
+  const renewed = renewAccount(account.id);
+  notifyAdminOfRenewal(wholesalerId, account, profile.clientPhone, quote, renewed?.expiresAt ?? null);
+  res.json({ ok: true, account: publicAccount(renewed ?? getAccountById(account.id)), kind: quote.kind, priceCents: quote.priceCents });
 });
 
 router.delete("/clients/:profileId", (req, res) => {
@@ -407,16 +527,23 @@ router.delete("/clients/:profileId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Marca del mayorista: "" (sin marcar) o "no" (no renueva). "✅ Renueva"
+// queda SOLO para la renovación pagada — antes se podía marcar con este
+// botón sin pagar y en "Renovados" se veía igual que una pagada.
 router.post("/clients/:profileId/renewal-marker", (req, res) => {
   const status = String(req.body?.status ?? "") as RenewalStatus;
-  if (!["", "yes", "no"].includes(status)) return res.status(400).json({ message: "Status inválido." });
+  if (status === "yes") {
+    return res.status(400).json({ message: "Para que renueve, usa «💰 Renovar» (se descuenta de tu saldo)." });
+  }
+  if (!["", "no"].includes(status)) return res.status(400).json({ message: "Status inválido." });
 
-  const existing = getProfileById(Number(req.params.profileId));
-  if (!existing || existing.wholesalerId !== wid(req)) {
-    return res.status(404).json({ message: "Perfil no encontrado." });
+  const found = ownProfileAndAccount(wid(req), Number(req.params.profileId));
+  if (!found) return res.status(404).json({ message: "Perfil no encontrado." });
+  if (found.profile.renewalStatus === "yes" && found.account.hasProfiles) {
+    return res.status(409).json({ message: "Esta renovación ya está pagada — se activa apenas confirmemos la cuenta con el proveedor." });
   }
 
-  const profile = setProfileRenewal(existing.id, status);
+  const profile = setProfileRenewal(found.profile.id, status);
   res.json({ profile });
 });
 
@@ -433,8 +560,21 @@ router.get("/summary", (req, res) => {
 // ── RECORDATORIOS (tanda manual de WhatsApp a los PROPIOS sub-clientes) ──
 
 router.get("/renewals/expiring", (req, res) => {
+  const wholesalerId = wid(req);
   const days = Number(req.query.days ?? 0);
-  const clients = listExpiringClientsForWholesaler(wid(req), Number.isFinite(days) ? days : 0, { excludeAlreadyExpired: true });
+  const products = new Map<string, CatalogProduct | null>();
+  // price = lo que cuesta renovar ESA cuenta (perfil o cuenta completa),
+  // no siempre el precio de perfil del catálogo.
+  const clients = listExpiringClientsForWholesaler(wholesalerId, Number.isFinite(days) ? days : 0, { excludeAlreadyExpired: true })
+    .map(c => {
+      const found = ownProfileAndAccount(wholesalerId, c.profileId);
+      if (!found) return c;
+      const q = renewQuoteFor(found.account, found.profile.orderRef, products);
+      // Sin precio de renovación (cuenta completa sin precio configurado): el
+      // recordatorio sale sin monto en vez de con el de perfil.
+      const price = q.ok ? money(q.quote.priceCents / 100) : q.status === 422 ? "" : c.price;
+      return { ...c, ...renewInfo(q), price };
+    });
   res.json({ clients });
 });
 

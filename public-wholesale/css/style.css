@@ -427,6 +427,12 @@ button:disabled { cursor: default; }
   background: var(--chip-bg); border-radius: 999px; padding: 4px 10px;
   display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
 }
+.client-kind-badge {
+  font-size: 11.5px; font-weight: 700; color: var(--text);
+  background: var(--chip-bg); border-radius: 999px; padding: 4px 10px;
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-bottom: 2px;
+}
+.client-paid { font-size: 12px; font-weight: 700; color: var(--ok); }
 .client-own-badge {
   font-size: 11.5px; font-weight: 700; color: var(--gold-dark);
   background: var(--chip-bg); border-radius: 999px; padding: 4px 10px;

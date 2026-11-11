@@ -617,6 +617,9 @@ export const sellProfileForWholesaler = db.transaction((
 export const createManualActivationForWholesaler = db.transaction((params: {
   platform: string; email: string; password?: string; expiresAt: string;
   wholesalerId: number; clientPhone: string; orderRef: string; planMonths?: number | undefined;
+  // false = cuenta ya lista (admin › Asignar cuenta › Cuenta completa a mano
+  // de Netflix, Disney…): no hay nada que activar, no va a "Pendientes".
+  activationPending?: boolean;
 }): { accountId: number; email: string } => {
   const [account] = createAccountsBulk({
     platform:    params.platform,
@@ -632,7 +635,7 @@ export const createManualActivationForWholesaler = db.transaction((params: {
     WHERE id = ?
   `).run(digits, params.orderRef, params.wholesalerId, account.profiles[0].id);
   setAccountPlanMonths(account.id, params.planMonths);
-  markActivationPending(account.id);
+  if (params.activationPending !== false) markActivationPending(account.id);
   createWholesalerNotification(params.wholesalerId, "purchase_added", params.platform, params.email);
   return { accountId: account.id, email: params.email };
 });
@@ -754,22 +757,24 @@ export function assignProfilesToWholesaler(profileIds: number[], wholesalerId: n
 
 export type WholesalerClientProfile = AccessProfile & {
   platform: string; expiresAt: string | null; email: string; password: string;
+  accountHasProfiles: boolean;
 };
 
 /** Sub-clientes de ESTE mayorista (perfiles con wholesaler_id = ? y cliente asignado).
  *  Incluye password — "Enviar cuenta" desde el panel mayorista necesita
  *  mandar el acceso completo, no solo el correo. */
 export function listWholesalerClients(wholesalerId: number): WholesalerClientProfile[] {
-  return db.prepare(`
+  const rows = db.prepare(`
     SELECT p.id, p.account_id AS accountId, p.slot_number AS slotNumber, p.profile_name AS profileName,
            p.client_phone AS clientPhone, p.renewal_status AS renewalStatus, p.order_ref AS orderRef,
            p.updated_at AS updatedAt, a.platform AS platform, a.expires_at AS expiresAt,
-           a.email AS email, a.password AS password
+           a.email AS email, a.password AS password, a.has_profiles AS accountHasProfiles
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id = ? AND p.client_phone != ''
     ORDER BY a.expires_at ASC
-  `).all(wholesalerId) as WholesalerClientProfile[];
+  `).all(wholesalerId) as any[];
+  return rows.map(r => ({ ...r, accountHasProfiles: r.accountHasProfiles === 1 })) as WholesalerClientProfile[];
 }
 
 /** Libera el/los perfiles de ese cliente en esa plataforma (orden cancelada). Devuelve cuántos liberó. */
