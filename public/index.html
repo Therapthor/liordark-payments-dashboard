@@ -988,10 +988,14 @@
       <label>Proveedor <span class="text-muted">(opcional)</span>
         <select id="bulk-provider"></select>
       </label>
+      <label>Código <span class="text-muted">(opcional — de dónde se saca el código de inicio de sesión de todas estas cuentas)</span>
+        <select id="bulk-code-source"></select>
+      </label>
+      <p id="bulk-code-hint" class="bulk-code-hint" hidden></p>
       <label>Vencimiento inicial
         <input id="bulk-expires" type="date" required />
       </label>
-      <label>Cuentas — una por línea, formato <code>correo:contraseña</code>
+      <label><span id="bulk-lines-label">Cuentas — una por línea, formato <code>correo:contraseña</code></span>
         <textarea id="bulk-lines" rows="6" placeholder="correo1@gmail.com:clave123&#10;correo2@gmail.com:clave456" required></textarea>
       </label>
 

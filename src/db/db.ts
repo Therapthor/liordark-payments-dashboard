@@ -182,18 +182,11 @@ ensureColumn("access_accounts", "totp_secret", "totp_secret TEXT");
 // de donde se sacan los códigos. Solo el admin lo ve — nunca el cliente.
 ensureColumn("access_accounts", "code_inbox_url", "code_inbox_url TEXT NOT NULL DEFAULT ''");
 
-// Prime Video / Amazon y Crunchyroll sacan su código de Vegamig (ver
-// codes-lookup.service.ts). Toda cuenta de esas plataformas que todavía no
-// tenga fuente queda configurada sola al arrancar — incluidas las nuevas.
-// No toca las que ya tienen una fuente elegida a mano.
-{
-  const changed = db.prepare(`
-    UPDATE access_accounts SET codes_enabled = 1, code_source = 'vegamig_web'
-    WHERE code_source IS NULL
-      AND (upper(platform) LIKE '%PRIME%' OR upper(platform) LIKE '%AMAZON%' OR upper(platform) LIKE '%CRUNCHY%')
-  `).run().changes;
-  if (changed) console.log(`🔑 Códigos: ${changed} cuenta(s) de Prime Video/Crunchyroll configuradas con Vegamig`);
-}
+// El tipo de código se elige al agregar las cuentas (Accesos › + Agregar
+// cuentas). Antes, al arrancar, toda cuenta de Prime Video/Crunchyroll sin
+// fuente quedaba con Vegamig sola — aunque se le hubiera quitado a mano. Ya
+// no: si no se marca nada, la cuenta queda sin código. Las que ya tenían
+// Vegamig lo conservan.
 
 // Activación manual (CANVA, GEMINI AI PRO, YOUTUBE PREMIUM) — queda en 1
 // al crear/renovar la cuenta, hasta que el admin confirme que ya hizo la

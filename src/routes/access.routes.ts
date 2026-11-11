@@ -49,7 +49,7 @@ import {
   getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
@@ -121,6 +121,15 @@ router.post("/accounts/bulk", async (req, res) => {
     providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
   } = req.body ?? {};
 
+  // De dónde sacar el código para TODAS las cuentas del lote (vacío = sin
+  // código). El 2FA no va acá: cada cuenta necesita su propia clave.
+  const codeSource = typeof req.body?.codeSource === "string" && req.body.codeSource.trim() ? req.body.codeSource.trim() : null;
+  if (codeSource && (codeSource === TOTP_SOURCE_ID || !listCodeSources().some(s => s.id === codeSource))) {
+    res.status(400).json({ message: "Ese tipo de código no existe (el 2FA se configura en cada cuenta, en Editar)." });
+    return;
+  }
+  const needsInbox = !!codeSource && INBOX_LINK_SOURCES.includes(codeSource);
+
   if (!platform?.trim()) { res.status(400).json({ message: "Elige una plataforma." }); return; }
   if (!expiresAt || !DATE_RE.test(expiresAt)) { res.status(400).json({ message: "Fecha de vencimiento inválida." }); return; }
   if (typeof lines !== "string" || !lines.trim()) { res.status(400).json({ message: "Pega al menos una línea correo:contraseña." }); return; }
@@ -132,16 +141,31 @@ router.post("/accounts/bulk", async (req, res) => {
     }
   }
 
-  const pairs = lines
+  const rawLines = lines
     .split("\n")
     .map((line: string) => line.trim())
-    .filter((line: string) => line.length > 0)
-    .map((line: string) => {
-      const idx = line.indexOf(":");
-      if (idx === -1) return null;
-      return { email: line.slice(0, idx).trim(), password: line.slice(idx + 1).trim() };
-    });
+    .filter((line: string) => line.length > 0);
+  const pairs = rawLines.map((line: string) => {
+    let rest = line;
+    let inboxUrl: string | undefined;
+    // Bandeja del proveedor (Juanpa): el link va al final de cada línea.
+    if (needsInbox) {
+      const m = rest.match(/\s+(\S+)$/);
+      const url = m ? normalizeInboxUrl(m[1]) : null;
+      if (!url) return { bad: "inbox" as const };
+      inboxUrl = url;
+      rest = rest.slice(0, m!.index).trim();
+    }
+    const idx = rest.indexOf(":");
+    if (idx === -1) return null;
+    return { email: rest.slice(0, idx).trim(), password: rest.slice(idx + 1).trim(), ...(inboxUrl ? { inboxUrl } : {}) };
+  });
 
+  const missingInbox = pairs.findIndex((p: any) => p && p.bad === "inbox");
+  if (missingInbox >= 0) {
+    res.status(400).json({ message: `Línea ${missingInbox + 1}: falta el link de la bandeja al final (correo:contraseña https://mibalu.fun/buzon/…).` });
+    return;
+  }
   const invalid = pairs.some((p: any) => !p || !p.email || !p.password);
   if (invalid || pairs.length === 0) {
     res.status(400).json({ message: "Cada línea debe tener el formato correo:contraseña." });
@@ -152,7 +176,8 @@ router.post("/accounts/bulk", async (req, res) => {
 
   const accounts = createAccountsBulk({
     platform, provider: typeof provider === "string" ? provider : "",
-    hasProfiles, expiresAt, pairs: pairs as { email: string; password: string }[],
+    hasProfiles, expiresAt, pairs: pairs as { email: string; password: string; inboxUrl?: string }[],
+    codeSource,
     providerRenewalEnabled:  !!providerRenewalEnabled,
     providerRenewalCost:     typeof providerRenewalCost === "string" ? providerRenewalCost : "",
     providerRenewalCurrency: typeof providerRenewalCurrency === "string" ? providerRenewalCurrency : "USDT",

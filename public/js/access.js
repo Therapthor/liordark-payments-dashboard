@@ -795,12 +795,72 @@
   // MODAL — agregar cuentas en lote (correo:contraseña)
   // ─────────────────────────────────────────────────────────────
 
+  // ── Código al agregar: el mismo tipo para todas las cuentas del lote. Se
+  // sugiere según plataforma/proveedor (y lo último que elegiste con ese
+  // proveedor); sin marcar nada, las cuentas quedan sin código. ──
+  let bulkCodeTouched = false;
+  const BULK_CODE_LINES_DEFAULT = "correo1@gmail.com:clave123\ncorreo2@gmail.com:clave456";
+
+  function bulkCodeKey(provider, platform) {
+    return "bulkCode:" + String(provider || "").trim().toUpperCase() + "|" + String(platform || "").trim().toUpperCase();
+  }
+
+  function suggestBulkCode(platform, provider) {
+    try {
+      const saved = localStorage.getItem(bulkCodeKey(provider, platform));
+      if (saved !== null) return saved === "none" ? "" : saved;
+    } catch { /* sin almacenamiento */ }
+    const pl = String(platform || ""), pr = String(provider || "");
+    if (/vega/i.test(pr) || /crunchy|prime|amazon/i.test(pl)) return "vegamig_web";
+    if (/juanpa/i.test(pr) && /netflix/i.test(pl)) return "juanpa_bandeja";
+    if (/jos[eé]/i.test(pr) && /netflix/i.test(pl)) return "joseb_netflix";
+    if (/jos[eé]/i.test(pr) && /disney/i.test(pl)) return "joseb_disney";
+    if (/streaming\s*market|nexbol/i.test(pr)) return "streaming_market_web";
+    return "";
+  }
+
+  function populateBulkCodeSelect() {
+    const select = document.getElementById("bulk-code-source");
+    select.innerHTML = `<option value="">— Sin código —</option>` +
+      (codeSources || []).filter(s => s.id !== TOTP_SOURCE_ID)
+        .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join("");
+  }
+
+  function applyBulkCodeSuggestion() {
+    if (bulkCodeTouched) return;
+    const select = document.getElementById("bulk-code-source");
+    const want = suggestBulkCode(document.getElementById("bulk-platform").value, document.getElementById("bulk-provider").value);
+    select.value = [...select.options].some(o => o.value === want) ? want : "";
+    syncBulkCodeHint();
+  }
+
+  function syncBulkCodeHint() {
+    const select = document.getElementById("bulk-code-source");
+    const hint = document.getElementById("bulk-code-hint");
+    const lines = document.getElementById("bulk-lines");
+    const label = document.getElementById("bulk-lines-label");
+    const inbox = INBOX_LINK_SOURCES.includes(select.value);
+    hint.hidden = !select.value;
+    hint.textContent = !select.value ? ""
+      : inbox ? "🔑 Cada cuenta lleva su link de bandeja: ponlo al final de su línea, después de un espacio. Es privado: el cliente nunca lo ve."
+      : "🔑 Todas estas cuentas sacarán el código de: " + (select.selectedOptions[0]?.textContent || select.value) + ".";
+    label.innerHTML = inbox
+      ? "Cuentas — una por línea: <code>correo:contraseña https://mibalu.fun/buzon/…</code>"
+      : "Cuentas — una por línea, formato <code>correo:contraseña</code>";
+    lines.placeholder = inbox
+      ? "correo1@juanpa.tel:clave123 https://mibalu.fun/buzon/xxxx\ncorreo2@juanpa.tel:clave456 https://mibalu.fun/buzon/yyyy"
+      : BULK_CODE_LINES_DEFAULT;
+  }
+
   async function openBulkModal() {
-    await Promise.all([loadCatalog(), loadProviderCatalog()]);
+    await Promise.all([loadCatalog(), loadProviderCatalog(), loadCodeSources()]);
     document.getElementById("bulk-form").reset();
     document.getElementById("bulk-error").hidden = true;
     populatePlatformSelect(document.getElementById("bulk-platform"));
     populateProviderSelect(document.getElementById("bulk-provider"));
+    populateBulkCodeSelect();
+    bulkCodeTouched = false;
+    applyBulkCodeSuggestion();
     document.getElementById("bulk-expires").value = addDaysISO(todayISO(), 30);
     document.getElementById("bulk-expires").min = todayISO();
     document.getElementById("bulk-renewal-fields").hidden = true;
@@ -815,6 +875,11 @@
       document.getElementById("bulk-renewal-fields").hidden = !e.target.checked;
     });
 
+    document.getElementById("bulk-platform").addEventListener("change", applyBulkCodeSuggestion);
+    document.getElementById("bulk-provider").addEventListener("change", applyBulkCodeSuggestion);
+    document.getElementById("bulk-code-source").addEventListener("change", () => { bulkCodeTouched = true; syncBulkCodeHint(); });
+    document.getElementById("bulk-lines").addEventListener("input", () => { document.getElementById("bulk-error").hidden = true; });
+
     document.getElementById("bulk-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const renewalEnabled = document.getElementById("bulk-renewal-enabled").checked;
@@ -827,11 +892,14 @@
         providerRenewalCost:       renewalEnabled ? document.getElementById("bulk-renewal-cost").value : "",
         providerRenewalCurrency:   document.getElementById("bulk-renewal-currency").value,
         providerRenewalNextDate:   renewalEnabled ? document.getElementById("bulk-renewal-next-date").value : null,
+        codeSource:                document.getElementById("bulk-code-source").value || null,
       };
       const errorEl = document.getElementById("bulk-error");
       errorEl.hidden = true;
       try {
         await api("/accounts/bulk", { method: "POST", body: JSON.stringify(body) });
+        // Se recuerda lo elegido con este proveedor y plataforma para la próxima.
+        try { localStorage.setItem(bulkCodeKey(body.provider, body.platform), body.codeSource || "none"); } catch { /* sin almacenamiento */ }
         document.getElementById("bulk-modal").hidden = true;
         refresh();
       } catch (err) {

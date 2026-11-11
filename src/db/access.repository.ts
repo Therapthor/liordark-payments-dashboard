@@ -111,20 +111,22 @@ export function createAccountsBulk(params: {
   provider:    string;
   hasProfiles: boolean;
   expiresAt:   string | null;
-  pairs:       { email: string; password: string }[];
+  pairs:       { email: string; password: string; inboxUrl?: string }[];
   providerRenewalEnabled?:  boolean;
   providerRenewalCost?:     string;
   providerRenewalCurrency?: string;
   providerRenewalNextDate?: string | null;
+  codeSource?:              string | null; // de dónde sacar el código (null = sin código)
 }): AccessAccountWithProfiles[] {
   const slots = slotsFor(params.hasProfiles);
 
   const insertAccount = db.prepare(`
     INSERT INTO access_accounts (
       platform, email, password, provider, has_profiles, expires_at,
-      provider_renewal_enabled, provider_renewal_cost, provider_renewal_currency, provider_renewal_next_date
+      provider_renewal_enabled, provider_renewal_cost, provider_renewal_currency, provider_renewal_next_date,
+      codes_enabled, code_source, code_inbox_url
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProfile = db.prepare(`
     INSERT INTO access_profiles (account_id, slot_number, profile_name)
@@ -144,7 +146,10 @@ export function createAccountsBulk(params: {
         params.providerRenewalEnabled ? 1 : 0,
         params.providerRenewalCost ?? "",
         params.providerRenewalCurrency || "USDT",
-        params.providerRenewalEnabled ? (params.providerRenewalNextDate ?? null) : null
+        params.providerRenewalEnabled ? (params.providerRenewalNextDate ?? null) : null,
+        params.codeSource ? 1 : 0,
+        params.codeSource ?? null,
+        params.codeSource ? (pair.inboxUrl ?? "") : ""
       );
       const id = result.lastInsertRowid as number;
       for (let slot = 1; slot <= slots; slot++) {
@@ -264,9 +269,11 @@ export function createAccountFromRenewal(oldAccountId: number, params: {
   const renewing = oldAccount.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes");
   const slots = slotsFor(oldAccount.hasProfiles);
 
+  // Hereda de dónde se saca el código (no el link de bandeja ni la clave
+  // 2FA: con el correo nuevo cambian).
   const insertAccount = db.prepare(`
-    INSERT INTO access_accounts (platform, email, password, provider, has_profiles, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO access_accounts (platform, email, password, provider, has_profiles, expires_at, codes_enabled, code_source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProfile = db.prepare(`
     INSERT INTO access_profiles (account_id, slot_number, profile_name, client_phone)
@@ -279,7 +286,8 @@ export function createAccountFromRenewal(oldAccountId: number, params: {
   const newAccountId = db.transaction(() => {
     const result = insertAccount.run(
       oldAccount.platform, params.email.trim(), params.password.trim(),
-      oldAccount.provider, oldAccount.hasProfiles ? 1 : 0, params.expiresAt
+      oldAccount.provider, oldAccount.hasProfiles ? 1 : 0, params.expiresAt,
+      oldAccount.codesEnabled ? 1 : 0, oldAccount.codesEnabled ? oldAccount.codeSource : null
     );
     const id = result.lastInsertRowid as number;
 

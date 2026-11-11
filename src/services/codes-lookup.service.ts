@@ -1234,6 +1234,9 @@ export async function fetchListedEmail(sourceId: string, email: string, item: Li
   return null;
 }
 
+/** Fuentes que leen la bandeja privada del proveedor: cada cuenta lleva su link. */
+export const INBOX_LINK_SOURCES = ["juanpa_bandeja"];
+
 /** Fuentes que listan todos los correos recientes (las vigila el panel solo). */
 export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja"];
 
