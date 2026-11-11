@@ -74,6 +74,12 @@
   .totp-bar > i { display: block; height: 100%; background: var(--orange); border-radius: 99px; transition: width 1s linear; }
   .totp-bar.low > i { background: #E5484D; }
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--brown); color: var(--cream); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
+  /* Solicitud de inicio de sesión (Netflix): Aprobar / Rechazar */
+  .approval { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .device { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; font-size: 19px; font-weight: 800; }
+  .device svg { flex-shrink: 0; }
+  body.themed .device { background: var(--t-box); border-color: var(--t-line); color: var(--t-text); }
+  .small { font-size: 12.5px; }
 </style>
 </head>
 <body>
@@ -102,6 +108,13 @@
       <div class="codebox" id="found-codebox"><p class="code" id="found-code"></p></div>
       <div class="totp-bar" id="totp-bar" hidden><i></i></div>
       <a class="btn orange" id="found-link" href="#" target="_blank" rel="noopener" hidden>Abrir enlace</a>
+      <div class="approval" id="approval" hidden>
+        <div class="device"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg><span id="approval-device">Nuevo dispositivo</span></div>
+        <p class="muted">Si eres tú quien está entrando desde ese dispositivo, toca <b>Aprobar</b> y la sesión se inicia sola.</p>
+        <a class="btn orange" id="approve-link" href="#" target="_blank" rel="noopener">Aprobar</a>
+        <a class="btn light" id="deny-link" href="#" target="_blank" rel="noopener">Rechazar (no fui yo)</a>
+        <p class="muted small">El enlace vence en 15 minutos y sirve una sola vez.</p>
+      </div>
       <button class="btn dark" id="copy-btn">Copiar</button>
       <button class="link" id="mail-toggle" hidden>Ver correo completo</button>
       <iframe class="mail" id="mail" sandbox="" title="Correo completo" hidden></iframe>
@@ -227,6 +240,7 @@
     document.getElementById("found-codebox").hidden = false;
     document.getElementById("copy-btn").hidden = false;
     document.getElementById("found-link").hidden = true;
+    document.getElementById("approval").hidden = true;
     document.getElementById("mail-toggle").hidden = true;
     document.getElementById("refresh-btn2").hidden = true;
     lastValue = data.value;
@@ -274,6 +288,18 @@
           const travel = /travel\/verify/i.test(data.value);
           a.textContent = "Abrir link de inicio de sesión";
           if (travel) document.getElementById("found-meta").textContent += " · el link vence en 15 min";
+        }
+        // Netflix «Aprueba la nueva solicitud de inicio de sesión» (TV): Aprobar / Rechazar.
+        const ap = isLink && data.approval ? data.approval : null;
+        document.getElementById("approval").hidden = !ap;
+        if (ap) {
+          a.hidden = true;
+          document.getElementById("found-label").textContent = "SOLICITUD DE INICIO DE SESIÓN";
+          document.getElementById("approval-device").textContent = ap.device || "Nuevo dispositivo";
+          document.getElementById("approve-link").href = ap.approveUrl;
+          const deny = document.getElementById("deny-link");
+          deny.hidden = !ap.denyUrl;
+          if (ap.denyUrl) deny.href = ap.denyUrl;
         }
         const frame = document.getElementById("mail");
         document.getElementById("mail-toggle").hidden = !data.html;

@@ -462,6 +462,12 @@
         <div class="codes-box" id="codes-box"><span id="codes-value"></span></div>
         <div class="codes-totp-bar" id="codes-totp-bar" hidden><i></i></div>
         <a class="btn-primary btn-block" id="codes-link" href="#" target="_blank" rel="noopener" hidden>Abrir link de inicio de sesión</a>
+        <div class="codes-approval" id="codes-approval" hidden>
+          <div class="codes-device"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span id="codes-approval-device">Nuevo dispositivo</span></div>
+          <p class="muted small">Si es tu cliente entrando desde ese dispositivo, toca <b>Aprobar</b> (o pásale el link) y la sesión se inicia sola. Vence en 15 min y sirve una vez.</p>
+          <a class="btn-primary btn-block" id="codes-approve" href="#" target="_blank" rel="noopener">Aprobar</a>
+          <a class="btn-ghost btn-block" id="codes-deny" href="#" target="_blank" rel="noopener">Rechazar</a>
+        </div>
         <button class="btn-primary btn-block" id="codes-copy" type="button">Copiar</button>
         <button class="codes-textbtn" id="codes-mail-toggle" type="button" hidden>Ver correo completo</button>
         <iframe class="codes-mail" id="codes-mail" sandbox="" title="Correo completo" hidden></iframe>

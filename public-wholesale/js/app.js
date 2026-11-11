@@ -908,6 +908,7 @@
     document.getElementById("codes-box").hidden = false;
     document.getElementById("codes-copy").hidden = false;
     document.getElementById("codes-link").hidden = true;
+    document.getElementById("codes-approval").hidden = true;
     document.getElementById("codes-mail-toggle").hidden = true;
     document.getElementById("codes-mail").hidden = true;
     document.getElementById("codes-again").hidden = true;
@@ -956,6 +957,19 @@
         const a = document.getElementById("codes-link");
         a.hidden = !isLink;
         if (isLink) a.href = data.value;
+        // Netflix «Aprueba la nueva solicitud de inicio de sesión» (TV).
+        const ap = isLink && data.approval ? data.approval : null;
+        document.getElementById("codes-approval").hidden = !ap;
+        if (ap) {
+          a.hidden = true;
+          document.getElementById("codes-found-label").textContent = "SOLICITUD DE INICIO DE SESIÓN";
+          document.getElementById("codes-approval-device").textContent = ap.device || "Nuevo dispositivo";
+          document.getElementById("codes-approve").href = ap.approveUrl;
+          const deny = document.getElementById("codes-deny");
+          deny.hidden = !ap.denyUrl;
+          if (ap.denyUrl) deny.href = ap.denyUrl;
+          document.getElementById("codes-copy").textContent = "Copiar link de Aprobar";
+        }
         const frame = document.getElementById("codes-mail");
         document.getElementById("codes-mail-toggle").hidden = !data.html;
         if (data.html && frame.srcdoc !== data.html) frame.srcdoc = data.html;

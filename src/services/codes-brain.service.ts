@@ -1,7 +1,8 @@
-import { db } from "../db/db";
+import { db, ensureColumn } from "../db/db";
 import {
   onLookup, withLookupContext, lookupCode, fetchListedEmail, codeSourceLabel, listCodeSources,
   isAccountChangeResult, deliversEverything, parseProviderDate, sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID,
+  loginApprovalOf,
   type LookupEvent, type CodeLookupResult, type ListedEmail,
 } from "./codes-lookup.service";
 import { listCodesEnabledAccounts } from "../db/codes.repository";
@@ -147,6 +148,14 @@ function platformFor(sourceId: string, email: string): { accountId: number | nul
   return { accountId: null, platform: p };
 }
 
+// Solicitud de inicio de sesión de Netflix: «Rechazar» y el dispositivo (JSON).
+ensureColumn("code_inbox", "approval_json", "approval_json TEXT");
+
+function approvalJson(r: CodeLookupResult | null): string | null {
+  const a = r ? loginApprovalOf(r) : null;
+  return a ? JSON.stringify({ denyUrl: a.denyUrl, device: a.device }) : null;
+}
+
 const findInbox = db.prepare(`
   SELECT id FROM code_inbox
   WHERE source_id = ? AND email = ? AND provider_ref = ? AND provider_received_at = ? AND value = ?
@@ -154,16 +163,16 @@ const findInbox = db.prepare(`
 const findInboxByRef = db.prepare(`SELECT id, value FROM code_inbox WHERE source_id = ? AND email = ? AND provider_ref = ? LIMIT 1`);
 const insertInbox = db.prepare(`
   INSERT INTO code_inbox (source_id, email, account_id, platform, subject, kind, value, provider_ref,
-    provider_received_at, received_iso, expired, account_change, email_html, origin)
+    provider_received_at, received_iso, expired, account_change, email_html, origin, approval_json)
   VALUES (@sourceId, @email, @accountId, @platform, @subject, @kind, @value, @ref,
-    @receivedAt, @receivedIso, @expired, @accountChange, @html, @origin)
+    @receivedAt, @receivedIso, @expired, @accountChange, @html, @origin, @approval)
 `);
 const touchInbox = db.prepare(`
   UPDATE code_inbox SET last_seen_at = datetime('now'), expired = MAX(expired, ?) WHERE id = ?
 `);
 const fillInbox = db.prepare(`
   UPDATE code_inbox SET kind = @kind, value = @value, subject = @subject, email_html = @html,
-    account_change = @accountChange, expired = @expired, last_seen_at = datetime('now')
+    account_change = @accountChange, expired = @expired, approval_json = @approval, last_seen_at = datetime('now')
   WHERE id = @id
 `);
 
@@ -173,7 +182,17 @@ export type InboxItem = {
   id: number; sourceId: string; sourceLabel: string; email: string; accountId: number | null; platform: string;
   subject: string; kind: string; value: string; receivedAt: string; receivedIso: string | null;
   expired: boolean; accountChange: boolean; origin: string; firstSeenAt: string; hasHtml: boolean;
+  // Netflix «Aprueba la solicitud de inicio de sesión»: Aprobar = value.
+  approval: { approveUrl: string; denyUrl: string | null; device: string | null } | null;
 };
+
+function approvalOfRow(r: any): InboxItem["approval"] {
+  if (!r.approval_json || r.kind !== "link" || !r.value) return null;
+  try {
+    const a = JSON.parse(r.approval_json);
+    return { approveUrl: r.value, denyUrl: typeof a?.denyUrl === "string" ? a.denyUrl : null, device: typeof a?.device === "string" ? a.device : null };
+  } catch { return null; }
+}
 
 function rowToItem(r: any): InboxItem {
   return {
@@ -181,12 +200,12 @@ function rowToItem(r: any): InboxItem {
     accountId: r.account_id ?? null, platform: r.platform, subject: r.subject, kind: r.kind, value: r.value,
     receivedAt: r.provider_received_at, receivedIso: r.received_iso ?? null,
     expired: !!r.expired, accountChange: !!r.account_change, origin: r.origin,
-    firstSeenAt: r.first_seen_at, hasHtml: !!r.has_html,
+    firstSeenAt: r.first_seen_at, hasHtml: !!r.has_html, approval: approvalOfRow(r),
   };
 }
 
 const ITEM_COLUMNS = `id, source_id, email, account_id, platform, subject, kind, value, provider_received_at,
-  received_iso, expired, account_change, origin, first_seen_at, (email_html IS NOT NULL AND email_html <> '') AS has_html`;
+  received_iso, expired, account_change, origin, first_seen_at, (email_html IS NOT NULL AND email_html <> '') AS has_html, approval_json`;
 
 /** Guarda un correo en la bandeja. Devuelve el id si es NUEVO (null si ya estaba). */
 function saveToInbox(sourceId: string, email: string, origin: string, r: CodeLookupResult | null, listed?: ListedEmail): number | null {
@@ -204,6 +223,7 @@ function saveToInbox(sourceId: string, email: string, origin: string, r: CodeLoo
         fillInbox.run({
           id: prev.id, kind: r.found ? (r.kind ?? "") : "", value, subject: r.subject ?? listed?.subject ?? "",
           html: r.emailHtml ? r.emailHtml.slice(0, MAX_HTML) : null, accountChange: !deliversEverything(sourceId) && isAccountChangeResult(r) ? 1 : 0, expired,
+          approval: approvalJson(r),
         });
         return value ? prev.id : null;
       }
@@ -223,7 +243,7 @@ function saveToInbox(sourceId: string, email: string, origin: string, r: CodeLoo
     kind: r?.found ? (r.kind ?? "") : "", value, ref, receivedAt,
     receivedIso: when ? when.toISOString() : null, expired,
     accountChange: r && !deliversEverything(sourceId) && isAccountChangeResult(r) ? 1 : 0,
-    html: r?.emailHtml ? r.emailHtml.slice(0, MAX_HTML) : null, origin,
+    html: r?.emailHtml ? r.emailHtml.slice(0, MAX_HTML) : null, origin, approval: approvalJson(r),
   });
   return Number(info.lastInsertRowid);
 }

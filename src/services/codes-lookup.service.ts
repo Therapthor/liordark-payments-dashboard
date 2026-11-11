@@ -476,6 +476,38 @@ export function loginLinkOf(result: CodeLookupResult): string | null {
   return null;
 }
 
+// Netflix «Aprueba la nueva solicitud de inicio de sesión» (cuando en una TV
+// se pone el correo y se elige aprobar desde otro dispositivo): «Aprobar» es
+// un link de inicio de sesión (/ilum?code=…) que vence en 15 min y sirve una
+// vez; «Rechazar» va a /denysignin. Se entregan los dos como botones, con el
+// dispositivo que pidió entrar (ej. «LG - Smart TV»).
+export type LoginApproval = { approveUrl: string; denyUrl: string | null; device: string | null };
+
+const APPROVAL_SUBJECT_RE = /solicitud de inicio de sesi[oó]n|sign-?in request|solicita[cç][aã]o de (login|acesso|in[ií]cio de sess[aã]o)/i;
+const APPROVAL_TEXT_RE = /aprueba la (nueva )?solicitud de inicio de sesi[oó]n|approve (the |this )?(new )?sign-?in request|aprove a (nova )?solicita[cç][aã]o/i;
+const DENY_URL_RE = /^https:\/\/(www\.)?netflix\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?denysignin\b/i;
+
+export function loginApprovalOf(result: CodeLookupResult): LoginApproval | null {
+  if (!result.found || result.kind !== "link") return null;
+  const html = String(result.emailHtml || "");
+  if (!html) return null;
+  if (!APPROVAL_SUBJECT_RE.test(String(result.subject || "")) && !APPROVAL_TEXT_RE.test(emailHtmlToText(html))) return null;
+  let approveUrl: string | null = null;
+  let denyUrl: string | null = null;
+  for (const m of html.matchAll(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = decodeHtmlEntities(m[2] ?? "").trim();
+    if (!/^https:\/\/([a-z0-9-]+\.)*netflix\.com\//i.test(href)) continue;
+    const label = decodeHtmlEntities((m[3] ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+    if (!denyUrl && (DENY_URL_RE.test(href) || /^(rechazar|deny|reject|recusar)$/i.test(label))) denyUrl = href;
+    else if (!approveUrl && isLoginLinkUrl(href) && /^(aprobar|approve|aprovar)$/i.test(label)) approveUrl = href;
+  }
+  approveUrl = approveUrl ?? loginLinkOf(result);
+  if (!approveUrl) return null;
+  const rawDevice = html.match(/icon_[a-z_]+\.png[\s\S]{0,1500}?class="copy h3[^"]*"[^>]*>\s*([^<]{2,60}?)\s*<\/td>/i)?.[1] ?? "";
+  const device = decodeHtmlEntities(rawDevice).replace(/\s+/g, " ").trim();
+  return { approveUrl, denyUrl, device: device || null };
+}
+
 /** Búsqueda para el CLIENTE (asistente del chat): en Netflix por Pally
  *  "con opciones" consulta solo «Código Inicio Sesión» (4 dígitos) — no
  *  prueba las demás opciones, así se generan muchas menos consultas al
@@ -1510,13 +1542,19 @@ const CHANGE_LINK_RE = /(reset|password|passwd|contrase|senha|forgot|recover|rec
 // cambio de contraseña: se quita antes de mirar.
 const OTP_PHRASES_RE = /one[- ]time pass(word|code)|contrase[nñ]a (de un solo uso|[uú]nica|temporal de acceso)|senha (de uso [uú]nico|tempor[aá]ria)|\botp\b/gi;
 
+// «No se requiere contraseña» (encabezado de los links de inicio de sesión y
+// de las solicitudes para aprobar una TV de Netflix): tampoco es un cambio
+// de contraseña. Antes esa frase hacía descartar el correo como «cambio de
+// datos» y al cliente le llegaba el código viejo.
+const NO_PASSWORD_RE = /no se (requiere|necesita) (tu |una |ninguna )?contrase[nñ]a|sin (necesidad de )?(usar |poner )?(tu |una )?contrase[nñ]a|no (necesitas|requieres|hace falta) (tu |una |ninguna )?contrase[nñ]a|no password (is )?(needed|required)|without (a |your |any )?password|n[aã]o (é )?(necess[aá]ri[ao]|precisa)[^.]{0,20}senha/gi;
+
 /** true = el correo es para cambiar/recuperar datos de la cuenta (o el
  *  enlace lleva a eso): al cliente nunca se le muestra. */
 export function isAccountChangeResult(result: CodeLookupResult): boolean {
   if (!result.found) return false;
   if (result.kind === "link" && result.value && CHANGE_LINK_RE.test(result.value)) return true;
-  const subject = String(result.subject || "").replace(OTP_PHRASES_RE, " ");
-  const text = result.emailHtml ? emailHtmlToText(result.emailHtml).replace(OTP_PHRASES_RE, " ") : "";
+  const subject = String(result.subject || "").replace(OTP_PHRASES_RE, " ").replace(NO_PASSWORD_RE, " ");
+  const text = result.emailHtml ? emailHtmlToText(result.emailHtml).replace(OTP_PHRASES_RE, " ").replace(NO_PASSWORD_RE, " ") : "";
   if (!subject && !text) return false; // la fuente solo da el código (ej. Streaming Market)
   if (CHANGE_ANYWHERE_RE.test(subject) || CHANGE_ANYWHERE_RE.test(text)) return true;
   const at = result.kind === "code" && result.value ? text.indexOf(result.value) : -1;

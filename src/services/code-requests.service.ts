@@ -1,12 +1,12 @@
-import { db } from "../db/db";
+import { db, ensureColumn } from "../db/db";
 import { getAccountById } from "../db/access.repository";
 import { saveIncomingCode } from "../db/codes.repository";
 import { findCodeLink, codeLinkState, sqliteDate, type CodeLink } from "../db/code-links.repository";
 import {
   lookupCodeAction, withLookupContext, describeLookupError, parseProviderDate,
   isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult, deliversEverything,
-  sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID, codeSourceLabel,
-  type CodeLookupResult,
+  sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID, codeSourceLabel, loginApprovalOf,
+  type CodeLookupResult, type LoginApproval,
 } from "./codes-lookup.service";
 import { laneIdOf } from "./codes-lanes";
 import { alertClientWaiting, logCodeEvent } from "./codes-brain.service";
@@ -55,6 +55,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_code_searches_status ON code_searches(status, created_at);
 `);
+// Datos extra de lo encontrado (JSON): hoy, la solicitud de inicio de sesión
+// de Netflix con su «Rechazar» y el dispositivo (ver loginApprovalOf).
+ensureColumn("code_searches", "found_extra", "found_extra TEXT");
 
 // Un correo que llegó bastante antes de que se creara el link es el código
 // viejo (el que ya se usó): se trata como «todavía no llega».
@@ -146,7 +149,7 @@ export function searchAgain(token: string): void {
   if (!r) return;
   update(token, {
     status: "searching", baseline_value: r.foundValue || r.baselineValue, baseline_received_at: r.foundReceivedAt || r.baselineReceivedAt,
-    found_kind: "", found_value: "", found_received_at: "", found_html: null, found_at: null, note: "", last_state: "",
+    found_kind: "", found_value: "", found_received_at: "", found_html: null, found_extra: null, found_at: null, note: "", last_state: "",
   });
   rushed.add(token);
   const row = getRequest(token);
@@ -168,6 +171,17 @@ export function isChecking(token: string): boolean {
 export function foundHtml(token: string): string | null {
   const r = db.prepare(`SELECT found_html FROM code_searches WHERE token = ?`).get(token) as { found_html: string | null } | undefined;
   return r?.found_html ?? null;
+}
+
+/** Solicitud de inicio de sesión encontrada (Aprobar = el link entregado). */
+export function foundApproval(token: string, approveUrl: string): LoginApproval | null {
+  const r = db.prepare(`SELECT found_extra FROM code_searches WHERE token = ?`).get(token) as { found_extra: string | null } | undefined;
+  if (!r?.found_extra || !approveUrl) return null;
+  try {
+    const a = JSON.parse(r.found_extra)?.approval;
+    if (!a) return null;
+    return { approveUrl, denyUrl: typeof a.denyUrl === "string" ? a.denyUrl : null, device: typeof a.device === "string" ? a.device : null };
+  } catch { return null; }
 }
 
 // ── Qué se le entrega al cliente ──
@@ -225,11 +239,13 @@ async function checkRequest(req: CodeRequestRow): Promise<void> {
   const outcome = evaluate(current, result, problem);
   if (outcome.state === "found") {
     const r = outcome.result;
+    const approval = loginApprovalOf(r);
     update(req.token, {
       status: "found", attempts: current.attempts + 1, last_check_at: sqlNow(), last_state: "found",
       last_message: `Llegó ${r.kind === "link" ? "el link" : "el código"}${r.subject ? ` («${r.subject}»)` : ""}`, note: "",
       found_kind: r.kind ?? "code", found_value: outcome.value, found_received_at: r.providerReceivedAt ?? "",
       found_html: r.emailHtml ? sanitizeEmailHtml(r.emailHtml, true) : null, found_at: sqlNow(),
+      found_extra: approval ? JSON.stringify({ approval: { denyUrl: approval.denyUrl, device: approval.device } }) : null,
     });
     saveIncomingCode({
       accountId: req.accountId, code: outcome.value,

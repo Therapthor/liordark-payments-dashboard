@@ -788,6 +788,12 @@ button, input {
   border-radius: 12px; padding: 9px 14px; font-weight: 700; font-size: 13px; text-decoration: none; }
 .cx-linkbtn.big { font-size: 16px; padding: 14px 20px; border-radius: 16px; }
 .cx-linkbtn:hover { border-color: #5aa8e0; color: #c4e4ff; }
+/* Netflix: solicitud de inicio de sesión (Aprobar / Rechazar) */
+.cx-approval { display: flex; flex-direction: column; gap: 8px; }
+.cx-approval-device { font-size: 13px; font-weight: 700; opacity: .85; }
+.cx-approval-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.cx-linkbtn.deny { background: transparent; color: inherit; border-color: currentColor; opacity: .8; }
+.cx-linkbtn.deny:hover { opacity: 1; }
 .cx-novalue { margin: 0; font-size: 13px; color: var(--cmuted); }
 
 /* Marca de plataforma */

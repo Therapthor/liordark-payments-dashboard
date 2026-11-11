@@ -26,7 +26,7 @@ try {
 // que ya tenía la tabla, se agregan acá si todavía faltan.
 // ─────────────────────────────────────────────────────────────
 
-function ensureColumn(table: string, column: string, columnDdl: string): void {
+export function ensureColumn(table: string, column: string, columnDdl: string): void {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (!cols.some(c => c.name === column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDdl}`);

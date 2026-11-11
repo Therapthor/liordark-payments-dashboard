@@ -57,6 +57,17 @@
 
   function valueHtml(it, big) {
     if (!it.value) return `<p class="cx-novalue">${esc(it.subject || "Correo sin código")}</p>`;
+    // Netflix «Aprueba la nueva solicitud de inicio de sesión» (TV).
+    if (it.kind === "link" && it.approval) {
+      const a = it.approval;
+      return `<div class="cx-approval">
+          <span class="cx-approval-device">Solicitud de inicio de sesión${a.device ? " · " + esc(a.device) : ""}</span>
+          <span class="cx-approval-btns">
+            <a class="cx-linkbtn${big ? " big" : ""}" href="${esc(a.approveUrl)}" target="_blank" rel="noopener noreferrer">Aprobar</a>
+            ${a.denyUrl ? `<a class="cx-linkbtn deny${big ? " big" : ""}" href="${esc(a.denyUrl)}" target="_blank" rel="noopener noreferrer">Rechazar</a>` : ""}
+          </span>
+        </div>`;
+    }
     if (it.kind === "link") {
       return `<a class="cx-linkbtn${big ? " big" : ""}" href="${esc(it.value)}" target="_blank" rel="noopener noreferrer">Abrir enlace${/travel|temporal/i.test(it.value + it.subject) ? " · Obtener código" : ""}</a>`;
     }
@@ -119,7 +130,7 @@
         </div>
         <div class="cx-hero-actions">
           ${it.value && it.kind !== "link" ? `<button type="button" class="cx-btn" data-copy="${esc(it.value)}">Copiar código</button>` : ""}
-          ${it.value && it.kind === "link" ? `<button type="button" class="cx-btn" data-copy="${esc(it.value)}">Copiar enlace</button>` : ""}
+          ${it.value && it.kind === "link" ? `<button type="button" class="cx-btn" data-copy="${esc(it.value)}">${it.approval ? "Copiar link de Aprobar" : "Copiar enlace"}</button>` : ""}
           ${it.hasHtml ? `<button type="button" class="cx-ghost-btn" data-mail="${it.id}">Ver correo</button>` : ""}
         </div>
       </div>`;

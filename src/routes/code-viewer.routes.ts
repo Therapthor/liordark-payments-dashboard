@@ -11,7 +11,7 @@ import {
   type CodeLookupResult, type LookupOrigin,
 } from "../services/codes-lookup.service";
 import {
-  codeWaitMinutes, ensureCodeRequest, markClientSeen, rushRequest, searchAgain, closeCodeRequest, isChecking, foundHtml,
+  codeWaitMinutes, ensureCodeRequest, markClientSeen, rushRequest, searchAgain, closeCodeRequest, isChecking, foundHtml, foundApproval,
 } from "../services/code-requests.service";
 import { getCurrentTotp } from "../utils/totp.util";
 
@@ -187,10 +187,14 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
   let body: Record<string, unknown>;
   if (r.status === "found" || r.status === "delivered") {
     const when = parseProviderDate(r.foundReceivedAt);
+    // Netflix «Aprueba la solicitud de inicio de sesión»: el link entregado
+    // es «Aprobar»; se agregan «Rechazar» y el dispositivo para los botones.
+    const approval = r.foundKind === "link" ? foundApproval(link.token, r.foundValue) : null;
     body = {
       status: "found", kind: r.foundKind, value: r.foundValue,
       receivedAtLima: when ? limaTime(when) : null,
       html: foundHtml(link.token),
+      ...(approval ? { approval } : {}),
     };
   } else {
     body = { status: "waiting", note: r.note, checking: isChecking(link.token) || !r.lastCheckAt };
