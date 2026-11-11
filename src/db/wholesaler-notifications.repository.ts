@@ -12,7 +12,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // atendido (ver support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active" | "support_update";
 
 export type WholesalerNotification = {
   id:           number;
@@ -55,7 +55,10 @@ export function createWholesalerNotification(
   wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = "", customMessage = "", replaced = false
 ): void {
   if (!wholesalerId || !platform) return;
-  const message = type === "support_resolved"
+  // "support_update": respuesta a un reporte de Soporte del panel mayorista (texto completo).
+  const message = type === "support_update"
+    ? customMessage.trim()
+    : type === "support_resolved"
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))
     : type === "password_changed"
     ? `🔑 La cuenta de ${platformTitle(platform)} de tu cliente tiene una contraseña nueva: ${customMessage}`

@@ -333,6 +333,11 @@ ensureColumn("support_tickets", "replaced_at", "replaced_at TEXT");
 ensureColumn("support_tickets", "resolution", "resolution TEXT NOT NULL DEFAULT ''");
 ensureColumn("support_tickets", "profile_name", "profile_name TEXT NOT NULL DEFAULT ''");
 ensureColumn("support_tickets", "reviewed_at", "reviewed_at TEXT");
+// Reportes del panel mayorista: qué venta (perfil) y de qué tipo
+// ('account' = problema con la cuenta, 'codes' = restablecer el límite de
+// consultas de códigos del día).
+ensureColumn("support_tickets", "profile_id", "profile_id INTEGER");
+ensureColumn("support_tickets", "kind", "kind TEXT NOT NULL DEFAULT ''");
 
 // Correo del cliente retail — opcional, solo para el aviso de vencimiento
 // por correo (Resend). Vacío = no quiso o no lo puso todavía; en ese caso
@@ -494,6 +499,8 @@ db.exec(`
 // Consultas de «Códigos» del panel mayorista: se cuentan por perfil (cada
 // venta tiene su propio límite diario).
 ensureColumn("code_links", "profile_id", "profile_id INTEGER");
+// 1 = Soporte le restableció el límite del día: esta consulta ya no cuenta.
+ensureColumn("code_links", "quota_reset", "quota_reset INTEGER NOT NULL DEFAULT 0");
 
 // Links para que el cliente cambie su PIN (liordark.com/cambiar-pin/<token>).
 // Valen 10 min y se usan una sola vez.

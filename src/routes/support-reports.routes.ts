@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { listSupportTickets, countPendingSupportTickets, getSupportTicketById } from "../db/support-tickets.repository";
 import {
-  setTicketInReview, resolveTicketActive, resolveTicketSolved, replaceOptions, replaceTicketAccount,
+  setTicketInReview, resolveTicketActive, resolveTicketSolved, replaceOptions, replaceTicketAccount, resetCodesForTicket,
 } from "../services/support-reports.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -36,6 +36,13 @@ router.post("/tickets/:id/active", (req, res) => {
 router.post("/tickets/:id/solved", (req, res) => {
   const result = resolveTicketSolved(Number(req.params.id));
   if (!result) return res.status(404).json({ message: "Reporte no encontrado." });
+  res.json(result);
+});
+
+// Reporte de códigos del panel mayorista: restablece el límite del día.
+router.post("/tickets/:id/reset-codes", (req, res) => {
+  const result = resetCodesForTicket(Number(req.params.id));
+  if (!result.ok) return res.status(400).json({ message: result.message });
   res.json(result);
 });
 

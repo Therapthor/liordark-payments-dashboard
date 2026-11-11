@@ -91,20 +91,6 @@
     } catch { return String(iso); }
   }
 
-  function expiryClass(days) {
-    if (days === null || days === undefined) return "";
-    if (days < 0) return "expiry-over";
-    if (days <= 5) return "expiry-soon";
-    return "expiry-ok";
-  }
-
-  function expiryLabel(expiresAt, days) {
-    if (!expiresAt) return "Sin fecha";
-    if (days < 0) return `Venció hace ${Math.abs(days)}d · ${fmtDate(expiresAt)}`;
-    if (days === 0) return `Vence hoy · ${fmtDate(expiresAt)}`;
-    return `Vence en ${days}d · ${fmtDate(expiresAt)}`;
-  }
-
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
   // <img data-fallback="..."> que reemplaza por un chip de texto si la
@@ -124,6 +110,114 @@
   function mediaHtml(imageUrl, fallbackText) {
     if (!imageUrl) return `<span class="catalog-card-fallback">${escapeHtml(fallbackText)}</span>`;
     return `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" data-fallback="${escapeHtml(fallbackText)}">`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ÍCONOS (SVG de trazo, color = currentColor; estilo en .ic del css)
+  // ─────────────────────────────────────────────────────────────
+
+  const ICON_PATHS = {
+    home:    '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+    users:   '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.2A6.5 6.5 0 0 1 21.5 20"/>',
+    cart:    '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"/>',
+    box:     '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>',
+    card:    '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/><path d="M6.5 15h3"/>',
+    speaker: '<path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/>',
+    chat:    '<path d="M21 12a8.5 8.5 0 0 1-12.4 7.6L3 21l1.4-5.4A8.5 8.5 0 1 1 21 12z"/>',
+    more:    '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+    plus:    '<path d="M12 5v14M5 12h14"/>',
+    key:     '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/>',
+    send:    '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
+    trash:   '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+    check:   '<path d="m5 12 5 5 9-10"/>',
+    moon:    '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    sun:     '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    copy:    '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+    mail:    '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    shield:  '<path d="M12 3 4 6v6c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V6z"/>',
+    user:    '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    ban:     '<circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/>',
+    undo:    '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
+    alert:   '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    arrowUp: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+    arrowDn: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  };
+
+  function icon(name) {
+    return `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
+  }
+
+  // Chip con las iniciales y el color de cada plataforma (NF rojo, D+ azul…).
+  const PLATFORM_STYLES = [
+    [/netflix/i, "NF", "nf"], [/disney/i, "D+", "dp"], [/hbo|^max$/i, "HBO", "hbo"],
+    [/prime|amazon/i, "PV", "pv"], [/crunchy/i, "CR", "cr"], [/spotify/i, "SP", "sp"],
+    [/youtube/i, "YT", "yt"], [/canva/i, "CA", "ca"], [/gemini/i, "GE", "ge"],
+    [/chatgpt|openai|gpt/i, "AI", "ai"], [/paramount/i, "P+", "pp"], [/vix/i, "VX", "vx"],
+    [/apple/i, "TV", "tv"], [/star/i, "S+", "st"],
+  ];
+
+  function platformChip(platform, size) {
+    const p = String(platform || "");
+    const hit = PLATFORM_STYLES.find(([re]) => re.test(p));
+    const mono = hit ? hit[1] : (p.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?");
+    return `<span class="plat${hit ? " plat-" + hit[2] : ""}${size ? " plat-" + size : ""}" aria-hidden="true">${escapeHtml(mono)}</span>`;
+  }
+
+  const PLATFORM_NAMES = {
+    NETFLIX: "Netflix", DISNEY: "Disney+", "DISNEY+": "Disney+", HBO: "HBO Max", "HBO MAX": "HBO Max", MAX: "Max",
+    "PRIME VIDEO": "Prime Video", PRIME: "Prime Video", AMAZON: "Prime Video", CRUNCHYROLL: "Crunchyroll",
+    SPOTIFY: "Spotify", YOUTUBE: "YouTube", CANVA: "Canva Pro", GEMINI: "Gemini", CHATGPT: "ChatGPT",
+    PARAMOUNT: "Paramount+", VIX: "ViX",
+  };
+
+  // Nombre bonito: el título del catálogo si existe; si no, uno conocido o
+  // "Title Case" (el valor crudo sigue yendo en los mensajes de WhatsApp).
+  function platformName(platform) {
+    const item = catalogItem(platform);
+    if (item && item.title) return item.title;
+    const raw = String(platform || "").trim();
+    return PLATFORM_NAMES[raw.toUpperCase()] || raw.toLowerCase().replace(/(^|\s)\S/g, s => s.toUpperCase());
+  }
+
+  // "35.00" → "35" · "12.50" → "12.50"
+  function shortPrice(price) {
+    const n = Number(price);
+    if (!Number.isFinite(n)) return String(price ?? "");
+    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+  }
+
+  function expiryTone(days) {
+    if (days === null || days === undefined) return "none";
+    if (days < 0) return "over";
+    if (days <= 5) return "soon";
+    return "ok";
+  }
+
+  function expiryStatusText(expiresAt, days) {
+    if (!expiresAt) return "Sin fecha de vencimiento";
+    const d = fmtDate(expiresAt).slice(0, 5);
+    if (days < 0) return `Venció hace ${Math.abs(days)} día${days === -1 ? "" : "s"} · ${d}`;
+    if (days === 0) return `Vence hoy · ${d}`;
+    if (days === 1) return `Vence mañana · ${d}`;
+    if (days <= 5) return `Vence en ${days} días · ${d}`;
+    return `Activa · vence el ${d} (${days} días)`;
+  }
+
+  function whenText(days) {
+    if (days === null || days === undefined) return "sin fecha";
+    if (days < 0) return `venció hace ${Math.abs(days)}d`;
+    if (days === 0) return "vence hoy";
+    if (days === 1) return "mañana";
+    return `en ${days} días`;
+  }
+
+  function toast(text) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.setAttribute("role", "status");
+    el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2200);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -181,12 +275,29 @@
       }
     });
 
-    document.getElementById("app-logout-btn").addEventListener("click", async () => {
-      try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }
-      cartItems = [];
-      stopNotifPolling();
-      showAuth();
+    document.getElementById("app-logout-btn").addEventListener("click", logout);
+    document.getElementById("mas-logout-btn").addEventListener("click", logout);
+
+    // Ojo de la contraseña: mostrar / ocultar.
+    const eye = document.getElementById("login-eye");
+    eye.addEventListener("click", () => {
+      const input = document.getElementById("login-password");
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      eye.setAttribute("aria-label", show ? "Ocultar contraseña" : "Mostrar contraseña");
+      eye.title = eye.getAttribute("aria-label");
     });
+
+    document.getElementById("auth-support-link").href = "https://wa.me/" + SUPPORT_PHONE
+      + "?text=" + encodeURIComponent("Hola! Quiero ser mayorista de Manguitope.");
+  }
+
+  async function logout() {
+    try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }
+    cartItems = [];
+    cachedClients = [];
+    stopNotifPolling();
+    showAuth();
   }
 
   async function onAuthenticated() {
@@ -276,25 +387,25 @@
   // mobile). Un solo arreglo de páginas genera ambas navegaciones.
   // ─────────────────────────────────────────────────────────────
 
-  // Sidebar (desktop, ≥768px) — lista completa, hay espacio de sobra.
+  // Menú lateral (PC, ≥900px) — lista completa, hay espacio de sobra.
   const SIDEBAR_PAGES = [
-    { id: "inicio",        label: "Inicio",        icon: "🏠" },
-    { id: "clientes",      label: "Clientes",      icon: "👥" },
-    { id: "comprar",       label: "Comprar",       icon: "🛒" },
-    { id: "cuentas",       label: "Cuentas",       icon: "📦", badge: true },
-    { id: "creditos",      label: "Créditos",      icon: "💳" },
-    { id: "recordatorios", label: "Recordatorios", icon: "🔔" },
-    { id: "soporte",       label: "Soporte",       icon: "💬" },
+    { id: "inicio",        label: "Inicio",        icon: "home" },
+    { id: "clientes",      label: "Clientes",      icon: "users" },
+    { id: "comprar",       label: "Comprar",       icon: "cart" },
+    { id: "cuentas",       label: "Cuentas",       icon: "box", badge: true },
+    { id: "creditos",      label: "Créditos",      icon: "card" },
+    { id: "recordatorios", label: "Recordatorios", icon: "speaker" },
+    { id: "soporte",       label: "Soporte",       icon: "chat" },
   ];
 
-  // Tab bar (mobile) — Créditos/Recordatorios/Soporte se agrupan en "Más"
-  // (page-mas) para no amontonar íconos en una pantalla angosta.
+  // Barra inferior (celular) — Créditos/Recordatorios/Soporte se agrupan en
+  // "Más" (page-mas) para no amontonar íconos en una pantalla angosta.
   const TAB_PAGES = [
-    { id: "inicio",   label: "Inicio",   icon: "🏠" },
-    { id: "clientes", label: "Clientes", icon: "👥" },
-    { id: "comprar",  label: "Comprar",  icon: "🛒" },
-    { id: "cuentas",  label: "Cuentas",  icon: "📦", badge: true },
-    { id: "mas",      label: "Más",      icon: "⋯" },
+    { id: "inicio",   label: "Inicio",   icon: "home" },
+    { id: "clientes", label: "Clientes", icon: "users" },
+    { id: "comprar",  label: "Comprar",  icon: "cart" },
+    { id: "cuentas",  label: "Cuentas",  icon: "box", badge: true },
+    { id: "mas",      label: "Más",      icon: "more" },
   ];
 
   // Páginas que en mobile viven dentro de "Más" — su tab activo visualmente
@@ -310,7 +421,7 @@
 
     tabBar.innerHTML = TAB_PAGES.map(p => `
       <button class="tab-btn" data-page="${p.id}" type="button">
-        <span class="tab-btn-icon">${p.icon}</span>
+        ${icon(p.icon)}
         <span>${escapeHtml(p.label)}</span>
         ${p.badge ? `<span class="tab-badge" id="badge-${p.id}-tab" hidden>0</span>` : ""}
       </button>
@@ -318,7 +429,7 @@
 
     sidebarNav.innerHTML = SIDEBAR_PAGES.map(p => `
       <button class="sidebar-btn" data-page="${p.id}" type="button">
-        <span class="sidebar-btn-icon">${p.icon}</span>
+        ${icon(p.icon)}
         <span>${escapeHtml(p.label)}</span>
         ${p.badge ? `<span class="sidebar-badge" id="badge-${p.id}-sidebar" hidden>0</span>` : ""}
       </button>
@@ -330,6 +441,10 @@
     document.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-page]");
       if (btn) switchPage(btn.dataset.page);
+      // Cierra los menús «⋯» abiertos al tocar fuera de ellos.
+      document.querySelectorAll("details.more-menu[open]").forEach(d => {
+        if (!d.contains(e.target)) d.open = false;
+      });
     });
   }
 
@@ -351,9 +466,20 @@
 
   function switchPage(view) {
     const tabView = mobileTabFor(view);
-    document.querySelectorAll(".tab-btn[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === tabView));
-    document.querySelectorAll(".sidebar-btn[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === view));
+    document.querySelectorAll(".tab-btn[data-page]").forEach(b => {
+      const on = b.dataset.page === tabView;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    document.querySelectorAll(".sidebar-btn[data-page]").forEach(b => {
+      const on = b.dataset.page === view;
+      b.classList.toggle("active", on);
+      if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
     document.querySelectorAll(".page").forEach(sec => { sec.hidden = sec.id !== "page-" + view; });
+    // La banda mango se alarga solo en Inicio (la tarjeta de saldo se monta encima).
+    document.getElementById("view-app").dataset.page = view;
+    closeNotifPanel();
     document.getElementById("app-main").scrollTo(0, 0);
     window.scrollTo(0, 0);
 
@@ -363,6 +489,7 @@
     else if (view === "cuentas")       loadCuentas();
     else if (view === "creditos")      loadCreditos();
     else if (view === "recordatorios") loadReminders();
+    else if (view === "soporte")       loadSoporte();
   }
 
   let currentBalanceCents = 0;
@@ -387,8 +514,8 @@
       const { balanceCents, displayName, phone } = await api("/balance");
       currentBalanceCents = balanceCents;
       currentWholesalerPhone = phone || currentWholesalerPhone;
-      document.getElementById("header-hello").textContent = "Hola, " + (displayName || phone || "");
-      document.getElementById("header-balance").textContent = "Saldo: " + money(balanceCents);
+      document.getElementById("header-name").textContent = displayName || phone || "Mayorista";
+      document.getElementById("header-balance").textContent = money(balanceCents);
       const creditsBalanceEl = document.getElementById("credits-balance-value");
       if (creditsBalanceEl) creditsBalanceEl.textContent = money(balanceCents);
       const homeBalanceEl = document.getElementById("home-balance-value");
@@ -421,10 +548,8 @@
   // CLIENTES — sub-clientes del mayorista con perfil asignado.
   // ─────────────────────────────────────────────────────────────
 
-  // Marca del mayorista: ➖ sin marcar · ❌ no renueva. ✅ = renovación
-  // PAGADA (solo con «💰 Renovar»; ya no se puede poner a mano).
-  const RENEWAL_ICON  = { "": "➖", yes: "✅", no: "❌" };
-  const RENEWAL_TITLE = { "": "Marcar que NO renueva", yes: "Renovación pagada", no: "No renueva — clic para quitar la marca" };
+  // Marca del mayorista: sin marcar · «No renueva». La renovación PAGADA
+  // solo sale de «Renovar» (ya no se puede poner a mano).
   const PAID_MESSAGE  = "✅ Esta renovación ya está pagada — se activa apenas confirmemos la cuenta con el proveedor.";
 
   // Renovación pagada y esperando confirmación del proveedor (cuentas con perfiles).
@@ -433,111 +558,159 @@
   }
 
   let cachedClients = [];
+  let clientsFilter = "all";
+  let clientsQuery  = "";
+
+  // Trae clientes + catálogo (para los nombres). Lo usan Clientes y Soporte.
+  async function fetchClients() {
+    const [, { clients, manualOverrides }] = await Promise.all([fetchCatalog(), api("/clients")]);
+    // Reemplazos manuales de Soporte (garantía sin cuenta real en Accesos)
+    // — id negativo para no chocar nunca con un id real de perfil.
+    const overrides = (manualOverrides || []).map(o => ({
+      id: -o.id, isOverride: true, profileName: o.profileName, clientPhone: o.clientPhone,
+      renewalStatus: "", platform: o.platform, expiresAt: o.expiresAt, email: o.email, password: o.password,
+    }));
+    cachedClients = [...(clients || []), ...overrides];
+    return cachedClients;
+  }
 
   async function loadClients() {
     const listEl  = document.getElementById("clients-list");
     const emptyEl = document.getElementById("clients-empty");
-    listEl.innerHTML = `<p class="muted small">Cargando…</p>`;
+    if (!cachedClients.length) listEl.innerHTML = `<p class="muted small">Cargando…</p>`;
     emptyEl.hidden = true;
     try {
-      const [, { clients, manualOverrides }] = await Promise.all([fetchCatalog(), api("/clients")]);
-      // Reemplazos manuales de Soporte (garantía sin cuenta real en Accesos)
-      // — id negativo para no chocar nunca con un id real de perfil.
-      const overrides = (manualOverrides || []).map(o => ({
-        id: -o.id, isOverride: true, profileName: o.profileName, clientPhone: o.clientPhone,
-        renewalStatus: "", platform: o.platform, expiresAt: o.expiresAt, email: o.email, password: o.password,
-      }));
-      cachedClients = [...(clients || []), ...overrides];
+      await fetchClients();
       renderClients();
     } catch (err) {
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
   }
 
+  function isFullAccountClient(c) {
+    return !c.isOverride && (c.accountHasProfiles === false || (c.renew && c.renew.kind === "cuenta_completa"));
+  }
+
+  function clientMatchesFilter(c) {
+    if (clientsFilter === "soon") {
+      const days = daysLeftFor(c.expiresAt);
+      if (days === null || days > 5) return false;
+    } else if (clientsFilter === "full") {
+      if (!isFullAccountClient(c)) return false;
+    } else if (clientsFilter === "profile") {
+      if (c.isOverride || isFullAccountClient(c)) return false;
+    }
+    if (!clientsQuery) return true;
+    const hay = [c.clientPhone, c.email, c.platform, platformName(c.platform), c.profileName].join(" ").toLowerCase();
+    return clientsQuery.split(/\s+/).every(w => hay.includes(w));
+  }
+
   function clientCardHtml(c) {
     const days   = daysLeftFor(c.expiresAt);
-    const cls    = expiryClass(days);
-    const label  = expiryLabel(c.expiresAt, days);
+    const tone   = expiryTone(days);
     const status = c.renewalStatus || "";
+    const phoneLine = escapeHtml(c.clientPhone) + (c.profileName ? " · " + escapeHtml(c.profileName) : "");
 
     // "Es para el propio mayorista" (asignada desde el panel admin) — no
     // es un cliente real, así que se marca para no confundirla con uno.
-    const ownBadgeHtml = isOwnAccount(c.clientPhone) ? `<span class="client-own-badge">🧑‍💼 Tu cuenta</span>` : "";
+    const tags = [];
+    if (c.isOverride) tags.push(`<span class="tag tag-blue">${icon("shield")}Garantía de soporte</span>`);
+    if (isFullAccountClient(c)) tags.push(`<span class="tag tag-mango">Cuenta completa</span>`);
+    if (isOwnAccount(c.clientPhone)) tags.push(`<span class="tag tag-leaf">${icon("user")}Tu cuenta</span>`);
+    if (status === "no") tags.push(`<span class="tag tag-coral">${icon("ban")}No renueva</span>`);
+
+    const head = (menuHtml) => `
+        <div class="client-card-head">
+          ${platformChip(c.platform)}
+          <div class="client-card-id">
+            <div class="client-platform">${escapeHtml(platformName(c.platform))}</div>
+            <div class="client-phone">${phoneLine}</div>
+          </div>
+          ${menuHtml}
+        </div>
+        ${tags.length ? `<div class="client-tags">${tags.join("")}</div>` : ""}
+        <div class="client-status tone-${tone}">${escapeHtml(expiryStatusText(c.expiresAt, days))}</div>
+        ${c.email ? `<div class="client-email">${icon("mail")}${escapeHtml(c.email)}</div>` : ""}`;
 
     if (c.isOverride) {
       return `
-        <div class="client-card" data-profile-id="${c.id}">
-          <div class="client-card-head">
-            <div>
-              <div class="client-platform">${escapeHtml(c.platform)}</div>
-              <div class="client-phone">${escapeHtml(c.clientPhone)}</div>
-            </div>
-          </div>
-          <span class="client-override-badge">🛟 Garantía de soporte</span>
-          ${ownBadgeHtml}
-          <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
-          ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
-          ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
+        <article class="client-card" data-profile-id="${c.id}">
+          ${head("")}
           <div class="client-card-actions">
-            <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
+            <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">${icon("send")}Enviar cuenta</button>
           </div>
-        </div>`;
+        </article>`;
     }
 
     const paid = isRenewalPaid(c);
-    const fullBadgeHtml = c.renew && c.renew.kind === "cuenta_completa"
-      ? `<span class="client-kind-badge">📦 Cuenta completa</span>` : "";
+    const markerItem = paid ? "" : status === "no"
+      ? `<button type="button" data-act="marker" data-profile-id="${c.id}">${icon("undo")}Quitar «No renueva»</button>`
+      : `<button type="button" data-act="marker" data-profile-id="${c.id}">${icon("ban")}Marcar que no renueva</button>`;
+    const menu = `
+          <details class="more-menu">
+            <summary aria-label="Más acciones" title="Más acciones">${icon("more")}</summary>
+            <div class="more-menu-list">
+              ${markerItem}
+              <button type="button" class="danger" data-act="delete" data-profile-id="${c.id}">${icon("trash")}Eliminar cliente</button>
+            </div>
+          </details>`;
+
     const renewBtnHtml = paid
-      ? `<button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button" disabled>✅ Pagada</button>`
-      : `<button class="btn-primary btn-sm" data-act="renew" data-profile-id="${c.id}" type="button">💰 Renovar${c.renew ? ` · S/ ${escapeHtml(c.renew.price)}` : ""}</button>`;
+      ? `<button class="btn-primary btn-sm act-renew" data-act="renew" data-profile-id="${c.id}" type="button" disabled>${icon("check")}Pagada</button>`
+      : `<button class="btn-primary btn-sm act-renew" data-act="renew" data-profile-id="${c.id}" type="button">Renovar${c.renew ? ` S/ ${escapeHtml(shortPrice(c.renew.price))}` : ""}</button>`;
+    const codesBtnHtml = c.codes && c.codes.enabled
+      ? `<button class="btn-mango btn-sm" data-act="codes" data-profile-id="${c.id}" type="button" title="Ver el código que llega al correo de esta cuenta" aria-label="Códigos">${icon("key")}<span class="codes-left">${c.codes.open ? "Abierta" : `${c.codes.remaining}/${c.codes.limit}`}</span></button>`
+      : "";
 
     return `
-      <div class="client-card" data-profile-id="${c.id}">
-        <div class="client-card-head">
-          <div>
-            <div class="client-platform">${escapeHtml(c.platform)}</div>
-            <div class="client-phone">${escapeHtml(c.clientPhone)}</div>
-          </div>
-          <button class="renewal-btn renewal-${status || "unset"}" data-act="marker" data-profile-id="${c.id}" title="${escapeHtml(status === "yes" && !paid ? RENEWAL_TITLE[""] : RENEWAL_TITLE[status])}" type="button">${RENEWAL_ICON[status]}</button>
-        </div>
-        ${fullBadgeHtml}
-        ${ownBadgeHtml}
-        <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
-        ${paid ? `<div class="client-paid">✅ Renovación pagada — se activa al confirmar con el proveedor</div>` : ""}
-        ${c.email ? `<div class="client-email">${escapeHtml(c.email)}</div>` : ""}
-        ${c.profileName ? `<div class="client-email">Perfil: ${escapeHtml(c.profileName)}</div>` : ""}
+      <article class="client-card" data-profile-id="${c.id}">
+        ${head(menu)}
+        ${paid ? `<div class="client-paid">${icon("check")}Renovación pagada · se activa al confirmar con el proveedor</div>` : ""}
         <div class="client-card-actions">
           ${renewBtnHtml}
-          ${c.codes && c.codes.enabled
-            ? `<button class="btn-ghost btn-sm" data-act="codes" data-profile-id="${c.id}" type="button" title="Ver el código que llega al correo de esta cuenta">🔑 Códigos <span class="codes-left">${c.codes.open ? "abierta" : `${c.codes.remaining}/${c.codes.limit}`}</span></button>`
-            : ""}
-          <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button">📧 Enviar cuenta</button>
-          <button class="btn-danger btn-sm" data-act="delete" data-profile-id="${c.id}" type="button">🗑 Eliminar</button>
+          ${codesBtnHtml}
+          <button class="btn-ghost btn-sm" data-act="send" data-profile-id="${c.id}" type="button" title="Enviar los datos por WhatsApp">${icon("send")}Enviar</button>
         </div>
-      </div>`;
+      </article>`;
   }
 
   function renderClients() {
     const listEl  = document.getElementById("clients-list");
     const emptyEl = document.getElementById("clients-empty");
+    const countEl = document.getElementById("clients-count");
+    countEl.textContent = String(cachedClients.length);
+    countEl.hidden = cachedClients.length === 0;
+    const soonCount = cachedClients.filter(c => { const d = daysLeftFor(c.expiresAt); return d !== null && d <= 5; }).length;
+    const soonChip = document.querySelector('#clients-filters [data-filter="soon"]');
+    if (soonChip) soonChip.textContent = soonCount ? `Por vencer · ${soonCount}` : "Por vencer";
+
     if (cachedClients.length === 0) {
       listEl.innerHTML = "";
       emptyEl.hidden = false;
       return;
     }
     emptyEl.hidden = true;
-    listEl.innerHTML = cachedClients.map(clientCardHtml).join("");
+    // Si el menú «⋯» de una tarjeta estaba abierto, sigue abierto tras repintar.
+    const openMenu = listEl.querySelector("details.more-menu[open]");
+    const openId = openMenu ? openMenu.closest("[data-profile-id]").dataset.profileId : null;
+    const visible = cachedClients.filter(clientMatchesFilter);
+    listEl.innerHTML = visible.length
+      ? visible.map(clientCardHtml).join("")
+      : `<p class="empty-state">Ningún cliente coincide con la búsqueda.</p>`;
+    if (openId) {
+      const again = listEl.querySelector(`[data-profile-id="${openId}"] details.more-menu`);
+      if (again) again.open = true;
+    }
   }
 
-  async function handleRenewalMarker(btn, client) {
+  async function handleRenewalMarker(client) {
     if (isRenewalPaid(client)) { alert(PAID_MESSAGE); return; }
     const next = (client.renewalStatus || "") === "no" ? "" : "no";
     try {
       const { profile } = await api(`/clients/${client.id}/renewal-marker`, { method: "POST", body: { status: next } });
       client.renewalStatus = profile.renewalStatus;
-      btn.className = "renewal-btn renewal-" + (next || "unset");
-      btn.title = RENEWAL_TITLE[next];
-      btn.textContent = RENEWAL_ICON[next];
+      renderClients();
+      toast(next === "no" ? "Marcado: no renueva" : "Marca quitada");
     } catch (err) {
       alert(err.message);
     }
@@ -552,7 +725,7 @@
     if (isRenewalPaid(client)) { alert(PAID_MESSAGE); return; }
 
     renewInFlight = true;
-    const originalText = btn ? btn.textContent : "";
+    const originalHtml = btn ? btn.innerHTML : "";
     if (btn) { btn.disabled = true; btn.textContent = "Calculando…"; }
     try {
       const quote = await api(`/clients/${client.id}/renew-quote`);
@@ -584,7 +757,7 @@
       alert(err.message);
     } finally {
       renewInFlight = false;
-      if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = originalText; }
+      if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = originalHtml; }
     }
   }
 
@@ -615,12 +788,29 @@
       if (!btn) return;
       const client = cachedClients.find(c => c.id === Number(btn.dataset.profileId));
       if (!client) return;
+      const menu = btn.closest("details.more-menu");
+      if (menu) menu.open = false;
       const act = btn.dataset.act;
-      if (act === "marker") handleRenewalMarker(btn, client);
+      if (act === "marker") handleRenewalMarker(client);
       else if (act === "renew") handleRenew(client, btn);
       else if (act === "codes") openCodes(client, btn);
       else if (act === "send") handleSendClientAccount(client);
       else if (act === "delete") handleDeleteClient(client);
+    });
+
+    document.getElementById("clients-search").addEventListener("input", (e) => {
+      clientsQuery = e.target.value.trim().toLowerCase();
+      renderClients();
+    });
+    document.getElementById("clients-filters").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-filter]");
+      if (!chip) return;
+      clientsFilter = chip.dataset.filter;
+      document.querySelectorAll("#clients-filters .filter-chip").forEach(b => {
+        b.classList.toggle("active", b === chip);
+        b.setAttribute("aria-pressed", b === chip ? "true" : "false");
+      });
+      renderClients();
     });
   }
 
@@ -649,13 +839,7 @@
       .forEach(s => { document.getElementById(s).hidden = s !== id; });
   }
 
-  function codesToast(text) {
-    const el = document.createElement("div");
-    el.className = "toast";
-    el.textContent = text;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 1800);
-  }
+  function codesToast(text) { toast(text); }
 
   function codesStopTimers() {
     if (!codesState) return;
@@ -766,7 +950,7 @@
         document.getElementById("codes-box").classList.toggle("long", !isLink && String(data.value).length > 6);
         document.getElementById("codes-box").hidden = isLink;
         document.getElementById("codes-copy").hidden = false;
-        document.getElementById("codes-copy").textContent = isLink ? "📋 Copiar link" : "📋 Copiar";
+        document.getElementById("codes-copy").textContent = isLink ? "Copiar link" : "Copiar";
         document.getElementById("codes-totp-bar").hidden = true;
         document.getElementById("codes-again").hidden = false;
         const a = document.getElementById("codes-link");
@@ -806,7 +990,15 @@
     try {
       opened = await api(`/clients/${client.id}/codes/open`, { method: "POST" });
     } catch (err) {
-      alert(err.message);
+      // Límite del día agotado: ofrece pedir que se lo restablezcan.
+      if (err.status === 429) {
+        if (confirm(err.message + "\n\n¿Quieres pedir ahora que te restablezcamos el límite de esta cuenta?")) {
+          switchPage("soporte");
+          openSupportForm("codes", client.id);
+        }
+      } else {
+        alert(err.message);
+      }
       return;
     } finally {
       if (btn) btn.disabled = false;
@@ -823,7 +1015,8 @@
       lastValue: "", checking: false, serverChecking: false, manualUntil: 0, nextPollAt: 0, closed: false,
       remaining: opened.remaining, limit: opened.limit,
     };
-    document.getElementById("codes-platform").textContent = opened.platform || client.platform;
+    document.getElementById("codes-plat").innerHTML = platformChip(opened.platform || client.platform, "sm");
+    document.getElementById("codes-platform").textContent = platformName(opened.platform || client.platform);
     document.getElementById("codes-sub").textContent =
       (opened.email || client.email || "") + (opened.profileName ? " · Perfil: " + opened.profileName : "");
     document.getElementById("codes-waiting-title").textContent = /netflix/i.test(opened.platform || client.platform)
@@ -899,7 +1092,7 @@
     ordersList.innerHTML = "";
 
     try {
-      const { profiles, fullAccountOrders } = await api("/accounts");
+      const [, { profiles, fullAccountOrders }] = await Promise.all([fetchCatalog(), api("/accounts")]);
       renderCuentasProfiles(profiles || []);
       cachedFullOrders = fullAccountOrders || [];
       renderCuentasOrders();
@@ -909,24 +1102,23 @@
   }
 
   function cuentaProfileCardHtml(p) {
-    const days  = daysLeftFor(p.expiresAt);
-    const cls   = expiryClass(days);
-    const label = expiryLabel(p.expiresAt, days);
+    const days = daysLeftFor(p.expiresAt);
     return `
-      <div class="client-card">
+      <article class="client-card">
         <div class="client-card-head">
-          <div>
-            <div class="client-platform">${escapeHtml(p.platform)}</div>
-            <div class="client-phone">${escapeHtml(p.clientPhone)}</div>
+          ${platformChip(p.platform)}
+          <div class="client-card-id">
+            <div class="client-platform">${escapeHtml(platformName(p.platform))}</div>
+            <div class="client-phone">${escapeHtml(p.clientPhone)}${p.profileName ? " · " + escapeHtml(p.profileName) : ""}</div>
           </div>
         </div>
-        ${isOwnAccount(p.clientPhone) ? `<span class="client-own-badge">🧑‍💼 Tu cuenta</span>` : ""}
-        <div class="client-expiry ${cls}">${escapeHtml(label)}</div>
-        ${p.email ? `<div class="client-email">${escapeHtml(p.email)}</div>` : ""}
+        ${isOwnAccount(p.clientPhone) ? `<div class="client-tags"><span class="tag tag-leaf">${icon("user")}Tu cuenta</span></div>` : ""}
+        <div class="client-status tone-${expiryTone(days)}">${escapeHtml(expiryStatusText(p.expiresAt, days))}</div>
+        ${p.email ? `<div class="client-email">${icon("mail")}${escapeHtml(p.email)}</div>` : ""}
         <div class="client-card-actions">
-          <button class="btn-ghost btn-sm" data-act="send" data-phone="${escapeHtml(p.clientPhone)}" data-platform="${escapeHtml(p.platform)}" data-email="${escapeHtml(p.email || "")}" data-password="${escapeHtml(p.password || "")}" type="button">📧 Enviar cuenta</button>
+          <button class="btn-ghost btn-sm" data-act="send" data-phone="${escapeHtml(p.clientPhone)}" data-platform="${escapeHtml(p.platform)}" data-email="${escapeHtml(p.email || "")}" data-password="${escapeHtml(p.password || "")}" type="button">${icon("send")}Enviar cuenta</button>
         </div>
-      </div>`;
+      </article>`;
   }
 
   function renderCuentasProfiles(profiles) {
@@ -953,23 +1145,25 @@
         </div>`;
       actionsHtml = `
         <div class="client-card-actions">
-          <button class="btn-ghost btn-sm" data-act="send-order" data-id="${o.id}" type="button">📧 Enviar</button>
+          <button class="btn-ghost btn-sm" data-act="send-order" data-id="${o.id}" type="button">${icon("send")}Enviar al cliente</button>
         </div>`;
     }
     const metaLine = o.status === "delivered"
       ? `Entregado: ${escapeHtml(fmtDateTime(o.deliveredAt))}`
       : `Antes de: ${escapeHtml(fmtDateTime(o.dueBy))}`;
     return `
-      <div class="order-card">
+      <article class="order-card">
         <div class="order-card-head">
-          <span class="order-platform">${escapeHtml(o.platform)} ×${o.quantity}</span>
+          ${platformChip(o.platform)}
+          <div class="order-platform">${escapeHtml(platformName(o.platform))} ×${o.quantity}
+            <div class="order-meta">Cliente: ${escapeHtml(o.endClientPhone)} · ${money(o.totalCents)}</div>
+          </div>
           <span class="status-chip status-${escapeHtml(o.status)}">${escapeHtml(statusLabel)}</span>
         </div>
-        <div class="order-meta">Cliente: ${escapeHtml(o.endClientPhone)} · ${money(o.totalCents)}</div>
         <div class="order-meta">${metaLine}</div>
         ${credsHtml}
         ${actionsHtml}
-      </div>`;
+      </article>`;
   }
 
   function renderCuentasOrders() {
@@ -1015,13 +1209,17 @@
   const HOME_EXPIRING_MAX  = 5;
 
   function homeAlertRowHtml(c) {
+    const days = daysLeftFor(c.expiresAt);
+    const full = c.renew && c.renew.kind === "cuenta_completa";
+    const price = c.renew ? ` S/ ${escapeHtml(shortPrice(c.renew.price))}` : "";
     return `
       <div class="alert-row" data-profile-id="${c.profileId}">
-        <div>
-          <div class="alert-row-plat">${escapeHtml(c.platformTag || c.platform)}${c.renew && c.renew.kind === "cuenta_completa" ? " · Cuenta completa" : ""}</div>
-          <div class="alert-row-sub">${escapeHtml(c.clientPhone)} · ${escapeHtml(expiryLabel(c.expiresAt, daysLeftFor(c.expiresAt)))}</div>
+        ${platformChip(c.platform, "sm")}
+        <div class="alert-row-main">
+          <div class="alert-row-plat">${escapeHtml(platformName(c.platform))}${full ? " · completa" : ""}</div>
+          <div class="alert-row-sub${days !== null && days <= 1 ? " soon" : ""}">${escapeHtml(c.clientPhone)} · ${escapeHtml(whenText(days))}</div>
         </div>
-        <button class="pill-btn" data-act="home-renew" data-profile-id="${c.profileId}" type="button">Renovar</button>
+        <button class="pill-btn" data-act="home-renew" data-profile-id="${c.profileId}" type="button">Renovar${price}</button>
       </div>`;
   }
 
@@ -1096,6 +1294,7 @@
     const label = LEDGER_TYPE_LABEL[entry.type] || entry.type;
     return `
       <div class="ledger-row">
+        <span class="ledger-ic${positive ? "" : " neg"}">${icon(positive ? "plus" : "arrowUp")}</span>
         <div class="ledger-row-left">
           <div class="ledger-type">${escapeHtml(label)}</div>
           <div class="ledger-meta">${escapeHtml(fmtDateTime(entry.createdAt))} · Saldo: ${money(entry.balanceAfterCents)}</div>
@@ -1181,9 +1380,9 @@
     if (!btn) return;
     try {
       await navigator.clipboard.writeText(btn.dataset.copy);
-      const original = btn.textContent;
-      btn.textContent = "✅";
-      setTimeout(() => { btn.textContent = original; }, 1200);
+      const original = btn.innerHTML;
+      btn.innerHTML = icon("check");
+      setTimeout(() => { btn.innerHTML = original; }, 1200);
     } catch {
       alert("No se pudo copiar. Copia manualmente: " + btn.dataset.copy);
     }
@@ -1239,7 +1438,7 @@
            <span class="qty-value">${qty}</span>
            <button class="qty-btn" data-act="inc" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Agregar uno" ${qty >= maxQty ? "disabled" : ""}>+</button>
          </div>`
-      : `<button class="catalog-add-btn" data-act="inc" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Agregar al carrito">+</button>`;
+      : `<button class="catalog-add-btn" data-act="inc" data-platform="${escapeHtml(p.platform)}" type="button" aria-label="Agregar al carrito">${icon("plus")}</button>`;
     return `
       <div class="catalog-card">
         <div class="catalog-card-img">${img}</div>
@@ -1328,15 +1527,16 @@
     return `
       <div class="success-account-card">
         <div class="success-account-head">
-          <span class="success-account-platform">${escapeHtml(a.platform)}</span>
+          ${platformChip(a.platform, "sm")}
+          <span class="success-account-platform">${escapeHtml(platformName(a.platform))}</span>
         </div>
         <div class="success-account-row"><b>Correo:</b> ${escapeHtml(a.email)}</div>
         ${a.planLabel ? `<div class="success-account-row"><b>Plan:</b> ${escapeHtml(a.planLabel)}${a.expiresAt ? " · vence " + escapeHtml(a.expiresAt) : ""}</div>` : ""}
         ${a.password ? `<div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>` : `<div class="muted small">Se activa a mano en ese correo — te avisamos cuando esté lista.</div>`}
         ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
         <div class="success-account-actions">
-          <button class="btn-wa btn-xs" data-act="send" data-idx="${idx}" type="button">📧 Enviar</button>
-          <button class="btn-ghost btn-xs" data-act="copy" data-idx="${idx}" type="button">📋 Copiar</button>
+          <button class="btn-wa btn-xs" data-act="send" data-idx="${idx}" type="button">${icon("send")}Enviar</button>
+          <button class="btn-ghost btn-xs" data-act="copy" data-idx="${idx}" type="button">${icon("copy")}Copiar</button>
         </div>
       </div>`;
   }
@@ -1397,13 +1597,13 @@
         const title = catalogItem(i.platform)?.title || i.platform;
         const needsPassword = !!catalogItem(i.platform)?.requiresPassword;
         return `
-          <label class="muted small" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}</label>
-          <input type="email" class="cart-checkout-email-input" id="cart-email-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
-            placeholder="cliente@correo.com" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:15px; font-family:inherit; margin-top:4px;">
+          <label class="label" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}</label>
+          <input type="email" class="input cart-checkout-email-input" id="cart-email-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
+            placeholder="cliente@correo.com">
           ${needsPassword ? `
-            <label class="muted small" for="cart-password-${escapeHtml(i.platform)}">Contraseña de esa cuenta</label>
-            <input type="password" class="cart-checkout-password-input" id="cart-password-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
-              placeholder="Contraseña" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:15px; font-family:inherit; margin-top:4px;">
+            <label class="label" for="cart-password-${escapeHtml(i.platform)}">Contraseña de esa cuenta</label>
+            <input type="password" class="input cart-checkout-password-input" id="cart-password-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
+              placeholder="Contraseña">
           ` : ""}
         `;
       }).join("");
@@ -1481,9 +1681,9 @@
           const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
           const profileLine = account.profileName ? `\nPerfil: ${account.profileName}` : "";
           await navigator.clipboard.writeText(`${account.platform}\n${credLine}${profileLine}`);
-          const original = btn.textContent;
-          btn.textContent = "✅ Copiado";
-          setTimeout(() => { btn.textContent = original; }, 1500);
+          const original = btn.innerHTML;
+          btn.innerHTML = icon("check") + "Copiado";
+          setTimeout(() => { btn.innerHTML = original; }, 1500);
         } catch {
           alert("No se pudo copiar. Copia los datos manualmente.");
         }
@@ -1645,12 +1845,211 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // SOPORTE
+  // SOPORTE — restablecer el límite de códigos de una cuenta, reportar un
+  // problema con la cuenta de un cliente, o escribir por WhatsApp. Los
+  // reportes llegan al panel (Soportes) y la respuesta vuelve por la
+  // campanita; acá se ve el estado de cada uno («Mis reportes»).
   // ─────────────────────────────────────────────────────────────
+
+  let supportReasons = [];
+  let supportKind    = "account";
+  let cachedTickets  = [];
+
+  const SUPPORT_COPY = {
+    codes: {
+      icon: "key", tone: "tone-mango", title: "Restablecer límite de códigos", submit: "Pedir restablecer",
+      sub: "Elige la cuenta que se quedó sin consultas hoy. Te avisamos por la campanita apenas esté lista.",
+    },
+    account: {
+      icon: "alert", tone: "tone-coral", title: "Problema con una cuenta", submit: "Enviar reporte",
+      sub: "Elige la cuenta de tu cliente y cuéntanos qué pasa. Te avisamos por la campanita.",
+    },
+  };
+
+  // "2026-11-11 15:04:05" (UTC de SQLite) → ISO, para mostrarlo en hora de Lima.
+  function sqliteToIso(value) {
+    return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(value || "")) ? value.replace(" ", "T") + "Z" : value;
+  }
+
+  function ticketCardHtml(t) {
+    const isCodes = t.kind === "codes";
+    const st = t.status === "attended" ? "st-attended" : t.status === "seen" ? "st-seen" : "st-pending";
+    const canForward = !!t.detail && !isCodes;
+    return `
+      <article class="ticket-card">
+        <div class="ticket-head">
+          ${platformChip(t.platform, "sm")}
+          <div class="ticket-id">
+            <div class="ticket-title">${isCodes ? "Límite de códigos" : escapeHtml(platformName(t.platform))}</div>
+            <div class="ticket-sub">${isCodes ? escapeHtml(platformName(t.platform)) + " · " : ""}${escapeHtml(t.clientPhone)} · ${escapeHtml(fmtDateTime(sqliteToIso(t.createdAt)))}</div>
+          </div>
+          <span class="status-chip ${st}">${escapeHtml(t.statusLabel)}</span>
+        </div>
+        ${isCodes ? "" : `<div class="ticket-problem">${escapeHtml(t.problem)}</div>`}
+        ${t.detail ? `<div class="ticket-detail">${escapeHtml(t.detail)}</div>` : ""}
+        ${canForward ? `<button class="btn-wa btn-sm" data-act="ticket-send" data-id="${t.id}" type="button">${icon("send")}Enviar a mi cliente</button>` : ""}
+      </article>`;
+  }
+
+  function renderTickets() {
+    const listEl  = document.getElementById("support-tickets");
+    const emptyEl = document.getElementById("support-tickets-empty");
+    emptyEl.hidden = cachedTickets.length > 0;
+    listEl.innerHTML = cachedTickets.map(ticketCardHtml).join("");
+  }
+
+  async function loadSoporte() {
+    const listEl = document.getElementById("support-tickets");
+    if (!cachedTickets.length) listEl.innerHTML = `<p class="muted small">Cargando…</p>`;
+    try {
+      const [{ tickets, reasons }] = await Promise.all([api("/support/tickets"), cachedCatalog.length ? null : fetchCatalog()]);
+      supportReasons = reasons || supportReasons;
+      cachedTickets = tickets || [];
+      renderTickets();
+    } catch (err) {
+      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function selectedSupportReason() {
+    const checked = document.querySelector('input[name="support-reason"]:checked');
+    return checked ? checked.value : "";
+  }
+
+  function renderSupportReasons() {
+    document.getElementById("support-reasons").innerHTML = supportReasons.map((r, i) => `
+      <label class="reason-chip"><input type="radio" name="support-reason" value="${escapeHtml(r)}"${i === 0 ? " checked" : ""}><span>${escapeHtml(r)}</span></label>
+    `).join("");
+    updateSupportDetailHint();
+  }
+
+  // «Otro» necesita que cuenten qué pasa; los demás motivos, opcional.
+  function updateSupportDetailHint() {
+    const other = supportKind === "account" && selectedSupportReason() === "Otro";
+    document.querySelector('label[for="support-detail"]').innerHTML = other ? "Cuéntanos qué pasa" : 'Detalle <span class="muted">(opcional)</span>';
+    document.getElementById("support-detail").required = other;
+  }
+
+  function fillSupportAccounts(preselectId) {
+    const select = document.getElementById("support-account");
+    const note   = document.getElementById("support-account-note");
+    const submit = document.getElementById("support-submit");
+    const options = cachedClients
+      .filter(c => !c.isOverride && (supportKind !== "codes" || (c.codes && c.codes.enabled)))
+      .map(c => ({
+        c,
+        // Códigos: solo se puede pedir si ya usó todas las consultas de hoy.
+        disabled: supportKind === "codes" && c.codes.remaining > 0,
+        label: `${platformName(c.platform)} · ${c.clientPhone}${c.profileName ? " · " + c.profileName : ""}`,
+      }));
+    if (supportKind === "codes") options.sort((a, b) => Number(a.disabled) - Number(b.disabled));
+    const usable = options.filter(o => !o.disabled);
+
+    note.hidden = true;
+    if (!options.length) {
+      select.innerHTML = `<option value="">${supportKind === "codes" ? "Ninguna de tus cuentas tiene códigos en el panel" : "Todavía no tienes clientes"}</option>`;
+      select.disabled = true;
+      submit.disabled = true;
+      return;
+    }
+    select.innerHTML = `<option value="">Elige una cuenta…</option>` + options.map(o =>
+      `<option value="${o.c.id}"${o.disabled ? " disabled" : ""}>${escapeHtml(o.label)}${o.disabled ? ` (te quedan ${o.c.codes.remaining} hoy)` : ""}</option>`
+    ).join("");
+    select.disabled = false;
+    if (preselectId && usable.some(o => o.c.id === preselectId)) select.value = String(preselectId);
+    else if (usable.length === 1) select.value = String(usable[0].c.id);
+    if (!usable.length) {
+      note.textContent = "Todas tus cuentas todavía tienen consultas disponibles hoy.";
+      note.hidden = false;
+    }
+    submit.disabled = !usable.length;
+  }
+
+  async function openSupportForm(kind, preselectId) {
+    supportKind = kind === "codes" ? "codes" : "account";
+    const copy = SUPPORT_COPY[supportKind];
+    const iconEl = document.getElementById("support-modal-icon");
+    iconEl.className = "modal-icon " + copy.tone;
+    iconEl.innerHTML = icon(copy.icon);
+    document.getElementById("support-modal-title").textContent = copy.title;
+    document.getElementById("support-modal-sub").textContent = copy.sub;
+    document.getElementById("support-submit").textContent = copy.submit;
+    document.getElementById("support-reason-wrap").hidden = supportKind === "codes";
+    document.getElementById("support-detail-wrap").hidden = supportKind === "codes";
+    document.getElementById("support-detail").value = "";
+    document.getElementById("support-detail").required = false;
+    document.getElementById("support-account-note").hidden = true;
+    setFormError("support-error", "");
+    const select = document.getElementById("support-account");
+    select.innerHTML = `<option value="">Cargando tus cuentas…</option>`;
+    select.disabled = true;
+    document.getElementById("support-submit").disabled = true;
+    document.getElementById("support-modal").hidden = false;
+
+    try {
+      // Siempre fresco: las consultas de códigos que quedan cambian durante el día.
+      await fetchClients();
+      if (!supportReasons.length) {
+        const r = await api("/support/tickets");
+        supportReasons = r.reasons || [];
+        cachedTickets = r.tickets || [];
+      }
+    } catch (err) {
+      select.innerHTML = "";
+      setFormError("support-error", err.message);
+      return;
+    }
+    renderSupportReasons();
+    fillSupportAccounts(preselectId ? Number(preselectId) : null);
+  }
+
+  function closeSupportForm() {
+    document.getElementById("support-modal").hidden = true;
+  }
 
   function initSoportePage() {
     document.getElementById("support-wa-link").href = "https://wa.me/" + SUPPORT_PHONE
       + "?text=" + encodeURIComponent("Hola! Soy mayorista y necesito ayuda.");
+
+    document.querySelectorAll("[data-support]").forEach(btn => {
+      btn.addEventListener("click", () => openSupportForm(btn.dataset.support));
+    });
+    document.getElementById("support-refresh").addEventListener("click", loadSoporte);
+    document.getElementById("support-close").addEventListener("click", closeSupportForm);
+    document.getElementById("support-cancel").addEventListener("click", closeSupportForm);
+    document.getElementById("support-reasons").addEventListener("change", updateSupportDetailHint);
+
+    document.getElementById("support-tickets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-act='ticket-send']");
+      if (!btn) return;
+      const t = cachedTickets.find(x => x.id === Number(btn.dataset.id));
+      if (t && t.detail) window.open(waLink(t.clientPhone, t.detail), "_blank");
+    });
+
+    document.getElementById("support-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setFormError("support-error", "");
+      const profileId = Number(document.getElementById("support-account").value);
+      if (!profileId) { setFormError("support-error", "Elige una cuenta."); return; }
+      const reason = supportKind === "account" ? selectedSupportReason() : "";
+      const detail = supportKind === "account" ? document.getElementById("support-detail").value.trim() : "";
+      if (supportKind === "account" && reason === "Otro" && !detail) {
+        setFormError("support-error", "Cuéntanos qué pasa con la cuenta.");
+        return;
+      }
+      const btn = document.getElementById("support-submit");
+      btn.disabled = true;
+      try {
+        await api("/support/tickets", { method: "POST", body: { profileId, kind: supportKind, reason, detail } });
+        closeSupportForm();
+        toast(supportKind === "codes" ? "Pedido enviado — te avisamos al restablecerlo" : "Reporte enviado — te avisamos por la campanita");
+        loadSoporte();
+      } catch (err) {
+        setFormError("support-error", err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1664,19 +2063,26 @@
   function applyThemeIcon() {
     const isDark = document.documentElement.dataset.theme === "dark";
     const btn = document.getElementById("theme-toggle-btn");
-    btn.textContent = isDark ? "☀️" : "🌙";
+    btn.innerHTML = icon(isDark ? "sun" : "moon");
     btn.title = isDark ? "Modo claro" : "Modo oscuro";
+    btn.setAttribute("aria-label", btn.title);
+    document.getElementById("mas-theme-btn").setAttribute("aria-pressed", isDark ? "true" : "false");
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = isDark ? "#3A2A0E" : "#FFC93C";
+  }
+
+  function toggleTheme() {
+    const next = document.documentElement.dataset.theme === "dark" ? "" : "dark";
+    if (next) document.documentElement.dataset.theme = next;
+    else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem(THEME_KEY, next || "light"); } catch { /* sin storage disponible */ }
+    applyThemeIcon();
   }
 
   function initThemeToggle() {
     applyThemeIcon();
-    document.getElementById("theme-toggle-btn").addEventListener("click", () => {
-      const next = document.documentElement.dataset.theme === "dark" ? "" : "dark";
-      if (next) document.documentElement.dataset.theme = next;
-      else delete document.documentElement.dataset.theme;
-      try { localStorage.setItem(THEME_KEY, next || "light"); } catch { /* sin storage disponible */ }
-      applyThemeIcon();
-    });
+    document.getElementById("theme-toggle-btn").addEventListener("click", toggleTheme);
+    document.getElementById("mas-theme-btn").addEventListener("click", toggleTheme);
   }
 
   // ─────────────────────────────────────────────────────────────

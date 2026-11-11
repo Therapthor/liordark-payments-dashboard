@@ -67,17 +67,27 @@
 
   function renderCard(t) {
     const open = t.status !== "attended";
+    const codes = t.kind === "codes";
+    // Reportes del panel mayorista: se le escribe al mayorista, no al cliente final.
+    const waPhone = t.wholesalerId ? (t.wholesalerPhone || t.clientPhone) : t.clientPhone;
     const when = open
       ? `Reportado ${escapeHtml(fmtDateTime(t.createdAt))}`
       : `Resuelto ${escapeHtml(fmtDateTime(t.attendedAt))} · reportado ${escapeHtml(fmtDateTime(t.createdAt))}`;
+    const actions = !open ? "" : codes ? `
+            <button class="btn-primary btn-sm" data-act="reset-codes" type="button">🔑 Restablecer límite de hoy</button>` : `
+            <button class="btn-secondary btn-sm" data-act="review" type="button"${t.status === "seen" ? " disabled" : ""}>${t.status === "seen" ? "🔎 En revisión ✓" : "🔎 En revisión"}</button>
+            <button class="btn-secondary btn-sm" data-act="active" type="button">✅ Tiene suscripción</button>
+            <button class="btn-secondary btn-sm" data-act="solved" type="button">🎉 Listo</button>
+            <button class="btn-primary btn-sm" data-act="replace" type="button">🔁 Reemplazar cuenta</button>`;
     return `
       <div class="soporte-card${open ? "" : " is-done"}" data-id="${t.id}">
         <div class="soporte-card-head">
-          <b class="soporte-platform">📺 ${escapeHtml(t.platformTag)}</b>
+          <b class="soporte-platform">${codes ? "🔑" : "📺"} ${escapeHtml(t.platformTag)}</b>
           <span class="soporte-problem">${escapeHtml(t.problem || "Sin suscripción")}</span>
           ${statusBadge(t)}
+          ${t.wholesalerId ? `<span class="soporte-badge">🏪 ${escapeHtml(t.wholesalerName || "Mayorista")}</span>` : ""}
         </div>
-        <div class="soporte-card-sub">📱 <b>${escapeHtml(localPhone(t.clientPhone))}</b> · ${when}</div>
+        <div class="soporte-card-sub">📱 ${t.wholesalerId ? "Cliente del mayorista: " : ""}<b>${escapeHtml(localPhone(t.clientPhone))}</b> · ${when}</div>
         <div class="soporte-account">
           <div><span>Correo</span><code>${escapeHtml(t.accountEmail)}</code></div>
           <div><span>Contraseña</span><code>${escapeHtml(t.accountPassword)}</code></div>
@@ -85,12 +95,8 @@
           ${t.provider ? `<div><span>Proveedor</span><code>${escapeHtml(t.provider)}</code></div>` : ""}
         </div>
         <div class="soporte-actions">
-          ${open ? `
-            <button class="btn-secondary btn-sm" data-act="review" type="button"${t.status === "seen" ? " disabled" : ""}>${t.status === "seen" ? "🔎 En revisión ✓" : "🔎 En revisión"}</button>
-            <button class="btn-secondary btn-sm" data-act="active" type="button">✅ Tiene suscripción</button>
-            <button class="btn-secondary btn-sm" data-act="solved" type="button">🎉 Listo</button>
-            <button class="btn-primary btn-sm" data-act="replace" type="button">🔁 Reemplazar cuenta</button>` : ""}
-          <a class="btn-secondary btn-sm" href="${escapeHtml(waUrl(t.clientPhone, ""))}" target="_blank" rel="noopener">💬 WhatsApp</a>
+          ${actions}
+          <a class="btn-secondary btn-sm" href="${escapeHtml(waUrl(waPhone, ""))}" target="_blank" rel="noopener">💬 WhatsApp${t.wholesalerId ? " al mayorista" : ""}</a>
         </div>
       </div>`;
   }
@@ -125,11 +131,13 @@
   const QUICK_CONFIRM = {
     active: "¿Avisarle que su cuenta SÍ tiene suscripción y cerrar el reporte?",
     solved: "¿Avisarle que su problema ya está solucionado y cerrar el reporte?",
+    "reset-codes": "¿Restablecer las consultas de códigos de hoy de esta cuenta? El mayorista podrá volver a consultar.",
   };
   const QUICK_DONE = {
     review: "🔎 Le avisamos que su cuenta está en revisión.",
     active: "✅ Le avisamos que su cuenta tiene suscripción.",
     solved: "🎉 Le avisamos que su problema está solucionado.",
+    "reset-codes": "🔑 Límite de códigos restablecido.",
   };
 
   function toast(text) {
@@ -145,7 +153,7 @@
     btn.disabled = true;
     try {
       await api(`/tickets/${t.id}/${act}`, { method: "POST" });
-      toast(QUICK_DONE[act] + " (en su campanita de liordark.com)");
+      toast(QUICK_DONE[act] + (t.wholesalerId ? " (en su campanita del panel mayorista)" : " (en su campanita de liordark.com)"));
     } catch (err) {
       btn.disabled = false;
       alert(err.message || "No se pudo guardar.");

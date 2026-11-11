@@ -16,11 +16,16 @@ import { findWholesalerById } from "./wholesaler.repository";
 export type SupportTicketStatus = "pending" | "seen" | "attended";
 export type SupportTicketResolution = "" | "active" | "solved" | "replaced";
 
+export type SupportTicketKind = "" | "account" | "codes";
+
 export type SupportTicket = {
   id:              number;
   clientPhone:     string;
   wholesalerId:    number | null; // null = lo reportó un cliente de liordark.com
   wholesalerName:  string;
+  wholesalerPhone: string;
+  kind:            SupportTicketKind; // '' = reporte «sin suscripción» de liordark.com
+  profileId:       number | null;
   platform:        string;
   platformTag:     string;
   accountEmail:    string;
@@ -38,11 +43,15 @@ export type SupportTicket = {
 };
 
 function toTicket(row: any): SupportTicket {
+  const wholesaler = row.wholesaler_id ? findWholesalerById(row.wholesaler_id) : null;
   return {
     id:              row.id,
     clientPhone:     row.client_phone,
     wholesalerId:    row.wholesaler_id,
-    wholesalerName:  row.wholesaler_id ? (findWholesalerById(row.wholesaler_id)?.displayName || "") : "",
+    wholesalerName:  wholesaler?.displayName || "",
+    wholesalerPhone: wholesaler?.phone || "",
+    kind:            (row.kind || "") as SupportTicketKind,
+    profileId:       row.profile_id ?? null,
     platform:        row.platform,
     platformTag:     getCatalogProductByPlatform(row.platform)?.title || row.platform,
     accountEmail:    row.account_email,
@@ -67,13 +76,15 @@ function last9(phone: string): string {
 export function createSupportTicket(params: {
   clientPhone: string; wholesalerId?: number | null; platform: string; accountEmail: string;
   accountPassword: string; profileName?: string; provider: string; problem: string;
+  kind?: SupportTicketKind; profileId?: number | null;
 }): SupportTicket {
   const info = db.prepare(`
-    INSERT INTO support_tickets (client_phone, wholesaler_id, platform, account_email, account_password, profile_name, provider, problem)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO support_tickets (client_phone, wholesaler_id, platform, account_email, account_password, profile_name, provider, problem, kind, profile_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     params.clientPhone, params.wholesalerId ?? null, params.platform.trim().toUpperCase(),
-    params.accountEmail, params.accountPassword, params.profileName ?? "", params.provider, params.problem
+    params.accountEmail, params.accountPassword, params.profileName ?? "", params.provider, params.problem,
+    params.kind ?? "", params.profileId ?? null
   );
   return toTicket(db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(info.lastInsertRowid));
 }
@@ -114,6 +125,35 @@ export function countTicketsTodayForClient(phone: string): number {
       AND date(created_at, '-5 hours') = date('now', '-5 hours')
   `).get(last9(phone)) as { n: number };
   return row.n;
+}
+
+// ── Panel mayorista ──
+
+/** Reporte abierto de este tipo para esta venta (perfil) del mayorista. */
+export function findOpenWholesalerTicket(wholesalerId: number, profileId: number, kind: SupportTicketKind): SupportTicket | null {
+  const row = db.prepare(`
+    SELECT * FROM support_tickets
+    WHERE wholesaler_id = ? AND profile_id = ? AND kind = ? AND status IN ('pending', 'seen')
+    ORDER BY id DESC LIMIT 1
+  `).get(wholesalerId, profileId, kind);
+  return row ? toTicket(row) : null;
+}
+
+/** Reportes de hoy (hora Lima) de este mayorista — tope anti-spam. */
+export function countWholesalerTicketsToday(wholesalerId: number): number {
+  const row = db.prepare(`
+    SELECT COUNT(*) AS n FROM support_tickets
+    WHERE wholesaler_id = ? AND date(created_at, '-5 hours') = date('now', '-5 hours')
+  `).get(wholesalerId) as { n: number };
+  return row.n;
+}
+
+/** Sus reportes, los abiertos primero. */
+export function listWholesalerTickets(wholesalerId: number, limit = 30): SupportTicket[] {
+  return (db.prepare(`
+    SELECT * FROM support_tickets WHERE wholesaler_id = ?
+    ORDER BY (status = 'attended') ASC, id DESC LIMIT ?
+  `).all(wholesalerId, limit) as any[]).map(toTicket);
 }
 
 export function countPendingSupportTickets(): number {

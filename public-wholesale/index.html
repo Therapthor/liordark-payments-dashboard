@@ -3,10 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFC93C">
 <title>Mayorista Manguitope</title>
 <link rel="icon" href="/assets/logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 <script>
   // Aplica el tema guardado ANTES de pintar — si no, se ve un flash
@@ -21,246 +23,359 @@
 
 <div id="app">
 
-  <!-- ═══════════ GATE DE LOGIN — lo crea solo el admin, sin registro ═══════════ -->
+  <!-- ═══════════ LOGIN — lo crea solo el admin, sin registro ═══════════ -->
   <section id="view-auth" class="view-auth">
-    <div class="auth-blob"></div>
-    <div class="auth-wrap">
-      <div class="brand brand-center">
-        <img src="/assets/logo.webp" alt="Manguitope" class="brand-logo">
-        <span class="brand-name">MANGUITOPE</span>
-        <span class="brand-tag">✨ Panel Mayorista</span>
+    <div class="auth-hero">
+      <span class="auth-circle c1" aria-hidden="true"></span>
+      <span class="auth-circle c2" aria-hidden="true"></span>
+      <div class="auth-hero-inner">
+        <span class="auth-logo"><img src="/assets/logo.webp" alt="Manguitope"></span>
+        <div class="auth-brand">Manguitope</div>
+        <span class="auth-tag">Panel Mayorista</span>
+        <ul class="auth-perks">
+          <li><span class="perk-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>Compra perfiles y cuentas al toque con tu saldo</li>
+          <li><span class="perk-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg></span>Renueva y avisa a tus clientes en un clic</li>
+          <li><span class="perk-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg></span>Mira los códigos de tus cuentas sin esperar</li>
+        </ul>
       </div>
+    </div>
 
-      <div class="card auth-card" id="login-card">
-        <h1>Bienvenido</h1>
-        <p class="muted">Ingresa con el celular y contraseña que te dimos</p>
+    <div class="auth-main">
+      <div class="auth-card" id="login-card">
+        <h1>¡Hola de nuevo!</h1>
+        <p class="auth-lead">Ingresa con el celular y la contraseña que te dimos.</p>
         <form id="login-form">
           <label for="login-phone">Celular</label>
-          <input type="tel" id="login-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
+          <div class="field">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+            <input type="tel" id="login-phone" required placeholder="987 654 321" autocomplete="tel" inputmode="tel">
+          </div>
           <label for="login-password">Contraseña</label>
-          <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password">
+          <div class="field">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            <input type="password" id="login-password" required placeholder="Tu contraseña" autocomplete="current-password">
+            <button type="button" class="field-eye" id="login-eye" aria-label="Mostrar contraseña" title="Mostrar contraseña">
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
           <p class="form-error" id="login-error" hidden></p>
-          <button type="submit" class="btn-primary btn-block">Ingresar</button>
+          <button type="submit" class="btn-primary btn-block btn-lg">Ingresar</button>
         </form>
-        <p class="auth-foot muted small">¿No tienes cuenta mayorista? Escríbenos por soporte para activarla.</p>
+        <p class="auth-foot">¿Aún no eres mayorista? <a id="auth-support-link" href="#" target="_blank" rel="noopener">Escríbenos por soporte</a></p>
       </div>
     </div>
   </section>
 
   <!-- ═══════════ APP (post-login) ═══════════ -->
   <div id="view-app" hidden>
-    <header class="app-header">
-      <div class="brand">
-        <img src="/assets/logo.webp" alt="" class="brand-logo-sm">
-      </div>
-      <div class="app-header-info">
-        <span class="app-header-hello" id="header-hello">Hola</span>
-        <span class="app-header-balance" id="header-balance">Saldo: S/ 0.00</span>
-      </div>
-      <button class="theme-toggle-btn" id="theme-toggle-btn" type="button" title="Modo oscuro" aria-label="Modo oscuro">🌙</button>
-      <div class="notif-wrap">
-        <button class="nav-btn-bell" id="notif-bell-btn" type="button" title="Notificaciones" aria-label="Notificaciones">
-          <span class="nav-btn-bell-icon">🔔</span>
-          <span class="notif-dot" id="notif-dot" hidden></span>
-        </button>
-        <div class="notif-panel" id="notif-panel" hidden>
-          <div class="notif-panel-head">Notificaciones</div>
-          <div class="notif-list" id="notif-list"></div>
+
+    <!-- Menú lateral — solo PC (≥900px) -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo"><img src="/assets/logo.webp" alt=""></span>
+        <div>
+          <div class="sidebar-brand-name">Manguitope</div>
+          <span class="sidebar-brand-tag">Panel Mayorista</span>
         </div>
       </div>
-      <button class="app-logout-btn" id="app-logout-btn" type="button" title="Salir" aria-label="Salir">⎋</button>
+      <nav class="sidebar-nav" id="sidebar-nav" aria-label="Menú principal"></nav>
+      <button type="button" class="sidebar-help" data-page="soporte">
+        <span class="sidebar-help-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8.5 8.5 0 0 1-12.4 7.6L3 21l1.4-5.4A8.5 8.5 0 1 1 21 12z"/></svg></span>
+        <span><b>¿Necesitas ayuda?</b><small>Soporte y WhatsApp</small></span>
+      </button>
+    </aside>
+
+    <header class="app-header">
+      <div class="band-bg" aria-hidden="true"><span class="band-circle c1"></span><span class="band-circle c2"></span></div>
+      <div class="app-header-inner">
+        <span class="header-logo"><img src="/assets/logo.webp" alt=""></span>
+        <div class="app-header-info">
+          <span class="app-header-hello" id="header-hello">¡Hola!</span>
+          <span class="app-header-name" id="header-name">Mayorista</span>
+        </div>
+        <button type="button" class="header-balance" data-page="creditos" title="Ver mis créditos">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h12v4"/><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 13.5h2"/></svg>
+          <span id="header-balance">S/ 0.00</span>
+        </button>
+        <button class="hdr-btn theme-toggle-btn" id="theme-toggle-btn" type="button" title="Modo oscuro" aria-label="Modo oscuro"></button>
+        <div class="notif-wrap">
+          <button class="hdr-btn nav-btn-bell" id="notif-bell-btn" type="button" title="Notificaciones" aria-label="Notificaciones">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+            <span class="notif-dot" id="notif-dot" hidden></span>
+          </button>
+          <div class="notif-panel" id="notif-panel" hidden>
+            <div class="notif-panel-head">Notificaciones</div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+        <button class="hdr-btn app-logout-btn" id="app-logout-btn" type="button" title="Salir" aria-label="Salir">
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+        </button>
+      </div>
     </header>
 
-    <div class="app-body">
-      <!-- Sidebar — solo visible desde 768px (ver css, .sidebar) -->
-      <aside class="sidebar">
-        <nav class="sidebar-nav" id="sidebar-nav"></nav>
-      </aside>
+    <main class="app-main" id="app-main">
 
-      <main class="app-main" id="app-main">
-
-        <!-- ─── INICIO ─── -->
-        <section id="page-inicio" class="page">
-          <h2 class="page-title">🏠 Inicio</h2>
-          <div class="home-top-grid">
-            <div class="home-hero">
+      <!-- ─── INICIO ─── -->
+      <section id="page-inicio" class="page">
+        <h2 class="page-title sr-only">Inicio</h2>
+        <div class="home-top-grid">
+          <div class="home-hero">
+            <div>
               <div class="home-hero-label">Tu saldo</div>
               <div class="home-hero-value" id="home-balance-value">S/ 0.00</div>
-              <div class="home-hero-actions">
-                <button type="button" class="home-hero-btn" data-page="creditos">💳 Recargar</button>
-                <button type="button" class="home-hero-btn" data-page="comprar">🛒 Comprar</button>
-                <button type="button" class="home-hero-btn" data-page="cuentas">📦 Pedidos</button>
+            </div>
+            <div class="home-hero-actions">
+              <button type="button" class="home-hero-btn primary" data-page="creditos">
+                <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Recargar</button>
+              <button type="button" class="home-hero-btn" data-page="comprar">
+                <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"/></svg>Comprar</button>
+              <button type="button" class="home-hero-btn" data-page="cuentas">
+                <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>Pedidos</button>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-card ok"><div class="stat-card-value" id="home-stat-active">—</div><div class="stat-card-label">Activos</div></div>
+            <div class="stat-card warn"><div class="stat-card-value" id="home-stat-expiring">—</div><div class="stat-card-label">Por vencer</div></div>
+            <div class="stat-card"><div class="stat-card-value" id="home-stat-total">—</div><div class="stat-card-label">Clientes</div></div>
+          </div>
+        </div>
+        <div class="home-bottom-grid">
+          <div class="home-panel">
+            <div class="home-section-head">
+              <h3>Vencen pronto</h3>
+              <button type="button" data-page="clientes">Ver todos</button>
+            </div>
+            <div id="home-alerts-list"></div>
+            <p id="home-alerts-empty" class="empty-state" hidden>Ningún cliente vence en los próximos días.</p>
+          </div>
+          <div class="home-panel">
+            <div class="home-section-head">
+              <h3>Accesos rápidos</h3>
+            </div>
+            <div class="quick-grid">
+              <button type="button" class="quick-tile" data-page="clientes">
+                <span class="quick-tile-icon t-leaf"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.2A6.5 6.5 0 0 1 21.5 20"/></svg></span>
+                <span class="quick-tile-lbl">Clientes</span></button>
+              <button type="button" class="quick-tile" data-page="cuentas">
+                <span class="quick-tile-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span>
+                <span class="quick-tile-lbl">Cuentas</span></button>
+              <button type="button" class="quick-tile" data-page="recordatorios">
+                <span class="quick-tile-icon t-blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg></span>
+                <span class="quick-tile-lbl">Avisos</span></button>
+              <button type="button" class="quick-tile" data-page="soporte">
+                <span class="quick-tile-icon t-coral"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8.5 8.5 0 0 1-12.4 7.6L3 21l1.4-5.4A8.5 8.5 0 1 1 21 12z"/></svg></span>
+                <span class="quick-tile-lbl">Soporte</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── CLIENTES ─── -->
+      <section id="page-clientes" class="page" hidden>
+        <div class="page-head">
+          <h2 class="page-title">Mis clientes</h2>
+          <span class="count-chip" id="clients-count" hidden>0</span>
+        </div>
+        <div class="clients-tools">
+          <label class="field search-field">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="sr-only">Buscar cliente</span>
+            <input type="search" id="clients-search" placeholder="Buscar por celular, correo o plataforma" autocomplete="off">
+          </label>
+          <div class="filter-chips" id="clients-filters" role="group" aria-label="Filtrar clientes">
+            <button type="button" class="filter-chip active" data-filter="all">Todos</button>
+            <button type="button" class="filter-chip f-soon" data-filter="soon">Por vencer</button>
+            <button type="button" class="filter-chip" data-filter="full">Completas</button>
+            <button type="button" class="filter-chip" data-filter="profile">Perfiles</button>
+          </div>
+        </div>
+        <div id="clients-list" class="client-list"></div>
+        <p id="clients-empty" class="empty-state" hidden>Todavía no tienes clientes asignados. Ve a «Comprar» para vender tu primer perfil.</p>
+      </section>
+
+      <!-- ─── COMPRAR ─── -->
+      <section id="page-comprar" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Comprar</h2></div>
+        <p class="page-subtitle">Precio mayorista ya con descuento — agrega y compra directo.</p>
+
+        <div class="comprar-layout">
+          <div class="comprar-catalog">
+            <div id="catalog-grid" class="catalog-grid"></div>
+            <p id="catalog-empty" class="empty-state" hidden>Todavía no tienes stock asignado. Escríbenos por soporte para que te asignen plataformas.</p>
+          </div>
+
+          <aside class="comprar-side">
+            <div class="cart-card" id="cart-card" hidden>
+              <h3>Tu carrito</h3>
+              <div id="cart-list"></div>
+              <div class="cart-total-row">
+                <span class="muted small">Total</span>
+                <span class="cart-total-value" id="cart-total-value">S/ 0.00</span>
               </div>
+              <button class="btn-primary btn-block" id="cart-buy-btn" type="button" style="margin-top:14px;">Finalizar compra</button>
             </div>
-            <div class="stat-grid">
-              <div class="stat-card"><div class="stat-card-value ok" id="home-stat-active">—</div><div class="stat-card-label">Activos</div></div>
-              <div class="stat-card"><div class="stat-card-value warn" id="home-stat-expiring">—</div><div class="stat-card-label">Por vencer</div></div>
-              <div class="stat-card"><div class="stat-card-value" id="home-stat-total">—</div><div class="stat-card-label">Clientes</div></div>
+
+            <div class="full-order-card">
+              <h3><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>Pedir cuenta completa</h3>
+              <p>Hecha a tu pedido — se entrega en hasta 5 horas. Te avisamos en <b>Cuentas</b>, con un botón para enviársela a tu cliente por WhatsApp.</p>
+              <form class="full-order-form" id="full-order-form">
+                <label for="full-order-platform">Plataforma</label>
+                <select id="full-order-platform" class="input" required></select>
+                <label for="full-order-quantity">Cantidad</label>
+                <input type="number" id="full-order-quantity" class="input" min="1" value="1" required>
+                <label for="full-order-phone">Celular del cliente</label>
+                <input type="tel" id="full-order-phone" class="input" required placeholder="9XXXXXXXX" autocomplete="tel" inputmode="tel">
+                <p class="form-error" id="full-order-error" hidden></p>
+                <button type="submit" class="btn-primary btn-block">Pedir cuenta completa</button>
+              </form>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ─── CUENTAS ─── -->
+      <section id="page-cuentas" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Cuentas</h2></div>
+        <p class="page-subtitle">Perfiles ya asignados y tus pedidos de cuenta completa.</p>
+
+        <h3 class="section-heading">Perfiles asignados</h3>
+        <div id="cuentas-profiles-list" class="client-list"></div>
+        <p id="cuentas-profiles-empty" class="empty-state" hidden>Todavía no tienes perfiles asignados a clientes.</p>
+
+        <h3 class="section-heading">Cuentas completas pedidas</h3>
+        <div id="cuentas-orders-list" class="client-list"></div>
+        <p id="cuentas-orders-empty" class="empty-state" hidden>No has pedido ninguna cuenta completa todavía.</p>
+      </section>
+
+      <!-- ─── CRÉDITOS ─── -->
+      <section id="page-creditos" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Créditos</h2></div>
+        <div class="creditos-grid">
+          <div class="creditos-main">
+            <div class="balance-card">
+              <div class="balance-card-label">Tu saldo</div>
+              <div class="balance-card-value" id="credits-balance-value">S/ 0.00</div>
+            </div>
+            <button class="btn-ghost btn-sm btn-block" id="credits-refresh-btn" type="button">
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8.5"/><path d="M20 3.5v5h-5"/></svg>Actualizar saldo</button>
+            <p class="topup-title">Recargar por Yape</p>
+            <div class="topup-grid">
+              <button class="topup-btn" data-amount="20" type="button">S/ 20<span class="topup-btn-sub">Recargar</span></button>
+              <button class="topup-btn" data-amount="50" type="button">S/ 50<span class="topup-btn-sub">Recargar</span></button>
+              <button class="topup-btn" data-amount="100" type="button">S/ 100<span class="topup-btn-sub">Recargar</span></button>
+              <button class="topup-btn" data-amount="500" type="button">S/ 500<span class="topup-btn-sub">Recargar</span></button>
             </div>
           </div>
-          <div class="home-bottom-grid">
-            <div class="home-panel">
-              <div class="home-section-head">
-                <h3>⚠️ Vencen pronto</h3>
-                <button type="button" data-page="clientes">Ver todos</button>
-              </div>
-              <div id="home-alerts-list"></div>
-              <p id="home-alerts-empty" class="empty-state" hidden>Ningún cliente vence en los próximos días. 🎉</p>
-            </div>
-            <div class="home-panel">
-              <div class="home-section-head">
-                <h3>Accesos rápidos</h3>
-              </div>
-              <div class="quick-grid">
-                <button type="button" class="quick-tile" data-page="clientes"><div class="quick-tile-icon">👥</div><div class="quick-tile-lbl">Clientes</div></button>
-                <button type="button" class="quick-tile" data-page="cuentas"><div class="quick-tile-icon">📦</div><div class="quick-tile-lbl">Cuentas</div></button>
-                <button type="button" class="quick-tile" data-page="recordatorios"><div class="quick-tile-icon">🔔</div><div class="quick-tile-lbl">Avisos</div></button>
-                <button type="button" class="quick-tile" data-page="soporte"><div class="quick-tile-icon">💬</div><div class="quick-tile-lbl">Soporte</div></button>
-              </div>
-            </div>
+          <div class="creditos-history">
+            <h3 class="section-heading">Historial</h3>
+            <div id="ledger-list" class="ledger-list"></div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <!-- ─── CLIENTES ─── -->
-        <section id="page-clientes" class="page" hidden>
-          <h2 class="page-title">👥 Clientes</h2>
-          <p class="page-subtitle muted small">Tus sub-clientes con cuenta asignada.</p>
-          <div id="clients-list" class="client-list"></div>
-          <p id="clients-empty" class="empty-state" hidden>Todavía no tienes clientes asignados. Ve a "Comprar" para vender tu primer perfil.</p>
-        </section>
+      <!-- ─── RECORDATORIOS ─── -->
+      <section id="page-recordatorios" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Recordatorios</h2></div>
+        <p class="page-subtitle">Avisa por WhatsApp a tus clientes que vencen hoy, en tandas de 5.</p>
+        <p class="reminders-tip"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Funciona mejor con el App WhatsApp de PC.</p>
+        <p class="reminders-summary" id="reminders-summary"></p>
+        <button class="btn-primary btn-block" id="reminders-prepare-btn" type="button">Preparar tanda de 5</button>
+        <div id="reminders-list" class="reminders-list"></div>
+      </section>
 
-        <!-- ─── COMPRAR ─── -->
-        <section id="page-comprar" class="page" hidden>
-          <h2 class="page-title">🛒 Comprar</h2>
-          <p class="page-subtitle muted small">Precio mayorista ya con descuento — agrega y compra directo.</p>
+      <!-- ─── SOPORTE ─── -->
+      <section id="page-soporte" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Soporte</h2></div>
+        <p class="page-subtitle">¿Algo no anda bien? Elige una opción y lo vemos al toque.</p>
+        <div class="support-options">
+          <button type="button" class="support-option" data-support="codes">
+            <span class="support-option-icon tone-mango"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg></span>
+            <span class="support-option-text"><b>Restablecer límite de códigos</b><small>Se acabaron las consultas de hoy de una cuenta.</small></span>
+            <svg class="ic support-option-go" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button type="button" class="support-option" data-support="account">
+            <span class="support-option-icon tone-coral"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+            <span class="support-option-text"><b>Problema con una cuenta</b><small>No funciona, pide código o la contraseña no entra.</small></span>
+            <svg class="ic support-option-go" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <a class="support-option" id="support-wa-link" href="#" target="_blank" rel="noopener">
+            <span class="support-option-icon tone-wa"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.6a8.6 8.6 0 0 1-12.6 7.6L3.5 20.5l1.3-4.2a8.6 8.6 0 1 1 15.7-4.7z"/><path d="M9.2 8.3c-.3.9 0 2.2 1.1 3.5 1.2 1.4 2.6 2.1 3.6 2l.9-1.2-1.6-1-.8.6a3.4 3.4 0 0 1-1.6-1.6l.6-.8-1-1.6z"/></svg></span>
+            <span class="support-option-text"><b>Escríbenos por WhatsApp</b><small>Para cualquier otra duda, te respondemos al toque.</small></span>
+            <svg class="ic support-option-go" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </a>
+        </div>
 
-          <div id="catalog-grid" class="catalog-grid"></div>
-          <p id="catalog-empty" class="empty-state" hidden>Todavía no tienes stock asignado. Escríbenos por soporte para que te asignen plataformas.</p>
+        <div class="section-head">
+          <h3 class="section-heading">Mis reportes</h3>
+          <button type="button" class="link-btn" id="support-refresh">Actualizar</button>
+        </div>
+        <div id="support-tickets" class="ticket-list"></div>
+        <p id="support-tickets-empty" class="empty-state" hidden>Todavía no enviaste reportes.</p>
+      </section>
 
-          <div class="cart-card" id="cart-card" hidden>
-            <h3>Tu carrito</h3>
-            <div id="cart-list"></div>
-            <div class="cart-total-row">
-              <span class="muted small">Total</span>
-              <span class="cart-total-value" id="cart-total-value">S/ 0.00</span>
-            </div>
-            <button class="btn-primary btn-block" id="cart-buy-btn" type="button" style="margin-top:12px;">Finalizar compra</button>
-          </div>
+      <!-- ─── MÁS (solo celular — Créditos/Recordatorios/Soporte, tema y salir) ─── -->
+      <section id="page-mas" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Más</h2></div>
+        <div class="mas-list">
+          <button type="button" class="mas-row" data-page="creditos">
+            <span class="mas-row-icon t-leaf"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/><path d="M6.5 15h3"/></svg></span>
+            <span class="mas-row-label">Créditos<small>Saldo, recargas por Yape e historial</small></span>
+            <svg class="ic mas-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button type="button" class="mas-row" data-page="recordatorios">
+            <span class="mas-row-icon t-blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg></span>
+            <span class="mas-row-label">Recordatorios<small>Avisa a los que vencen hoy</small></span>
+            <svg class="ic mas-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button type="button" class="mas-row" data-page="soporte">
+            <span class="mas-row-icon t-coral"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8.5 8.5 0 0 1-12.4 7.6L3 21l1.4-5.4A8.5 8.5 0 1 1 21 12z"/></svg></span>
+            <span class="mas-row-label">Soporte<small>Límite de códigos, cuentas y WhatsApp</small></span>
+            <svg class="ic mas-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <div class="mas-sep"></div>
+          <button type="button" class="mas-row" id="mas-theme-btn" aria-pressed="false">
+            <span class="mas-row-icon"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
+            <span class="mas-row-label">Modo oscuro</span>
+            <span class="switch" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="mas-row danger" id="mas-logout-btn">
+            <span class="mas-row-icon t-coral"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></span>
+            <span class="mas-row-label">Cerrar sesión</span>
+          </button>
+        </div>
+      </section>
 
-          <div class="full-order-card">
-            <h3>📦 Pedir cuenta completa</h3>
-            <p class="muted small">Hecha a tu pedido — se entrega en hasta 5 horas. Cuando esté lista te avisa el badge en <b>📦 Cuentas</b>, con un botón para enviársela a tu cliente por WhatsApp.</p>
-            <form class="full-order-form" id="full-order-form">
-              <label for="full-order-platform">Plataforma</label>
-              <select id="full-order-platform" required></select>
-              <label for="full-order-quantity">Cantidad</label>
-              <input type="number" id="full-order-quantity" min="1" value="1" required>
-              <label for="full-order-phone">Celular del cliente</label>
-              <input type="tel" id="full-order-phone" required placeholder="9XXXXXXXX" autocomplete="tel">
-              <p class="form-error" id="full-order-error" hidden></p>
-              <button type="submit" class="btn-primary btn-block" style="margin-top:4px;">Pedir cuenta completa</button>
-            </form>
-          </div>
-        </section>
+    </main>
 
-        <!-- ─── CUENTAS ─── -->
-        <section id="page-cuentas" class="page" hidden>
-          <h2 class="page-title">📦 Cuentas</h2>
-          <p class="page-subtitle muted small">Perfiles ya asignados y tus pedidos de cuenta completa.</p>
-
-          <h3 class="section-heading">Perfiles asignados</h3>
-          <div id="cuentas-profiles-list" class="client-list"></div>
-          <p id="cuentas-profiles-empty" class="empty-state" hidden>Todavía no tienes perfiles asignados a clientes.</p>
-
-          <h3 class="section-heading">Cuentas completas pedidas</h3>
-          <div id="cuentas-orders-list" class="client-list"></div>
-          <p id="cuentas-orders-empty" class="empty-state" hidden>No has pedido ninguna cuenta completa todavía.</p>
-        </section>
-
-        <!-- ─── CRÉDITOS ─── -->
-        <section id="page-creditos" class="page" hidden>
-          <h2 class="page-title">💳 Créditos</h2>
-
-          <div class="balance-card">
-            <div class="balance-card-label">Tu saldo</div>
-            <div class="balance-card-value" id="credits-balance-value">S/ 0.00</div>
-          </div>
-          <button class="btn-ghost btn-sm btn-block" id="credits-refresh-btn" type="button" style="margin-bottom:18px;">🔄 Actualizar saldo</button>
-
-          <p class="muted small" style="margin-bottom:10px;">Recargar por Yape</p>
-          <div class="topup-grid">
-            <button class="topup-btn" data-amount="20" type="button">S/ 20<span class="topup-btn-sub">Recargar</span></button>
-            <button class="topup-btn" data-amount="50" type="button">S/ 50<span class="topup-btn-sub">Recargar</span></button>
-            <button class="topup-btn" data-amount="100" type="button">S/ 100<span class="topup-btn-sub">Recargar</span></button>
-            <button class="topup-btn" data-amount="500" type="button">S/ 500<span class="topup-btn-sub">Recargar</span></button>
-          </div>
-
-          <h3 class="section-heading">Historial</h3>
-          <div id="ledger-list" class="ledger-list"></div>
-        </section>
-
-        <!-- ─── RECORDATORIOS ─── -->
-        <section id="page-recordatorios" class="page" hidden>
-          <h2 class="page-title">🔔 Recordatorios</h2>
-          <p class="page-subtitle muted small">Avisa por WhatsApp a tus clientes que vencen hoy, en tandas de 5.</p>
-          <p class="reminders-tip">💡 Funciona mejor con el App WhatsApp de PC.</p>
-          <p class="reminders-summary" id="reminders-summary"></p>
-          <button class="btn-primary btn-block" id="reminders-prepare-btn" type="button" style="margin-bottom:18px;">Preparar tanda de 5</button>
-          <div id="reminders-list" class="reminders-list"></div>
-        </section>
-
-        <!-- ─── SOPORTE ─── -->
-        <section id="page-soporte" class="page" hidden>
-          <h2 class="page-title">💬 Soporte</h2>
-          <div class="support-card">
-            <div class="support-icon">🥭</div>
-            <h3>¿Necesitas ayuda?</h3>
-            <p class="muted">Escríbenos directo por WhatsApp y te respondemos al toque.</p>
-            <a class="btn-wa btn-block" id="support-wa-link" href="#" target="_blank" rel="noopener">💬 Chatear por WhatsApp</a>
-          </div>
-        </section>
-
-        <!-- ─── MÁS (solo mobile — agrupa Créditos/Recordatorios/Soporte) ─── -->
-        <section id="page-mas" class="page" hidden>
-          <h2 class="page-title">⋯ Más</h2>
-          <div class="mas-list">
-            <button type="button" class="mas-row" data-page="creditos"><span class="mas-row-icon">💳</span><span class="mas-row-label">Créditos</span><span class="mas-row-chevron">›</span></button>
-            <button type="button" class="mas-row" data-page="recordatorios"><span class="mas-row-icon">🔔</span><span class="mas-row-label">Recordatorios</span><span class="mas-row-chevron">›</span></button>
-            <button type="button" class="mas-row" data-page="soporte"><span class="mas-row-icon">💬</span><span class="mas-row-label">Soporte</span><span class="mas-row-chevron">›</span></button>
-          </div>
-        </section>
-
-      </main>
-    </div>
-
-    <!-- ─── Nav inferior (mobile) — se oculta desde 768px ─── -->
-    <nav class="tab-bar" id="tab-bar"></nav>
+    <!-- Barra inferior flotante (celular) — se oculta desde 900px -->
+    <nav class="tab-bar" id="tab-bar" aria-label="Menú principal"></nav>
   </div>
 
   <!-- ═══════════ MODAL: RECARGA YAPE ═══════════ -->
   <div id="checkout-modal" class="modal-backdrop" hidden>
     <div class="modal-card">
-      <button class="modal-close" id="checkout-close" type="button" aria-label="Cerrar">✕</button>
+      <button class="modal-close" id="checkout-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
 
       <div id="checkout-loading" class="checkout-state">
         <span class="spinner"></span>
-        <p>Preparando tu recarga…</p>
+        <p class="muted">Preparando tu recarga…</p>
       </div>
 
       <div id="checkout-ready" class="checkout-state" hidden>
-        <h2>Completa tu pago</h2>
+        <h2 style="padding-right:0;">Completa tu pago</h2>
         <p class="muted">Envía exactamente este monto por Yape:</p>
         <div class="checkout-amount-row">
           <span class="checkout-amount" id="checkout-amount">S/ 0.00</span>
-          <button class="yape-copy-btn" id="checkout-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto">📋</button>
+          <button class="yape-copy-btn" id="checkout-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
         </div>
         <img id="checkout-qr" class="checkout-qr" alt="QR de Yape" hidden>
         <p class="yape-info" id="checkout-instructions"></p>
         <div class="checkout-waiting">
-          <span>ℹ️</span>
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>
           <span>El saldo se acredita solo cuando se detecte el pago.</span>
         </div>
-        <a class="btn-wa btn-block" id="checkout-support-link" href="#" target="_blank" rel="noopener" style="margin-top:14px;">💬 Dudas con el pago</a>
+        <a class="btn-wa btn-block" id="checkout-support-link" href="#" target="_blank" rel="noopener" style="margin-top:14px;">Dudas con el pago</a>
         <button class="btn-ghost btn-block" id="checkout-done-btn" type="button" style="margin-top:8px;">Listo, ya pagué</button>
       </div>
 
@@ -274,15 +389,43 @@
   <!-- ═══════════ MODAL: TELÉFONO DEL CLIENTE FINAL (checkout del carrito) ═══════════ -->
   <div id="cart-checkout-modal" class="modal-backdrop" hidden>
     <div class="modal-card">
-      <button class="modal-close" id="cart-checkout-close" type="button" aria-label="Cerrar">✕</button>
+      <button class="modal-close" id="cart-checkout-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <h2>¿Para qué cliente es?</h2>
       <p class="muted small">Escribe el celular del cliente final — ahí le enviamos la cuenta.</p>
       <form id="cart-checkout-form">
-        <label for="cart-checkout-phone" class="muted small">Celular del cliente</label>
-        <input type="tel" id="cart-checkout-phone" required placeholder="9XXXXXXXX" autocomplete="tel" style="width:100%; padding:12px 13px; border-radius:11px; border:1px solid var(--border); background:var(--card); color:var(--text); font-size:15px; font-family:inherit; margin-top:4px;">
+        <label for="cart-checkout-phone" class="label">Celular del cliente</label>
+        <input type="tel" id="cart-checkout-phone" class="input" required placeholder="9XXXXXXXX" autocomplete="tel" inputmode="tel">
         <div id="cart-checkout-emails"></div>
         <p class="form-error" id="cart-checkout-error" hidden></p>
-        <button type="submit" class="btn-primary btn-block" style="margin-top:14px;">Confirmar compra</button>
+        <button type="submit" class="btn-primary btn-block" style="margin-top:18px;">Confirmar compra</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODAL: SOPORTE (restablecer códigos / problema con una cuenta) ═══════════ -->
+  <div id="support-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="support-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <span class="modal-icon tone-mango" id="support-modal-icon"></span>
+      <h2 id="support-modal-title">Soporte</h2>
+      <p class="muted small" id="support-modal-sub"></p>
+      <form id="support-form">
+        <label for="support-account" class="label">Cuenta</label>
+        <select id="support-account" class="input" required></select>
+        <p class="muted small" id="support-account-note" hidden style="margin-top:6px;"></p>
+        <div id="support-reason-wrap">
+          <span class="label">¿Qué pasa?</span>
+          <div class="reason-chips" id="support-reasons" role="radiogroup" aria-label="Motivo"></div>
+        </div>
+        <div id="support-detail-wrap">
+          <label for="support-detail" class="label">Detalle <span class="muted">(opcional)</span></label>
+          <textarea id="support-detail" class="input" rows="3" maxlength="300" placeholder="Cuéntanos qué ve tu cliente…"></textarea>
+        </div>
+        <p class="form-error" id="support-error" hidden></p>
+        <div class="btn-row">
+          <button type="button" class="btn-ghost" id="support-cancel">Cancelar</button>
+          <button type="submit" class="btn-primary" id="support-submit">Enviar</button>
+        </div>
       </form>
     </div>
   </div>
@@ -290,8 +433,9 @@
   <!-- ═══════════ MODAL: CÓDIGOS (los que llegan al correo de la cuenta) ═══════════ -->
   <div id="codes-modal" class="modal-backdrop" hidden>
     <div class="modal-card codes-card">
-      <button class="modal-close" id="codes-close" type="button" aria-label="Cerrar">✕</button>
+      <button class="modal-close" id="codes-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <div class="codes-head">
+        <span id="codes-plat"></span>
         <div class="codes-head-main">
           <div class="codes-platform" id="codes-platform"></div>
           <div class="codes-sub" id="codes-sub"></div>
@@ -318,12 +462,12 @@
         <div class="codes-box" id="codes-box"><span id="codes-value"></span></div>
         <div class="codes-totp-bar" id="codes-totp-bar" hidden><i></i></div>
         <a class="btn-primary btn-block" id="codes-link" href="#" target="_blank" rel="noopener" hidden>Abrir link de inicio de sesión</a>
-        <button class="btn-primary btn-block" id="codes-copy" type="button">📋 Copiar</button>
+        <button class="btn-primary btn-block" id="codes-copy" type="button">Copiar</button>
         <button class="codes-textbtn" id="codes-mail-toggle" type="button" hidden>Ver correo completo</button>
         <iframe class="codes-mail" id="codes-mail" sandbox="" title="Correo completo" hidden></iframe>
         <div class="codes-actions">
           <button class="btn-ghost" id="codes-again" type="button">¿No sirvió? Buscar otro</button>
-          <button class="btn-ghost" id="codes-done" type="button">✅ Listo</button>
+          <button class="btn-ghost" id="codes-done" type="button">Listo</button>
         </div>
       </div>
 
@@ -346,15 +490,14 @@
   <!-- ═══════════ MODAL: COMPRA EXITOSA ═══════════ -->
   <div id="purchase-success-modal" class="modal-backdrop" hidden>
     <div class="modal-card">
-      <button class="modal-close" id="purchase-success-close-x" type="button" aria-label="Cerrar">✕</button>
+      <button class="modal-close" id="purchase-success-close-x" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <div class="success-check">✓</div>
-      <h2 style="text-align:center;">¡Listo!</h2>
+      <h2 style="text-align:center; padding-right:0;">¡Listo!</h2>
       <p class="muted" style="text-align:center;">Copia los datos o envíalos directo al cliente:</p>
       <div id="purchase-success-list" class="success-accounts-list"></div>
       <button class="btn-primary btn-block" id="purchase-success-close" type="button">Cerrar y seguir comprando</button>
     </div>
   </div>
-
 
 </div>
 

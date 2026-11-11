@@ -63,6 +63,8 @@ import {
 import { plansFor, planFor, planExpiresAt, money } from "../services/plans.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { getAccountCodesConfig } from "../db/codes.repository";
+import { listWholesalerTickets, type SupportTicket } from "../db/support-tickets.repository";
+import { reportWholesalerProblem, WHOLESALE_REPORT_REASONS } from "../services/support-reports.service";
 import { createCodeLink, countWholesalerLinksToday, findOpenWholesalerLink } from "../db/code-links.repository";
 import { codeWaitMinutes } from "../services/code-requests.service";
 import { TOTP_SOURCE_ID } from "../services/codes-lookup.service";
@@ -610,6 +612,50 @@ router.post("/clients/:profileId/renewal-marker", (req, res) => {
 
   const profile = setProfileRenewal(found.profile.id, status);
   res.json({ profile });
+});
+
+// ── SOPORTE (reportes a nombre de un cliente + restablecer límite de códigos) ──
+
+function ticketForWholesaler(t: SupportTicket) {
+  const label = t.status === "pending" ? "Enviado"
+    : t.status === "seen" ? "En revisión"
+    : t.kind === "codes" ? "Límite restablecido"
+    : t.resolution === "replaced" ? "Cuenta reemplazada"
+    : t.resolution === "active" ? "Tenía suscripción activa"
+    : "Solucionado";
+  return {
+    id: t.id, kind: t.kind || "account", platform: t.platform, platformTag: t.platformTag,
+    clientPhone: t.clientPhone, profileName: t.profileName, accountEmail: t.accountEmail,
+    problem: t.problem, status: t.status, statusLabel: label,
+    // Con reemplazo van los datos de la cuenta nueva (para pasárselos al cliente).
+    detail: t.resolution === "replaced" || t.kind === "codes" ? t.resolutionMessage : "",
+    createdAt: t.createdAt, attendedAt: t.attendedAt,
+  };
+}
+
+router.get("/support/tickets", (req, res) => {
+  res.json({ tickets: listWholesalerTickets(wid(req)).map(ticketForWholesaler), reasons: WHOLESALE_REPORT_REASONS });
+});
+
+router.post("/support/tickets", (req, res) => {
+  const wholesalerId = wid(req);
+  const kind = req.body?.kind === "codes" ? "codes" : "account";
+  const found = ownProfileAndAccount(wholesalerId, Number(req.body?.profileId));
+  if (!found) return res.status(404).json({ message: "Elige una cuenta de tus clientes." });
+
+  let codesRemaining: number | null = null;
+  if (kind === "codes") {
+    const info = codesInfoFor(found.profile.id, found.account);
+    if (!info.enabled) return res.status(409).json({ message: "Esta cuenta no tiene códigos en el panel." });
+    codesRemaining = info.remaining;
+  }
+  const result = reportWholesalerProblem({
+    wholesalerId, profileId: found.profile.id, kind,
+    reason: String(req.body?.reason ?? ""), detail: String(req.body?.detail ?? ""), codesRemaining,
+  });
+  if (!result.ok) return res.status(result.status).json({ message: result.message });
+  touchWholesalerActivity(wholesalerId);
+  res.status(201).json({ ticket: ticketForWholesaler(result.ticket) });
 });
 
 // ── RESUMEN ──

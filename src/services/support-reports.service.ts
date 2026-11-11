@@ -8,6 +8,10 @@ import {
   markSupportTicketSeen, markSupportTicketResolved, type SupportTicket,
 } from "../db/support-tickets.repository";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
+import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
+import { findOpenWholesalerTicket, countWholesalerTicketsToday } from "../db/support-tickets.repository";
+import { getProfileById } from "../db/access.repository";
+import { resetWholesalerCodeQuota } from "../db/code-links.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
 import { limaTodayISO } from "./access.service";
 
@@ -126,6 +130,70 @@ export function replacementMessage(p: {
   return lines.join("\n");
 }
 
+// ── Panel mayorista (Soporte) ──
+// El mayorista reporta un problema con la cuenta de un cliente suyo o
+// pide que le restablezcan las consultas de códigos del día de una venta.
+// Llega al mismo panel > Soportes; la respuesta le llega a su campanita.
+
+export const WHOLESALE_REPORT_REASONS = [
+  "No tiene suscripción / no funciona",
+  "Pide código o verificación",
+  "Contraseña incorrecta",
+  "Otro",
+] as const;
+export const CODES_RESET_PROBLEM = "Restablecer límite de códigos";
+const MAX_WHOLESALE_REPORTS_PER_DAY = 10;
+
+export function reportWholesalerProblem(params: {
+  wholesalerId: number; profileId: number; kind: "account" | "codes"; reason?: string; detail?: string;
+  codesRemaining?: number | null;
+}): ReportResult {
+  const profile = getProfileById(params.profileId);
+  if (!profile || profile.wholesalerId !== params.wholesalerId || !profile.clientPhone) {
+    return { ok: false, status: 404, message: "No encontramos esa cuenta en tus clientes." };
+  }
+  const account = getAccountById(profile.accountId);
+  if (!account) return { ok: false, status: 404, message: "No encontramos esa cuenta en tus clientes." };
+
+  if (findOpenWholesalerTicket(params.wholesalerId, profile.id, params.kind)) {
+    return { ok: false, status: 409, message: params.kind === "codes"
+      ? "Ya pediste restablecer el límite de esta cuenta. Te avisamos apenas esté listo."
+      : "Ya reportaste esta cuenta y está en revisión. Te avisamos apenas quede lista." };
+  }
+  if (countWholesalerTicketsToday(params.wholesalerId) >= MAX_WHOLESALE_REPORTS_PER_DAY) {
+    return { ok: false, status: 429, message: "Ya enviaste varios reportes hoy. Si es urgente, escríbenos por WhatsApp." };
+  }
+
+  let problem: string;
+  if (params.kind === "codes") {
+    if (params.codesRemaining != null && params.codesRemaining > 0) {
+      return { ok: false, status: 409, message: `Todavía te quedan ${params.codesRemaining} consultas hoy para esta cuenta.` };
+    }
+    problem = CODES_RESET_PROBLEM;
+  } else {
+    const reason = WHOLESALE_REPORT_REASONS.find(r => r === params.reason) ?? "Otro";
+    const detail = String(params.detail ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+    if (reason === "Otro" && !detail) return { ok: false, status: 400, message: "Cuéntanos qué pasa con la cuenta." };
+    problem = detail ? `${reason} — ${detail}` : reason;
+  }
+
+  const ticket = createSupportTicket({
+    clientPhone: profile.clientPhone, wholesalerId: params.wholesalerId, platform: account.platform,
+    accountEmail: account.email, accountPassword: account.password, profileName: profile.profileName || "",
+    provider: account.provider || "", problem, kind: params.kind, profileId: profile.id,
+  });
+  return { ok: true, ticket };
+}
+
+function wholesalerUpdate(t: SupportTicket, text: string): void {
+  if (!t.wholesalerId) return;
+  createWholesalerNotification(t.wholesalerId, "support_update", t.platform, t.accountEmail, text);
+}
+
+function clientRef(t: SupportTicket): string {
+  return `${platformTitle(t.platform)} de tu cliente ${String(t.clientPhone).replace(/\D/g, "").slice(-9)}`;
+}
+
 // ── Panel ──
 
 export function setTicketInReview(id: number): { ticket: SupportTicket; message: string } | null {
@@ -135,6 +203,9 @@ export function setTicketInReview(id: number): { ticket: SupportTicket; message:
   const ticket = before.status === "pending" ? markSupportTicketSeen(id) : before;
   if (before.status === "pending" && !before.wholesalerId) {
     createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
+  }
+  if (before.status === "pending" && before.wholesalerId) {
+    wholesalerUpdate(before, `🔎 Tu reporte de ${clientRef(before)} está en revisión. Te avisamos apenas quede listo.`);
   }
   return ticket ? { ticket, message } : null;
 }
@@ -147,6 +218,9 @@ export function resolveTicketActive(id: number): { ticket: SupportTicket; messag
   if (before.status !== "attended" && !before.wholesalerId) {
     createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
   }
+  if (before.status !== "attended" && before.wholesalerId) {
+    wholesalerUpdate(before, `✅ Revisamos ${clientRef(before)}: tiene su suscripción activa. Que cierre sesión y vuelva a entrar con sus datos.`);
+  }
   return ticket ? { ticket, message } : null;
 }
 
@@ -158,7 +232,23 @@ export function resolveTicketSolved(id: number): { ticket: SupportTicket; messag
   if (before.status !== "attended" && !before.wholesalerId) {
     createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
   }
+  if (before.status !== "attended" && before.wholesalerId) {
+    wholesalerUpdate(before, `🎉 Listo: el problema de ${clientRef(before)} ya está solucionado.`);
+  }
   return ticket ? { ticket, message } : null;
+}
+
+/** «Restablecer límite» (reporte de códigos del mayorista): las consultas de
+ *  hoy de esa venta dejan de contar y se cierra el reporte. */
+export function resetCodesForTicket(id: number): { ok: true; ticket: SupportTicket; message: string } | { ok: false; message: string } {
+  const before = getSupportTicketById(id);
+  if (!before) return { ok: false, message: "Reporte no encontrado." };
+  if (before.kind !== "codes" || !before.profileId) return { ok: false, message: "Este reporte no es de códigos." };
+  resetWholesalerCodeQuota(before.profileId);
+  const message = `🔑 Listo: te restablecimos las consultas de códigos de hoy de ${clientRef(before)}. Ya puedes volver a consultar.`;
+  const ticket = markSupportTicketResolved(id, "solved", message);
+  if (before.status !== "attended") wholesalerUpdate(before, message);
+  return { ok: true, ticket: ticket ?? before, message };
 }
 
 export type ReplaceOption = {
@@ -240,6 +330,15 @@ export function replaceTicketAccount(
     profileName: newProfile, expiresAt, temporary: mode === "shared",
   });
   const resolved = markSupportTicketResolved(id, "replaced", message);
+  if (ticket.wholesalerId) {
+    const detail = [
+      `Cliente: ${String(ticket.clientPhone).replace(/\D/g, "").slice(-9)}`,
+      `📧 Correo: ${target.email}`, `🔑 Contraseña: ${target.password}`,
+      ...(newProfile ? [`👤 Perfil: ${newProfile}`] : []),
+      ...(expiresAt ? [`📅 Vence: ${fmtDate(expiresAt)}`] : []),
+    ].join("\n");
+    createWholesalerNotification(ticket.wholesalerId, "account_replaced", ticket.platform, target.email, detail);
+  }
   if (!ticket.wholesalerId) {
     const detail = [
       `📧 Correo: ${target.email}`, `🔑 Contraseña: ${target.password}`,

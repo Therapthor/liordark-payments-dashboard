@@ -108,9 +108,18 @@ export function findOpenClientLink(accountId: number, clientPhone: string): Code
 export function countWholesalerLinksToday(profileId: number): number {
   const r = db.prepare(`
     SELECT COUNT(*) AS n FROM code_links
-    WHERE created_by = 'wholesaler' AND profile_id = ? AND created_at >= ?
+    WHERE created_by = 'wholesaler' AND profile_id = ? AND created_at >= ? AND quota_reset = 0
   `).get(profileId, limaMidnightUtcSql()) as { n: number };
   return r.n;
+}
+
+/** Soporte restablece el límite del día de este perfil: las consultas de
+ *  hoy dejan de contar (siguen sirviendo las que estén abiertas). */
+export function resetWholesalerCodeQuota(profileId: number): number {
+  return db.prepare(`
+    UPDATE code_links SET quota_reset = 1
+    WHERE created_by = 'wholesaler' AND profile_id = ? AND created_at >= ?
+  `).run(profileId, limaMidnightUtcSql()).changes;
 }
 
 /** La consulta del mayorista que sigue abierta para este perfil, si hay. */
