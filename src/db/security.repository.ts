@@ -342,3 +342,105 @@ export function phoneHasAccounts(phone: string): boolean {
   if (d.length < 9) return false;
   return !!db.prepare(`SELECT 1 FROM access_profiles WHERE substr(client_phone, -9) = ? LIMIT 1`).get(d);
 }
+
+// ─────────────────────────────────────────────────────────────
+// QUITAR BLOQUEO DE VERDAD — el login de la tienda bloquea por número Y por
+// conexión (IP). «Quitar bloqueo» solo limpiaba el número: la conexión
+// seguía bloqueada y el cliente no podía entrar. Ahora:
+//  · login_failure_ips: desde qué IP falló cada número (para limpiar esas
+//    conexiones al desbloquearlo),
+//  · login_passes: pase del admin por 24 h — ese número entra sin bloqueos
+//    por conexión ni límite por conexión (el de su propio número sigue:
+//    si vuelve a fallar el PIN, se bloquea de nuevo).
+// ─────────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS login_failure_ips (
+    kind    TEXT NOT NULL,
+    phone9  TEXT NOT NULL,
+    ip      TEXT NOT NULL,
+    last_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (kind, phone9, ip)
+  );
+  CREATE TABLE IF NOT EXISTS login_passes (
+    kind       TEXT NOT NULL,
+    phone9     TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    PRIMARY KEY (kind, phone9)
+  );
+`);
+
+export type LoginKind = "cliente" | "mayorista";
+
+export function rememberLoginFailureIp(kind: LoginKind, phone: string, ip: string): void {
+  const d = last9(phone);
+  if (d.length < 9 || !ip) return;
+  db.prepare(`
+    INSERT INTO login_failure_ips (kind, phone9, ip) VALUES (?, ?, ?)
+    ON CONFLICT(kind, phone9, ip) DO UPDATE SET last_at = datetime('now')
+  `).run(kind, d, ip);
+}
+
+export function loginFailureIps(kind: LoginKind, phone: string): string[] {
+  const d = last9(phone);
+  if (d.length < 9) return [];
+  return (db.prepare(`
+    SELECT ip FROM login_failure_ips WHERE kind = ? AND phone9 = ? AND last_at >= datetime('now', '-30 days')
+  `).all(kind, d) as { ip: string }[]).map(r => r.ip);
+}
+
+export function grantLoginPass(kind: LoginKind, phone: string, hours = 24): void {
+  const d = last9(phone);
+  if (d.length < 9) return;
+  db.prepare(`
+    INSERT INTO login_passes (kind, phone9, expires_at) VALUES (?, ?, datetime('now', ?))
+    ON CONFLICT(kind, phone9) DO UPDATE SET expires_at = excluded.expires_at
+  `).run(kind, d, `+${hours} hours`);
+}
+
+export function hasLoginPass(kind: LoginKind, phone: string): boolean {
+  const d = last9(phone);
+  if (d.length < 9) return false;
+  return !!db.prepare(`SELECT 1 FROM login_passes WHERE kind = ? AND phone9 = ? AND expires_at > datetime('now')`).get(kind, d);
+}
+
+/** Reinicia el contador de intentos fallidos de una conexión (y su bloqueo). */
+export function resetIpLoginFailures(ip: string): void {
+  db.prepare(`DELETE FROM login_ip_failures WHERE ip = ?`).run(ip);
+}
+
+/** Conexiones bloqueadas AHORA por intentos fallidos (para «IPs bloqueadas»). */
+export function listIpFailureLocks(): { ip: string; count: number; lockedUntil: string }[] {
+  const now = Date.now();
+  return (db.prepare(`SELECT ip, count, locked_until FROM login_ip_failures WHERE locked_until IS NOT NULL`).all() as any[])
+    .filter(r => new Date(r.locked_until).getTime() > now)
+    .map(r => ({ ip: r.ip, count: r.count, lockedUntil: r.locked_until }));
+}
+
+/** Por número de cliente (9 dígitos): hasta cuándo sigue bloqueada alguna conexión desde donde falló. */
+export function customerIpLocks(): Map<string, string> {
+  const now = Date.now();
+  const out = new Map<string, string>();
+  const put = (phone9: string, untilIso: string) => {
+    const t = new Date(untilIso).getTime();
+    if (!(t > now)) return;
+    const prev = out.get(phone9);
+    if (!prev || new Date(prev).getTime() < t) out.set(phone9, new Date(t).toISOString());
+  };
+  for (const r of db.prepare(`
+    SELECT f.phone9 AS phone9, l.locked_until AS until FROM login_failure_ips f
+    JOIN login_ip_failures l ON l.ip = f.ip
+    WHERE f.kind = 'cliente' AND l.locked_until IS NOT NULL
+  `).all() as { phone9: string; until: string }[]) put(r.phone9, r.until);
+  for (const r of db.prepare(`
+    SELECT f.phone9 AS phone9, b.expires_at AS until FROM login_failure_ips f
+    JOIN blocked_ips b ON b.ip = f.ip
+    WHERE f.kind = 'cliente' AND b.expires_at > datetime('now')
+  `).all() as { phone9: string; until: string }[]) put(r.phone9, r.until.replace(" ", "T") + "Z");
+  return out;
+}
+
+export function cleanOldLoginTraces(): void {
+  db.prepare(`DELETE FROM login_failure_ips WHERE last_at < datetime('now', '-30 days')`).run();
+  db.prepare(`DELETE FROM login_passes WHERE expires_at < datetime('now')`).run();
+}

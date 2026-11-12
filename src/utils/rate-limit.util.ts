@@ -7,10 +7,11 @@ import { clientIp } from "../services/security.service";
 // Generoso a propósito: en Perú muchos celulares comparten la misma IP.
 // ─────────────────────────────────────────────────────────────
 
-export function loginRateLimit(name: string, max: number, windowMs: number) {
+/** `skip`: intentos que no cuentan ni se frenan (ej. número con pase del admin). */
+export function loginRateLimit(name: string, max: number, windowMs: number, skip?: (req: Request) => boolean) {
   const hits = new Map<string, number[]>();
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (req.method !== "POST") { next(); return; }
+    if (req.method !== "POST" || skip?.(req)) { next(); return; }
     const now = Date.now();
     const key = clientIp(req) || "?";
     const list = (hits.get(key) ?? []).filter(t => now - t < windowMs);

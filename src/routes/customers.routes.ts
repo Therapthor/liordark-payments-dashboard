@@ -10,7 +10,6 @@ import {
   countAllCustomers,
   countCustomersWithEmail,
   dailyRegistrationsThisMonth,
-  clearCustomerLockout,
   resetCustomerPin,
   findCustomerByPhone,
   createCustomer,
@@ -22,8 +21,10 @@ import { checkLockout } from "../services/login-lockout.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { blockPhone, unblockPhone, unblockIp, listBlockedPhones, isPhoneBlocked } from "../db/security.repository";
 import crypto from "crypto";
-import { revokeCustomerSessions, listSecurityEvents, listBlockedIps, setIpLoginFailures } from "../db/security.repository";
+import { revokeCustomerSessions, listSecurityEvents, listBlockedIps, setIpLoginFailures, customerIpLocks, listIpFailureLocks } from "../db/security.repository";
 import { banForFraud } from "../services/security.service";
+import { unlockCustomerLogin, unlockWholesalerLogin } from "../services/login-unlock.service";
+import { findWholesalerById, listLockedWholesalers } from "../db/wholesaler.repository";
 
 // ─────────────────────────────────────────────────────────────
 // CLIENTES DE LA TIENDA WEB (panel admin) — muestra la contraseña de
@@ -42,6 +43,14 @@ function last9(phone: string): string {
   return phone.replace(/\D/g, "").slice(-9);
 }
 
+/** Hasta cuándo no puede entrar: lo que dure más entre su número y sus conexiones. */
+function lockedUntilOf(phoneLock: string | null, ipLock: string | undefined): string | null {
+  const a = phoneLock && checkLockout(phoneLock).locked ? phoneLock : null;
+  if (!ipLock) return a;
+  if (!a) return ipLock;
+  return new Date(ipLock).getTime() > new Date(a).getTime() ? ipLock : a;
+}
+
 // "Clientes > Registro" muestra DOS orígenes en una sola lista: quienes
 // se registraron de verdad en liordark.com (tabla customers) Y quienes
 // solo existen porque alguna vez les asignaron una cuenta en Accesos
@@ -52,6 +61,7 @@ function last9(phone: string): string {
 router.get("/", (_req, res) => {
   const accessStats = listAccessClientStats();
   const registeredDigits = new Set(listAllCustomers().map(c => last9(c.phone)));
+  const ipLocks = customerIpLocks();
 
   const customers = listAllCustomers().map(c => {
     const stat = accessStats.find(s => last9(s.phone) === last9(c.phone));
@@ -64,7 +74,7 @@ router.get("/", (_req, res) => {
       purchaseCount:  stat?.purchaseCount ?? 0,
       suspended:      isCustomerSuspended(c),
       suspendedUntil: c.suspendedUntil,
-      lockedUntil:    checkLockout(c.lockedUntil).locked ? c.lockedUntil : null,
+      lockedUntil:    lockedUntilOf(c.lockedUntil, ipLocks.get(last9(c.phone))),
       blocked:        isPhoneBlocked(c.phone),
       pinRecovery:    c.pinRecovery,
       createdAt:      c.createdAt,
@@ -128,17 +138,23 @@ router.post("/:id/reset-password", async (req, res) => {
   }
   const newPassword = generatePassword();
   const passwordHash = await hashPassword(newPassword);
-  setCustomerPassword(id, passwordHash, newPassword);
+  const updated = setCustomerPassword(id, passwordHash, newPassword);
+  if (updated) unlockCustomerLogin(updated.phone); // con la nueva entra sin esperar
   res.json({ ok: true, password: newPassword });
 });
 
-// Quita el bloqueo por intentos fallidos para que el cliente entre ya.
+// Quita el bloqueo para que el cliente entre YA: el de su número, el de las
+// conexiones desde donde falló y 24 h sin bloqueos por conexión.
 router.post("/:id/unlock", (req, res) => {
   const id = Number(req.params.id);
-  if (!findCustomerById(id)) {
+  const customer = findCustomerById(id);
+  if (!customer) {
     return res.status(404).json({ message: "Cliente no encontrado." });
   }
-  clearCustomerLockout(id);
+  // Si además su número estaba baneado, también se libera (y la conexión del baneo).
+  const ban = listBlockedPhones().find(b => b.phone.slice(-9) === last9(customer.phone));
+  if (ban) unblockPhone(customer.phone);
+  unlockCustomerLogin(customer.phone, ban?.ip ? [ban.ip] : []);
   res.json({ ok: true });
 });
 
@@ -177,6 +193,8 @@ router.post("/:id/reset-pin", async (req, res) => {
   const pin = String(crypto.randomInt(10000)).padStart(4, "0");
   resetCustomerPin(id, await hashPassword(pin), pin);
   revokeCustomerSessions(id);
+  const customer = findCustomerById(id);
+  if (customer) unlockCustomerLogin(customer.phone); // con el PIN nuevo entra sin esperar
   res.json({ ok: true, pin });
 });
 
@@ -187,9 +205,13 @@ router.post("/create-access", async (req, res) => {
   const phone = String(req.body?.phone ?? "").replace(/\D/g, "");
   if (phone.length < 9) return res.status(400).json({ message: "Celular inválido." });
   const existing = findCustomerByPhone(phone);
-  if (existing) return res.json({ ok: true, id: existing.id, phone: existing.phone, existed: true });
+  if (existing) {
+    unlockCustomerLogin(existing.phone);
+    return res.json({ ok: true, id: existing.id, phone: existing.phone, existed: true });
+  }
   const pin = String(crypto.randomInt(10000)).padStart(4, "0");
   const customer = createCustomer(phone, await hashPassword(pin), pin, true);
+  unlockCustomerLogin(customer.phone);
   res.json({ ok: true, id: customer.id, phone: customer.phone, existed: false });
 });
 
@@ -204,7 +226,14 @@ router.post("/fraud", (req, res) => {
 
 // Intentos de ataque detectados e IPs bloqueadas.
 router.get("/security/events", (_req, res) => {
-  res.json({ events: listSecurityEvents(), ips: listBlockedIps() });
+  // Además de las de 7 días por ataque, las bloqueadas por intentos fallidos.
+  const ips: { ip: string; reason: string; expiresAt: string }[] = listBlockedIps();
+  const seen = new Set(ips.map(b => b.ip));
+  for (const f of listIpFailureLocks()) {
+    if (seen.has(f.ip)) continue;
+    ips.push({ ip: f.ip, reason: `${f.count} intentos fallidos de PIN`, expiresAt: f.lockedUntil });
+  }
+  res.json({ events: listSecurityEvents(), ips });
 });
 
 router.post("/security/ips/unblock", (req, res) => {
@@ -220,12 +249,33 @@ router.get("/blocked/list", (_req, res) => {
   res.json({ blocked: listBlockedPhones() });
 });
 
-router.post("/blocked/:phone/unblock", (req, res) => {
+router.post("/blocked/:phone/unblock", async (req, res) => {
   const phone = String(req.params.phone).replace(/\D/g, "");
   if (phone.length < 9) return res.status(400).json({ message: "Celular inválido." });
   const entry = listBlockedPhones().find(b => b.phone.slice(-9) === phone.slice(-9));
   unblockPhone(phone);
-  if (entry?.ip) unblockIp(entry.ip);
+  // Al banear se borra su acceso web: sin esto, aunque se desbloquee no
+  // tiene con qué entrar (y no puede registrarse porque ya compró). Se le
+  // crea de nuevo con un PIN al azar para que le mandes su link de PIN.
+  const fullPhone = entry?.phone || phone;
+  let createdPin: string | null = null;
+  if (entry && !findCustomerByPhone(fullPhone)) {
+    createdPin = String(crypto.randomInt(10000)).padStart(4, "0");
+    createCustomer(fullPhone, await hashPassword(createdPin), createdPin, true);
+  }
+  unlockCustomerLogin(fullPhone, entry?.ip ? [entry.ip] : []);
+  res.json({ ok: true, ...(createdPin ? { createdPin } : {}) });
+});
+
+// Mayoristas que no pueden entrar a mayorista.liordark.com por intentos fallidos.
+router.get("/wholesalers/locked", (_req, res) => {
+  res.json({ wholesalers: listLockedWholesalers() });
+});
+
+router.post("/wholesalers/:id/unlock", (req, res) => {
+  const w = findWholesalerById(Number(req.params.id));
+  if (!w) return res.status(404).json({ message: "Mayorista no encontrado." });
+  unlockWholesalerLogin(w);
   res.json({ ok: true });
 });
 

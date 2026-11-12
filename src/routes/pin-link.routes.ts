@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { findCustomerById, setCustomerPassword, isCustomerSuspended, clearCustomerLockout } from "../db/customer.repository";
+import { findCustomerById, setCustomerPassword, isCustomerSuspended } from "../db/customer.repository";
+import { unlockCustomerLogin } from "../services/login-unlock.service";
 import {
   createPinLink, findPinLink, markPinLinkOpened, usePinLink, pinLinkState, PIN_LINK_MINUTES,
 } from "../db/pin-links.repository";
@@ -83,7 +84,7 @@ pinLinkRoutes.post("/:token", async (req, res) => {
   if (!usePinLink(info.link.token)) return res.status(410).json({ ...info.body, state: "used" });
 
   setCustomerPassword(info.customer.id, await hashPassword(pin), pin);
-  clearCustomerLockout(info.customer.id); // con el PIN nuevo entra sin esperar
+  unlockCustomerLogin(info.customer.phone); // con el PIN nuevo entra sin esperar (número y conexión)
   revokeCustomerSessions(info.customer.id); // cualquier sesión anterior se cierra
   res.json({ ok: true, phone: info.body.phone });
 });

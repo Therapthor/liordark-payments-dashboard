@@ -105,9 +105,11 @@
     // Bloqueo por intentos fallidos de PIN (3+ fallos: 1 a 15 min).
     const blockedBadge = c.blocked ? `<span class="web-customer-status web-customer-status-locked">🚫 Bloqueado</span>` : "";
     const lockBadge = c.lockedUntil
-      ? `<span class="web-customer-status web-customer-status-locked">🔒 Bloqueada por intentos · hasta ${new Date(c.lockedUntil).toLocaleTimeString("es-PE", { hour: "numeric", minute: "2-digit" })}</span>
-         <button class="btn-secondary btn-sm web-customer-unlock-btn" type="button">🔓 Quitar bloqueo</button>`
+      ? `<span class="web-customer-status web-customer-status-locked">🔒 Bloqueada por intentos · hasta ${escapeHtml(formatDate(c.lockedUntil))}</span>`
       : "";
+    // Siempre a mano: aunque el panel no vea el bloqueo (ej. conexión
+    // compartida bloqueada por otros), lo deja entrar al instante.
+    const unlockBtn = `<button class="${c.lockedUntil || c.blocked ? "btn-primary" : "btn-secondary"} btn-sm web-customer-unlock-btn" type="button" title="Quita el bloqueo de su número y de su conexión: entra al instante (24 h sin bloqueos por conexión)">🔓 Quitar bloqueo</button>`;
 
     div.innerHTML = `
       <div class="web-customer-main">
@@ -119,6 +121,7 @@
       </div>
       <div class="web-customer-sub">${formatDate(c.createdAt)} · ${purchaseLabel}</div>
       <div class="web-customer-actions">
+        ${unlockBtn}
         ${passwordArea}
         <button class="btn-secondary btn-sm web-customer-pinlink-btn" type="button">🔑 Link cambio de PIN</button>
         <button class="btn-secondary btn-sm web-customer-resetpin-btn" type="button">♻️ Resetear PIN y cerrar sesión</button>
@@ -176,6 +179,7 @@
   async function unlock(id) {
     try {
       await api(`/${id}/unlock`, { method: "POST" });
+      alert("✅ Desbloqueado: ya puede entrar. Se limpió su número y su conexión (24 h sin bloqueos por conexión).");
       await load();
     } catch (err) {
       alert(err.message);
@@ -413,12 +417,13 @@
     loadStats();
     loadBlocked();
     loadSecurity();
+    loadLockedWholesalers();
   }
 
   // ─── Bloqueo temporal por intentos fallidos de PIN ───
-  let blockedCounts = { locked: 0, phones: 0, ips: 0 };
+  let blockedCounts = { locked: 0, phones: 0, ips: 0, wholesalers: 0 };
   function paintBlockedCount() {
-    const n = blockedCounts.locked + blockedCounts.phones + blockedCounts.ips;
+    const n = blockedCounts.locked + blockedCounts.phones + blockedCounts.ips + blockedCounts.wholesalers;
     const el = document.getElementById("customers-blocked-count");
     if (el) el.textContent = n ? `(${n})` : "";
   }
@@ -445,6 +450,51 @@
       list.appendChild(row);
     });
   }
+
+  // ─── Mayoristas que no pueden entrar (intentos fallidos en su panel) ───
+  async function loadLockedWholesalers() {
+    const list = document.getElementById("locked-wholesalers-list");
+    if (!list) return;
+    try {
+      const { wholesalers } = await api("/wholesalers/locked");
+      blockedCounts.wholesalers = wholesalers.length;
+      paintBlockedCount();
+      list.innerHTML = wholesalers.length ? "" : `<p class="feed-empty">Ningún mayorista bloqueado.</p>`;
+      wholesalers.forEach(w => {
+        const row = document.createElement("div");
+        row.className = "web-customer-row";
+        const state = w.lockedNow
+          ? `🔒 Bloqueado hasta ${escapeHtml(formatDate(w.lockedUntil))}`
+          : `⚠️ ${w.failedLoginCount} intentos fallidos: el próximo lo bloquea`;
+        row.innerHTML = `
+          <div class="web-customer-main">
+            <span class="web-customer-phone">${escapeHtml(localPhone(w.phone))}</span>
+            <span class="web-customer-badge">🏪 ${escapeHtml(w.displayName || "Mayorista")}</span>
+            <span class="web-customer-status web-customer-status-locked">${state}</span>
+          </div>
+          <div class="web-customer-actions">
+            <button class="btn-primary btn-sm" data-ws-unlock="${escapeHtml(String(w.id))}" type="button">🔓 Quitar bloqueo</button>
+          </div>`;
+        list.appendChild(row);
+      });
+    } catch (err) {
+      list.innerHTML = `<p class="feed-empty">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  document.getElementById("locked-wholesalers-list")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-ws-unlock]");
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      await api(`/wholesalers/${encodeURIComponent(btn.dataset.wsUnlock)}/unlock`, { method: "POST" });
+      alert("✅ Desbloqueado: ya puede entrar a su panel de mayorista.");
+      loadLockedWholesalers();
+    } catch (err) {
+      btn.disabled = false;
+      alert(err.message);
+    }
+  });
 
   // ─── Intentos de ataque e IPs bloqueadas ───
   async function loadSecurity() {
@@ -533,8 +583,11 @@
     if (!btn) return;
     if (!confirm("¿Desbloquear este número? Podrá volver a entrar.")) return;
     try {
-      await api(`/blocked/${encodeURIComponent(btn.dataset.unblock)}/unblock`, { method: "POST" });
-      loadBlocked();
+      const r = await api(`/blocked/${encodeURIComponent(btn.dataset.unblock)}/unblock`, { method: "POST" });
+      alert(r && r.createdPin
+        ? `✅ Desbloqueado. Su acceso web se había borrado al banearlo: se creó de nuevo con PIN ${r.createdPin}. Envíale ese PIN o el «Link cambio de PIN» (pestaña Web).`
+        : "✅ Desbloqueado: ya puede entrar (también se limpió su conexión).");
+      load();
     } catch (err) { alert(err.message); }
   });
 

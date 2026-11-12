@@ -37,7 +37,7 @@ router.post("/login", passwordLock(async (req, res) => {
   const lock = wholesalerLockoutStatus(phone);
   if (lock.locked) {
     return res.status(429).json({
-      message: `Demasiados intentos fallidos. Probá de nuevo en ${Math.ceil(lock.retryAfterSeconds / 60)} min.`,
+      message: `Demasiados intentos fallidos. Prueba de nuevo en ${Math.ceil(lock.retryAfterSeconds / 60)} min o escríbenos al WhatsApp 963 081 436 para desbloquearte.`,
       retryAfterSeconds: lock.retryAfterSeconds,
     });
   }

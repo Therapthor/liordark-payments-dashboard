@@ -85,8 +85,11 @@ export function wholesalerSessionsValidAfter(id: number): number {
 }
 
 export function setWholesalerPassword(id: number, passwordHash: string, passwordPlain: string): Wholesaler | null {
-  db.prepare(`UPDATE wholesalers SET password_hash = ?, password_plain = ?, sessions_valid_after = ? WHERE id = ?`)
-    .run(passwordHash, passwordPlain, Date.now(), id);
+  // Con la contraseña nueva entra ya: sin el bloqueo de los intentos viejos.
+  db.prepare(`
+    UPDATE wholesalers SET password_hash = ?, password_plain = ?, sessions_valid_after = ?,
+      failed_login_count = 0, locked_until = NULL WHERE id = ?
+  `).run(passwordHash, passwordPlain, Date.now(), id);
   return findWholesalerById(id);
 }
 
@@ -111,6 +114,35 @@ export function recordWholesalerLoginFailure(phone: string): void {
 
 export function recordWholesalerLoginSuccess(id: number): void {
   db.prepare(`UPDATE wholesalers SET failed_login_count = 0, locked_until = NULL WHERE id = ?`).run(id);
+}
+
+/** Admin: quita el bloqueo por intentos fallidos (y reinicia el contador). */
+export function clearWholesalerLockout(id: number): void {
+  db.prepare(`UPDATE wholesalers SET failed_login_count = 0, locked_until = NULL WHERE id = ?`).run(id);
+}
+
+export type LockedWholesaler = {
+  id: number; phone: string; displayName: string;
+  failedLoginCount: number; lockedUntil: string; lockedNow: boolean;
+};
+
+/**
+ * Mayoristas con problemas para entrar: bloqueados ahora, o que se
+ * bloquearon en las últimas 24 h y siguen con intentos fallidos (el próximo
+ * fallo los vuelve a bloquear). Desde el 3.er fallo cada intento bloquea.
+ */
+export function listLockedWholesalers(): LockedWholesaler[] {
+  const now = Date.now();
+  return (db.prepare(`
+    SELECT id, phone, display_name, failed_login_count, locked_until FROM wholesalers
+    WHERE failed_login_count >= 3 AND locked_until IS NOT NULL
+  `).all() as any[])
+    .filter(r => new Date(r.locked_until).getTime() > now - 24 * 3600_000)
+    .map(r => ({
+      id: r.id, phone: r.phone, displayName: r.display_name,
+      failedLoginCount: r.failed_login_count, lockedUntil: r.locked_until,
+      lockedNow: new Date(r.locked_until).getTime() > now,
+    }));
 }
 
 /**

@@ -1,5 +1,6 @@
 import http from "http";
 import { loginRateLimit } from "./utils/rate-limit.util";
+import { hasLoginPass, cleanOldLoginTraces, cleanOldIpFailures } from "./db/security.repository";
 import express from "express";
 import cookieParser from "cookie-parser";
 import compression from "compression";
@@ -95,8 +96,9 @@ apiRouter.use((_req, res, next) => {
 // Límite de intentos por IP en los logins (solo POST).
 apiRouter.use("/auth/login", loginRateLimit("admin", 30, 10 * 60_000));
 apiRouter.use("/auth/passkey/login", loginRateLimit("admin-llave", 60, 10 * 60_000));
-apiRouter.use("/store/auth", loginRateLimit("tienda", 60, 10 * 60_000));
-apiRouter.use("/wholesaler/auth/login", loginRateLimit("mayorista", 30, 10 * 60_000));
+// Con pase del admin («Quitar bloqueo») el número entra aunque su conexión llegue al límite.
+apiRouter.use("/store/auth", loginRateLimit("tienda", 60, 10 * 60_000, req => hasLoginPass("cliente", String(req.body?.phone ?? ""))));
+apiRouter.use("/wholesaler/auth/login", loginRateLimit("mayorista", 30, 10 * 60_000, req => hasLoginPass("mayorista", String(req.body?.phone ?? ""))));
 apiRouter.use("/auth", authRoutes);
 apiRouter.use("/live", requireAuth, liveRoutes);
 apiRouter.use("/stats", requireAuth, statsRoutes);
@@ -291,7 +293,7 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   setInterval(runArchiveExpiredAccounts, ARCHIVE_INTERVAL_MS);
 
   // Curso: pedidos que nunca se pagaron (más de 1 día) se borran.
-  const cleanCourse = () => { try { cleanOldPendingPurchases(); cleanOldCodeLinks(); cleanPinLinks(); cleanOldPlanOrders(); } catch { /* no crítico */ } };
+  const cleanCourse = () => { try { cleanOldPendingPurchases(); cleanOldCodeLinks(); cleanPinLinks(); cleanOldPlanOrders(); cleanOldLoginTraces(); cleanOldIpFailures(); } catch { /* no crítico */ } };
   cleanCourse();
   setInterval(cleanCourse, ARCHIVE_INTERVAL_MS);
 

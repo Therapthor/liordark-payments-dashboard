@@ -234,32 +234,6 @@
     document.getElementById("view-app").hidden = false;
   }
 
-  let lockoutTimer = null;
-
-  function startLoginLockoutCountdown(seconds) {
-    const btn = document.querySelector('#login-form button[type="submit"]');
-    if (!btn) return;
-    if (lockoutTimer) { clearInterval(lockoutTimer); lockoutTimer = null; }
-    if (!seconds || seconds <= 0) return;
-    let remaining = Math.ceil(seconds);
-    const original = btn.dataset.originalLabel || btn.textContent;
-    btn.dataset.originalLabel = original;
-    btn.disabled = true;
-    const tick = () => {
-      if (remaining <= 0) {
-        clearInterval(lockoutTimer);
-        lockoutTimer = null;
-        btn.disabled = false;
-        btn.textContent = original;
-        return;
-      }
-      btn.textContent = `Espera ${remaining}s…`;
-      remaining--;
-    };
-    tick();
-    lockoutTimer = setInterval(tick, 1000);
-  }
-
   function initLoginForm() {
     document.getElementById("login-form").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -270,8 +244,9 @@
         await api("/auth/login", { method: "POST", body: { phone, password } });
         await onAuthenticated();
       } catch (err) {
+        // Sin cuenta regresiva que deje el botón apagado: el servidor decide.
+        // Así, si soporte le quita el bloqueo, entra al instante.
         setFormError("login-error", err.message);
-        if (err.status === 429) startLoginLockoutCountdown(err.data && err.data.retryAfterSeconds);
       }
     });
 

@@ -23,6 +23,7 @@ import {
 } from "../db/wholesale-full-account.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { touchWholesalerActivity } from "../db/wholesaler.repository";
+import { unlockWholesalerLogin } from "../services/login-unlock.service";
 import { renewAccount } from "../services/access.service";
 import type { Wholesaler } from "../db/wholesaler.repository";
 
@@ -93,6 +94,7 @@ router.post("/:id/reset-password", async (req, res) => {
   const passwordHash = await hashPassword(password);
   const wholesaler    = setWholesalerPassword(Number(req.params.id), passwordHash, password);
   if (!wholesaler) return res.status(404).json({ message: "Mayorista no encontrado." });
+  unlockWholesalerLogin(wholesaler); // con la contraseña nueva entra sin esperar
   res.json({ password });
 });
 

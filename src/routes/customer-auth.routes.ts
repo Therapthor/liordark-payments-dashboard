@@ -19,7 +19,7 @@ import {
   hashPassword,
   verifyCustomerSessionToken,
 } from "../services/customer-auth.service";
-import { isPhoneBlocked, isIpBlocked, countRegistrationsFromIp, logRegistration, ipLoginFailures, setIpLoginFailures, phoneHasAccounts } from "../db/security.repository";
+import { isPhoneBlocked, isIpBlocked, countRegistrationsFromIp, logRegistration, ipLoginFailures, setIpLoginFailures, phoneHasAccounts, hasLoginPass, rememberLoginFailureIp } from "../db/security.repository";
 import { checkLockout, nextCustomerLockoutState, lockoutDurationText } from "../services/login-lockout.service";
 import { clientIp, isPublicIp } from "../services/security.service";
 import { oneAtATime, phoneKey } from "../utils/one-at-a-time.util";
@@ -57,19 +57,21 @@ function ipLockedResponse(req: import("express").Request): { status: number; mes
   return null;
 }
 
-function recordIpFailure(req: import("express").Request): void {
+function recordIpFailure(req: import("express").Request, phone: string): void {
   const ip = clientIp(req);
   if (!isPublicIp(ip)) return;
   const { failedLoginCount, lockedUntil } = nextCustomerLockoutState(ipLoginFailures(ip).count);
   setIpLoginFailures(ip, failedLoginCount, lockedUntil);
+  // Para que «Quitar bloqueo» en el panel limpie también esta conexión.
+  rememberLoginFailureIp("cliente", phone, ip);
 }
 
-/** Tras un intento fallido: ¿quedó bloqueado el número o la IP? */
-function lockAfterFailure(req: import("express").Request, phone: string): string | null {
+/** Tras un intento fallido: ¿quedó bloqueado el número o la IP? (con pase del admin, solo el número) */
+function lockAfterFailure(req: import("express").Request, phone: string, pass: boolean): string | null {
   const byPhone = customerLockoutStatus(phone);
   if (byPhone.locked) return lockedMessage(byPhone.retryAfterSeconds);
   const ip = clientIp(req);
-  if (isPublicIp(ip)) {
+  if (!pass && isPublicIp(ip)) {
     const byIp = checkLockout(ipLoginFailures(ip).lockedUntil);
     if (byIp.locked) return lockedMessage(byIp.retryAfterSeconds);
   }
@@ -94,7 +96,9 @@ router.post("/login", pinLock(async (req, res) => {
   const phone    = String(req.body?.phone ?? "");
   const password = String(req.body?.password ?? "");
   if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
-  const ipLock = ipLockedResponse(req);
+  // Pase del admin («Quitar bloqueo»): entra aunque su conexión esté bloqueada.
+  const pass = hasLoginPass("cliente", phone);
+  const ipLock = pass ? null : ipLockedResponse(req);
   if (ipLock) return res.status(ipLock.status).json({ message: ipLock.message });
 
   const lock = customerLockoutStatus(phone);
@@ -105,8 +109,8 @@ router.post("/login", pinLock(async (req, res) => {
   const customer = findCustomerByPhone(phone);
   if (!customer || !(await checkPassword(password, customer.passwordHash))) {
     recordCustomerLoginFailure(phone);
-    recordIpFailure(req);
-    const lockedNow = lockAfterFailure(req, phone);
+    recordIpFailure(req, phone);
+    const lockedNow = lockAfterFailure(req, phone, pass);
     if (lockedNow) return res.status(429).json({ message: lockedNow });
     return res.status(401).json({ message: "Celular o contraseña incorrectos. Te queda 1 intento antes de un bloqueo temporal." });
   }
@@ -164,7 +168,9 @@ router.post("/quick", pinLock(async (req, res) => {
     return res.status(400).json({ message: "Número de celular inválido." });
   }
   if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
-  const ipLock = ipLockedResponse(req);
+  // Pase del admin («Quitar bloqueo»): entra aunque su conexión esté bloqueada.
+  const pass = hasLoginPass("cliente", phone);
+  const ipLock = pass ? null : ipLockedResponse(req);
   if (ipLock) return res.status(ipLock.status).json({ message: ipLock.message });
 
   const existing = findCustomerByPhone(phone);
@@ -175,8 +181,8 @@ router.post("/quick", pinLock(async (req, res) => {
     }
     if (!(await checkPassword(pin, existing.passwordHash))) {
       recordCustomerLoginFailure(phone);
-      recordIpFailure(req);
-      const lockedNow = lockAfterFailure(req, phone);
+      recordIpFailure(req, phone);
+      const lockedNow = lockAfterFailure(req, phone, pass);
       if (lockedNow) return res.status(429).json({ message: lockedNow });
       return res.status(401).json({
         message: "Ese celular ya tiene cuenta y el PIN no coincide. Usa el PIN que creaste en tu primera compra.",
