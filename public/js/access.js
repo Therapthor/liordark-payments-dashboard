@@ -13,7 +13,11 @@
     });
     if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "Error de red");
+    if (!res.ok) {
+      const err = new Error(data?.message || "Error de red");
+      err.data = data;
+      throw err;
+    }
     return data;
   }
 
@@ -817,8 +821,7 @@
   function populateBulkCodeSelect() {
     const select = document.getElementById("bulk-code-source");
     select.innerHTML = `<option value="">— Sin código —</option>` +
-      (codeSources || []).filter(s => s.id !== TOTP_SOURCE_ID)
-        .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join("");
+      (codeSources || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(codeSourceOptionLabel(s))}</option>`).join("");
   }
 
   function applyBulkCodeSuggestion() {
@@ -835,23 +838,80 @@
     const lines = document.getElementById("bulk-lines");
     const label = document.getElementById("bulk-lines-label");
     const inbox = INBOX_LINK_SOURCES.includes(select.value);
+    const totp  = select.value === TOTP_SOURCE_ID;
     hint.hidden = !select.value;
     hint.textContent = !select.value ? ""
+      : totp ? "🔐 Cada cuenta lleva su propia clave 2FA: ponla después del primer espacio de su línea (puede ir con espacios o guiones). El código se calcula solo; el cliente nunca ve la clave."
       : inbox ? "🔑 Cada cuenta lleva su link de bandeja: ponlo al final de su línea, después de un espacio. Es privado: el cliente nunca lo ve."
       : "🔑 Todas estas cuentas sacarán el código de: " + (select.selectedOptions[0]?.textContent || select.value) + ".";
-    label.innerHTML = inbox
+    label.innerHTML = totp
+      ? "Cuentas — una por línea: <code>correo:contraseña CLAVE2FA</code>"
+      : inbox
       ? "Cuentas — una por línea: <code>correo:contraseña https://mibalu.fun/buzon/…</code>"
       : "Cuentas — una por línea, formato <code>correo:contraseña</code>";
-    lines.placeholder = inbox
+    lines.placeholder = totp
+      ? "correo1@gmail.com:clave123 JBSWY3DPEHPK3PXP\ncorreo2@gmail.com:clave456 KRUG KZTB OBXW 6ZLT"
+      : inbox
       ? "correo1@juanpa.tel:clave123 https://mibalu.fun/buzon/xxxx\ncorreo2@juanpa.tel:clave456 https://mibalu.fun/buzon/yyyy"
       : BULK_CODE_LINES_DEFAULT;
   }
 
-  async function openBulkModal() {
+  // Separa y revisa las líneas del lote ANTES de mandarlas — mismo criterio
+  // que el servidor (POST /accounts/bulk), que las vuelve a revisar. Las
+  // líneas se numeran como se ven en el cuadro, contando las vacías.
+  function parseBulkLines(text, codeSource) {
+    const totp  = codeSource === TOTP_SOURCE_ID;
+    const inbox = INBOX_LINK_SOURCES.includes(codeSource);
+    const errors = [];
+    let count = 0;
+    String(text || "").split("\n").forEach((raw, i) => {
+      let rest = raw.trim();
+      if (!rest) return;
+      count++;
+      const line = i + 1;
+      if (totp) {
+        const sep = rest.search(/\s/);
+        if (sep === -1) { errors.push({ line, message: "falta la clave 2FA después de un espacio (correo:contraseña CLAVE2FA)." }); return; }
+        if (!normalizeTotpSecret(rest.slice(sep + 1))) { errors.push({ line, message: "la clave 2FA no es válida (mínimo 16 caracteres, solo letras A–Z y números 2–7)." }); return; }
+        rest = rest.slice(0, sep).trim();
+      } else if (inbox) {
+        const m = rest.match(/\s+(\S+)$/);
+        if (!m || !looksLikeInboxUrl(m[1])) { errors.push({ line, message: "falta el link de la bandeja al final (correo:contraseña https://mibalu.fun/buzon/…)." }); return; }
+        rest = rest.slice(0, m.index).trim();
+      }
+      const idx = rest.indexOf(":");
+      if (idx === -1 || !rest.slice(0, idx).trim() || !rest.slice(idx + 1).trim()) {
+        errors.push({ line, message: "debe tener el formato correo:contraseña." });
+      }
+    });
+    return { count, errors };
+  }
+
+  // Mismo criterio que normalizeInboxUrl (codes-lookup.service.ts).
+  function looksLikeInboxUrl(raw) {
+    try {
+      const u = new URL(raw);
+      return u.protocol === "https:" && /^\/buzon\/[A-Za-z0-9-]{8,80}\/?$/.test(u.pathname);
+    } catch { return false; }
+  }
+
+  function showBulkErrors(errors) {
+    const errorEl = document.getElementById("bulk-error");
+    errorEl.innerHTML = "Revisa estas líneas (no se creó ninguna cuenta):<br>" +
+      errors.map(e => escapeHtml(`Línea ${e.line}: ${e.message}`)).join("<br>");
+    errorEl.hidden = false;
+  }
+
+  // opts.platform (opcional): deja elegida esa plataforma — para abrir el
+  // modal desde otras pantallas (LiordarkAccess.openBulkAdd).
+  async function openBulkModal(opts) {
     await Promise.all([loadCatalog(), loadProviderCatalog(), loadCodeSources()]);
     document.getElementById("bulk-form").reset();
     document.getElementById("bulk-error").hidden = true;
     populatePlatformSelect(document.getElementById("bulk-platform"));
+    const wanted = opts && typeof opts.platform === "string" ? opts.platform.trim().toUpperCase() : "";
+    const platformSelect = document.getElementById("bulk-platform");
+    if (wanted && [...platformSelect.options].some(o => o.value === wanted)) platformSelect.value = wanted;
     populateProviderSelect(document.getElementById("bulk-provider"));
     populateBulkCodeSelect();
     bulkCodeTouched = false;
@@ -863,7 +923,7 @@
   }
 
   function initBulkModal() {
-    document.getElementById("access-new-account-btn").addEventListener("click", openBulkModal);
+    document.getElementById("access-new-account-btn").addEventListener("click", () => openBulkModal());
     document.getElementById("bulk-cancel").addEventListener("click", () => { document.getElementById("bulk-modal").hidden = true; });
 
     document.getElementById("bulk-renewal-enabled").addEventListener("change", (e) => {
@@ -891,6 +951,13 @@
       };
       const errorEl = document.getElementById("bulk-error");
       errorEl.hidden = true;
+      const { count, errors } = parseBulkLines(body.lines, body.codeSource || "");
+      if (errors.length > 0) { showBulkErrors(errors); return; }
+      if (count === 0) {
+        errorEl.textContent = "Pega al menos una línea correo:contraseña.";
+        errorEl.hidden = false;
+        return;
+      }
       try {
         await api("/accounts/bulk", { method: "POST", body: JSON.stringify(body) });
         // Se recuerda lo elegido con este proveedor y plataforma para la próxima.
@@ -898,6 +965,7 @@
         document.getElementById("bulk-modal").hidden = true;
         refresh();
       } catch (err) {
+        if (Array.isArray(err.data?.errors) && err.data.errors.length > 0) { showBulkErrors(err.data.errors); return; }
         errorEl.textContent = err.message;
         errorEl.hidden = false;
       }
@@ -948,9 +1016,15 @@
 
   // ── "🔑 Código" — fuentes disponibles para sacar el código (ver
   // codes-lookup.service.ts) y guardado de los dos campos del modal. ──
-  // "Streaming Market — código 2FA": no consulta ninguna página, el código
+  // 2FA (en el desplegable: "🔐 Código 2FA (clave secreta)"): no consulta ninguna página, el código
   // sale de una clave TOTP — el campo para pegarla solo aparece con esta opción.
   const TOTP_SOURCE_ID = "streaming_market_2fa";
+  const TOTP_SOURCE_LABEL = "🔐 Código 2FA (clave secreta)";
+
+  // Nombre que se ve en los desplegables de código (Agregar cuentas y Editar cuenta).
+  function codeSourceOptionLabel(s) {
+    return s.id === TOTP_SOURCE_ID ? TOTP_SOURCE_LABEL : s.label;
+  }
 
   // Misma regla que normalizeTotpSecret (src/utils/totp.util.ts): sin
   // espacios ni guiones, en mayúsculas, solo A–Z y 2–7, al menos 16
@@ -982,7 +1056,7 @@
     }
     const select = document.getElementById("account-edit-code-source");
     select.innerHTML = `<option value="">— Sin configurar —</option>` +
-      codeSources.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label)}</option>`).join("");
+      codeSources.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(codeSourceOptionLabel(s))}</option>`).join("");
     return codeSources;
   }
 
@@ -1891,5 +1965,11 @@
     document.getElementById("access-platform-sort-toggle").addEventListener("click", togglePlatformSort);
   }
 
-  window.LiordarkAccess = { init, load, loadProviderRenewals, loadPasswordChangePending, openComboOrderModal };
+  // openBulkAdd({ platform }) — abre "+ Agregar cuentas" desde otras pantallas.
+  function openBulkAdd(opts) {
+    init();
+    return openBulkModal(opts);
+  }
+
+  window.LiordarkAccess = { init, load, loadProviderRenewals, loadPasswordChangePending, openComboOrderModal, openBulkAdd };
 })();
