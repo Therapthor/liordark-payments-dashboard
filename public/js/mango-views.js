@@ -16,6 +16,9 @@
   // ── Soportes: «Reemplazar» + WhatsApp + Listo; lo demás en «⋯» ──
   MP.collapse.register(".soporte-actions", { keep: 2, prefer: ["a[href*='wa.me'], a[href*='whatsapp']", "[data-act='solved']"] });
 
+  // ── Clientes: 2 acciones a la vista; Banear / Fraude / resto en «⋯» ──
+  MP.collapse.register(".web-customer-actions", { keep: 2 });
+
   // ── Accesos ──
   MP.collapse.register(".access-account-summary-actions", { keep: 2 });
   MP.collapse.register(".access-account-actions", { keep: 2, prefer: [".access-copy-credentials", ".access-renew-account"] });

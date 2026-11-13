@@ -472,32 +472,18 @@
           <h2>Clientes</h2>
         </div>
 
-        <div class="panel-grid resumen-top-grid">
-          <div class="panel resumen-today-card">
-            <div class="stat-label">Clientes registrados</div>
-            <div class="stat-value" id="web-customers-total">0</div>
-          </div>
-          <div class="panel resumen-today-card">
-            <div class="stat-label">📧 Correos registrados</div>
-            <div class="stat-value" id="web-customers-with-email">0</div>
-          </div>
-        </div>
-
-        <div class="panel chart-panel">
-          <div class="panel-header">
-            <h2>Registros este mes</h2>
-          </div>
-          <div class="chart-wrap">
-            <canvas id="chart-web-customers"></canvas>
-          </div>
-        </div>
-
         <div class="config-subnav">
           <button class="config-subnav-item active" data-customers-section="web">Web</button>
           <button class="config-subnav-item" data-customers-section="registro">Registro</button>
           <button class="config-subnav-item" data-customers-section="blocked">Bloqueados <span id="customers-blocked-count"></span></button>
           <button class="config-subnav-item" data-customers-section="ventas">🔗 Links de venta</button>
         </div>
+
+        <div class="mp-kpis" aria-label="Resumen de clientes">
+          <div class="mp-kpi is-blue"><b id="web-customers-total">0</b><span>Registrados</span></div>
+          <div class="mp-kpi is-green"><b id="web-customers-with-email">0</b><span>Con correo</span></div>
+        </div>
+
 
         <div id="customers-section-ventas" hidden>
           <div class="panel">
@@ -603,6 +589,17 @@
             <div id="security-events" class="web-customers-list"></div>
           </div>
         </div>
+
+        <!-- Registros del mes: va al final (historial) -->
+        <div class="panel chart-panel">
+          <div class="panel-header">
+            <h2>Registros este mes</h2>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="chart-web-customers"></canvas>
+          </div>
+        </div>
+
       </section>
 
       <!-- ═══════════ VISTA: HISTORIAL ═══════════ -->
