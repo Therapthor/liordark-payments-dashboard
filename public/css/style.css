@@ -1141,6 +1141,8 @@ button, input {
 .access-account-summary::-webkit-details-marker { display: none; }
 .access-account-summary-email { font-size: 14px; font-weight: 600; }
 .access-copy-email { margin-left: 6px; vertical-align: middle; font-weight: 400; }
+.pending-assign-result ul { margin: 4px 0 8px; padding-left: 18px; }
+.pending-assign-result li { margin: 2px 0; }
 .access-account-summary-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .access-account[open] .access-account-summary { border-bottom: 1px solid var(--border); }
 .access-occupancy { font-weight: 600; }

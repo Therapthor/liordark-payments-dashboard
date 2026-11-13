@@ -32,7 +32,7 @@ import {
 import {
   renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO,
   listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
-  accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers,
+  accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers, minTargetExpiry,
 } from "../services/access.service";
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
@@ -363,11 +363,13 @@ router.post("/cycle-renewals/:id/confirm", (req, res) => {
 });
 
 // Cuentas de la misma plataforma con cupos libres suficientes para mover
-// a todos los que pagaron.
+// a todos los que pagaron, y que les duren al menos 28 de sus 30 días (ver
+// minTargetExpiry).
 router.get("/cycle-renewals/:id/candidates", (req, res) => {
   const pending = listCycleRenewalsAwaitingConfirmation().find(a => a.id === Number(req.params.id));
   if (!pending) return res.status(404).json({ message: "Esta cuenta ya no tiene renovaciones por confirmar." });
-  res.json({ accounts: listAccountsWithFreeProfiles(pending.platform, pending.renewing.length, limaTodayISO()).filter(a => a.id !== pending.id) });
+  const floor = pending.newExpiresAt ? minTargetExpiry(pending.newExpiresAt) : limaTodayISO();
+  res.json({ accounts: listAccountsWithFreeProfiles(pending.platform, pending.renewing.length, floor).filter(a => a.id !== pending.id) });
 });
 
 // Mueve a los que pagaron a otra cuenta (del stock o escrita a mano), ya con
