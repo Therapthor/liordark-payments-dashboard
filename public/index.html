@@ -30,6 +30,7 @@
       <button type="submit">Entrar</button>
       <div class="login-or" id="login-passkey-or" hidden><span>o</span></div>
       <button type="button" id="login-passkey" class="login-passkey" hidden>🔑 Entrar con llave de acceso</button>
+      <p id="login-passkey-hint" class="login-passkey-hint" hidden>Usa Face ID o tu huella. En la PC, escanea el código QR con tu iPhone.</p>
       <p id="login-error" class="login-error" hidden>Contraseña incorrecta</p>
     </form>
   </div>
@@ -731,6 +732,7 @@
           <div class="panel" style="margin-bottom:16px">
             <div class="panel-header"><h2>🔑 Llaves de acceso (Face ID)</h2></div>
             <p class="panel-hint">Entra al panel con Face ID o huella, sin escribir la contraseña. La llave queda en tu iPhone (llavero de iCloud). En la PC, toca «Entrar con llave de acceso» y escanea el código QR con el iPhone.</p>
+            <p id="sec-passkey-only" class="panel-hint" style="font-weight:800"></p>
             <ul id="sec-passkeys" class="sec-sessions"></ul>
             <form id="sec-passkey-form" class="sec-password-form" autocomplete="off">
               <input type="text" id="sec-pk-name" placeholder="Nombre (ej. Mi iPhone)" maxlength="60">

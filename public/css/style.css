@@ -105,6 +105,13 @@ button, input {
 .login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .login-card button.login-passkey { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
 .login-card button.login-passkey:hover { background: var(--surface-raised); }
+/* Entrada solo con llave de acceso: un único botón grande + una línea de ayuda. */
+.login-card button.login-passkey.login-passkey-main {
+  min-height: 58px; font-size: 17px; border: none;
+  background: var(--mp-leaf, var(--accent)); color: #fff;
+}
+.login-card button.login-passkey.login-passkey-main:hover { background: var(--mp-leaf-dark, var(--accent-dim)); }
+.login-passkey-hint { margin: 0; text-align: center; font-size: 13.5px; line-height: 1.45; color: var(--mp-muted, var(--text-muted)); }
 
 /* ─────────────────────────────────────────────────────────────
    LAYOUT GENERAL

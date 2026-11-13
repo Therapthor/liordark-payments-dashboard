@@ -141,7 +141,17 @@
   async function loadPasskeys() {
     const list = document.getElementById("sec-passkeys");
     try {
-      const { passkeys } = await api("/passkeys");
+      const { passkeys, passkeyOnly } = await api("/passkeys");
+      // Con al menos una llave, la contraseña ya no abre el panel.
+      const st = document.getElementById("sec-passkey-only");
+      if (st && passkeyOnly) {
+        const n = passkeyOnly.passkeys;
+        st.textContent = passkeyOnly.active
+          ? `Entrada solo con llave de acceso: activada (${n} ${n === 1 ? "llave" : "llaves"})`
+          : n > 0 && passkeyOnly.override
+            ? "Entrada solo con llave de acceso: apagada por emergencia (PANEL_PASSWORD_LOGIN=on), la contraseña también abre el panel"
+            : "Desactivada: registra una llave para activarla";
+      }
       list.innerHTML = passkeys.map(p => `
         <li class="sec-session">
           <div>
