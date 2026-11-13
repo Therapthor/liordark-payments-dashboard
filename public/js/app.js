@@ -1660,6 +1660,16 @@
     document.getElementById("resumen-quick-assign-btn").addEventListener("click", () => {
       if (window.LiordarkAccess) window.LiordarkAccess.openComboOrderModal();
     });
+    // «Subir cuentas»: el formulario «Agregar cuentas» de Accesos.
+    document.getElementById("resumen-bulk-add-btn").addEventListener("click", () => {
+      if (window.LiordarkAccess && typeof window.LiordarkAccess.openBulkAdd === "function") {
+        window.LiordarkAccess.openBulkAdd();
+        return;
+      }
+      switchView("access");
+      const btn = document.getElementById("access-new-account-btn");
+      if (btn) btn.click();
+    });
 
     loadProviderRenewalsCount();
     setInterval(loadProviderRenewalsCount, CONNECTORS_POLL_MS);
