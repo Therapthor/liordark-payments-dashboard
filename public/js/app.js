@@ -325,6 +325,8 @@
     if (view === "access" && window.LiordarkAccess) window.LiordarkAccess.load();
     if (view === "codes" && window.LiordarkCodes) window.LiordarkCodes.load();
     if (view === "codes" && window.LiordarkCodesInbox) window.LiordarkCodesInbox.open();
+    // Búsqueda rápida: en PC, el cursor queda listo para pegar el correo.
+    if (view === "codes" && window.LiordarkCodes && window.LiordarkCodes.onOpen) window.LiordarkCodes.onOpen();
     if (view === "wholesalers" && window.LiordarkWholesalers) window.LiordarkWholesalers.load();
     if (view === "web-customers" && window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
     if (view === "course" && window.LiordarkCourse) window.LiordarkCourse.load();
@@ -338,6 +340,9 @@
       switchConfigSection(savedSection);
     }
   }
+
+  // Para que otras vistas abran una sección (ej. LiordarkCodes.openFor).
+  window.LiordarkApp = Object.assign(window.LiordarkApp || {}, { switchView });
 
   // "Configuración" tiene su propio sub-menú (Catálogo / Métodos de pago /
   // Proveedores) — se maneja aparte del menú principal de arriba.

@@ -330,6 +330,30 @@ export function getInboxHtml(id: number): { item: InboxItem; html: string | null
   return { item: rowToItem(row), html: row.email_html ? sanitizeEmailHtml(row.email_html, false) : null };
 }
 
+// Búsqueda rápida del panel: el correo de la bandeja que trajo un resultado
+// (lo guarda el observador de arriba antes de que la consulta responda), para
+// «Ver correo» y para saber cuándo llegó aunque el proveedor no dé la hora.
+const inboxRowForResult = db.prepare(`
+  SELECT id, received_iso, first_seen_at, (email_html IS NOT NULL AND email_html <> '') AS has_html
+  FROM code_inbox
+  WHERE source_id = @sourceId AND email = @email
+    AND ((@ref <> '' AND provider_ref = @ref) OR (@ref = '' AND value = @value))
+  ORDER BY last_seen_at DESC, id DESC LIMIT 1
+`);
+
+export function inboxInfoFor(sourceId: string, email: string, r: CodeLookupResult): { inboxId: number | null; seenIso: string | null } {
+  if (!r.found || !r.value) return { inboxId: null, seenIso: null };
+  const row = inboxRowForResult.get({
+    sourceId, email: email.trim().toLowerCase(), ref: r.providerRef ?? "", value: r.value,
+  }) as { id: number; received_iso: string | null; first_seen_at: string; has_html: number } | undefined;
+  if (!row) return { inboxId: null, seenIso: null };
+  const firstSeen = new Date(String(row.first_seen_at).replace(" ", "T") + "Z");
+  return {
+    inboxId: row.has_html ? row.id : null,
+    seenIso: row.received_iso ?? (Number.isNaN(firstSeen.getTime()) ? null : firstSeen.toISOString()),
+  };
+}
+
 export type ActivityRow = {
   id: number; at: string; sourceId: string; sourceLabel: string; email: string; accountId: number | null;
   origin: string; status: LookupStatus; message: string; value: string; relogged: boolean; ms: number;
