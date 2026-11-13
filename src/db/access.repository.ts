@@ -105,13 +105,17 @@ export function createAccount(params: {
   })[0]!;
 }
 
+/** Una línea de "+ Agregar cuentas" ya separada: link de bandeja (fuentes
+ *  de bandeja) o clave 2FA ya validada (fuente 2FA), según el código elegido. */
+export type BulkAccountPair = { email: string; password: string; inboxUrl?: string; totpSecret?: string };
+
 /** Crea varias cuentas de una — formato "correo:contraseña" ya parseado en pares. */
 export function createAccountsBulk(params: {
   platform:    string;
   provider:    string;
   hasProfiles: boolean;
   expiresAt:   string | null;
-  pairs:       { email: string; password: string; inboxUrl?: string }[];
+  pairs:       BulkAccountPair[];
   providerRenewalEnabled?:  boolean;
   providerRenewalCost?:     string;
   providerRenewalCurrency?: string;
@@ -124,9 +128,9 @@ export function createAccountsBulk(params: {
     INSERT INTO access_accounts (
       platform, email, password, provider, has_profiles, expires_at,
       provider_renewal_enabled, provider_renewal_cost, provider_renewal_currency, provider_renewal_next_date,
-      codes_enabled, code_source, code_inbox_url
+      codes_enabled, code_source, code_inbox_url, totp_secret
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProfile = db.prepare(`
     INSERT INTO access_profiles (account_id, slot_number, profile_name)
@@ -149,7 +153,8 @@ export function createAccountsBulk(params: {
         params.providerRenewalEnabled ? (params.providerRenewalNextDate ?? null) : null,
         params.codeSource ? 1 : 0,
         params.codeSource ?? null,
-        params.codeSource ? (pair.inboxUrl ?? "") : ""
+        params.codeSource ? (pair.inboxUrl ?? "") : "",
+        params.codeSource ? (pair.totpSecret ?? null) : null
       );
       const id = result.lastInsertRowid as number;
       for (let slot = 1; slot <= slots; slot++) {
