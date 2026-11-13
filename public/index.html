@@ -264,18 +264,6 @@
       <!-- ═══════════ VISTA: CÓDIGOS ═══════════ -->
       <section id="view-codes" class="view" hidden>
         <div class="codes-page">
-          <header class="cx-head">
-            <div class="cx-head-text">
-              <h2 class="cx-title">Códigos</h2>
-              <p class="cx-sub">Todo lo que llega a los correos de tus cuentas, en un solo lugar.</p>
-            </div>
-            <div class="cx-live" id="cx-live">
-              <span class="cx-live-dot" aria-hidden="true"></span>
-              <span id="cx-watch-text">Vigilando…</span>
-              <button type="button" id="cx-watch-now" class="cx-ghost-btn">Revisar ahora</button>
-            </div>
-          </header>
-
           <!-- Búsqueda rápida: pegar el correo + Enter → código (ver codes.js). -->
           <section class="cx-quick" aria-label="Buscar código por correo">
             <form id="cx-quick-form" class="cx-quick-form" autocomplete="off" novalidate>
@@ -297,6 +285,19 @@
             <div id="cx-quick-recent" class="cx-quick-recent" hidden></div>
             <div id="cx-quick-result" class="cx-quick-result" aria-live="polite" hidden></div>
           </section>
+
+          <header class="cx-head">
+            <div class="cx-head-text">
+              <h2 class="cx-title">Códigos</h2>
+              <p class="cx-sub">Todo lo que llega a los correos de tus cuentas, en un solo lugar.</p>
+            </div>
+            <div class="cx-live" id="cx-live">
+              <span class="cx-live-dot" aria-hidden="true"></span>
+              <span id="cx-watch-text">Vigilando…</span>
+              <button type="button" id="cx-watch-now" class="cx-ghost-btn">Revisar ahora</button>
+            </div>
+          </header>
+
 
           <div id="cx-health" class="cx-health" aria-label="Estado de cada fuente"></div>
           <article id="cx-hero" class="cx-hero" hidden></article>
