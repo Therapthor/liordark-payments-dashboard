@@ -778,7 +778,7 @@
     if (box._mpSig === sig && box.querySelector(":scope > .mp-dots")) return;
     box._mpSig = sig;
     box.querySelectorAll(":scope > .mp-dots").forEach((d) => d.remove());
-    all.forEach((b) => b.classList.remove("mp-in-menu"));
+    all.forEach((b) => b.classList.remove("mp-in-menu", "mp-act-primary"));
     const visible = all.filter((b) => !b.hidden && b.style.display !== "none");
     const keepN = opts.keep ?? 2;
     let primaryKept = false, kept = 0;
@@ -791,7 +791,7 @@
     for (const b of ranked) {
       if (isDanger(b) && opts.danger !== "keep") { toMenu.push(b); continue; }
       const isPrimary = b.matches(".btn-primary, .activation-done-btn, [data-mp-main]");
-      if (isPrimary && !primaryKept && opts.primary !== false) { primaryKept = true; continue; }
+      if (isPrimary && !primaryKept && opts.primary !== false) { primaryKept = true; b.classList.add("mp-act-primary"); continue; }
       if (kept < keepN) { kept++; continue; }
       toMenu.push(b);
     }

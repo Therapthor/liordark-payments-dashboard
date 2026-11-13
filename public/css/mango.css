@@ -1858,3 +1858,20 @@ button.mp-kpi:active { transform: scale(0.98); }
   .cx-quick-go { padding: 0 16px; min-height: 46px; }
   .cx-live { flex-wrap: wrap; border-radius: 18px; }
 }
+
+/* ─── Soportes ─── */
+#view-soportes > .config-subnav { margin-bottom: 16px; }
+.soportes-list { margin-top: 0; gap: 12px; }
+.soporte-card { gap: 10px; }
+.soporte-card-sub { color: var(--mp-muted); font-weight: 700; font-size: 13px; }
+.soporte-account { gap: 8px 16px; padding: 10px 12px; border-radius: 14px; background: var(--mp-page); }
+.soporte-account span { font-weight: 800; color: var(--mp-muted); }
+.soporte-account code { font-family: var(--mp-font); font-weight: 700; }
+.soporte-actions { align-items: center; }
+@media (max-width: 899px) {
+  .soporte-card { padding: 14px; }
+  .soporte-account { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+/* Mismo orden en todas las filas: principal, secundarias, «⋯» */
+.mp-act-primary { order: -1; }
+.mp-dots { order: 99; }
