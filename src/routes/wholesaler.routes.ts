@@ -18,11 +18,9 @@ import {
   setProfileRenewal,
   markReminderSent,
   listExpiringClientsForWholesaler,
-  listUnnotifiedExpiringClientsForWholesaler,
-  listAllUnnotifiedExpiringClientsForWholesalers,
-  markExpiryNotified,
   type RenewalStatus,
 } from "../db/access.repository";
+import { generateWholesalerExpiryDigests } from "../services/wholesaler-expiry-digest.service";
 import { listManualOverridesForWholesaler } from "../db/manual-overrides.repository";
 import {
   createWholesalerNotification,
@@ -700,30 +698,19 @@ router.post("/renewals/:profileId/mark-reminded", (req, res) => {
 
 // ── NOTIFICACIONES (campanita del header) ──
 
-const EXPIRY_NOTIFY_DAYS = 1;
-
-// A diferencia de compra añadida/cuenta lista (eventos puntuales, se
-// escriben en el momento desde access.repository/wholesale-full-account.
-// repository), "cliente por vencer" no tiene un evento propio — se genera
-// acá mismo, de forma perezosa, cada vez que el mayorista pide sus
-// notificaciones (mismo polling de 20s del front).
+// "Cuentas por vencer" no tiene un evento propio: se genera acá, cada vez
+// que el mayorista pide sus notificaciones (polling del front) y en el job
+// proactivo de index.ts. Un resumen por mayorista a 3 días, 1 día y el mismo
+// día (antes era un aviso por cada perfil). Ver wholesaler-expiry-digest.service.ts.
 function generateExpiryNotifications(wholesalerId: number): void {
-  const expiring = listUnnotifiedExpiringClientsForWholesaler(wholesalerId, EXPIRY_NOTIFY_DAYS);
-  for (const c of expiring) {
-    createWholesalerNotification(wholesalerId, "client_expiring", c.platform, c.email);
-    markExpiryNotified(c.profileId);
-  }
+  generateWholesalerExpiryDigests({ wholesalerId });
 }
 
-/** Mismo criterio, pero para TODOS los mayoristas de una — job proactivo
- *  (ver runGenerateExpiryNotifications en index.ts) para que la campanita
- *  no dependa de que el mayorista entre al panel a pedirla. */
+/** Para TODOS los mayoristas de una — job proactivo (ver
+ *  runGenerateExpiryNotifications en index.ts) para que la campanita no
+ *  dependa de que el mayorista entre al panel a pedirla. */
 export function generateExpiryNotificationsForAllWholesalers(): void {
-  const expiring = listAllUnnotifiedExpiringClientsForWholesalers(EXPIRY_NOTIFY_DAYS);
-  for (const c of expiring) {
-    createWholesalerNotification(c.wholesalerId, "client_expiring", c.platform, c.email);
-    markExpiryNotified(c.profileId);
-  }
+  generateWholesalerExpiryDigests();
 }
 
 router.get("/notifications", (req, res) => {

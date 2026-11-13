@@ -350,13 +350,32 @@
       setHtmlIfChanged(el, '<div class="notif-empty">No tienes notificaciones todavía.</div>');
       return;
     }
-    // Se pide cada 10 s: solo se redibuja si algo cambió.
-    setHtmlIfChanged(el, list.map(n => `
-      <div class="notif-item${n.readAt ? "" : " notif-item-unread"}">
+    // Se pide cada 10 s: solo se redibuja si algo cambió. Los avisos de
+    // vencimiento llevan a Clientes › «Por vencer».
+    setHtmlIfChanged(el, list.map(n => {
+      const toSoon = n.type === "expiry_digest" || n.type === "client_expiring";
+      return `
+      <div class="notif-item${n.readAt ? "" : " notif-item-unread"}${toSoon ? " notif-item-link" : ""}"${toSoon ? ' data-open="soon" role="button" tabindex="0"' : ""}>
         <div class="notif-item-msg">${escapeHtml(n.message)}</div>
+        ${toSoon ? `<div class="notif-item-cta">Ver cuentas por vencer →</div>` : ""}
         <div class="notif-item-time">${timeAgo(n.createdAt)}</div>
-      </div>
-    `).join(""));
+      </div>`;
+    }).join(""));
+  }
+
+  // Clientes con el filtro «Por vencer» puesto (ordenado por vencimiento).
+  function openExpiringClients() {
+    clientsFilter = "soon";
+    clientsQuery = "";
+    const search = document.getElementById("clients-search");
+    if (search) search.value = "";
+    document.querySelectorAll("#clients-filters .filter-chip").forEach(b => {
+      const on = b.dataset.filter === "soon";
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    closeNotifPanel();
+    switchPage("clientes");
   }
 
   async function loadNotifications() {
@@ -381,6 +400,16 @@
   }
 
   function initNotifications() {
+    const list = document.getElementById("notif-list");
+    list.addEventListener("click", (e) => {
+      if (e.target.closest('[data-open="soon"]')) openExpiringClients();
+    });
+    list.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && e.target.closest('[data-open="soon"]')) {
+        e.preventDefault();
+        openExpiringClients();
+      }
+    });
     document.getElementById("notif-bell-btn").addEventListener("click", (e) => {
       e.stopPropagation();
       document.getElementById("notif-panel").hidden ? openNotifPanel() : closeNotifPanel();
@@ -718,6 +747,8 @@
     const openMenu = listEl.querySelector("details.more-menu[open]");
     const openId = openMenu ? openMenu.closest("[data-profile-id]").dataset.profileId : null;
     const visible = cachedClients.filter(clientMatchesFilter);
+    // «Por vencer»: lo más urgente primero.
+    if (clientsFilter === "soon") visible.sort((a, b) => String(a.expiresAt || "9999").localeCompare(String(b.expiresAt || "9999")));
     listEl.innerHTML = visible.length
       ? visible.map(clientCardHtml).join("")
       : `<p class="empty-state">Ningún cliente coincide con la búsqueda.</p>`;

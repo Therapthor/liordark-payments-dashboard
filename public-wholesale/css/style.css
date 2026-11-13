@@ -327,6 +327,9 @@ select.input {
 .notif-item-unread { background: var(--chip-bg); }
 .notif-item-msg { font-size: 13.5px; line-height: 1.45; white-space: pre-line; }
 .notif-item-time { font-size: 11.5px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+.notif-item-link { cursor: pointer; }
+.notif-item-link:hover, .notif-item-link:focus-visible { background: var(--soft); outline: none; }
+.notif-item-cta { font-size: 12.5px; font-weight: 800; color: var(--leaf); margin-top: 6px; }
 .notif-empty { padding: 26px 16px; text-align: center; color: var(--muted); font-size: 13.5px; }
 
 .app-main { padding: 18px 14px calc(var(--tabbar-h) + 24px); }
