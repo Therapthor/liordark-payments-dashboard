@@ -511,6 +511,17 @@
         </div>
 
         <div id="customers-section-blocked" hidden>
+          <div class="panel" style="margin-bottom:20px">
+            <div class="panel-header">
+              <h2>🔓 Desbloqueo general</h2>
+              <div class="panel-header-actions">
+                <button id="unlock-all-btn" class="btn-primary" type="button">🔓 Desbloquear a todos</button>
+              </div>
+            </div>
+            <p class="panel-hint">Quita de una vez todos los bloqueos temporales: clientes y mayoristas bloqueados por intentos, e IPs bloqueadas. Los «🚫 Números bloqueados» no se tocan.</p>
+            <p id="unlock-all-result" class="panel-hint" hidden></p>
+          </div>
+
           <div class="panel">
             <div class="panel-header"><h2>🔒 Bloqueo temporal por intentos</h2></div>
             <p class="panel-hint">Fallaron el PIN varias veces (cada 2 fallos: 1 h → 8 h → 2 días → 7 días → 30 días), desde su número o su conexión. «Quitar bloqueo» lo deja entrar al instante: limpia su número y su conexión, y por 24 h ningún bloqueo por conexión lo frena. También está en cada cliente de la pestaña Web.</p>

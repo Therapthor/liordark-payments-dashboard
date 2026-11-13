@@ -23,7 +23,7 @@ import { blockPhone, unblockPhone, unblockIp, listBlockedPhones, isPhoneBlocked 
 import crypto from "crypto";
 import { revokeCustomerSessions, listSecurityEvents, listBlockedIps, setIpLoginFailures, customerIpLocks, listIpFailureLocks } from "../db/security.repository";
 import { banForFraud } from "../services/security.service";
-import { unlockCustomerLogin, unlockWholesalerLogin } from "../services/login-unlock.service";
+import { unlockCustomerLogin, unlockWholesalerLogin, unlockAllTemporaryBlocks } from "../services/login-unlock.service";
 import { findWholesalerById, listLockedWholesalers } from "../db/wholesaler.repository";
 
 // ─────────────────────────────────────────────────────────────
@@ -265,6 +265,14 @@ router.post("/blocked/:phone/unblock", async (req, res) => {
   }
   unlockCustomerLogin(fullPhone, entry?.ip ? [entry.ip] : []);
   res.json({ ok: true, ...(createdPin ? { createdPin } : {}) });
+});
+
+// «Desbloquear a todos» (Bloqueados): clientes, mayoristas e IPs con bloqueo
+// temporal, de una vez. Los números baneados siguen baneados.
+router.post("/unlock-all", (_req, res) => {
+  const result = unlockAllTemporaryBlocks();
+  console.log(`🔓 Desbloquear a todos: ${result.customers} cliente(s), ${result.wholesalers} mayorista(s), ${result.ips} IP(s)`);
+  res.json({ ok: true, ...result });
 });
 
 // Mayoristas que no pueden entrar a mayorista.liordark.com por intentos fallidos.

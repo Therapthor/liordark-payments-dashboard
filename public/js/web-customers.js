@@ -451,6 +451,34 @@
     });
   }
 
+  // ─── Desbloquear a todos: bloqueos temporales de una vez (los baneados no) ───
+  function countText(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+
+  document.getElementById("unlock-all-btn")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    if (!confirm(
+      "¿Desbloquear a todos?\n\n" +
+      "Se quitan TODOS los bloqueos temporales: clientes y mayoristas bloqueados por intentos fallidos, " +
+      "y las IPs bloqueadas (con sus intentos en cero). Entran al instante.\n\n" +
+      "Los «🚫 Números bloqueados» NO se desbloquean: esos bloqueos son a propósito."
+    )) return;
+    const out = document.getElementById("unlock-all-result");
+    btn.disabled = true;
+    try {
+      const r = await api("/unlock-all", { method: "POST" });
+      const total = r.customers + r.wholesalers + r.ips;
+      out.textContent = total
+        ? `✅ Desbloqueados: ${countText(r.customers, "cliente", "clientes")}, ${countText(r.wholesalers, "mayorista", "mayoristas")} y ${countText(r.ips, "IP", "IPs")}. Los números bloqueados siguen igual.`
+        : "✅ No había nadie con bloqueo temporal.";
+      out.hidden = false;
+      await load();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // ─── Mayoristas que no pueden entrar (intentos fallidos en su panel) ───
   async function loadLockedWholesalers() {
     const list = document.getElementById("locked-wholesalers-list");
