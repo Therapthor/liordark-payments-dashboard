@@ -752,6 +752,13 @@
     sortDangerLast(items);
     openMenu(dots, items, { title: dots.getAttribute("data-mp-title") || "" });
   });
+  // Atajo: un botón con data-mp-click="id" hace lo mismo que ese botón
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-mp-click]");
+    if (!t) return;
+    const target = $(t.dataset.mpClick);
+    if (target) { e.preventDefault(); target.click(); }
+  });
   function sortDangerLast(items) {
     items.sort((a, b) => (a && b ? (a.danger === b.danger ? 0 : a.danger ? 1 : -1) : 0));
     const firstDanger = items.findIndex((x) => x && x.danger);

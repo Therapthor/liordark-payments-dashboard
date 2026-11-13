@@ -10,6 +10,9 @@
   const MP = window.MP;
   if (!MP || !MP.collapse) return;
 
+  // ── Resumen: pedidos y renovaciones (✅ ❌ 🧹 a la vista, lo demás en «⋯») ──
+  MP.collapse.register(".pending-order-actions", { keep: 3 });
+
   // ── Accesos ──
   MP.collapse.register(".access-account-summary-actions", { keep: 2 });
   MP.collapse.register(".access-account-actions", { keep: 2, prefer: [".access-copy-credentials", ".access-renew-account"] });

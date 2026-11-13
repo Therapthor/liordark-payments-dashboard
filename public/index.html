@@ -114,39 +114,48 @@
       <section id="view-live" class="view">
 
 
-        <!-- ── GANANCIAS DE HOY + ACCIÓN RÁPIDA ── -->
-        <div class="panel-grid resumen-top-grid">
-          <div class="panel resumen-today-card">
-            <div class="stat-label">Ganancias de hoy</div>
-            <div class="stat-value" id="stat-today-total">S/ 0.00</div>
-            <div class="stat-sub" id="stat-today-count">0 pagos</div>
+        <!-- ── HOY: ganancias + contadores (flotan sobre la banda) ── -->
+        <div class="mp-resumen-top">
+          <div class="panel mp-hero-card resumen-today-card">
+            <div class="mp-hero-main">
+              <div class="stat-label">Ganancias de hoy</div>
+              <div class="stat-value" id="stat-today-total">S/ 0.00</div>
+              <div class="stat-sub" id="stat-today-count">0 pagos</div>
+            </div>
+            <div class="mp-hero-actions">
+              <button id="resumen-quick-assign-btn" class="btn-primary resumen-quick-assign-btn" type="button" data-mp-primary="+ Agregar cliente">➕ Agregar cliente a una cuenta</button>
+              <button class="btn-secondary" type="button" data-mp-click="access-new-account-btn">⬆ Subir cuentas</button>
+            </div>
           </div>
 
-          <div class="panel resumen-provider-renewals-card">
-            <div class="stat-label">Cuentas por renovar</div>
-            <div class="stat-value" id="stat-provider-renewals-count">0</div>
-            <button id="resumen-provider-renewals-btn" class="btn-secondary btn-sm resumen-provider-renewals-btn" type="button">Ver cuentas →</button>
-          </div>
-
-          <div class="panel resumen-provider-renewals-card">
-            <div class="stat-label">🟢 Conviene renovar</div>
-            <div class="stat-value" id="stat-worth-renewing-count">0</div>
-            <button id="resumen-worth-renewing-btn" class="btn-secondary btn-sm resumen-provider-renewals-btn" type="button">Ver en Renovados →</button>
-          </div>
-
-          <div class="panel resumen-provider-renewals-card">
-            <div class="stat-label">🕒 Pendientes de cuenta nueva</div>
-            <div class="stat-value" id="stat-pending-new-count">0</div>
-            <button id="resumen-pending-new-btn" class="btn-secondary btn-sm resumen-provider-renewals-btn" type="button">Ver en Accesos →</button>
-          </div>
-
-          <div class="panel resumen-quick-action">
-            <button id="resumen-quick-assign-btn" class="btn-primary resumen-quick-assign-btn">➕ Agregar cliente a una cuenta</button>
+          <div class="mp-kpis mp-kpi-rows" aria-label="Cuentas por atender">
+            <button id="resumen-provider-renewals-btn" class="mp-kpi is-peach" type="button"><b id="stat-provider-renewals-count">0</b><span>Por renovar</span></button>
+            <button id="resumen-worth-renewing-btn" class="mp-kpi is-green" type="button"><b id="stat-worth-renewing-count">0</b><span>Conviene renovar</span></button>
+            <button id="resumen-pending-new-btn" class="mp-kpi is-warn" type="button"><b id="stat-pending-new-count">0</b><span>Cuenta nueva</span></button>
           </div>
         </div>
 
+        <!-- Celular: conectores y stock (en PC están en la barra lateral) -->
+        <div class="mp-dock-pills" id="mp-dock-pills" aria-label="Conectores y stock"></div>
+
         <!-- ── OPERATIVA DEL DÍA — las 4 en una sola fila ── -->
         <div class="resumen-ops-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Pedidos pendientes</h2>
+              <div class="panel-header-actions">
+                <span class="badge orders-count-badge" id="orders-pending-count">0</span>
+                <button id="orders-sweep-btn" class="icon-btn-sm" type="button" title="Barrido: borra rechazados, confirmados pegados, y pendientes sin pago emparejado por Yape. Nunca toca comprobantes, sin stock, ni pendientes con pago ya emparejado.">🧹</button>
+              </div>
+            </div>
+            <div class="feed-search">
+              <input id="pending-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
+              <button id="pending-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
+            </div>
+            <ul id="orders-pending-list" class="feed-list"></ul>
+            <p id="orders-pending-empty" class="feed-empty">No hay pedidos pendientes 🎉</p>
+          </div>
+
           <div class="panel">
             <div class="panel-header">
               <h2>Renovaciones pendientes</h2>
@@ -168,22 +177,6 @@
             <p id="search-status" class="panel-hint" hidden></p>
             <ul id="feed-list" class="feed-list"></ul>
             <p id="feed-empty" class="feed-empty">Todavía no hay pagos registrados.</p>
-          </div>
-
-          <div class="panel">
-            <div class="panel-header">
-              <h2>Pedidos pendientes</h2>
-              <div class="panel-header-actions">
-                <span class="badge orders-count-badge" id="orders-pending-count">0</span>
-                <button id="orders-sweep-btn" class="icon-btn-sm" type="button" title="Barrido: borra rechazados, confirmados pegados, y pendientes sin pago emparejado por Yape. Nunca toca comprobantes, sin stock, ni pendientes con pago ya emparejado.">🧹</button>
-              </div>
-            </div>
-            <div class="feed-search">
-              <input id="pending-search" type="text" inputmode="numeric" placeholder="Buscar por celular…" />
-              <button id="pending-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
-            </div>
-            <ul id="orders-pending-list" class="feed-list"></ul>
-            <p id="orders-pending-empty" class="feed-empty">No hay pedidos pendientes 🎉</p>
           </div>
 
           <div class="panel">
