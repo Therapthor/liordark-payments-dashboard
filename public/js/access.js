@@ -103,6 +103,9 @@
   let currentProfileForModal   = null;
   let editingAccountId         = null;
   let editingAccountPlatform   = null;
+  // Correo/contraseña al abrir "Editar cuenta" — si cambian, se ofrece
+  // avisar a los clientes con suscripción vigente.
+  let editingOriginalCredentials = null;
   let platformCatalog          = [];
   let providerCatalog          = [];
 
@@ -339,7 +342,6 @@
     const open = !!(opts && opts.open);
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
     const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
-    const renewingCount = account.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes").length;
     const accountAttr = JSON.stringify(account).replace(/"/g, "&quot;");
     const occupancyLabel = account.hasProfiles
       ? `${occupiedCount}/${account.profiles.length} ocupado(s)`
@@ -348,7 +350,7 @@
     return `
       <details class="access-account" data-account-id="${account.id}" data-platform="${escapeHtml(account.platform)}"${open ? " open" : ""}>
         <summary class="access-account-summary">
-          <span class="access-account-summary-email">📧 ${escapeHtml(account.email)}</span>
+          <span class="access-account-summary-email">📧 ${escapeHtml(account.email)}<button type="button" class="icon-btn-sm access-copy-email" data-email="${escapeHtml(account.email)}" title="Copiar correo">📋</button></span>
           <span class="access-account-meta">
             ${account.provider ? `<span>🏷 ${escapeHtml(account.provider)}</span>` : ""}
             <span class="badge access-badge-${STATUS_CLASS[account.status]}">${STATUS_LABEL[account.status]}</span>
@@ -357,6 +359,7 @@
             <span class="access-occupancy">${occupancyLabel}</span>
           </span>
           <span class="access-account-summary-actions">
+            <button type="button" class="btn-secondary btn-sm access-open-code" data-email="${escapeHtml(account.email)}" title="Ver el código de este correo en Códigos">🔢 Código</button>
             <button type="button" class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte</button>
             <button type="button" class="btn-secondary btn-sm access-provider-renew-request" data-account="${accountAttr}" title="Pedir al proveedor que renueve esta cuenta">🔁 Renovar proveedor</button>
           </span>
@@ -371,13 +374,9 @@
               </div>
             </div>
             <div class="access-account-actions">
-              ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-send-all" data-account="${accountAttr}">🔄 Enviar reemplazo a todos (${occupiedCount})</button>` : ""}
-              ${occupiedCount > 0 ? `<button class="btn-secondary btn-sm access-password-all" data-account="${accountAttr}">🔑 Cambiar contraseña a todos</button>` : ""}
-              ${account.link ? `<button class="btn-secondary btn-sm access-open-link" data-link="${escapeHtml(account.link)}">🔗 Abrir enlace</button>` : ""}
               <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
               <button class="btn-secondary btn-sm access-copy-credentials" data-account="${accountAttr}">📋 Copiar cuenta</button>
               ${renderRenewControls(account)}
-              ${renewingCount > 0 ? `<button class="btn-secondary btn-sm access-renew-new" data-account-id="${account.id}" data-renewing-count="${renewingCount}">🆕 Renovar (cuenta nueva) — ${renewingCount}</button>` : ""}
               <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
               <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
             </div>
@@ -448,18 +447,6 @@
       });
     });
 
-    target.querySelectorAll(".access-send-all").forEach(btn => {
-      btn.addEventListener("click", () => notifyReplacementAll(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
-    });
-
-    target.querySelectorAll(".access-password-all").forEach(btn => {
-      btn.addEventListener("click", () => notifyPasswordChangeAll(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
-    });
-
-    target.querySelectorAll(".access-open-link").forEach(btn => {
-      btn.addEventListener("click", () => window.open(btn.dataset.link, "_blank"));
-    });
-
     target.querySelectorAll(".row-renewal").forEach(btn => {
       btn.addEventListener("click", async () => {
         const next = RENEWAL_NEXT[btn.dataset.status || ""];
@@ -479,9 +466,25 @@
       btn.addEventListener("click", () => copyAccountCredentials(btn, JSON.parse(btn.dataset.account.replace(/&quot;/g, '"'))));
     });
 
-    // Soporte / renovación con proveedor viven en el <summary>, que no se
-    // cierra al compactar — sin esto, el clic en el botón también
-    // dispararía el toggle nativo de abrir/cerrar la tarjeta.
+    // Soporte / renovación con proveedor / código / copiar correo viven en
+    // el <summary>, que no se cierra al compactar — sin preventDefault, el
+    // clic en el botón también abriría/cerraría la tarjeta.
+    target.querySelectorAll(".access-copy-email").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        copyToClipboard(btn, btn.dataset.email, "✅");
+      });
+    });
+
+    target.querySelectorAll(".access-open-code").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openCodesFor(btn.dataset.email);
+      });
+    });
+
     target.querySelectorAll(".access-provider-support").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -546,10 +549,6 @@
       });
     });
 
-    target.querySelectorAll(".access-renew-new").forEach(btn => {
-      btn.addEventListener("click", () => openRenewNewModal(Number(btn.dataset.accountId), Number(btn.dataset.renewingCount)));
-    });
-
     target.querySelectorAll(".access-edit-account").forEach(btn => {
       btn.addEventListener("click", () => openEditModal(Number(btn.dataset.accountId)));
     });
@@ -569,6 +568,25 @@
     target.querySelectorAll(".row-action").forEach(btn => {
       btn.addEventListener("click", () => handleRowAction(btn.dataset.act, JSON.parse(btn.dataset.ctx.replace(/&quot;/g, '"'))));
     });
+  }
+
+  // "🔢 Código" — abre Códigos buscando ese correo. Si Códigos trae su
+  // propio atajo (LiordarkCodes.openFor), se usa ese; si no, se cambia a
+  // la vista y se usa el buscador por correo que ya existe ahí.
+  function openCodesFor(email) {
+    if (window.LiordarkCodes && typeof window.LiordarkCodes.openFor === "function") {
+      window.LiordarkCodes.openFor(email);
+      return;
+    }
+    document.querySelector('.tab-btn[data-view="codes"]')?.click();
+    document.querySelector('.cx-tab[data-cx-tab="accounts"]')?.click();
+    const form  = document.getElementById("codes-search-form");
+    const input = document.getElementById("codes-search-email");
+    if (!form || !input) return;
+    input.value = email;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   }
 
   function handleRowAction(act, ctx) {
@@ -741,11 +759,16 @@
     return `${account.email}:${account.password}`;
   }
 
-  function copyToClipboard(btn, text) {
+  function copyToClipboard(btn, text, doneLabel) {
     const done = () => {
-      const original = btn.textContent;
-      btn.textContent = "✅ Copiado";
-      setTimeout(() => { btn.textContent = original; }, 1500);
+      // Dos clics seguidos no deben dejar pegado el "✅" como texto original.
+      if (btn.dataset.copyOriginal === undefined) btn.dataset.copyOriginal = btn.textContent;
+      btn.textContent = doneLabel || "✅ Copiado";
+      clearTimeout(btn._copyTimer);
+      btn._copyTimer = setTimeout(() => {
+        btn.textContent = btn.dataset.copyOriginal;
+        delete btn.dataset.copyOriginal;
+      }, 1500);
     };
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(() => alert("No se pudo copiar:\n\n" + text));
@@ -760,35 +783,6 @@
 
   function copyAccountCredentials(btn, account) {
     copyToClipboard(btn, accountCredentialsText(account));
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // REEMPLAZO — SOLO masivo (a todos los perfiles con cliente asignado),
-  // y SOLO por la campanita de notificaciones, nunca por WhatsApp (mismo
-  // criterio que notifyPasswordChangeAll). El correo/contraseña nuevos ya
-  // están guardados en la cuenta (se editan aparte, en "✏️ Editar
-  // cuenta") — acá solo se avisa.
-  // ─────────────────────────────────────────────────────────────
-
-  async function notifyReplacementAll(btn, account) {
-    const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
-    if (occupiedCount === 0) return;
-    if (!confirm(
-      `¿Avisar el reemplazo de ${account.platform} (${account.email}) a los ${occupiedCount} cliente(s) con esta cuenta?\n\n` +
-      `Se les llega por su campanita de notificaciones, no por WhatsApp.`
-    )) return;
-
-    const originalLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Avisando…";
-    try {
-      await api("/accounts/" + account.id + "/notify-replacement", { method: "POST" });
-    } catch (err) {
-      alert(err.message || "No se pudo avisar el reemplazo.");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = originalLabel;
-    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -920,11 +914,18 @@
     document.getElementById("account-edit-form").reset();
     document.getElementById("account-edit-error").hidden = true;
 
-    const { account } = await api("/accounts/" + accountId);
+    const { account, activeClientCount } = await api("/accounts/" + accountId);
     editingAccountPlatform = account.platform;
+    editingOriginalCredentials = { email: account.email, password: account.password };
     populatePlatformSelect(document.getElementById("account-edit-platform"), account.platform);
     document.getElementById("account-edit-email").value = account.email;
     document.getElementById("account-edit-password").value = account.password;
+    const activeCount = Number(activeClientCount) || 0;
+    document.getElementById("account-edit-notify").checked = true;
+    document.getElementById("account-edit-notify-text").textContent = activeCount > 1
+      ? `Avisar a los ${activeCount} clientes con suscripción vigente`
+      : "Avisar al cliente con suscripción vigente";
+    syncEditNotify();
     populateProviderSelect(document.getElementById("account-edit-provider"), account.provider);
     document.getElementById("account-edit-expires").value = account.expiresAt || "";
     document.getElementById("account-edit-link").value = account.link || "";
@@ -951,6 +952,16 @@
   // sale de una clave TOTP — el campo para pegarla solo aparece con esta opción.
   const TOTP_SOURCE_ID = "streaming_market_2fa";
 
+  // Misma regla que normalizeTotpSecret (src/utils/totp.util.ts): sin
+  // espacios ni guiones, en mayúsculas, solo A–Z y 2–7, al menos 16
+  // caracteres y un largo que corresponda a bytes enteros. null = no sirve.
+  function normalizeTotpSecret(raw) {
+    const key = String(raw || "").replace(/[\s-]+/g, "").toUpperCase();
+    if (!/^[A-Z2-7]+$/.test(key) || key.length < 16 || ![0, 2, 4, 5, 7].includes(key.length % 8)) return null;
+    return key;
+  }
+  const TOTP_INVALID_MSG = "La clave 2FA no es válida: debe tener al menos 16 caracteres, solo letras A–Z y números 2–7 (los espacios y guiones se quitan solos). Revisa que la copiaste completa.";
+
   // Fuentes que leen la bandeja privada que da el proveedor (link por cuenta).
   const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney"];
 
@@ -975,8 +986,23 @@
     return codeSources;
   }
 
+  // Mismo criterio que accountNoticeFor (access.service.ts): el correo se
+  // compara sin espacios ni mayúsculas; la contraseña, tal cual.
+  function editCredentialsChanged() {
+    if (!editingOriginalCredentials) return false;
+    const email = document.getElementById("account-edit-email").value.trim().toLowerCase();
+    const password = document.getElementById("account-edit-password").value;
+    return email !== editingOriginalCredentials.email.trim().toLowerCase() || password !== editingOriginalCredentials.password;
+  }
+
+  function syncEditNotify() {
+    document.getElementById("account-edit-notify-wrap").hidden = !editCredentialsChanged();
+  }
+
   function initEditModal() {
     document.getElementById("account-edit-cancel").addEventListener("click", () => { document.getElementById("account-edit-modal").hidden = true; });
+    document.getElementById("account-edit-email").addEventListener("input", syncEditNotify);
+    document.getElementById("account-edit-password").addEventListener("input", syncEditNotify);
 
     document.getElementById("account-edit-renewal-enabled").addEventListener("change", (e) => {
       document.getElementById("account-edit-renewal-fields").hidden = !e.target.checked;
@@ -1003,6 +1029,10 @@
         providerRenewalCurrency: document.getElementById("account-edit-renewal-currency").value,
         providerRenewalNextDate: renewalEnabled ? document.getElementById("account-edit-renewal-next-date").value : null,
       };
+      // Aviso automático (campanita) si cambió el correo o la contraseña.
+      const credentialsChanged = editCredentialsChanged();
+      const passwordChanged = !!editingOriginalCredentials && body.password !== editingOriginalCredentials.password;
+      body.notifyClients = credentialsChanged && document.getElementById("account-edit-notify").checked;
       const codesEnabled = document.getElementById("account-edit-codes-enabled").checked;
       const codeSource   = document.getElementById("account-edit-code-source").value || null;
       const totpSecret   = codeSource === TOTP_SOURCE_ID
@@ -1019,11 +1049,19 @@
         errorEl.hidden = false;
         return;
       }
+      if (codesEnabled && totpSecret && !normalizeTotpSecret(totpSecret)) {
+        errorEl.textContent = TOTP_INVALID_MSG;
+        errorEl.hidden = false;
+        return;
+      }
       try {
         if (needsInbox) {
           await api("/accounts/" + editingAccountId + "/code-inbox-url", { method: "POST", body: JSON.stringify({ url: inboxUrl }) });
         }
-        await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
+        const saved = await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
+        // Ya guardado (y avisado): si se vuelve a guardar, no se repite el aviso.
+        editingOriginalCredentials = { email: body.email, password: body.password };
+        syncEditNotify();
         await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
         await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
         await api("/accounts/" + editingAccountId + "/totp-secret", { method: "POST", body: JSON.stringify({ totpSecret: codesEnabled ? totpSecret : null }) });
@@ -1034,6 +1072,12 @@
           await refreshAccountInPlace(editingAccountId, editingAccountPlatform);
         } else {
           await refresh();
+        }
+        // La contraseña nueva ya cumple "Cuentas por cambiar contraseña".
+        if (passwordChanged) loadPasswordChangePending();
+        if (body.notifyClients) {
+          const n = Number(saved && saved.notified) || 0;
+          alert(n > 0 ? `Se avisó a ${n} cliente(s)` : "No había clientes con suscripción vigente");
         }
       } catch (err) {
         errorEl.textContent = err.message;
@@ -1069,84 +1113,6 @@
         refreshAccountInPlace(currentProfileForModal.accountId);
       } catch (err) {
         errorEl.textContent = err.message;
-        errorEl.hidden = false;
-      }
-    });
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // CAMBIO DE CONTRASEÑA — SOLO masivo (a todos los perfiles con cliente
-  // asignado). Usa la contraseña que la cuenta YA tiene guardada (se edita
-  // aparte, en "✏️ Editar cuenta", ANTES de tocar este botón) — ya no pide
-  // escribirla de nuevo acá. Avisa por la campanita de notificaciones de
-  // cada cliente/mayorista, no por WhatsApp.
-  // ─────────────────────────────────────────────────────────────
-
-  async function notifyPasswordChangeAll(btn, account) {
-    const occupiedCount = account.profiles.filter(p => p.clientPhone).length;
-    if (occupiedCount === 0) return;
-    if (!confirm(
-      `¿Avisar la contraseña actual de ${account.platform} (${account.email}) a los ${occupiedCount} cliente(s) con esta cuenta?\n\n` +
-      `Se les llega por su campanita de notificaciones, no por WhatsApp.`
-    )) return;
-
-    const originalLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Avisando…";
-    try {
-      await api("/accounts/" + account.id + "/notify-password-change", { method: "POST" });
-    } catch (err) {
-      alert(err.message || "No se pudo avisar el cambio de contraseña.");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = originalLabel;
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // MODAL — renovar con cuenta nueva
-  //
-  // Crea una cuenta aparte y le pasa solo los clientes de la cuenta vieja
-  // marcados "✅ Renueva". No manda WhatsApp ni toca el bot todavía — es
-  // la base para cuando se traspase todo al panel/bot más adelante.
-  // ─────────────────────────────────────────────────────────────
-
-  let renewNewAccountId = null;
-
-  function openRenewNewModal(accountId, renewingCount) {
-    renewNewAccountId = accountId;
-
-    document.getElementById("renew-new-hint").textContent =
-      `Se creará una cuenta nueva y se le pasarán los ${renewingCount} cliente(s) marcados "✅ Renueva" de esta cuenta. El resto se queda como está.`;
-    document.getElementById("renew-new-email").value    = "";
-    document.getElementById("renew-new-password").value = "";
-    document.getElementById("renew-new-expires").value  = addDaysISO(todayISO(), 30);
-    document.getElementById("renew-new-error").hidden = true;
-    document.getElementById("renew-new-modal").hidden = false;
-  }
-
-  function initRenewNewModal() {
-    document.getElementById("renew-new-cancel").addEventListener("click", () => {
-      document.getElementById("renew-new-modal").hidden = true;
-    });
-
-    document.getElementById("renew-new-form").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const errorEl = document.getElementById("renew-new-error");
-      errorEl.hidden = true;
-
-      const body = {
-        email:     document.getElementById("renew-new-email").value.trim(),
-        password:  document.getElementById("renew-new-password").value.trim(),
-        expiresAt: document.getElementById("renew-new-expires").value,
-      };
-
-      try {
-        await api("/accounts/" + renewNewAccountId + "/renew-new", { method: "POST", body: JSON.stringify(body) });
-        document.getElementById("renew-new-modal").hidden = true;
-        await refresh();
-      } catch (err) {
-        errorEl.textContent = err.message || "No se pudo crear la cuenta nueva.";
         errorEl.hidden = false;
       }
     });
@@ -1909,7 +1875,6 @@
     initBulkModal();
     initEditModal();
     initProfileModal();
-    initRenewNewModal();
     initHistoryModal();
     initRenewingModal();
     initRenewalHistoryModal();

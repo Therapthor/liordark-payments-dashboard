@@ -75,8 +75,11 @@ codeViewerAdminRoutes.post("/:accountId/fetch", async (req, res) => {
   if (sourceId === TOTP_SOURCE_ID) {
     const secret = getAccountTotpSecret(accountId);
     if (!secret) return res.status(409).json({ message: "Falta la clave 2FA en Accesos > Editar cuenta." });
-    const totp = await getCurrentTotp(secret);
-    return res.json({ ...base, totp });
+    try {
+      return res.json({ ...base, totp: getCurrentTotp(secret) });
+    } catch {
+      return res.status(409).json({ message: "La clave 2FA guardada no es válida. Corrígela en Accesos > Editar cuenta." });
+    }
   }
 
   const { result, problem } = await fetchOnce(sourceId, account.email, "panel", accountId, req.body?.actionId);
@@ -169,7 +172,7 @@ codeLinkRoutes.post("/:token/check", async (req, res) => {
     const secret = getAccountTotpSecret(link.accountId);
     if (!secret) return res.json({ status: "advisor", ...linkInfo(link) });
     try {
-      const totp = await getCurrentTotp(secret);
+      const totp = getCurrentTotp(secret);
       return res.json({ status: "totp", value: totp.code, secondsRemaining: totp.secondsRemaining, ...linkInfo(link) });
     } catch (err: any) {
       console.error("⚠️ link 2FA:", err?.message);

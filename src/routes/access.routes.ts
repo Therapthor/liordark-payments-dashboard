@@ -12,7 +12,6 @@ import {
   setProfileRenewal,
   searchAccountsByEmail,
   searchProfilesByPhone,
-  createAccountFromRenewal,
   listProviderRenewalAccounts,
   markProviderRenewalRenewed,
   setRenewalPending,
@@ -32,6 +31,7 @@ import {
 import {
   renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO,
   listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
+  accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers,
 } from "../services/access.service";
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
@@ -54,13 +54,28 @@ import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSource
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
-import { getCurrentTotp } from "../utils/totp.util";
+import { getCurrentTotp, normalizeTotpSecret } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
 const router = Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const TOTP_SECRET_INVALID_MESSAGE =
+  "La clave 2FA no es válida: debe tener al menos 16 caracteres, solo letras A–Z y números 2–7 " +
+  "(los espacios y guiones se quitan solos). Revisa que la copiaste completa.";
+
+/** Código 2FA de una cuenta para la lista de Códigos — una clave mala en
+ *  UNA cuenta nunca tumba la lista entera: esa cuenta sale sin código. */
+function safeTotp(secret: string, accountId: number): { code: string; secondsRemaining: number } | null {
+  try {
+    return getCurrentTotp(secret);
+  } catch {
+    console.warn(`⚠️ Clave 2FA inválida en la cuenta ${accountId} (Códigos la muestra sin código).`);
+    return null;
+  }
+}
 
 // ── serialización — agrega estado/días calculados a la cuenta ──
 
@@ -198,14 +213,21 @@ router.post("/accounts/bulk", async (req, res) => {
 router.get("/accounts/:id", (req, res) => {
   const account = getAccountById(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-  res.json({ account: withStatus(account) });
+  // Para el "Avisar a los N clientes con suscripción vigente" de Editar cuenta.
+  res.json({ account: withStatus(account), activeClientCount: listActiveSubscribers(account.id).length });
 });
 
+// Editar cuenta — si cambió el correo (reemplazo de cuenta) o solo la
+// contraseña, se avisa solo a los clientes con suscripción vigente, por la
+// campanita (ver notifyActiveSubscribers). body.notifyClients: false = no
+// avisar (por defecto sí). Cambiar la contraseña ya cumple el "Cuentas por
+// cambiar contraseña" de Renovaciones.
 router.put("/accounts/:id", (req, res) => {
   const {
     platform, email, password, provider, expiresAt, link, notes,
     providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
   } = req.body ?? {};
+  const id = Number(req.params.id);
 
   if (expiresAt !== undefined && expiresAt !== null && !DATE_RE.test(expiresAt)) {
     res.status(400).json({ message: "Fecha inválida, usa YYYY-MM-DD." });
@@ -219,7 +241,9 @@ router.put("/accounts/:id", (req, res) => {
     }
   }
 
-  const account = updateAccount(Number(req.params.id), {
+  const before = getAccountById(id);
+  if (!before) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const account = updateAccount(id, {
     platform, email, password, provider, expiresAt, link, notes,
     ...(providerRenewalEnabled !== undefined ? { providerRenewalEnabled: !!providerRenewalEnabled } : {}),
     ...(typeof providerRenewalCost === "string" ? { providerRenewalCost } : {}),
@@ -227,61 +251,16 @@ router.put("/accounts/:id", (req, res) => {
     ...(providerRenewalNextDate !== undefined ? { providerRenewalNextDate } : {}),
   });
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-  res.json({ account: withStatus(account) });
+
+  if (before.password !== account.password) markPasswordChanged(id);
+  const notice = accountNoticeFor(before, account);
+  const notified = notice && req.body?.notifyClients !== false ? notifyActiveSubscribers(id, notice) : 0;
+  res.json({ account: withStatus(getAccountById(id)!), notice, notified });
 });
 
 router.delete("/accounts/:id", (req, res) => {
   deleteAccount(Number(req.params.id));
   res.json({ ok: true });
-});
-
-// POST /accounts/:id/notify-password-change — "🔑 Cambiar contraseña a
-// todos" (Accesos). La contraseña nueva YA está guardada en la cuenta (se
-// edita aparte, en "✏️ Editar cuenta") — acá solo se avisa a cada perfil
-// ocupado con la que ya tiene la cuenta ahora mismo, por la campanita de
-// notificaciones (nunca por WhatsApp): al cliente retail directo si no es
-// de un mayorista, o al mayorista dueño si el perfil es su stock.
-router.post("/accounts/:id/notify-password-change", (req, res) => {
-  const account = getAccountById(Number(req.params.id));
-  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-
-  const occupied = account.profiles.filter(p => p.clientPhone);
-  for (const p of occupied) {
-    if (p.wholesalerId != null) {
-      createWholesalerNotification(p.wholesalerId, "password_changed", account.platform, account.email, account.password);
-    } else {
-      createCustomerNotification(p.clientPhone, "password_changed", account.platform, account.email, account.password);
-    }
-  }
-
-  res.json({ ok: true, notified: occupied.length });
-});
-
-// POST /accounts/:id/notify-replacement — "🔄 Enviar reemplazo a todos"
-// (Accesos). Mismo criterio que notify-password-change (nunca por
-// WhatsApp, solo por la campanita de notificaciones): la cuenta ya tiene
-// guardado el correo/contraseña nuevos (se edita aparte, en "✏️ Editar
-// cuenta"), acá solo se avisa a cada perfil ocupado con el detalle
-// completo — correo, contraseña, perfil y días restantes.
-router.post("/accounts/:id/notify-replacement", (req, res) => {
-  const account = getAccountById(Number(req.params.id));
-  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-
-  const left = daysLeft(account.expiresAt);
-  const occupied = account.profiles.filter(p => p.clientPhone);
-  for (const p of occupied) {
-    const profileLine = p.profileName ? `\n👤 Perfil: ${p.profileName}` : "";
-    const detail = `📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}${profileLine}` +
-      (left !== null ? `\n⏳ Días restantes: ${left}` : "") +
-      `\n\nCualquier inconveniente adicional, estamos atentos. 😊`;
-    if (p.wholesalerId != null) {
-      createWholesalerNotification(p.wholesalerId, "account_replaced", account.platform, account.email, detail);
-    } else {
-      createCustomerNotification(p.clientPhone, "account_replaced", account.platform, account.email, detail);
-    }
-  }
-
-  res.json({ ok: true, notified: occupied.length });
 });
 
 // ── PEDIDO (combo) — venta manual de varias plataformas a un solo
@@ -435,8 +414,11 @@ router.post("/accounts/:id/code-source", (req, res) => {
 // los dos mecanismos.
 router.post("/accounts/:id/totp-secret", (req, res) => {
   const accountId = Number(req.params.id);
-  const secret = typeof req.body?.totpSecret === "string" && req.body.totpSecret.trim() ? req.body.totpSecret.trim() : null;
   if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const raw = typeof req.body?.totpSecret === "string" ? req.body.totpSecret.trim() : "";
+  // Se guarda ya limpia (sin espacios ni guiones, en mayúsculas).
+  const secret = raw ? normalizeTotpSecret(raw) : null;
+  if (raw && !secret) { res.status(400).json({ message: TOTP_SECRET_INVALID_MESSAGE }); return; }
   setAccountTotpSecret(accountId, secret);
   res.json({ account: withStatus(getAccountById(accountId)!) });
 });
@@ -503,7 +485,7 @@ router.post("/codes/watch-now", async (_req, res) => {
   res.json({ checked, watcher: watcherInfo() });
 });
 
-router.get("/codes", async (_req, res) => {
+router.get("/codes", (_req, res) => {
   // Varias cuentas suelen compartir el mismo login (ej. ChatGPT, una por
   // cliente) — el código es el mismo para todas, así que se muestra una
   // fila por correo+fuente en vez de repetirla. La fila usa la primera
@@ -515,7 +497,7 @@ router.get("/codes", async (_req, res) => {
     if (group) group.push(a); else groups.set(key, [a]);
   }
 
-  const accounts = await Promise.all([...groups.values()].map(async group => {
+  const accounts = [...groups.values()].map(group => {
     const a = group[0]!;
     const { totpSecret, ...rest } = a;
     const latestCodeRaw = group
@@ -536,9 +518,9 @@ router.get("/codes", async (_req, res) => {
       // 2FA por TOTP — se calcula al vuelo, sin consultar nada externo.
       // No se manda la clave en sí, solo el código ya calculado.
       hasTotp: !!totpSecret,
-      totp: totpSecret ? await getCurrentTotp(totpSecret) : null,
+      totp: totpSecret ? safeTotp(totpSecret, a.id) : null,
     };
-  }));
+  });
   res.json({ accounts });
 });
 
@@ -611,25 +593,6 @@ router.post("/accounts/:id/renewal-pending/cancel", (req, res) => {
   res.json({ account: withStatus(account) });
 });
 
-// Renovación con cuenta nueva — crea una cuenta aparte y le pasa solo los
-// clientes marcados "✅ Renueva" de la vieja. No manda WhatsApp ni toca el
-// bot, solo mueve datos del panel (ver createAccountFromRenewal).
-router.post("/accounts/:id/renew-new", (req, res) => {
-  const { email, password, expiresAt } = req.body ?? {};
-  if (!email?.trim())    { res.status(400).json({ message: "El correo es obligatorio." }); return; }
-  if (!password?.trim()) { res.status(400).json({ message: "La contraseña es obligatoria." }); return; }
-
-  const result = createAccountFromRenewal(Number(req.params.id), {
-    email, password, expiresAt: expiresAt?.trim() || null,
-  });
-  if (!result) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-
-  res.json({
-    oldAccount: withStatus(result.oldAccount),
-    newAccount: withStatus(result.newAccount),
-  });
-});
-
 // ── PERFILES (solo el teléfono del cliente — el resto vive en la cuenta) ──
 
 router.put("/profiles/:id", (req, res) => {
@@ -699,24 +662,13 @@ router.get("/password-change-pending", (_req, res) => {
 
 // Al confirmar "✅ Ya la cambié" (Pagos > Renovaciones > Cuentas por
 // cambiar contraseña) también se avisa de una vez a quien se quedó con la
-// cuenta — mismo aviso que "🔑 Cambiar contraseña a todos" en Accesos,
-// para no tener que ir a hacerlo aparte a mano cada vez.
+// cuenta — mismo aviso que al cambiar la contraseña en "✏️ Editar cuenta":
+// solo a los clientes con suscripción vigente, por la campanita.
 router.post("/accounts/:id/password-changed", (req, res) => {
   const id = Number(req.params.id);
-  const account = getAccountById(id);
-  if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
+  if (!getAccountById(id)) return res.status(404).json({ message: "Cuenta no encontrada." });
   markPasswordChanged(id);
-
-  const occupied = account.profiles.filter(p => p.clientPhone);
-  for (const p of occupied) {
-    if (p.wholesalerId != null) {
-      createWholesalerNotification(p.wholesalerId, "password_changed", account.platform, account.email, account.password);
-    } else {
-      createCustomerNotification(p.clientPhone, "password_changed", account.platform, account.email, account.password);
-    }
-  }
-
-  res.json({ ok: true, notified: occupied.length });
+  res.json({ ok: true, notified: notifyActiveSubscribers(id, "password") });
 });
 
 // GET /renewal-history — registro permanente de renovaciones ya hechas

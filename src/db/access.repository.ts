@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
-import { createCustomerNotification, createCustomerNotifications } from "./customer-notifications.repository";
+import { createCustomerNotification } from "./customer-notifications.repository";
 import { createWholesalerNotification } from "./wholesaler-notifications.repository";
 import { createManualOverride, deleteManualOverride, findManualOverride, listManualOverridesForClient } from "./manual-overrides.repository";
 
@@ -250,65 +250,6 @@ export function setRenewalPending(id: number, pending: boolean): AccessAccountWi
   return getAccountById(id);
 }
 
-/**
- * Renovación con cuenta nueva: crea una cuenta aparte (mismas plataforma/
- * proveedor/perfiles que la vieja, con el correo y contraseña nuevos que ya
- * se cambiaron en el proveedor) y le pasa SOLO los clientes de la cuenta
- * vieja marcados "✅ Renueva" — el resto se queda como estaba en la vieja,
- * para decidir aparte qué hacer con ellos. No manda nada por WhatsApp ni
- * toca el bot — solo mueve datos dentro del panel.
- */
-export function createAccountFromRenewal(oldAccountId: number, params: {
-  email:     string;
-  password:  string;
-  expiresAt: string | null;
-}): { oldAccount: AccessAccountWithProfiles; newAccount: AccessAccountWithProfiles } | null {
-  const oldAccount = getAccountById(oldAccountId);
-  if (!oldAccount) return null;
-
-  const renewing = oldAccount.profiles.filter(p => p.clientPhone && p.renewalStatus === "yes");
-  const slots = slotsFor(oldAccount.hasProfiles);
-
-  // Hereda de dónde se saca el código (no el link de bandeja ni la clave
-  // 2FA: con el correo nuevo cambian).
-  const insertAccount = db.prepare(`
-    INSERT INTO access_accounts (platform, email, password, provider, has_profiles, expires_at, codes_enabled, code_source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertProfile = db.prepare(`
-    INSERT INTO access_profiles (account_id, slot_number, profile_name, client_phone)
-    VALUES (?, ?, ?, ?)
-  `);
-  const freeOldProfile = db.prepare(`
-    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', updated_at = datetime('now') WHERE id = ?
-  `);
-
-  const newAccountId = db.transaction(() => {
-    const result = insertAccount.run(
-      oldAccount.platform, params.email.trim(), params.password.trim(),
-      oldAccount.provider, oldAccount.hasProfiles ? 1 : 0, params.expiresAt,
-      oldAccount.codesEnabled ? 1 : 0, oldAccount.codesEnabled ? oldAccount.codeSource : null
-    );
-    const id = result.lastInsertRowid as number;
-
-    for (let slot = 1; slot <= slots; slot++) {
-      const client = renewing[slot - 1];
-      insertProfile.run(id, slot, slots === 1 ? "" : "Perfil " + slot, client ? client.clientPhone : "");
-      if (client) freeOldProfile.run(client.id);
-    }
-    return id;
-  })();
-
-  createCustomerNotifications(
-    renewing.map(c => ({
-      clientPhone: c.clientPhone, type: "renewed" as const,
-      platform: oldAccount.platform, accountEmail: params.email.trim(),
-    }))
-  );
-
-  return { oldAccount: getAccountById(oldAccountId)!, newAccount: getAccountById(newAccountId)! };
-}
-
 export function getAccountById(id: number): AccessAccountWithProfiles | null {
   const row = db.prepare(`SELECT * FROM access_accounts WHERE id = ?`).get(id) as any;
   if (!row) return null;
@@ -355,6 +296,21 @@ export function getProfilesByAccount(accountId: number): AccessProfile[] {
 export function getProfileById(id: number): AccessProfile | null {
   const row = db.prepare(`SELECT * FROM access_profiles WHERE id = ?`).get(id) as any;
   return row ? toProfile(row) : null;
+}
+
+export type SubscriberProfile = AccessProfile & { expiresAt: string | null };
+
+/** Clientes de la cuenta (perfiles ocupados) con su fecha de vencimiento
+ *  real: la propia del perfil (expires_override, ver replaceClientAccount)
+ *  si la tiene; si no, la de la cuenta. */
+export function listAccountSubscribers(accountId: number): SubscriberProfile[] {
+  return (db.prepare(`
+    SELECT p.*, COALESCE(p.expires_override, a.expires_at) AS effective_expires_at
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.account_id = ? AND p.client_phone != ''
+    ORDER BY p.slot_number ASC
+  `).all(accountId) as any[]).map(row => ({ ...toProfile(row), expiresAt: row.effective_expires_at ?? null }));
 }
 
 export function assignProfileClient(id: number, clientPhone: string): AccessProfile | null {
