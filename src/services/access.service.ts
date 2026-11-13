@@ -11,7 +11,9 @@ import {
   listAccountsWithFreeProfiles,
   replaceClientAccount,
   assignClientToFreeProfile,
+  listAccountSubscribers,
   type AccessAccountWithProfiles,
+  type SubscriberProfile,
 } from "../db/access.repository";
 import {
   createPendingAssignment, listPendingAssignments, markPendingAssigned, countPendingAssignments,
@@ -114,6 +116,57 @@ export function renewAccount(id: number): AccessAccountWithProfiles | null {
   setRenewalPending(id, false);
 
   return getAccountById(id);
+}
+
+// ─────────────────────────────────────────────────────────────
+// AVISO AUTOMÁTICO AL EDITAR UNA CUENTA (Accesos › ✏️ Editar cuenta) —
+// reemplaza los botones "Enviar reemplazo a todos" / "Cambiar contraseña a
+// todos". Solo a los clientes con suscripción vigente en esa cuenta (manda
+// la fecha propia del perfil si Soporte se la congeló), y solo por la
+// campanita de notificaciones: nunca por WhatsApp.
+// ─────────────────────────────────────────────────────────────
+
+export type AccountNotice = "replacement" | "password";
+
+/** Qué aviso corresponde a una edición: cambió el correo (con la
+ *  contraseña o sin ella) → reemplazo de cuenta; solo la contraseña →
+ *  cambio de contraseña; ninguno de los dos → sin aviso. */
+export function accountNoticeFor(
+  before: { email: string; password: string }, after: { email: string; password: string },
+): AccountNotice | null {
+  if (before.email.trim().toLowerCase() !== after.email.trim().toLowerCase()) return "replacement";
+  if (before.password !== after.password) return "password";
+  return null;
+}
+
+/** Clientes de la cuenta con suscripción vigente (vence hoy o después, o
+ *  sin fecha). */
+export function listActiveSubscribers(accountId: number): SubscriberProfile[] {
+  const today = limaTodayISO();
+  return listAccountSubscribers(accountId).filter(p => !p.expiresAt || p.expiresAt >= today);
+}
+
+/** Avisa por la campanita (cliente de la tienda o su mayorista) con los
+ *  datos que la cuenta YA tiene guardados. Devuelve a cuántos se avisó. */
+export function notifyActiveSubscribers(accountId: number, notice: AccountNotice): number {
+  const account = getAccountById(accountId);
+  if (!account) return 0;
+  const active = listActiveSubscribers(accountId);
+  for (const p of active) {
+    if (notice === "password") {
+      if (p.wholesalerId != null) createWholesalerNotification(p.wholesalerId, "password_changed", account.platform, account.email, account.password);
+      else createCustomerNotification(p.clientPhone, "password_changed", account.platform, account.email, account.password);
+      continue;
+    }
+    const left = daysLeft(p.expiresAt);
+    const detail = `📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}` +
+      (p.profileName ? `\n👤 Perfil: ${p.profileName}` : "") +
+      (left !== null ? `\n⏳ Días restantes: ${left}` : "") +
+      `\n\nCualquier inconveniente adicional, estamos atentos. 😊`;
+    if (p.wholesalerId != null) createWholesalerNotification(p.wholesalerId, "account_replaced", account.platform, account.email, detail);
+    else createCustomerNotification(p.clientPhone, "account_replaced", account.platform, account.email, detail);
+  }
+  return active.length;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -357,6 +357,21 @@ export function getProfileById(id: number): AccessProfile | null {
   return row ? toProfile(row) : null;
 }
 
+export type SubscriberProfile = AccessProfile & { expiresAt: string | null };
+
+/** Clientes de la cuenta (perfiles ocupados) con su fecha de vencimiento
+ *  real: la propia del perfil (expires_override, ver replaceClientAccount)
+ *  si la tiene; si no, la de la cuenta. */
+export function listAccountSubscribers(accountId: number): SubscriberProfile[] {
+  return (db.prepare(`
+    SELECT p.*, COALESCE(p.expires_override, a.expires_at) AS effective_expires_at
+    FROM access_profiles p
+    JOIN access_accounts a ON a.id = p.account_id
+    WHERE p.account_id = ? AND p.client_phone != ''
+    ORDER BY p.slot_number ASC
+  `).all(accountId) as any[]).map(row => ({ ...toProfile(row), expiresAt: row.effective_expires_at ?? null }));
+}
+
 export function assignProfileClient(id: number, clientPhone: string): AccessProfile | null {
   const result = db.prepare(`
     UPDATE access_profiles SET client_phone = ?, updated_at = datetime('now') WHERE id = ?

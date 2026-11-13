@@ -103,6 +103,9 @@
   let currentProfileForModal   = null;
   let editingAccountId         = null;
   let editingAccountPlatform   = null;
+  // Correo/contraseña al abrir "Editar cuenta" — si cambian, se ofrece
+  // avisar a los clientes con suscripción vigente.
+  let editingOriginalCredentials = null;
   let platformCatalog          = [];
   let providerCatalog          = [];
 
@@ -920,11 +923,18 @@
     document.getElementById("account-edit-form").reset();
     document.getElementById("account-edit-error").hidden = true;
 
-    const { account } = await api("/accounts/" + accountId);
+    const { account, activeClientCount } = await api("/accounts/" + accountId);
     editingAccountPlatform = account.platform;
+    editingOriginalCredentials = { email: account.email, password: account.password };
     populatePlatformSelect(document.getElementById("account-edit-platform"), account.platform);
     document.getElementById("account-edit-email").value = account.email;
     document.getElementById("account-edit-password").value = account.password;
+    const activeCount = Number(activeClientCount) || 0;
+    document.getElementById("account-edit-notify").checked = true;
+    document.getElementById("account-edit-notify-text").textContent = activeCount > 1
+      ? `Avisar a los ${activeCount} clientes con suscripción vigente`
+      : "Avisar al cliente con suscripción vigente";
+    syncEditNotify();
     populateProviderSelect(document.getElementById("account-edit-provider"), account.provider);
     document.getElementById("account-edit-expires").value = account.expiresAt || "";
     document.getElementById("account-edit-link").value = account.link || "";
@@ -985,8 +995,23 @@
     return codeSources;
   }
 
+  // Mismo criterio que accountNoticeFor (access.service.ts): el correo se
+  // compara sin espacios ni mayúsculas; la contraseña, tal cual.
+  function editCredentialsChanged() {
+    if (!editingOriginalCredentials) return false;
+    const email = document.getElementById("account-edit-email").value.trim().toLowerCase();
+    const password = document.getElementById("account-edit-password").value;
+    return email !== editingOriginalCredentials.email.trim().toLowerCase() || password !== editingOriginalCredentials.password;
+  }
+
+  function syncEditNotify() {
+    document.getElementById("account-edit-notify-wrap").hidden = !editCredentialsChanged();
+  }
+
   function initEditModal() {
     document.getElementById("account-edit-cancel").addEventListener("click", () => { document.getElementById("account-edit-modal").hidden = true; });
+    document.getElementById("account-edit-email").addEventListener("input", syncEditNotify);
+    document.getElementById("account-edit-password").addEventListener("input", syncEditNotify);
 
     document.getElementById("account-edit-renewal-enabled").addEventListener("change", (e) => {
       document.getElementById("account-edit-renewal-fields").hidden = !e.target.checked;
@@ -1013,6 +1038,10 @@
         providerRenewalCurrency: document.getElementById("account-edit-renewal-currency").value,
         providerRenewalNextDate: renewalEnabled ? document.getElementById("account-edit-renewal-next-date").value : null,
       };
+      // Aviso automático (campanita) si cambió el correo o la contraseña.
+      const credentialsChanged = editCredentialsChanged();
+      const passwordChanged = !!editingOriginalCredentials && body.password !== editingOriginalCredentials.password;
+      body.notifyClients = credentialsChanged && document.getElementById("account-edit-notify").checked;
       const codesEnabled = document.getElementById("account-edit-codes-enabled").checked;
       const codeSource   = document.getElementById("account-edit-code-source").value || null;
       const totpSecret   = codeSource === TOTP_SOURCE_ID
@@ -1038,7 +1067,10 @@
         if (needsInbox) {
           await api("/accounts/" + editingAccountId + "/code-inbox-url", { method: "POST", body: JSON.stringify({ url: inboxUrl }) });
         }
-        await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
+        const saved = await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
+        // Ya guardado (y avisado): si se vuelve a guardar, no se repite el aviso.
+        editingOriginalCredentials = { email: body.email, password: body.password };
+        syncEditNotify();
         await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
         await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
         await api("/accounts/" + editingAccountId + "/totp-secret", { method: "POST", body: JSON.stringify({ totpSecret: codesEnabled ? totpSecret : null }) });
@@ -1049,6 +1081,12 @@
           await refreshAccountInPlace(editingAccountId, editingAccountPlatform);
         } else {
           await refresh();
+        }
+        // La contraseña nueva ya cumple "Cuentas por cambiar contraseña".
+        if (passwordChanged) loadPasswordChangePending();
+        if (body.notifyClients) {
+          const n = Number(saved && saved.notified) || 0;
+          alert(n > 0 ? `Se avisó a ${n} cliente(s)` : "No había clientes con suscripción vigente");
         }
       } catch (err) {
         errorEl.textContent = err.message;

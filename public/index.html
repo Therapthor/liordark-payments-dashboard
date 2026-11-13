@@ -1048,6 +1048,12 @@
       <label>Contraseña
         <input id="account-edit-password" type="text" required />
       </label>
+      <!-- Aparece solo si cambia el correo o la contraseña: al guardar se
+           avisa por la campanita a quien tiene suscripción vigente. -->
+      <label id="account-edit-notify-wrap" class="catalog-checkbox-label" hidden>
+        <input id="account-edit-notify" type="checkbox" checked />
+        <span id="account-edit-notify-text">Avisar al cliente con suscripción vigente</span>
+      </label>
       <label>Proveedor <span class="text-muted">(opcional)</span>
         <select id="account-edit-provider"></select>
       </label>

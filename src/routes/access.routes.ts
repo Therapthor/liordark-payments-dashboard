@@ -32,6 +32,7 @@ import {
 import {
   renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO,
   listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
+  accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers,
 } from "../services/access.service";
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
@@ -205,14 +206,21 @@ router.post("/accounts/bulk", async (req, res) => {
 router.get("/accounts/:id", (req, res) => {
   const account = getAccountById(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-  res.json({ account: withStatus(account) });
+  // Para el "Avisar a los N clientes con suscripción vigente" de Editar cuenta.
+  res.json({ account: withStatus(account), activeClientCount: listActiveSubscribers(account.id).length });
 });
 
+// Editar cuenta — si cambió el correo (reemplazo de cuenta) o solo la
+// contraseña, se avisa solo a los clientes con suscripción vigente, por la
+// campanita (ver notifyActiveSubscribers). body.notifyClients: false = no
+// avisar (por defecto sí). Cambiar la contraseña ya cumple el "Cuentas por
+// cambiar contraseña" de Renovaciones.
 router.put("/accounts/:id", (req, res) => {
   const {
     platform, email, password, provider, expiresAt, link, notes,
     providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
   } = req.body ?? {};
+  const id = Number(req.params.id);
 
   if (expiresAt !== undefined && expiresAt !== null && !DATE_RE.test(expiresAt)) {
     res.status(400).json({ message: "Fecha inválida, usa YYYY-MM-DD." });
@@ -226,7 +234,9 @@ router.put("/accounts/:id", (req, res) => {
     }
   }
 
-  const account = updateAccount(Number(req.params.id), {
+  const before = getAccountById(id);
+  if (!before) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const account = updateAccount(id, {
     platform, email, password, provider, expiresAt, link, notes,
     ...(providerRenewalEnabled !== undefined ? { providerRenewalEnabled: !!providerRenewalEnabled } : {}),
     ...(typeof providerRenewalCost === "string" ? { providerRenewalCost } : {}),
@@ -234,7 +244,11 @@ router.put("/accounts/:id", (req, res) => {
     ...(providerRenewalNextDate !== undefined ? { providerRenewalNextDate } : {}),
   });
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-  res.json({ account: withStatus(account) });
+
+  if (before.password !== account.password) markPasswordChanged(id);
+  const notice = accountNoticeFor(before, account);
+  const notified = notice && req.body?.notifyClients !== false ? notifyActiveSubscribers(id, notice) : 0;
+  res.json({ account: withStatus(getAccountById(id)!), notice, notified });
 });
 
 router.delete("/accounts/:id", (req, res) => {
@@ -709,24 +723,13 @@ router.get("/password-change-pending", (_req, res) => {
 
 // Al confirmar "✅ Ya la cambié" (Pagos > Renovaciones > Cuentas por
 // cambiar contraseña) también se avisa de una vez a quien se quedó con la
-// cuenta — mismo aviso que "🔑 Cambiar contraseña a todos" en Accesos,
-// para no tener que ir a hacerlo aparte a mano cada vez.
+// cuenta — mismo aviso que al cambiar la contraseña en "✏️ Editar cuenta":
+// solo a los clientes con suscripción vigente, por la campanita.
 router.post("/accounts/:id/password-changed", (req, res) => {
   const id = Number(req.params.id);
-  const account = getAccountById(id);
-  if (!account) return res.status(404).json({ message: "Cuenta no encontrada." });
+  if (!getAccountById(id)) return res.status(404).json({ message: "Cuenta no encontrada." });
   markPasswordChanged(id);
-
-  const occupied = account.profiles.filter(p => p.clientPhone);
-  for (const p of occupied) {
-    if (p.wholesalerId != null) {
-      createWholesalerNotification(p.wholesalerId, "password_changed", account.platform, account.email, account.password);
-    } else {
-      createCustomerNotification(p.clientPhone, "password_changed", account.platform, account.email, account.password);
-    }
-  }
-
-  res.json({ ok: true, notified: occupied.length });
+  res.json({ ok: true, notified: notifyActiveSubscribers(id, "password") });
 });
 
 // GET /renewal-history — registro permanente de renovaciones ya hechas
