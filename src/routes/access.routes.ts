@@ -24,6 +24,7 @@ import {
   markActivationDone,
   getProfileForRenewalMessage,
   type AccessAccountWithProfiles,
+  type BulkAccountPair,
   type ProfileWithAccount,
   type RenewalStatus,
   type SoldProfile,
@@ -31,7 +32,7 @@ import {
 import {
   renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO,
   listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
-  accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers,
+  accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers, minTargetExpiry,
 } from "../services/access.service";
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
@@ -138,6 +139,9 @@ router.get("/platforms/:platform/accounts", (req, res) => {
 // Alta en formato "correo:contraseña" (una por línea) — todas comparten
 // plataforma, proveedor y vencimiento inicial. hasProfiles se resuelve
 // del catálogo propio del panel, nunca se confía en lo que mande el cliente.
+// Con bandeja (Juanpa) cada línea lleva su link al final; con 2FA, su clave
+// secreta después del primer espacio. Si alguna línea está mal no se crea
+// nada y se responde qué línea falla y por qué (errors).
 router.post("/accounts/bulk", async (req, res) => {
   const {
     platform, provider, expiresAt, lines,
@@ -145,13 +149,14 @@ router.post("/accounts/bulk", async (req, res) => {
   } = req.body ?? {};
 
   // De dónde sacar el código para TODAS las cuentas del lote (vacío = sin
-  // código). El 2FA no va acá: cada cuenta necesita su propia clave.
+  // código).
   const codeSource = typeof req.body?.codeSource === "string" && req.body.codeSource.trim() ? req.body.codeSource.trim() : null;
-  if (codeSource && (codeSource === TOTP_SOURCE_ID || !listCodeSources().some(s => s.id === codeSource))) {
-    res.status(400).json({ message: "Ese tipo de código no existe (el 2FA se configura en cada cuenta, en Editar)." });
+  if (codeSource && !listCodeSources().some(s => s.id === codeSource)) {
+    res.status(400).json({ message: "Ese tipo de código no existe." });
     return;
   }
   const needsInbox = !!codeSource && INBOX_LINK_SOURCES.includes(codeSource);
+  const needsTotp  = codeSource === TOTP_SOURCE_ID;
 
   if (!platform?.trim()) { res.status(400).json({ message: "Elige una plataforma." }); return; }
   if (!expiresAt || !DATE_RE.test(expiresAt)) { res.status(400).json({ message: "Fecha de vencimiento inválida." }); return; }
@@ -164,34 +169,50 @@ router.post("/accounts/bulk", async (req, res) => {
     }
   }
 
-  const rawLines = lines
-    .split("\n")
-    .map((line: string) => line.trim())
-    .filter((line: string) => line.length > 0);
-  const pairs = rawLines.map((line: string) => {
-    let rest = line;
+  // Mismo criterio que parseBulkLines en public/js/access.js (el panel ya
+  // avisa antes de mandar; esto es la segunda revisión). Las líneas se
+  // numeran como se ven en el cuadro, contando las vacías.
+  const pairs: BulkAccountPair[] = [];
+  const lineErrors: { line: number; message: string }[] = [];
+  lines.split("\n").forEach((raw: string, i: number) => {
+    let rest = raw.trim();
+    if (!rest) return;
+    const line = i + 1;
     let inboxUrl: string | undefined;
-    // Bandeja del proveedor (Juanpa): el link va al final de cada línea.
-    if (needsInbox) {
+    let totpSecret: string | undefined;
+    if (needsTotp) {
+      // 2FA: correo:contraseña CLAVE2FA — la clave va después del primer
+      // espacio (puede venir en bloques separados por espacios).
+      const sep = rest.search(/\s/);
+      if (sep === -1) { lineErrors.push({ line, message: "falta la clave 2FA después de un espacio (correo:contraseña CLAVE2FA)." }); return; }
+      const key = normalizeTotpSecret(rest.slice(sep + 1));
+      if (!key) { lineErrors.push({ line, message: "la clave 2FA no es válida (mínimo 16 caracteres, solo letras A–Z y números 2–7)." }); return; }
+      totpSecret = key;
+      rest = rest.slice(0, sep).trim();
+    } else if (needsInbox) {
+      // Bandeja del proveedor (Juanpa): el link va al final de cada línea.
       const m = rest.match(/\s+(\S+)$/);
-      const url = m ? normalizeInboxUrl(m[1]) : null;
-      if (!url) return { bad: "inbox" as const };
+      const url = m ? normalizeInboxUrl(m[1]!) : null;
+      if (!url) { lineErrors.push({ line, message: "falta el link de la bandeja al final (correo:contraseña https://mibalu.fun/buzon/…)." }); return; }
       inboxUrl = url;
       rest = rest.slice(0, m!.index).trim();
     }
     const idx = rest.indexOf(":");
-    if (idx === -1) return null;
-    return { email: rest.slice(0, idx).trim(), password: rest.slice(idx + 1).trim(), ...(inboxUrl ? { inboxUrl } : {}) };
+    const email    = idx === -1 ? "" : rest.slice(0, idx).trim();
+    const password = idx === -1 ? "" : rest.slice(idx + 1).trim();
+    if (!email || !password) { lineErrors.push({ line, message: "debe tener el formato correo:contraseña." }); return; }
+    pairs.push({ email, password, ...(inboxUrl ? { inboxUrl } : {}), ...(totpSecret ? { totpSecret } : {}) });
   });
 
-  const missingInbox = pairs.findIndex((p: any) => p && p.bad === "inbox");
-  if (missingInbox >= 0) {
-    res.status(400).json({ message: `Línea ${missingInbox + 1}: falta el link de la bandeja al final (correo:contraseña https://mibalu.fun/buzon/…).` });
+  if (lineErrors.length > 0) {
+    res.status(400).json({
+      message: "Revisa estas líneas (no se creó ninguna cuenta):\n" + lineErrors.map(e => `Línea ${e.line}: ${e.message}`).join("\n"),
+      errors: lineErrors,
+    });
     return;
   }
-  const invalid = pairs.some((p: any) => !p || !p.email || !p.password);
-  if (invalid || pairs.length === 0) {
-    res.status(400).json({ message: "Cada línea debe tener el formato correo:contraseña." });
+  if (pairs.length === 0) {
+    res.status(400).json({ message: "Pega al menos una línea correo:contraseña." });
     return;
   }
 
@@ -199,7 +220,7 @@ router.post("/accounts/bulk", async (req, res) => {
 
   const accounts = createAccountsBulk({
     platform, provider: typeof provider === "string" ? provider : "",
-    hasProfiles, expiresAt, pairs: pairs as { email: string; password: string; inboxUrl?: string }[],
+    hasProfiles, expiresAt, pairs,
     codeSource,
     providerRenewalEnabled:  !!providerRenewalEnabled,
     providerRenewalCost:     typeof providerRenewalCost === "string" ? providerRenewalCost : "",
@@ -342,11 +363,13 @@ router.post("/cycle-renewals/:id/confirm", (req, res) => {
 });
 
 // Cuentas de la misma plataforma con cupos libres suficientes para mover
-// a todos los que pagaron.
+// a todos los que pagaron, y que les duren al menos 28 de sus 30 días (ver
+// minTargetExpiry).
 router.get("/cycle-renewals/:id/candidates", (req, res) => {
   const pending = listCycleRenewalsAwaitingConfirmation().find(a => a.id === Number(req.params.id));
   if (!pending) return res.status(404).json({ message: "Esta cuenta ya no tiene renovaciones por confirmar." });
-  res.json({ accounts: listAccountsWithFreeProfiles(pending.platform, pending.renewing.length, limaTodayISO()).filter(a => a.id !== pending.id) });
+  const floor = pending.newExpiresAt ? minTargetExpiry(pending.newExpiresAt) : limaTodayISO();
+  res.json({ accounts: listAccountsWithFreeProfiles(pending.platform, pending.renewing.length, floor).filter(a => a.id !== pending.id) });
 });
 
 // Mueve a los que pagaron a otra cuenta (del stock o escrita a mano), ya con

@@ -12,6 +12,7 @@ import {
   replaceClientAccount,
   assignClientToFreeProfile,
   listAccountSubscribers,
+  listPlacementSlots,
   type AccessAccountWithProfiles,
   type SubscriberProfile,
 } from "../db/access.repository";
@@ -19,11 +20,25 @@ import {
   createPendingAssignment, listPendingAssignments, markPendingAssigned, countPendingAssignments,
 } from "../db/pending-assignments.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
+import { db } from "../db/db";
 import { logRenewalHistory } from "../db/renewal-history.repository";
 import { createCustomerNotifications, createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
 const RENEW_DAYS = 30;
+
+// Al pasar a otra cuenta a un cliente que ya pagó (Pendientes de cuenta
+// nueva, o cuentas que no conviene renovar), sirve una cuenta que le dure al
+// menos 28 de sus 30 días: hasta 2 días antes de la fecha que pagó.
+export const RENEW_TOLERANCE_DAYS = 2;
+
+/** Hasta cuándo tiene que durar como mínimo la cuenta destino de un cliente
+ *  que pagó hasta `paidUntilISO` (nunca antes de hoy). */
+export function minTargetExpiry(paidUntilISO: string): string {
+  const floor = addDaysISO(paidUntilISO, -RENEW_TOLERANCE_DAYS);
+  const today = limaTodayISO();
+  return floor > today ? floor : today;
+}
 
 export type AccountStatus = "activo" | "por_vencer" | "vencido" | "sin_fecha";
 
@@ -331,7 +346,7 @@ export function relocateUnworthyRenewals(): RelocationResult {
     if (a.worthRenewing || a.daysLeft === null || a.daysLeft > 1 || !a.newExpiresAt) continue;
     result.accounts.push(`${a.platform} — ${a.email}`);
     for (const p of a.renewing) {
-      const target = listAccountsWithFreeProfiles(a.platform, 1, a.newExpiresAt).find(t => t.id !== a.id);
+      const target = listAccountsWithFreeProfiles(a.platform, 1, minTargetExpiry(a.newExpiresAt)).find(t => t.id !== a.id);
       if (target) {
         replaceClientAccount({
           clientPhone: p.clientPhone, platform: a.platform, email: a.email,
@@ -354,21 +369,76 @@ export function relocateUnworthyRenewals(): RelocationResult {
   return result;
 }
 
-/** "Asignar pendientes" (Accesos) — y también en el corte diario: cada
- *  pendiente va al primer cupo libre de su plataforma que le dure hasta su
- *  fecha. Los que no entran siguen pendientes. */
-export function assignPendingClients(): { assigned: number; stillPending: number } {
-  let assigned = 0;
-  for (const pend of listPendingAssignments()) {
-    const target = listAccountsWithFreeProfiles(pend.platform, 1, pend.expiresAt)[0];
-    if (!target) continue;
-    const profileId = assignClientToFreeProfile({
-      accountId: target.id, clientPhone: pend.clientPhone, wholesalerId: pend.wholesalerId, expiresAt: pend.expiresAt,
-    });
-    if (!profileId) continue;
-    markPendingAssigned(pend.id, target.id);
-    notifyNewAccount(pend.clientPhone, pend.wholesalerId, pend.platform, target.id, pend.expiresAt);
-    assigned++;
-  }
-  return { assigned, stillPending: countPendingAssignments() };
+export type PendingAssigned = {
+  pendingId: number; platform: string; clientPhone: string; wholesalerId: number | null; paidUntil: string;
+  accountId: number; accountEmail: string; accountExpiresAt: string | null;
+};
+export type PendingNotPlaced = {
+  pendingId: number; platform: string; clientPhone: string; wholesalerId: number | null; paidUntil: string;
+  reason: string;
+};
+export type AssignPendingResult = {
+  assigned: number; stillPending: number; assignedList: PendingAssigned[]; notPlaced: PendingNotPlaced[];
+};
+
+function ddmm(dateISO: string): string {
+  const [, m, d] = dateISO.split("-");
+  return `${d}/${m}`;
 }
+
+/** "Asignar pendientes" (Accesos) — y también en el corte diario: todos de
+ *  una vez, los más antiguos primero, repartidos entre TODAS las cuentas de
+ *  su plataforma con cupo libre. Cada uno va a la cuenta con cupo que vence
+ *  antes pero igual le dura lo suficiente (ver minTargetExpiry): así las
+ *  cuentas más largas quedan para quien las necesita. Los que no entran
+ *  siguen pendientes, con el motivo. */
+export const assignPendingClients = db.transaction((): AssignPendingResult => {
+  const today = limaTodayISO();
+  const result: AssignPendingResult = { assigned: 0, stillPending: 0, assignedList: [], notPlaced: [] };
+  const slotsByPlatform = new Map<string, { id: number; email: string; expiresAt: string | null; free: number }[]>();
+  const pending = [...listPendingAssignments()].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id - y.id);
+
+  for (const pend of pending) {
+    let slots = slotsByPlatform.get(pend.platform);
+    if (!slots) {
+      // Las que vencen antes primero; sin fecha, al final.
+      slots = listPlacementSlots(pend.platform, today)
+        .map(a => ({ id: a.id, email: a.email, expiresAt: a.expiresAt, free: a.freeCount }))
+        .sort((x, y) => (x.expiresAt ?? "9999-12-31").localeCompare(y.expiresAt ?? "9999-12-31") || x.id - y.id);
+      slotsByPlatform.set(pend.platform, slots);
+    }
+    const need = minTargetExpiry(pend.expiresAt);
+    const base = { pendingId: pend.id, platform: pend.platform, clientPhone: pend.clientPhone, wholesalerId: pend.wholesalerId, paidUntil: pend.expiresAt };
+
+    let placed: { id: number; email: string; expiresAt: string | null; free: number } | null = null;
+    for (;;) {
+      const target = slots.find(t => t.free > 0 && (!t.expiresAt || t.expiresAt >= need));
+      if (!target) break;
+      const profileId = assignClientToFreeProfile({
+        accountId: target.id, clientPhone: pend.clientPhone, wholesalerId: pend.wholesalerId, expiresAt: pend.expiresAt,
+      });
+      if (profileId) { target.free--; placed = target; break; }
+      target.free = 0; // ya no le quedaba cupo de verdad
+    }
+
+    if (!placed) {
+      const withRoom = slots.filter(t => t.free > 0);
+      const latest = withRoom.map(t => t.expiresAt ?? "").sort().pop() ?? "";
+      result.notPlaced.push({
+        ...base,
+        reason: withRoom.length === 0
+          ? `No hay cupos libres de ${pend.platform}`
+          : `Las cuentas con cupo de ${pend.platform} vencen el ${ddmm(latest)}; necesita una que dure hasta el ${ddmm(need)} (pagó hasta el ${ddmm(pend.expiresAt)})`,
+      });
+      continue;
+    }
+
+    markPendingAssigned(pend.id, placed.id);
+    notifyNewAccount(pend.clientPhone, pend.wholesalerId, pend.platform, placed.id, pend.expiresAt);
+    result.assignedList.push({ ...base, accountId: placed.id, accountEmail: placed.email, accountExpiresAt: placed.expiresAt });
+  }
+
+  result.assigned = result.assignedList.length;
+  result.stillPending = countPendingAssignments();
+  return result;
+});

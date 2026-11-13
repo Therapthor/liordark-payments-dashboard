@@ -173,12 +173,16 @@
 
   // ── Pendientes de cuenta nueva (Accesos) ──
 
-  async function loadPending() {
+  // keepResult: recién se tocó "Asignar pendientes" — el resumen sigue a la
+  // vista aunque ya no quede nadie pendiente.
+  async function loadPending(keepResult) {
     const panel = document.getElementById("pending-assignments-panel");
     if (!panel) return;
     try {
       const { pending } = await api("/pending-assignments");
-      panel.hidden = pending.length === 0;
+      const status = document.getElementById("pending-assignments-status");
+      if (keepResult !== true) status.hidden = true;
+      panel.hidden = pending.length === 0 && status.hidden;
       document.getElementById("pending-assignments-count").textContent = String(pending.length);
       document.getElementById("pending-assignments-list").innerHTML = pending.map(p => `
         <li class="catalog-item">
@@ -201,6 +205,32 @@
     } catch { /* no crítico */ }
   }
 
+  // Resumen de "Asignar pendientes": quién fue a qué cuenta (agrupado por
+  // cuenta) y, para los que siguen pendientes, por qué.
+  function renderAssignResult(r) {
+    const who = (p) => (p.wholesalerId != null ? "🏪 " : "👤 ") + escapeHtml(p.clientPhone);
+    const parts = [];
+    const assignedList = r.assignedList || [];
+    const notPlaced = r.notPlaced || [];
+    if (assignedList.length > 0) {
+      const byAccount = new Map();
+      for (const a of assignedList) {
+        if (!byAccount.has(a.accountId)) byAccount.set(a.accountId, { ...a, clients: [] });
+        byAccount.get(a.accountId).clients.push(a);
+      }
+      parts.push(`<b>✅ ${assignedList.length} cliente(s) asignados y avisados:</b><ul>` +
+        [...byAccount.values()].map(acc =>
+          `<li>📦 ${escapeHtml(acc.platform)} — ${escapeHtml(acc.accountEmail)}${acc.accountExpiresAt ? ` (vence ${fmtDate(acc.accountExpiresAt)})` : ""}: ` +
+          acc.clients.map(who).join(", ") + `</li>`).join("") + `</ul>`);
+    }
+    if (notPlaced.length > 0) {
+      parts.push(`<b>🕒 Siguen pendientes (${notPlaced.length}):</b><ul>` +
+        notPlaced.map(p => `<li>${who(p)} (${escapeHtml(p.platform)}): ${escapeHtml(p.reason)}.</li>`).join("") + `</ul>`);
+    }
+    if (parts.length === 0) parts.push("No había clientes pendientes.");
+    return parts.join("");
+  }
+
   function initPending() {
     const btn = document.getElementById("pending-assignments-assign-btn");
     if (!btn) return;
@@ -208,12 +238,10 @@
       const status = document.getElementById("pending-assignments-status");
       btn.disabled = true;
       try {
-        const { assigned, stillPending } = await api("/pending-assignments/assign", { method: "POST" });
+        const result = await api("/pending-assignments/assign", { method: "POST" });
+        status.innerHTML = renderAssignResult(result);
         status.hidden = false;
-        status.textContent = assigned > 0
-          ? `✅ ${assigned} cliente(s) asignados y avisados.${stillPending ? ` Faltan ${stillPending}: agrega más cuentas con cupos libres.` : ""}`
-          : "No hay cupos libres que les duren hasta su fecha. Agrega cuentas nuevas y vuelve a intentar.";
-        await loadPending();
+        await loadPending(true);
         loadSummary();
       } catch (err) {
         alert(err.message || "No se pudo asignar.");

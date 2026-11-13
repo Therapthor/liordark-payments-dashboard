@@ -105,13 +105,17 @@ export function createAccount(params: {
   })[0]!;
 }
 
+/** Una línea de "+ Agregar cuentas" ya separada: link de bandeja (fuentes
+ *  de bandeja) o clave 2FA ya validada (fuente 2FA), según el código elegido. */
+export type BulkAccountPair = { email: string; password: string; inboxUrl?: string; totpSecret?: string };
+
 /** Crea varias cuentas de una — formato "correo:contraseña" ya parseado en pares. */
 export function createAccountsBulk(params: {
   platform:    string;
   provider:    string;
   hasProfiles: boolean;
   expiresAt:   string | null;
-  pairs:       { email: string; password: string; inboxUrl?: string }[];
+  pairs:       BulkAccountPair[];
   providerRenewalEnabled?:  boolean;
   providerRenewalCost?:     string;
   providerRenewalCurrency?: string;
@@ -124,9 +128,9 @@ export function createAccountsBulk(params: {
     INSERT INTO access_accounts (
       platform, email, password, provider, has_profiles, expires_at,
       provider_renewal_enabled, provider_renewal_cost, provider_renewal_currency, provider_renewal_next_date,
-      codes_enabled, code_source, code_inbox_url
+      codes_enabled, code_source, code_inbox_url, totp_secret
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertProfile = db.prepare(`
     INSERT INTO access_profiles (account_id, slot_number, profile_name)
@@ -149,7 +153,8 @@ export function createAccountsBulk(params: {
         params.providerRenewalEnabled ? (params.providerRenewalNextDate ?? null) : null,
         params.codeSource ? 1 : 0,
         params.codeSource ?? null,
-        params.codeSource ? (pair.inboxUrl ?? "") : ""
+        params.codeSource ? (pair.inboxUrl ?? "") : "",
+        params.codeSource ? (pair.totpSecret ?? null) : null
       );
       const id = result.lastInsertRowid as number;
       for (let slot = 1; slot <= slots; slot++) {
@@ -961,12 +966,30 @@ export function listAccountsWithFreeProfiles(platform: string, minFree: number, 
   `).all(platform.trim().toUpperCase(), todayISO, minFree) as { id: number; email: string; expiresAt: string | null; freeCount: number }[];
 }
 
+/** Cupos para acomodar a "Pendientes de cuenta nueva": perfiles sin
+ *  cliente que no son stock de un mayorista, en cuentas vigentes de la
+ *  plataforma (al menos uno por cuenta). */
+export function listPlacementSlots(platform: string, todayISO: string):
+  { id: number; email: string; expiresAt: string | null; freeCount: number }[] {
+  return db.prepare(`
+    SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt, COUNT(p.id) AS freeCount
+    FROM access_accounts a
+    JOIN access_profiles p ON p.account_id = a.id AND p.client_phone = '' AND p.wholesaler_id IS NULL
+    WHERE a.platform = ? AND a.has_profiles = 1 AND (a.expires_at IS NULL OR a.expires_at >= ?)
+    GROUP BY a.id
+  `).all(platform.trim().toUpperCase(), todayISO) as { id: number; email: string; expiresAt: string | null; freeCount: number }[];
+}
+
 /** Coloca a un cliente (sin cuenta de origen — ej. un pendiente de cuenta
- *  nueva) en el primer cupo libre de `accountId`, con su propia fecha. */
+ *  nueva) en el primer cupo libre de `accountId` que no sea stock de un
+ *  mayorista (ver listPlacementSlots), con su propia fecha. */
 export const assignClientToFreeProfile = db.transaction((params: {
   accountId: number; clientPhone: string; wholesalerId: number | null; expiresAt: string;
 }): number | null => {
-  const freeProfileId = findFreeProfileId(params.accountId);
+  const row = db.prepare(`
+    SELECT id FROM access_profiles WHERE account_id = ? AND client_phone = '' AND wholesaler_id IS NULL ORDER BY slot_number ASC LIMIT 1
+  `).get(params.accountId) as { id: number } | undefined;
+  const freeProfileId = row ? row.id : null;
   if (!freeProfileId) return null;
   assignProfileClient(freeProfileId, params.clientPhone);
   db.prepare(`
