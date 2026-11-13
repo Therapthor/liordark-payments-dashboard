@@ -911,17 +911,18 @@ button, input {
 .cx-quick-keys { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--cmuted); }
 .cx-quick-keys kbd { font-family: var(--cx-mono); font-size: 11px; font-weight: 700; background: var(--cchip); color: var(--ctext);
   border: 1px solid var(--cx-line); border-radius: 6px; padding: 2px 6px; }
-.cx-quick-field { display: flex; align-items: center; gap: 8px; min-width: 0; background: #120c06; border: 2px solid var(--cx-line);
+.cx-quick-field { display: flex; align-items: center; gap: 8px; min-width: 0; background: var(--cpg); border: 2px solid var(--cx-line);
   border-radius: 14px; padding: 4px 4px 4px 14px; transition: border-color .15s, box-shadow .15s; }
-.cx-quick-field:focus-within { border-color: var(--cx-amber); box-shadow: 0 0 0 4px rgba(255,181,71,.12); }
+.cx-quick-field:focus-within { border-color: var(--cx-amber-2); box-shadow: 0 0 0 4px rgba(255,181,71,.16); }
 .cx-quick-icon { flex: none; font-size: 18px; opacity: .8; }
 .cx-quick-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--ctext);
   font-family: inherit; font-size: 21px; font-weight: 600; padding: 12px 0; }
-.cx-quick-input::placeholder { color: #8a7560; font-weight: 500; }
+.cx-quick-input::placeholder { color: var(--cmuted); font-weight: 500; }
+.cx-quick-field .cx-quick-input { border: 0; border-radius: 0; box-shadow: none; background: transparent; min-height: 0; width: auto; }
 .cx-quick-clear { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--cchip); color: var(--cmuted);
   font-size: 13px; cursor: pointer; }
 .cx-quick-clear:hover { color: var(--ctext); }
-.cx-quick-go { flex: none; background: linear-gradient(135deg, var(--cx-amber), var(--cx-amber-2)); color: #1c140c; border: 0;
+.cx-quick-go { flex: none; background: var(--mp-mango, #ffb547); color: var(--mp-ink, #1c140c); border: 0;
   border-radius: 10px; padding: 13px 20px; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer; }
 .cx-quick-clear:focus-visible, .cx-quick-go:focus-visible, .cx-q-chip:focus-visible { outline: 2px solid var(--cx-amber); outline-offset: 2px; }
 
@@ -943,7 +944,7 @@ button, input {
 
 .cx-quick-result { margin-top: 14px; min-width: 0; }
 .cx-q-card { position: relative; display: flex; flex-direction: column; gap: 14px; min-width: 0; overflow: hidden; padding: 16px 18px 16px 22px;
-  border-radius: 16px; border: 1px solid var(--cx-line); background: radial-gradient(120% 140% at 100% 0%, #3a2814 0%, var(--cpg) 60%); }
+  border-radius: 16px; border: 1px solid var(--cx-line); background: var(--cpg); }
 .cx-q-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--p-other); }
 .cx-q-card.p-netflix::before { background: var(--p-netflix); }
 .cx-q-card.p-disney::before { background: var(--p-disney); }
@@ -980,6 +981,16 @@ button, input {
 @keyframes cxQSpin { to { transform: rotate(360deg); } }
 .cx-q-others { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--cmuted); min-width: 0; }
 .cx-q-others span { margin-right: 2px; }
+/* Gatito de los códigos (css/cat.css): tamaño en cada lugar */
+.cx-q-cat, .codes-banner-cat, .codes-row-cat { --ld-cat-size: 96px; }
+.cx-q-idle { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 2px 4px; }
+.cx-q-idle p { margin: 0; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cx-q-idle strong { font-size: 15px; color: var(--ctext); }
+.cx-q-idle span { font-size: 12.5px; color: var(--cmuted); }
+.codes-row-status { flex-basis: 100%; display: flex; align-items: center; gap: 12px; min-width: 0; margin-top: 2px; padding-top: 8px;
+  border-top: 1px dashed var(--cx-line); }
+.codes-row-status-text { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; font-size: 13px; }
+.codes-row-status-text span { font-size: 12px; color: var(--cmuted); overflow-wrap: anywhere; }
 @media (hover: none) { .cx-quick-keys { display: none; } }
 @media (prefers-reduced-motion: reduce) { .cx-q-spin { animation-duration: 3s; } }
 @media (max-width: 640px) {

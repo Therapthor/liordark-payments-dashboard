@@ -26,6 +26,12 @@
     return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // Gatito de los códigos (js/cat.js): idle, searching, found, sad. Sin él
+  // quedan los íconos de antes.
+  function catHtml(state, cls) {
+    return window.LiordarkCat ? window.LiordarkCat.html(state, cls) : "";
+  }
+
   function fmtDateTime(iso) {
     if (!iso) return "—";
     const d = new Date(iso.includes("Z") || iso.includes("+") ? iso : iso + "Z");
@@ -136,7 +142,7 @@
     banner.hidden = false;
     banner.className = "codes-banner not-found";
     banner.innerHTML = `
-      <span class="codes-banner-icon">✕</span>
+      ${catHtml("idle", "codes-banner-cat") || `<span class="codes-banner-icon">✕</span>`}
       <span class="codes-banner-info">
         <span class="codes-banner-email">No hay cuentas con «${escapeHtml(text)}» en la lista</span>
         <span class="codes-banner-source">La lista muestra solo las cuentas con «Código» habilitado en Accesos.</span>
@@ -163,17 +169,19 @@
     const timerEl = createTimerEl();
     btn.insertAdjacentElement("beforebegin", timerEl);
     const stopTimer = startTimer(timerEl);
+    const icon = banner.querySelector(".ld-cat, .codes-banner-icon");
+    if (icon && window.LiordarkCat) icon.outerHTML = catHtml("searching", "codes-banner-cat");
     try {
       const result = await api("/codes/lookup", { method: "POST", body: JSON.stringify({ email }) });
       banner.hidden = false;
       if (!result.found) {
         banner.className = "codes-banner not-found";
-        banner.innerHTML = `<span class="codes-banner-icon">✕</span><span>No se encontró ningún código reciente para <b>${escapeHtml(email)}</b>.</span>`;
+        banner.innerHTML = `${catHtml("sad", "codes-banner-cat") || `<span class="codes-banner-icon">✕</span>`}<span>No se encontró ningún código reciente para <b>${escapeHtml(email)}</b>.</span>`;
         return;
       }
       banner.className = "codes-banner" + (result.kind === "link" ? " link" : "");
       banner.innerHTML = `
-        <span class="codes-banner-icon">${result.kind === "link" ? "🔗" : "✓"}</span>
+        ${catHtml("found", "codes-banner-cat") || `<span class="codes-banner-icon">${result.kind === "link" ? "🔗" : "✓"}</span>`}
         <span class="codes-banner-info">
           <span class="codes-banner-email">${escapeHtml(email)}</span>
           <span class="codes-banner-source">${escapeHtml(result.sourceLabel || "")}${result.receivedAt ? " · Recibido: " + escapeHtml(result.receivedAt) : ""}</span>
@@ -183,7 +191,8 @@
     } catch (err) {
       banner.hidden = false;
       banner.className = "codes-banner not-found";
-      banner.textContent = err.message || "No se pudo buscar.";
+      if (window.LiordarkCat) banner.innerHTML = `${catHtml("sad", "codes-banner-cat")}<span>${escapeHtml(err.message || "No se pudo buscar.")}</span>`;
+      else banner.textContent = err.message || "No se pudo buscar.";
     } finally {
       stopTimer();
       timerEl.remove();
@@ -320,8 +329,35 @@
       ? cachedAccounts.filter(a => (a.email || "").toLowerCase().includes(searchFilter)
           || (a.platform || "").toLowerCase().includes(searchFilter))
       : cachedAccounts;
-    for (const a of visible) list.appendChild(renderAccountRow(a));
+    for (const a of visible) {
+      const row = renderAccountRow(a);
+      const st = rowStatus.get(a.id);
+      if (st && Date.now() - st.at < ROW_STATUS_MS) row.insertAdjacentHTML("beforeend", rowStatusHtml(st));
+      else rowStatus.delete(a.id);
+      list.appendChild(row);
+    }
     scheduleTotpRefresh();
+  }
+
+  // «Consultar» de una fila: su gatito y lo que pasó, debajo de la fila
+  // (queda 3 min o hasta la próxima consulta). Sin gatito: los avisos de antes.
+  const rowStatus = new Map();
+  const ROW_STATUS_MS = 3 * 60 * 1000;
+
+  function rowStatusHtml(st) {
+    return `<div class="codes-row-status is-${st.state}">${catHtml(st.state, "codes-row-cat")}<div class="codes-row-status-text">${st.html}</div></div>`;
+  }
+
+  function setRowStatus(id, state, html) {
+    if (!window.LiordarkCat) return false;
+    rowStatus.set(id, { state, html, at: Date.now() });
+    const row = document.querySelector(`#codes-accounts-list .codes-account-row[data-id="${id}"]`);
+    if (row) {
+      const old = row.querySelector(".codes-row-status");
+      if (old) old.outerHTML = rowStatusHtml(rowStatus.get(id));
+      else row.insertAdjacentHTML("beforeend", rowStatusHtml(rowStatus.get(id)));
+    }
+    return true;
   }
 
   let loadedOnce = false;
@@ -393,15 +429,25 @@
       const timerEl = createTimerEl();
       btn.insertAdjacentElement("beforebegin", timerEl);
       const stopTimer = startTimer(timerEl);
+      setRowStatus(id, "searching", "<strong>Buscando el código…</strong>");
       try {
         const result = await api("/codes/" + id + "/lookup-now", {
           method: "POST",
           body: JSON.stringify(actionId ? { actionId } : {}),
         });
-        if (!result.found) alert("Todavía no hay código nuevo para esa cuenta.");
+        if (!result.found) {
+          if (!setRowStatus(id, "sad", "<strong>Todavía no hay código nuevo para esa cuenta.</strong><span>Pide el código en la app y vuelve a consultar.</span>")) {
+            alert("Todavía no hay código nuevo para esa cuenta.");
+          }
+        } else {
+          const value = result.approval && safeUrl(result.approval.approveUrl) ? approvalHtml(result.approval) : resultHtml(result.kind, result.value);
+          setRowStatus(id, "found", `<strong>¡Llegó!</strong>${value}`);
+        }
         await load();
       } catch (err) {
-        alert(err.message || "No se pudo consultar.");
+        if (!setRowStatus(id, "sad", `<strong>No se pudo consultar.</strong><span>${escapeHtml(err.message || "")}</span>`)) {
+          alert(err.message || "No se pudo consultar.");
+        }
       } finally {
         stopTimer();
         timerEl.remove();
@@ -676,7 +722,7 @@
     quick.target.account = a;
     quick.state = "totp";
     quick.totpPaused = false;
-    quick.totp = { code: a.totp.code, deadline: loadedAt + a.totp.secondsRemaining * 1000 + 300 };
+    quick.totp = { code: a.totp.code, deadline: loadedAt + a.totp.secondsRemaining * 1000 };
     stopQuickTimer();
     renderQuick();
     quickTimer = setInterval(() => tickTotp(seq), 1000);
@@ -761,8 +807,11 @@
     return codeValueHtml(res.value);
   }
 
-  function statusHtml(kind, title, sub) {
-    const icon = kind === "spin" ? `<span class="cx-q-spin" aria-hidden="true"></span>`
+  // Con gatito: searching mientras busca y sad si no llegó o falló (o el
+  // estado que se pida); sin él, el círculo que gira y los íconos de antes.
+  function statusHtml(kind, title, sub, catState) {
+    const icon = window.LiordarkCat ? catHtml(catState || (kind === "spin" ? "searching" : "sad"), "cx-q-cat")
+      : kind === "spin" ? `<span class="cx-q-spin" aria-hidden="true"></span>`
       : `<span class="cx-q-icon" aria-hidden="true">${kind === "bad" ? "!" : kind === "warn" ? "…" : "?"}</span>`;
     return `<div class="cx-q-status ${kind}">${icon}<div><strong>${title}</strong><span>${sub}</span></div></div>`;
   }
@@ -782,7 +831,7 @@
     const q = quick;
     if (q.state === "hint") {
       return `<article class="cx-q-card is-hint">${q.many
-        ? statusHtml("warn", `Hay varias cuentas con «${escapeHtml(q.text)}»`, "Elige una de la lista con ↑/↓ y Enter.")
+        ? statusHtml("warn", `Hay varias cuentas con «${escapeHtml(q.text)}»`, "Elige una de la lista con ↑/↓ y Enter.", "idle")
         : statusHtml("warn", `Ninguna cuenta guardada tiene «${escapeHtml(q.text)}»`, "Escribe el correo completo para buscarlo en todas las fuentes.")}</article>`;
     }
 
@@ -799,7 +848,7 @@
     } else if (q.state === "totp") {
       const left = totpLeft();
       pill = `<span class="cx-pill new">2FA en vivo</span>`;
-      body = `<div class="cx-q-value">${codeValueHtml(q.totp.code)}
+      body = `<div class="cx-q-value">${catHtml("found", "cx-q-cat")}${codeValueHtml(q.totp.code)}
           <span class="cx-q-totp" aria-hidden="true"><span class="codes-timer" data-q-ring style="--pct:${(left / TOTP_PERIOD_SECONDS) * 100}"><span class="codes-timer-num">${left}s</span></span>
           <span>Cambia en <b data-q-left>${left}</b> s</span></span>
         </div>`;
@@ -810,7 +859,7 @@
       const age = d ? Date.now() - d.getTime() : null;
       pill = age == null ? "" : age > CODE_STALE_MS
         ? `<span class="cx-pill muted">Viejo</span>` : age < 10 * 60 * 1000 ? `<span class="cx-pill new">Nuevo</span>` : "";
-      body = `<div class="cx-q-value">${foundValueHtml(res)}</div>`;
+      body = `<div class="cx-q-value">${catHtml("found", "cx-q-cat")}${foundValueHtml(res)}</div>`;
       meta = `${escapeHtml(res.sourceLabel || (a && a.codeSourceLabel) || "")} · ${ageHtml(res)}`;
       const link = res.approval ? safeUrl(res.approval.approveUrl) : res.kind === "link" ? safeUrl(res.value) : null;
       actions = retry +
@@ -843,7 +892,14 @@
 
   function renderQuick() {
     const box = $("cx-quick-result");
-    if (!quick) { box.hidden = true; box.innerHTML = ""; return; }
+    if (!quick) {
+      // Sin búsqueda todavía: el gatito esperando (sin gatito, nada).
+      box.hidden = !window.LiordarkCat;
+      box.innerHTML = window.LiordarkCat
+        ? `<div class="cx-q-idle">${catHtml("idle", "cx-q-cat")}<p><strong>Pega el correo y presiona Enter.</strong><span>El código sale aquí mismo.</span></p></div>`
+        : "";
+      return;
+    }
     box.hidden = false;
     box.innerHTML = quickCardHtml();
   }
@@ -995,6 +1051,7 @@
       if (ctrl) ctrl.textContent = "⌘";
     }
     renderRecent();
+    renderQuick();
   }
 
   // Al entrar a la vista (app.js → switchView): recientes al día, 2FA
