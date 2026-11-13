@@ -23,6 +23,9 @@
   MP.collapse.register("#wholesalers-tbody .table-actions", { keep: 2, prefer: [".ws-adjust-btn", ".ws-assign-btn"] });
   MP.collapse.register("#wholesalers-queue-tbody td:last-child", { keep: 2 });
 
+  // ── Listas tipo catálogo (Configuración, Renovaciones): 2 a la vista ──
+  MP.collapse.register(".catalog-actions", { keep: 2, prefer: [".provider-renewal-done-btn", ".provider-renewal-renew-btn", "[class*='toggle-btn']", "[class*='edit-btn']"] });
+
   // ── Accesos ──
   MP.collapse.register(".access-account-summary-actions", { keep: 2 });
   MP.collapse.register(".access-account-actions", { keep: 2, prefer: [".access-copy-credentials", ".access-renew-account"] });

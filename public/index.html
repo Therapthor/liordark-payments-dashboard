@@ -611,19 +611,17 @@
       <!-- ═══════════ VISTA: HISTORIAL ═══════════ -->
       <section id="view-history" class="view" hidden>
 
-        <div class="panel-header standalone">
-          <h2>Historial diario</h2>
-          <div class="panel-header-actions">
+        <!-- Barra: números del mes + herramientas («Agregar día pasado» va a la banda) -->
+        <div class="mp-toolbar mp-toolbar-kpis">
+          <div class="mp-kpis">
+            <div class="mp-kpi is-green"><b id="history-month-total">S/ 0.00</b><span>Este mes · <span id="history-month-count">0 pagos</span></span></div>
+            <div class="mp-kpi is-soft"><b id="history-lastmonth-total">S/ 0.00</b><span><span id="history-lastmonth-label">Mes pasado</span> · <span id="history-lastmonth-count">0 pagos</span></span></div>
+          </div>
+          <div class="mp-toolbar-tools">
             <button id="show-months-btn" class="btn-secondary">📊 Histórico</button>
             <button id="add-manual-btn" class="btn-primary" data-mp-primary>+ Agregar día pasado</button>
           </div>
         </div>
-
-        <p class="panel-hint">
-          Este mes: <b id="history-month-total">S/ 0.00</b> · <span id="history-month-count">0 pagos</span>
-          &nbsp;·&nbsp;
-          <span id="history-lastmonth-label">Mes pasado</span>: <b id="history-lastmonth-total">S/ 0.00</b> · <span id="history-lastmonth-count">0 pagos</span>
-        </p>
 
         <div class="panel chart-panel">
           <div class="panel-header">
@@ -654,17 +652,29 @@
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
 
-        <!-- Corte automático de ciclo (ver runRenewalCutover en
-             access.service.ts) — corre solo 1 vez al día (6am), pero
-             queda el disparo manual para una gestión puntual. El aviso de
-             "cambiar contraseña" es lo más urgente: salió un cliente que
-             no renovó y no debe poder volver a entrar con la vieja. -->
-        <div class="panel-header standalone">
-          <h2>Corte de renovación</h2>
-          <button id="renewal-cutover-run-btn" class="btn-secondary btn-sm" type="button">🔁 Procesar ahora</button>
+        <!-- Números de un vistazo (se copian de los contadores de cada sección) -->
+        <div class="mp-kpis" aria-label="Resumen de renovaciones">
+          <div class="mp-kpi is-green"><b data-mp-mirror="full-renewals-count">0</b><span>Renovados</span></div>
+          <div class="mp-kpi is-peach"><b data-mp-mirror="password-change-count">0</b><span>Cambiar clave</span></div>
+          <div class="mp-kpi is-blue"><b data-mp-mirror="renewals-notif-today-sent">0</b><span>Avisos hoy</span></div>
+          <div class="mp-kpi is-soft"><b data-mp-mirror="renewals-notif-today-failed">0</b><span>Fallidos</span></div>
         </div>
-        <p class="panel-hint">Automático a las 6am: saca a quien no renovó en las cuentas que ya confirmaste en "Renovados" (en su fecha de vencimiento original). Ya no suma días solo — eso se confirma en "Renovados".</p>
-        <p id="renewal-cutover-status" class="panel-hint" hidden></p>
+
+        <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
+             se venden al cliente como plan anual pero Liordark las paga
+             mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
+             Va primero: es lo que más importa revisar acá. -->
+        <!-- RENOVADOS — cuentas con perfiles donde algún cliente ya pagó su
+             renovación; la cuenta entera espera la confirmación del admin
+             (ya renovada con el proveedor). Ver public/js/full-renewals.js. -->
+        <div class="panel-header standalone">
+          <h2>Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
+        </div>
+
+        <p class="panel-hint">Cuentas donde algún cliente ya pagó su renovación. 🟢 Conviene renovar = pagó más de la mitad: renuévala con el proveedor y confírmala (+30 días). 🔴 No conviene = la mitad o menos: 1 día antes de vencer, a los que pagaron se los mueve solos a otra cuenta (o quedan en "Pendientes de cuenta nueva", en Accesos).</p>
+
+        <ul id="full-renewals-list" class="catalog-list"></ul>
+        <p id="full-renewals-empty" class="feed-empty" hidden>No hay cuentas esperando confirmación de renovación. 🎉</p>
 
         <div class="panel-header standalone">
           <h2>⚠️ Cuentas por cambiar contraseña</h2>
@@ -673,6 +683,15 @@
         <p class="panel-hint">Se sacó a algún cliente que no renovó — cambia la contraseña para que no pueda volver a entrar.</p>
         <ul id="password-change-list" class="catalog-list"></ul>
         <p id="password-change-empty" class="feed-empty" hidden>Ninguna cuenta pendiente de cambiar contraseña.</p>
+
+        <div class="panel-header standalone">
+          <h2>Renovación con proveedor</h2>
+        </div>
+
+        <p class="panel-hint">Cuentas de Accesos marcadas para recordatorio de pago al proveedor — independiente del vencimiento del cliente. Se activa al crear o editar la cuenta.</p>
+
+        <ul id="provider-renewal-list" class="catalog-list"></ul>
+        <p id="provider-renewal-empty" class="feed-empty" hidden>No hay cuentas marcadas para renovación con proveedor.</p>
 
         <!-- SMS automático (ClickLab/Infobip). Corridas pendientes/hechas
              por día — Hoy (quedaron colgados sin mandar) y Mañana (tanda
@@ -702,30 +721,17 @@
           </div>
         </div>
 
-        <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
-             se venden al cliente como plan anual pero Liordark las paga
-             mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
-             Va primero: es lo que más importa revisar acá. -->
-        <!-- RENOVADOS — cuentas con perfiles donde algún cliente ya pagó su
-             renovación; la cuenta entera espera la confirmación del admin
-             (ya renovada con el proveedor). Ver public/js/full-renewals.js. -->
+        <!-- Corte automático de ciclo (ver runRenewalCutover en
+             access.service.ts) — corre solo 1 vez al día (6am), pero
+             queda el disparo manual para una gestión puntual. El aviso de
+             "cambiar contraseña" es lo más urgente: salió un cliente que
+             no renovó y no debe poder volver a entrar con la vieja. -->
         <div class="panel-header standalone">
-          <h2>Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
+          <h2>Corte de renovación</h2>
+          <button id="renewal-cutover-run-btn" class="btn-secondary btn-sm" type="button">🔁 Procesar ahora</button>
         </div>
-
-        <p class="panel-hint">Cuentas donde algún cliente ya pagó su renovación. 🟢 Conviene renovar = pagó más de la mitad: renuévala con el proveedor y confírmala (+30 días). 🔴 No conviene = la mitad o menos: 1 día antes de vencer, a los que pagaron se los mueve solos a otra cuenta (o quedan en "Pendientes de cuenta nueva", en Accesos).</p>
-
-        <ul id="full-renewals-list" class="catalog-list"></ul>
-        <p id="full-renewals-empty" class="feed-empty" hidden>No hay cuentas esperando confirmación de renovación. 🎉</p>
-
-        <div class="panel-header standalone">
-          <h2>Renovación con proveedor</h2>
-        </div>
-
-        <p class="panel-hint">Cuentas de Accesos marcadas para recordatorio de pago al proveedor — independiente del vencimiento del cliente. Se activa al crear o editar la cuenta.</p>
-
-        <ul id="provider-renewal-list" class="catalog-list"></ul>
-        <p id="provider-renewal-empty" class="feed-empty" hidden>No hay cuentas marcadas para renovación con proveedor.</p>
+        <p class="panel-hint">Automático a las 6am: saca a quien no renovó en las cuentas que ya confirmaste en "Renovados" (en su fecha de vencimiento original). Ya no suma días solo — eso se confirma en "Renovados".</p>
+        <p id="renewal-cutover-status" class="panel-hint" hidden></p>
 
         <div class="panel-header standalone">
           <h2>Renovaciones — avisos enviados</h2>

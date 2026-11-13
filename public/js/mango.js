@@ -822,7 +822,17 @@
     refresh: refreshCollapse,
   };
 
-  MP.onRefresh(() => { markDuplicateTitles(); refreshHints(); refreshCollapse(); });
+  // Números copiados de otro contador: <b data-mp-mirror="id-del-contador">
+  function refreshMirrors() {
+    document.querySelectorAll("[data-mp-mirror]").forEach((el) => {
+      const src = $(el.dataset.mpMirror);
+      const raw = src && !src.hidden ? src.textContent : "";
+      const num = (String(raw).match(/\d+/) || ["0"])[0];
+      if (el.textContent !== num) el.textContent = num;
+    });
+  }
+
+  MP.onRefresh(() => { markDuplicateTitles(); refreshHints(); refreshCollapse(); refreshMirrors(); });
   document.addEventListener("mp:view", () => { closeMenu(false); closePopover(false); syncBandHints(); });
 
   // ─── Aviso corto (toast) para las vistas ───
@@ -841,6 +851,16 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.hidden = true; }, ms);
   };
+
+  // Gráficos (Chart.js): letra y colores de Mango Pro
+  if (window.Chart && window.Chart.defaults) {
+    try {
+      window.Chart.defaults.font.family = '"Nunito Sans", system-ui, -apple-system, sans-serif';
+      window.Chart.defaults.font.weight = "600";
+      window.Chart.defaults.color = "#8A6E4B";
+      window.Chart.defaults.borderColor = "#F5EADA";
+    } catch { /* versión sin defaults editables — no crítico */ }
+  }
 
   // ─── Arranque ───
   app.dataset.mpView = current;

@@ -1070,7 +1070,7 @@
     const canvas = document.getElementById("chart-daily");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const barColors = ordered.map(d => d.date === today ? "#16a34a" : "rgba(22,163,74,0.55)");
+    const barColors = ordered.map(d => d.date === today ? "#1F6B44" : "rgba(31,107,68,0.45)");
 
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
