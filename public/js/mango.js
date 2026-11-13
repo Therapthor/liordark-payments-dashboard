@@ -776,7 +776,12 @@
     const keepN = opts.keep ?? 2;
     let primaryKept = false, kept = 0;
     const toMenu = [];
-    for (const b of visible) {
+    // Las preferidas ocupan primero los lugares visibles; el orden en
+    // pantalla sigue siendo el de siempre.
+    const prefer = opts.prefer || [];
+    const rank = (b) => { const i = prefer.findIndex((sel) => b.matches(sel)); return i === -1 ? prefer.length : i; };
+    const ranked = visible.map((b, i) => ({ b, i })).sort((x, y) => rank(x.b) - rank(y.b) || x.i - y.i).map((x) => x.b);
+    for (const b of ranked) {
       if (isDanger(b) && opts.danger !== "keep") { toMenu.push(b); continue; }
       const isPrimary = b.matches(".btn-primary, .activation-done-btn, [data-mp-main]");
       if (isPrimary && !primaryKept && opts.primary !== false) { primaryKept = true; continue; }
