@@ -5,7 +5,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // ─────────────────────────────────────────────────────────────
 // NOTIFICACIONES DEL CLIENTE (campanita en liordark.com) — cuenta nueva
 // asignada, cuenta renovada, o reporte de soporte atendido. Se escriben
-// desde sellProfile/createAccountFromRenewal (acá mismo, access.repository.ts),
+// desde sellProfile (access.repository.ts),
 // desde renewAccount (access.service.ts) y desde markSupportTicketAttended
 // (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
@@ -51,8 +51,8 @@ function buildSupportResolvedHeadline(platform: string, replaced: boolean): stri
  *  "support_resolved" va DESPUÉS del encabezado fijo (reemplazo o no),
  *  nunca lo reemplaza. En "password_changed" es la contraseña nueva. En
  *  "account_replaced" son los datos completos de la cuenta nueva (correo,
- *  contraseña, perfil, días restantes) — ver notify-replacement en
- *  access.routes.ts, que arma ese bloque; acá solo se le antepone el
+ *  contraseña, perfil, días restantes) — ver notifyActiveSubscribers en
+ *  access.service.ts, que arma ese bloque; acá solo se le antepone el
  *  mismo encabezado fijo de "reemplazo" que usa support_resolved.
  *  replaced: si Soporte usó "Reemplazar" antes de atender este reporte
  *  (ver support.routes.ts). */

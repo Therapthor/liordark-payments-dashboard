@@ -12,7 +12,6 @@ import {
   setProfileRenewal,
   searchAccountsByEmail,
   searchProfilesByPhone,
-  createAccountFromRenewal,
   listProviderRenewalAccounts,
   markProviderRenewalRenewed,
   setRenewalPending,
@@ -254,55 +253,6 @@ router.put("/accounts/:id", (req, res) => {
 router.delete("/accounts/:id", (req, res) => {
   deleteAccount(Number(req.params.id));
   res.json({ ok: true });
-});
-
-// POST /accounts/:id/notify-password-change — "🔑 Cambiar contraseña a
-// todos" (Accesos). La contraseña nueva YA está guardada en la cuenta (se
-// edita aparte, en "✏️ Editar cuenta") — acá solo se avisa a cada perfil
-// ocupado con la que ya tiene la cuenta ahora mismo, por la campanita de
-// notificaciones (nunca por WhatsApp): al cliente retail directo si no es
-// de un mayorista, o al mayorista dueño si el perfil es su stock.
-router.post("/accounts/:id/notify-password-change", (req, res) => {
-  const account = getAccountById(Number(req.params.id));
-  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-
-  const occupied = account.profiles.filter(p => p.clientPhone);
-  for (const p of occupied) {
-    if (p.wholesalerId != null) {
-      createWholesalerNotification(p.wholesalerId, "password_changed", account.platform, account.email, account.password);
-    } else {
-      createCustomerNotification(p.clientPhone, "password_changed", account.platform, account.email, account.password);
-    }
-  }
-
-  res.json({ ok: true, notified: occupied.length });
-});
-
-// POST /accounts/:id/notify-replacement — "🔄 Enviar reemplazo a todos"
-// (Accesos). Mismo criterio que notify-password-change (nunca por
-// WhatsApp, solo por la campanita de notificaciones): la cuenta ya tiene
-// guardado el correo/contraseña nuevos (se edita aparte, en "✏️ Editar
-// cuenta"), acá solo se avisa a cada perfil ocupado con el detalle
-// completo — correo, contraseña, perfil y días restantes.
-router.post("/accounts/:id/notify-replacement", (req, res) => {
-  const account = getAccountById(Number(req.params.id));
-  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-
-  const left = daysLeft(account.expiresAt);
-  const occupied = account.profiles.filter(p => p.clientPhone);
-  for (const p of occupied) {
-    const profileLine = p.profileName ? `\n👤 Perfil: ${p.profileName}` : "";
-    const detail = `📧 Correo: ${account.email}\n🔑 Contraseña: ${account.password}${profileLine}` +
-      (left !== null ? `\n⏳ Días restantes: ${left}` : "") +
-      `\n\nCualquier inconveniente adicional, estamos atentos. 😊`;
-    if (p.wholesalerId != null) {
-      createWholesalerNotification(p.wholesalerId, "account_replaced", account.platform, account.email, detail);
-    } else {
-      createCustomerNotification(p.clientPhone, "account_replaced", account.platform, account.email, detail);
-    }
-  }
-
-  res.json({ ok: true, notified: occupied.length });
 });
 
 // ── PEDIDO (combo) — venta manual de varias plataformas a un solo
@@ -633,25 +583,6 @@ router.post("/accounts/:id/renewal-pending/cancel", (req, res) => {
   const account = setRenewalPending(Number(req.params.id), false);
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   res.json({ account: withStatus(account) });
-});
-
-// Renovación con cuenta nueva — crea una cuenta aparte y le pasa solo los
-// clientes marcados "✅ Renueva" de la vieja. No manda WhatsApp ni toca el
-// bot, solo mueve datos del panel (ver createAccountFromRenewal).
-router.post("/accounts/:id/renew-new", (req, res) => {
-  const { email, password, expiresAt } = req.body ?? {};
-  if (!email?.trim())    { res.status(400).json({ message: "El correo es obligatorio." }); return; }
-  if (!password?.trim()) { res.status(400).json({ message: "La contraseña es obligatoria." }); return; }
-
-  const result = createAccountFromRenewal(Number(req.params.id), {
-    email, password, expiresAt: expiresAt?.trim() || null,
-  });
-  if (!result) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
-
-  res.json({
-    oldAccount: withStatus(result.oldAccount),
-    newAccount: withStatus(result.newAccount),
-  });
 });
 
 // ── PERFILES (solo el teléfono del cliente — el resto vive en la cuenta) ──
