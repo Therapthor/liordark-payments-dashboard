@@ -880,7 +880,10 @@
     timer.className = "codes-timer off";
     timer.textContent = state === "expired" ? "Vencida" : "Cerrada";
     const expired = state === "expired";
-    document.getElementById("codes-closed-icon").textContent = expired ? "⏱" : "✓";
+    // Gatito (js/cat.js): triste si venció, feliz si se cerró bien.
+    const closedIcon = document.getElementById("codes-closed-icon");
+    if (window.LiordarkCat) window.LiordarkCat.set(closedIcon, expired ? "sad" : "idle");
+    else closedIcon.textContent = expired ? "⏱" : "✓";
     document.getElementById("codes-closed-title").textContent = expired ? "Esta consulta ya venció" : "¡Listo!";
     document.getElementById("codes-closed-text").textContent = expired
       ? "Si todavía necesitas el código, vuelve a tocar «Códigos» (abre una consulta nueva)."
