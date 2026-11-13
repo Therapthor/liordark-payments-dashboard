@@ -249,6 +249,28 @@
             </div>
           </header>
 
+          <!-- Búsqueda rápida: pegar el correo + Enter → código (ver codes.js). -->
+          <section class="cx-quick" aria-label="Buscar código por correo">
+            <form id="cx-quick-form" class="cx-quick-form" autocomplete="off" novalidate>
+              <label class="cx-quick-label" for="cx-quick-input">
+                <span>Buscar código</span>
+                <span class="cx-quick-keys">Atajo: <kbd>/</kbd> o <kbd>Ctrl</kbd>+<kbd>K</kbd></span>
+              </label>
+              <div class="cx-quick-field">
+                <span class="cx-quick-icon" aria-hidden="true">🔎</span>
+                <input id="cx-quick-input" class="cx-quick-input" type="text" inputmode="email" autocomplete="off"
+                  autocapitalize="off" spellcheck="false" enterkeyhint="search"
+                  placeholder="Pega el correo y presiona Enter"
+                  role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cx-quick-sugs" />
+                <button type="button" id="cx-quick-clear" class="cx-quick-clear" aria-label="Borrar" hidden>✕</button>
+                <button type="submit" class="cx-quick-go">Buscar</button>
+              </div>
+              <ul id="cx-quick-sugs" class="cx-quick-sugs" role="listbox" aria-label="Cuentas guardadas" hidden></ul>
+            </form>
+            <div id="cx-quick-recent" class="cx-quick-recent" hidden></div>
+            <div id="cx-quick-result" class="cx-quick-result" aria-live="polite" hidden></div>
+          </section>
+
           <div id="cx-health" class="cx-health" aria-label="Estado de cada fuente"></div>
           <article id="cx-hero" class="cx-hero" hidden></article>
 
