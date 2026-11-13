@@ -1,0 +1,148 @@
+/* ═════════════════════════════════════════════════════════════════
+   MANGO PRO — diseño del panel (se carga DESPUÉS de style.css)
+   ─────────────────────────────────────────────────────────────────
+   Este archivo es la base visual de todo el panel:
+     1. Fuentes propias (Outfit para títulos y números, Nunito Sans
+        para el resto) servidas desde /fonts — nada de Google Fonts.
+     2. Tokens (colores, radios, sombras, movimiento). Los tokens viejos
+        de style.css (--accent, --surface…) se reasignan acá, así lo que
+        ya los usaba toma la paleta nueva sin tocar cada regla.
+     3. Reskin de los componentes que comparten todas las vistas.
+     4. El armazón nuevo: barra lateral oscura (PC), banda mango con el
+        título de cada vista, barra de pestañas inferior (celular).
+   Las vistas pueden usar los tokens --mp-* directamente.
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ─── 1. Fuentes (subconjunto latino) ─── */
+@font-face {
+  font-family: "Outfit"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("../fonts/outfit-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Outfit"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("../fonts/outfit-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Outfit"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("../fonts/outfit-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Outfit"; font-style: normal; font-weight: 800; font-display: swap;
+  src: url("../fonts/outfit-800.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Nunito Sans"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("../fonts/nunito-sans-400.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Nunito Sans"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("../fonts/nunito-sans-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Nunito Sans"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("../fonts/nunito-sans-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Nunito Sans"; font-style: normal; font-weight: 800; font-display: swap;
+  src: url("../fonts/nunito-sans-800.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ─── 2. Tokens ─── */
+:root {
+  /* Paleta Mango Pro */
+  --mp-page:        #FFF8EC;
+  --mp-ink:         #2B1B0E;
+  --mp-ink-2:       #6E5638;   /* texto secundario */
+  --mp-muted:       #8A6E4B;
+  --mp-faint:       #B59B78;   /* flechas, íconos apagados */
+  --mp-mango:       #FFC93C;
+  --mp-mango-deep:  #FFB21A;
+  --mp-mango-light: #FFD866;
+  --mp-band-ink:    #6B4A10;   /* texto chico sobre la banda mango */
+  --mp-card:        #FFFFFF;
+  --mp-soft:        #F6EFE4;
+  --mp-soft-2:      #EFE4D2;   /* hover de lo "soft" */
+  --mp-line:        #F0E2C8;
+  --mp-field:       #F3E2C4;   /* borde de inputs */
+  --mp-leaf:        #1F6B44;   /* acción principal */
+  --mp-leaf-dark:   #17573A;
+  --mp-green-bg:    #E3F3E9;
+  --mp-green-ink:   #2E5A41;
+  --mp-warn-bg:     #FFF1D0;
+  --mp-warn-ink:    #8A5A00;
+  --mp-peach-bg:    #FFE4D6;
+  --mp-peach-ink:   #7A3518;
+  --mp-danger:      #E2552B;
+  --mp-danger-ink:  #B42318;
+  --mp-danger-line: #F7D5CB;
+  --mp-sidebar:     #2B1B0E;
+  --mp-sidebar-ink: #E8D6BC;
+
+  --mp-shadow:    0 16px 32px -20px rgba(43, 27, 14, 0.55);
+  --mp-shadow-sm: 0 10px 24px -20px rgba(43, 27, 14, 0.6);
+  --mp-shadow-pop: 0 24px 48px -18px rgba(43, 27, 14, 0.45), 0 2px 6px rgba(43, 27, 14, 0.06);
+
+  --mp-r-card: 24px;
+  --mp-r-card-lg: 26px;
+  --mp-r-item: 16px;
+  --mp-r-btn: 14px;
+  --mp-r-btn-sm: 11px;
+  --mp-r-input: 12px;
+
+  --mp-font: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mp-display: "Outfit", "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Movimiento: corto y suave (ease-out), solo transform/opacity */
+  --mp-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --mp-dur: 200ms;
+  --mp-dur-fast: 150ms;
+  --mp-dur-slow: 250ms;
+
+  --mp-sidebar-w: 248px;
+  --mp-gutter: 40px;          /* margen lateral del contenido (PC) */
+  --mp-overlap: 78px;         /* cuánto sube el primer bloque sobre la banda */
+
+  /* Tokens viejos de style.css → paleta nueva */
+  --page:           var(--mp-page);
+  --surface:        var(--mp-card);
+  --surface-raised: var(--mp-soft);
+  --border:         var(--mp-line);
+  --gridline:       #F5EADA;
+  --text-primary:   var(--mp-ink);
+  --text-secondary: var(--mp-ink-2);
+  --text-muted:     var(--mp-muted);
+  --accent:         var(--mp-mango);
+  --accent-dim:     var(--mp-mango-deep);
+  --on-accent:      var(--mp-ink);
+  --good:           var(--mp-leaf);
+  --warning:        var(--mp-warn-ink);
+  --serious:        var(--mp-danger);
+  --critical:       var(--mp-danger-ink);
+  --radius-sm:      12px;
+  --radius-md:      20px;
+  --radius-lg:      26px;
+  --font:           var(--mp-font);
+  --card:           var(--mp-card);
+}
+
+html, body {
+  background: var(--mp-page);
+  color: var(--mp-ink);
+  font-family: var(--mp-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+button, input, select, textarea { font-family: inherit; }
+h1, h2, h3, h4 { font-family: var(--mp-display); letter-spacing: -0.01em; }
+a { color: var(--mp-leaf); }
+a:hover { color: #14502F; }
+::selection { background: #FFE39A; color: var(--mp-ink); }
