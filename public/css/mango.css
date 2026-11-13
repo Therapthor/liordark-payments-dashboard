@@ -1111,3 +1111,232 @@ button.mp-more-item:active { background: var(--mp-page); }
 
 /* Elementos que solo existen en el celular */
 .mp-tabbar, .mp-seg.mp-pagos-seg { display: none; }
+
+/* ═════════════════════════════════════════════════════════════════
+   5. CELULAR (< 900 px) — iPhone 15 Pro 393 × 852
+   Nada se sale de ancho: sin scroll horizontal en ninguna vista.
+   ═════════════════════════════════════════════════════════════════ */
+@media (max-width: 899px) {
+  :root { --mp-gutter: 16px; --mp-overlap: 58px; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  @supports (overflow-x: clip) { html, body { overflow-x: clip; } }
+  .app:not([hidden]) { display: block; }
+  .mp-sidebar { display: none; }
+
+  /* Banda: «L», fecha · estado del bot, título y 👁 */
+  .mp-band {
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(var(--mp-overlap) + 18px);
+    border-radius: 0 0 32px 32px;
+  }
+  .mp-band-blob--a { width: 170px; height: 170px; right: -56px; top: -76px; }
+  .mp-band-blob--b { display: none; }
+  .mp-band-row { flex-wrap: nowrap; gap: 10px; }
+  .mp-band-logo {
+    display: flex;
+    width: 42px; height: 42px; flex: none;
+    border-radius: 50%;
+    background: #fff;
+    align-items: center; justify-content: center;
+    font-family: var(--mp-display); font-weight: 800; font-size: 18px;
+  }
+  .mp-band-text { flex: 1 1 auto; }
+  .mp-eyebrow { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mp-title { font-size: 20px; }
+  .mp-title > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mp-band-actions { gap: 8px; }
+  .mp-band-actions .icon-btn { width: 44px; height: 44px; }
+  #sound-toggle, #logout-btn { display: none; }
+
+  /* Acción principal de la vista = botón flotante sobre las pestañas */
+  .mp-band-primary {
+    position: fixed;
+    right: 16px;
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    z-index: 55;
+  }
+  .mp-band-primary > .btn-primary {
+    min-height: 52px;
+    padding: 0 22px;
+    border-radius: 999px;
+    font-size: 15.5px;
+    box-shadow: 0 16px 30px -12px rgba(23, 87, 58, 0.8), 0 2px 6px rgba(23, 87, 58, 0.25);
+  }
+
+  .content { padding: 0 16px calc(120px + env(safe-area-inset-bottom)); }
+  .app:has(.mp-band-primary.mp-has-primary) .content { padding-bottom: calc(184px + env(safe-area-inset-bottom)); }
+
+  /* Barra de pestañas fija (oscura, con margen y zona segura) */
+  .mp-tabbar {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    position: fixed;
+    left: 12px; right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    z-index: 60;
+    padding: 8px;
+    border-radius: 24px;
+    background: var(--mp-ink);
+    box-shadow: 0 18px 40px -16px rgba(43, 27, 14, 0.75);
+  }
+  .mp-tab {
+    position: relative;
+    min-width: 0;
+    min-height: 52px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    padding: 6px 0;
+    border: none;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--mp-sidebar-ink);
+    font-family: var(--mp-font);
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color var(--mp-dur) var(--mp-ease), color var(--mp-dur) var(--mp-ease), transform var(--mp-dur-fast) var(--mp-ease);
+  }
+  .mp-tab:active { transform: scale(0.94); }
+  .mp-tab > span:not(.mp-tab-badge) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mp-tab.active,
+  .mp-tab-more[aria-expanded="true"],
+  .app:is([data-mp-view="soportes"], [data-mp-view="wholesalers"], [data-mp-view="web-customers"], [data-mp-view="course"], [data-mp-view="config"]) .mp-tab-more { background: var(--mp-mango); color: var(--mp-ink); }
+  .app.mp-more-open .mp-tab.active:not(.mp-tab-more) { background: transparent; color: var(--mp-sidebar-ink); }
+  .mp-tab-badge {
+    position: absolute;
+    top: 2px; left: 50%;
+    margin-left: 7px;
+    min-width: 18px; height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--mp-danger);
+    color: #fff;
+    font-size: 10.5px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 2px var(--mp-ink);
+  }
+
+  /* Pagos: Historial | Renovaciones */
+  .app:is([data-mp-view="history"], [data-mp-view="renewals"]):not(.mp-more-open) .mp-seg.mp-pagos-seg { display: flex; width: 100%; margin-bottom: 14px; }
+
+  /* Pantalla «Más» */
+  .app.mp-more-open .content > .view,
+  .app.mp-more-open .content > .mp-seg { display: none !important; }
+  .app.mp-more-open .mp-band { padding-bottom: 18px; }
+  .app.mp-more-open .content { margin-top: 0; padding-top: 14px; }
+
+  /* Campos: 16 px para que el iPhone no haga zoom; dedo cómodo (44 px) */
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select, textarea) {
+    min-height: 46px;
+    font-size: 16px;
+    max-width: 100%;
+  }
+  .btn-primary, .btn-secondary, .btn-danger, .btn-mango { min-height: 44px; white-space: normal; max-width: 100%; }
+  .btn-sm { min-height: 40px; }
+  /* Botones chicos: el dibujo es chico, la zona para el dedo llega a 44 px */
+  :is(.row-action, .icon-btn-sm, .row-renewal, .modal-x, .btn-sm, .config-subnav-item, .cx-tab)::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+  }
+  :is(.btn-sm, .config-subnav-item, .cx-tab, .modal-x) { position: relative; }
+
+  /* Tarjetas compactas */
+  .panel { padding: 16px; border-radius: 22px; }
+  .panel-grid, .resumen-top-grid, .resumen-ops-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .panel-header.standalone { margin: 22px 0 10px; }
+  .panel-header.standalone h2 { font-size: 19px; }
+  .stat-value { font-size: 34px; }
+  .feed-list { max-height: none; }
+  .feed-search { flex-wrap: wrap; }
+  .feed-search input { flex: 1 1 160px; width: auto; min-width: 0; }
+  .feed-search select { margin-left: 0; flex: 1 1 140px; }
+  .feed-item { flex-wrap: wrap; }
+  .feed-main { flex: 1 1 0; }
+  .pending-order-actions { flex-basis: 100%; justify-content: flex-end; }
+  .catalog-item { flex-wrap: wrap; }
+  .catalog-desc { white-space: normal; max-width: 100%; }
+  .access-platforms { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .access-search { min-width: 0; max-width: none; }
+  .web-customer-row, .sms-day-row, .sec-session { flex-wrap: wrap; }
+
+  /* Selectores segmentados: una sola fila que se desliza por dentro */
+  .config-subnav, .cx-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .config-subnav::-webkit-scrollbar, .cx-tabs::-webkit-scrollbar { display: none; }
+  .config-subnav-item, .cx-tab { flex: 0 0 auto; scroll-snap-align: start; }
+
+  /* Tablas → tarjetas (cada celda con su etiqueta; mango.js pone data-label) */
+  .history-table, .access-table { display: block; width: 100%; margin-top: 0; white-space: normal; overflow: visible; }
+  .history-table thead, .access-table thead { display: none; }
+  .history-table tbody, .access-table tbody { display: flex; flex-direction: column; gap: 8px; }
+  .history-table tr, .access-table tr {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--mp-page);
+  }
+  .history-table td, .access-table td {
+    display: block;
+    flex: 1 1 40%;
+    min-width: 0;
+    padding: 0;
+    background: transparent !important;
+    border-radius: 0 !important;
+    overflow-wrap: anywhere;
+  }
+  .history-table td[data-label]::before, .access-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--mp-muted);
+  }
+  .history-table td:not([data-label]), .access-table td:not([data-label]) { flex-basis: 100%; }
+  .history-table tr:hover td { background: transparent; }
+
+  /* Modales → hojas desde abajo, con asa */
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal-card, .modal-card--wide, .modal-card--xwide, .support-attend-card, .support-replace-card {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 40px);
+    padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+    border-radius: 28px 28px 0 0;
+    box-shadow: 0 -18px 40px -24px rgba(43, 27, 14, 0.7);
+  }
+  .modal-card::before {
+    content: "";
+    display: block;
+    flex: none;
+    width: 40px; height: 5px;
+    margin: 0 auto 4px;
+    border-radius: 3px;
+    background: #D9C6A8;
+  }
+  .modal-backdrop:not([hidden]) > .modal-card { animation: mp-sheet-in var(--mp-dur-slow) var(--mp-ease) both; }
+  .modal-x { top: 22px; right: 16px; }
+  .modal-actions {
+    position: sticky;
+    bottom: calc(-20px - env(safe-area-inset-bottom));
+    margin: 4px -16px calc(-20px - env(safe-area-inset-bottom));
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+    background: linear-gradient(to bottom, rgba(255, 248, 236, 0), var(--mp-page) 14px);
+    flex-wrap: nowrap;
+  }
+  .modal-actions > :is(button, a) { flex: 1 1 0; min-width: 0; }
+
+  .soporte-toast, .mp-toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+  /* Códigos */
+  .cx-head { margin-bottom: 12px; }
+  .cx-health { grid-template-columns: minmax(0, 1fr); }
+  .cx-hero-main { gap: 14px; }
+  .cx-code.big { font-size: 38px; letter-spacing: 0.12em; padding: 8px 14px; }
+}

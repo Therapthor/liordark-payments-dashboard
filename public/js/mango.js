@@ -291,6 +291,41 @@
   }
   MP.animateIn = animateIn;
 
+  // ─── Cambios en el DOM: lo que las vistas pintan después ───
+  // Cada «refresher» es idempotente; se corren juntos una vez por cuadro.
+  const refreshers = [];
+  let refreshQueued = false;
+  function scheduleRefresh() {
+    if (refreshQueued) return;
+    refreshQueued = true;
+    requestAnimationFrame(() => {
+      refreshQueued = false;
+      for (const fn of refreshers) {
+        try { fn(); } catch (err) { console.error("[mango]", err); }
+      }
+    });
+  }
+  MP.onRefresh = (fn) => { refreshers.push(fn); scheduleRefresh(); };
+  MP.refresh = scheduleRefresh;
+  new MutationObserver(scheduleRefresh).observe(document.body, { childList: true, subtree: true });
+
+  // ─── Tablas: etiqueta de columna para verlas como tarjetas en el celular ───
+  function labelTables() {
+    document.querySelectorAll("table.history-table, table.access-table").forEach((table) => {
+      const heads = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim());
+      if (!heads.length) return;
+      table.querySelectorAll("tbody tr").forEach((tr) => {
+        let col = 0;
+        for (const td of tr.children) {
+          const label = heads[col];
+          if (label && td.colSpan === 1 && td.getAttribute("data-label") !== label) td.setAttribute("data-label", label);
+          col += td.colSpan || 1;
+        }
+      });
+    });
+  }
+  MP.onRefresh(labelTables);
+
   // ─── Arranque ───
   app.dataset.mpView = current;
   adoptPrimaries();
