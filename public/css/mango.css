@@ -1927,3 +1927,33 @@ button.mp-kpi:active { transform: scale(0.98); }
 .sl-label { font-weight: 800; }
 .sl-preview { border-color: var(--mp-line); border-radius: 14px; background: var(--mp-page); }
 .sec-password-form input { border: 2px solid var(--mp-field); border-radius: var(--mp-r-input); }
+
+/* Primer encabezado de una vista (si quedó con herramientas): tarjeta flotante */
+.view > .panel-header.standalone:first-child:not(.mp-empty-head) {
+  margin: 0 0 18px;
+  padding: 12px;
+  border-radius: var(--mp-r-card-lg);
+  background: var(--mp-card);
+  box-shadow: var(--mp-shadow);
+}
+.view > .panel-header.standalone:first-child:not(.mp-empty-head) > h2:not(.mp-dup-title) { padding-left: 6px; }
+
+/* ─── Curso ─── */
+.crs-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0 0 18px; }
+.crs-stats .panel { min-height: 74px; padding: 12px 16px; border-radius: 18px; box-shadow: none; background: var(--mp-soft); display: flex; flex-direction: column; justify-content: center; }
+.crs-stats .panel:nth-child(1) { background: #E1E9FF; }
+.crs-stats .panel:nth-child(2), .crs-stats .panel:nth-child(4) { background: var(--mp-green-bg); }
+.crs-stats .panel:nth-child(3) { background: var(--mp-warn-bg); }
+.crs-stats .stat-label { order: 2; margin: 0; font-size: 12.5px; color: var(--mp-ink-2); }
+.crs-stats .stat-value { order: 1; font-size: 24px; }
+.crs-stats .stat-sub { display: none; }
+.crs-publish { margin-top: 0; }
+.crs-block { margin-top: 16px; }
+@media (max-width: 899px) {
+  .crs-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .crs-stats .panel { min-height: 62px; padding: 10px; }
+  .crs-stats .stat-value { font-size: 18px; overflow-wrap: anywhere; }
+  .crs-stats .stat-label { font-size: 11.5px; }
+  .crs-cue .lbl { min-width: 0; flex: 1 1 100%; }
+  .crs-row input[style*="width:170px"] { width: 100% !important; }
+}
