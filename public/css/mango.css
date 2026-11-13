@@ -671,7 +671,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .modal-x:hover { background: var(--mp-soft-2); color: var(--mp-ink); }
-.modal-head .modal-x { position: static; flex: none; }
+.modal-head .modal-x { position: relative; top: auto; right: auto; flex: none; }
 .support-attend-head, .support-replace-title { margin-right: 52px; }
 .modal-card label { gap: 6px; font-size: 13px; font-weight: 800; color: var(--mp-ink); }
 .modal-card label .text-muted { font-weight: 700; color: var(--mp-muted); }
@@ -1238,7 +1238,7 @@ button.mp-more-item:active { background: var(--mp-page); }
     position: absolute;
     inset: -5px;
   }
-  :is(.btn-sm, .config-subnav-item, .cx-tab, .modal-x) { position: relative; }
+  :is(.row-action, .icon-btn-sm, .row-renewal, .btn-sm, .config-subnav-item, .cx-tab) { position: relative; }
 
   /* Tarjetas compactas */
   .panel { padding: 16px; border-radius: 22px; }
