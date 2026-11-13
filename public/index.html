@@ -366,24 +366,9 @@
 
         <p class="panel-hint">Cuentas con saldo prepagado que compran perfiles y cuentas completas con descuento. Se dan de alta solo desde acá — nunca se autoregistran.</p>
 
-        <div class="panel">
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>Celular</th>
-                <th>Nombre</th>
-                <th>Saldo</th>
-                <th>Estado</th>
-                <th>Última actividad</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="wholesalers-tbody"></tbody>
-          </table>
-        </div>
-        <p id="wholesalers-empty" class="feed-empty" hidden>Todavía no hay mayoristas dados de alta.</p>
+        <div class="mp-kpis" id="wholesalers-kpis" aria-label="Resumen de mayoristas"></div>
 
-        <div class="panel-header standalone" style="margin-top: 28px;">
+        <div class="panel-header standalone">
           <h2>📦 Cola de cuentas completas</h2>
         </div>
 
@@ -406,6 +391,27 @@
           </table>
         </div>
         <p id="wholesalers-queue-empty" class="feed-empty" hidden>No hay pedidos de cuenta completa pendientes.</p>
+
+        <div class="panel-header standalone">
+          <h2>🏪 Mayoristas dados de alta</h2>
+        </div>
+
+        <div class="panel">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Celular</th>
+                <th>Nombre</th>
+                <th>Saldo</th>
+                <th>Estado</th>
+                <th>Última actividad</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="wholesalers-tbody"></tbody>
+          </table>
+        </div>
+        <p id="wholesalers-empty" class="feed-empty" hidden>Todavía no hay mayoristas dados de alta.</p>
 
       </section>
 

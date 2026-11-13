@@ -19,6 +19,10 @@
   // ── Clientes: 2 acciones a la vista; Banear / Fraude / resto en «⋯» ──
   MP.collapse.register(".web-customer-actions", { keep: 2 });
 
+  // ── Mayoristas: «Ajustar saldo» y «Asignar cuenta» a la vista ──
+  MP.collapse.register("#wholesalers-tbody .table-actions", { keep: 2, prefer: [".ws-adjust-btn", ".ws-assign-btn"] });
+  MP.collapse.register("#wholesalers-queue-tbody td:last-child", { keep: 2 });
+
   // ── Accesos ──
   MP.collapse.register(".access-account-summary-actions", { keep: 2 });
   MP.collapse.register(".access-account-actions", { keep: 2, prefer: [".access-copy-credentials", ".access-renew-account"] });

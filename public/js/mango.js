@@ -718,7 +718,7 @@
   //   vista 1 principal + 2 secundarias y pasa el resto al «⋯». Lo que
   //   borra o libera (Eliminar, Liberar, Banear…) va siempre al menú, en rojo.
   // ═══════════════════════════════════════════════════════════════
-  const DANGER_RE = /(^|[^a-záéíóúñ])(eliminar|borrar|liberar|banear|desactivar|dar de baja|resetear contraseña)/i;
+  const DANGER_RE = /(^|[^a-záéíóúñ])(eliminar|borrar|liberar|banear|desactivar|deshabilitar|dar de baja|resetear contraseña)/i;
   function isDanger(el) {
     if (el.matches(".btn-danger, .access-delete-account, .client-release-profile, .row-delete-btn, [data-mp-danger]")) return true;
     const act = el.dataset.act || "";
