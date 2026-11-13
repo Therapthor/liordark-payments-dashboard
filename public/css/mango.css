@@ -1912,9 +1912,12 @@ button.mp-kpi:active { transform: scale(0.98); }
   .mp-toolbar-kpis .mp-kpi > b { font-size: 19px; }
 }
 @media (max-width: 899px) {
-  .catalog-item > .catalog-actions { flex: 1 1 100%; min-width: 0; justify-content: flex-start; }
+  .catalog-item { align-items: center; }
+  .catalog-main { flex: 1 1 calc(100% - 60px); }
+  .catalog-item:has(> .catalog-thumb) > .catalog-price { margin-left: 58px; }
+  .catalog-price { flex: 1 1 auto; text-align: left; }
+  .catalog-item > .catalog-actions { flex: 0 1 auto; max-width: 100%; min-width: 0; margin-left: auto; justify-content: flex-end; }
   .catalog-actions > * { min-width: 0; max-width: 100%; }
-  .catalog-main { flex: 1 1 0; }
 }
 
 /* Restos del tema naranja viejo → Mango */
@@ -1956,4 +1959,16 @@ button.mp-kpi:active { transform: scale(0.98); }
   .crs-stats .stat-label { font-size: 11.5px; }
   .crs-cue .lbl { min-width: 0; flex: 1 1 100%; }
   .crs-row input[style*="width:170px"] { width: 100% !important; }
+}
+
+/* ─── Configuración ─── */
+#view-config > .config-subnav { margin-bottom: 54px; }
+.config-section > .panel-header.standalone:first-child { margin-top: 0; }
+.catalog-combos-header { margin-top: 30px; }
+.catalog-item .catalog-main { min-width: 0; }
+#config-section-security .panel { margin-bottom: 16px; }
+@media (max-width: 899px) {
+  #view-config > .config-subnav { margin-bottom: 26px; }
+  .catalog-item { gap: 10px 12px; padding: 12px; }
+  .catalog-price { text-align: left; }
 }
