@@ -30,67 +30,89 @@
   <!-- ───────────── APP ───────────── -->
   <div id="app" class="app" hidden>
 
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-icon">💸</span>
-        <span class="brand-name">Liordark</span>
+    <!-- ═══ Armazón Mango Pro — barra lateral oscura (PC) ═══
+         Los ids de siempre (pagos-toggle, insignias, conn-indicator,
+         connector-*, stock-alert-*) viven acá; mango.js los refleja en la
+         banda y en la pantalla «Más» del celular. -->
+    <aside class="mp-sidebar" aria-label="Menú principal">
+      <div class="mp-brand">
+        <span class="mp-brand-logo" aria-hidden="true">L</span>
+        <div class="mp-brand-text">
+          <span class="mp-brand-name">Liordark</span>
+          <span class="mp-brand-tag">Panel admin</span>
+        </div>
       </div>
 
-      <nav class="tabs">
-        <button class="tab-btn active" data-view="resumen">Resumen</button>
-        <div class="tab-dropdown" id="pagos-dropdown">
-          <button class="tab-btn tab-dropdown-toggle" id="pagos-toggle" type="button">
-            Pagos <span class="tab-dropdown-caret">▾</span>
-          </button>
-          <div class="tab-dropdown-menu" id="pagos-menu" hidden>
-            <button class="tab-dropdown-item" data-view="history">Historial</button>
-            <button class="tab-dropdown-item" data-view="renewals">Renovaciones</button>
+      <nav class="tabs mp-nav" aria-label="Secciones">
+        <button class="tab-btn mp-nav-item active" data-view="resumen" type="button" aria-current="page"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="mp-nav-label">Resumen</span></button>
+        <div class="tab-dropdown mp-nav-group" id="pagos-dropdown">
+          <button class="tab-btn tab-dropdown-toggle mp-nav-item" id="pagos-toggle" data-view="pagos" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/></svg><span class="mp-nav-label">Pagos</span></button>
+          <div class="mp-nav-sub" id="pagos-menu" role="group" aria-label="Pagos">
+            <button class="tab-dropdown-item mp-nav-subitem" data-view="history" type="button">Historial</button>
+            <button class="tab-dropdown-item mp-nav-subitem" data-view="renewals" type="button">Renovaciones</button>
           </div>
         </div>
-        <button class="tab-btn" data-view="access">Accesos</button>
-        <button class="tab-btn" data-view="codes">Códigos</button>
-        <button class="tab-btn" data-view="wholesalers">Mayoristas <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
-        <button class="tab-btn" data-view="web-customers">Clientes</button>
-        <button class="tab-btn" data-view="course">Curso</button>
-        <button class="tab-btn" data-view="config">Configuración</button>
-        <button class="tab-btn" data-view="soportes">Soportes <span class="tab-badge-alert" id="soportes-badge" hidden>0</span></button>
+        <button class="tab-btn mp-nav-item" data-view="access" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg><span class="mp-nav-label">Accesos</span></button>
+        <button class="tab-btn mp-nav-item" data-view="codes" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg><span class="mp-nav-label">Códigos</span></button>
+        <button class="tab-btn mp-nav-item" data-view="wholesalers" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 4.5 4h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/></svg><span class="mp-nav-label">Mayoristas</span> <span class="tab-badge-alert" id="wholesalers-pending-badge" hidden>0</span></button>
+        <button class="tab-btn mp-nav-item" data-view="web-customers" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.2A6.5 6.5 0 0 1 21.5 20"/></svg><span class="mp-nav-label">Clientes</span></button>
+        <button class="tab-btn mp-nav-item" data-view="course" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg><span class="mp-nav-label">Curso</span></button>
+        <button class="tab-btn mp-nav-item" data-view="config" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span class="mp-nav-label">Configuración</span></button>
+        <button class="tab-btn mp-nav-item" data-view="soportes" type="button"><svg class="mp-ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="m5.6 5.6 3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></svg><span class="mp-nav-label">Soportes</span> <span class="tab-badge-alert" id="soportes-badge" hidden>0</span></button>
       </nav>
 
-      <div class="topbar-actions">
+      <!-- Estado: conexión en vivo, bot, Cloudinary y plataformas sin stock -->
+      <div class="mp-status" id="mp-status" aria-label="Estado de las conexiones">
         <span id="conn-indicator" class="conn-indicator conn-connecting" title="Conectando...">
           <span class="conn-dot"></span> Conectando…
         </span>
-        <button id="money-toggle" class="icon-btn" title="Ocultar/mostrar montos">👁</button>
-        <button id="sound-toggle" class="icon-btn" title="Sonido de notificaciones">🔔</button>
-        <button id="logout-btn" class="icon-btn" title="Cerrar sesión">⏻</button>
+        <div class="dock-row">
+          <span id="connector-dot-bot" class="connector-dot"></span>
+          <span class="dock-label">Bot</span>
+          <span id="connector-state-bot" class="dock-state">Conectando…</span>
+        </div>
+        <div class="dock-row">
+          <span id="connector-dot-cloudinary" class="connector-dot"></span>
+          <span class="dock-label">Cloudinary</span>
+          <span id="connector-state-cloudinary" class="dock-state">Verificando…</span>
+        </div>
+        <div class="mp-status-stock">
+          <ul id="stock-alert-list" class="dock-stock-list"></ul>
+          <p id="stock-alert-ok" class="dock-stock-ok" hidden>Stock OK ✅</p>
+        </div>
       </div>
-    </header>
+    </aside>
 
-    <main class="content">
+    <div class="mp-main">
+      <!-- Banda mango: fecha/estado, título de la vista, acción principal y 👁 🔔 ⏻ -->
+      <header class="mp-band" id="mp-band">
+        <span class="mp-band-blob mp-band-blob--a" aria-hidden="true"></span>
+        <span class="mp-band-blob mp-band-blob--b" aria-hidden="true"></span>
+        <div class="mp-band-row">
+          <span class="mp-band-logo" aria-hidden="true">L</span>
+          <div class="mp-band-text">
+            <p class="mp-eyebrow" id="mp-eyebrow">&nbsp;</p>
+            <h1 class="mp-title"><span id="mp-title">Resumen</span></h1>
+          </div>
+          <div class="mp-band-primary" id="mp-band-primary"></div>
+          <div class="topbar-actions mp-band-actions">
+            <button id="money-toggle" class="icon-btn" type="button" title="Ocultar/mostrar montos">👁</button>
+            <button id="sound-toggle" class="icon-btn" type="button" title="Sonido de notificaciones">🔔</button>
+            <button id="logout-btn" class="icon-btn" type="button" title="Cerrar sesión">⏻</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="content">
+        <!-- Celular: Pagos = Historial | Renovaciones -->
+        <div class="mp-seg mp-pagos-seg" role="group" aria-label="Pagos">
+          <button type="button" class="mp-seg-item" data-view="history">Historial</button>
+          <button type="button" class="mp-seg-item" data-view="renewals">Renovaciones</button>
+        </div>
 
       <!-- ═══════════ VISTA: RESUMEN ═══════════ -->
       <section id="view-live" class="view">
 
-        <!-- Estado de conectores + stock — flotante, minimal, esquina inferior izquierda. -->
-        <div class="resumen-dock">
-          <div class="dock-card">
-            <div class="dock-row">
-              <span id="connector-dot-bot" class="connector-dot"></span>
-              <span class="dock-label">Bot</span>
-              <span id="connector-state-bot" class="dock-state">Conectando…</span>
-            </div>
-            <div class="dock-row">
-              <span id="connector-dot-cloudinary" class="connector-dot"></span>
-              <span class="dock-label">Cloudinary</span>
-              <span id="connector-state-cloudinary" class="dock-state">Verificando…</span>
-            </div>
-          </div>
-
-          <div class="dock-card dock-stock">
-            <ul id="stock-alert-list" class="dock-stock-list"></ul>
-            <p id="stock-alert-ok" class="dock-stock-ok" hidden>Stock OK ✅</p>
-          </div>
-        </div>
 
         <!-- ── GANANCIAS DE HOY + ACCIÓN RÁPIDA ── -->
         <div class="panel-grid resumen-top-grid">
@@ -192,7 +214,7 @@
           <button id="access-renewing-btn" class="btn-secondary">🔁 Renovados</button>
           <button id="access-renewal-history-btn" class="btn-secondary">📋 Registro</button>
           <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
-          <button id="access-new-account-btn" class="btn-primary">+ Agregar cuentas</button>
+          <button id="access-new-account-btn" class="btn-primary" data-mp-primary>+ Agregar cuentas</button>
         </div>
 
         <!-- PENDIENTES DE CUENTA NUEVA — clientes que pagaron su renovación
@@ -337,7 +359,7 @@
 
         <div class="panel-header standalone">
           <h2>Mayoristas</h2>
-          <button id="wholesaler-new-btn" class="btn-primary">+ Nuevo mayorista</button>
+          <button id="wholesaler-new-btn" class="btn-primary" data-mp-primary>+ Nuevo mayorista</button>
         </div>
 
         <p class="panel-hint">Cuentas con saldo prepagado que compran perfiles y cuentas completas con descuento. Se dan de alta solo desde acá — nunca se autoregistran.</p>
@@ -588,7 +610,7 @@
           <h2>Historial diario</h2>
           <div class="panel-header-actions">
             <button id="show-months-btn" class="btn-secondary">📊 Histórico</button>
-            <button id="add-manual-btn" class="btn-primary">+ Agregar día pasado</button>
+            <button id="add-manual-btn" class="btn-primary" data-mp-primary>+ Agregar día pasado</button>
           </div>
         </div>
 
@@ -777,7 +799,7 @@
 
           <div class="panel-header standalone">
             <h2>Catálogo</h2>
-            <button id="catalog-new-btn" class="btn-primary">+ Agregar producto</button>
+            <button id="catalog-new-btn" class="btn-primary" data-mp-primary>+ Agregar producto</button>
           </div>
 
           <p class="panel-hint">Esto alimenta el desplegable de plataforma en "Accesos". <b>Por ahora no cambia nada en WhatsApp</b> — es un catálogo aparte, hasta que se conecte más adelante.</p>
@@ -801,7 +823,7 @@
 
           <div class="panel-header standalone">
             <h2>Métodos de pago</h2>
-            <button id="payment-method-new-btn" class="btn-primary">+ Agregar método</button>
+            <button id="payment-method-new-btn" class="btn-primary" data-mp-primary>+ Agregar método</button>
           </div>
 
           <p class="panel-hint">Métodos de pago que manejas. Hoy el bot solo usa Yape — esta lista es tuya, para tenerla lista si cambia.</p>
@@ -815,7 +837,7 @@
 
           <div class="panel-header standalone">
             <h2>Proveedores</h2>
-            <button id="provider-new-btn" class="btn-primary">+ Agregar proveedor</button>
+            <button id="provider-new-btn" class="btn-primary" data-mp-primary>+ Agregar proveedor</button>
           </div>
 
           <p class="panel-hint">Se usan en el desplegable "Proveedor" de Accesos y en el botón 🔑 para pedirles soporte por WhatsApp.</p>
@@ -842,7 +864,68 @@
         <p id="soportes-empty" class="feed-empty" hidden>No hay reportes pendientes 🎉</p>
       </section>
 
-    </main>
+
+        <!-- ═══ Celular: pantalla «Más» (secciones que no caben abajo) ═══ -->
+        <section id="mp-more" class="mp-more" aria-label="Más" hidden>
+          <p class="mp-more-label">Gestión</p>
+          <div class="mp-more-card">
+          <button class="mp-more-item" data-view="soportes" type="button">
+            <span class="mp-more-ico mp-ico-red" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="m5.6 5.6 3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></svg></span>
+            <span class="mp-more-text"><b>Soportes</b><small id="mp-more-sub-soportes">Reportes de clientes</small></span>
+            <span class="mp-count" id="mp-more-count-soportes" hidden></span><svg class="mp-more-chev" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button class="mp-more-item" data-view="wholesalers" type="button">
+            <span class="mp-more-ico mp-ico-peach" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 4.5 4h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13v7h14v-7"/></svg></span>
+            <span class="mp-more-text"><b>Mayoristas</b><small id="mp-more-sub-wholesalers">Saldo, pedidos y clientes</small></span>
+            <span class="mp-count" id="mp-more-count-wholesalers" hidden></span><svg class="mp-more-chev" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button class="mp-more-item" data-view="web-customers" type="button">
+            <span class="mp-more-ico mp-ico-blue" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.2A6.5 6.5 0 0 1 21.5 20"/></svg></span>
+            <span class="mp-more-text"><b>Clientes</b><small id="mp-more-sub-web-customers">Web, Registro, Bloqueados, Links de venta</small></span>
+            <svg class="mp-more-chev" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button class="mp-more-item" data-view="course" type="button">
+            <span class="mp-more-ico mp-ico-violet" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg></span>
+            <span class="mp-more-text"><b>Curso</b><small id="mp-more-sub-course">Videos, precio y alumnos</small></span>
+            <svg class="mp-more-chev" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button class="mp-more-item" data-view="config" type="button">
+            <span class="mp-more-ico mp-ico-soft" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
+            <span class="mp-more-text"><b>Configuración</b><small id="mp-more-sub-config">Catálogo, métodos de pago, proveedores, seguridad</small></span>
+            <svg class="mp-more-chev" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          </div>
+
+          <p class="mp-more-label">En este celular</p>
+          <div class="mp-more-card">
+            <div class="mp-more-item mp-more-row">
+              <span class="mp-more-ico mp-ico-soft" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span>
+              <span class="mp-more-text"><b id="mp-sound-label">Sonido de notificaciones</b><small>Suena al llegar un pago o un pedido</small></span>
+              <button type="button" class="mp-switch" id="mp-sound-switch" role="switch" aria-checked="true" aria-labelledby="mp-sound-label"><span></span></button>
+            </div>
+            <div class="mp-more-item mp-more-row">
+              <span class="mp-more-ico mp-ico-soft" aria-hidden="true"><svg class="mp-ico" aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span>
+              <span class="mp-more-text"><b id="mp-money-label">Ocultar montos</b><small>También con el 👁 de arriba</small></span>
+              <button type="button" class="mp-switch" id="mp-money-switch" role="switch" aria-checked="false" aria-labelledby="mp-money-label"><span></span></button>
+            </div>
+          </div>
+
+          <p class="mp-more-label">Conexiones</p>
+          <div class="mp-more-card mp-more-conn" id="mp-more-conn"></div>
+
+          <button type="button" class="mp-logout" id="mp-more-logout"><svg class="mp-ico" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>Cerrar sesión</button>
+        </section>
+      </main>
+    </div>
+
+    <!-- ═══ Celular: barra de pestañas fija abajo ═══ -->
+    <nav class="mp-tabbar" aria-label="Secciones">
+      <button class="mp-tab" data-view="resumen" type="button"><svg class="mp-ico" aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Resumen</span></button>
+      <button class="mp-tab" data-view="pagos" type="button"><svg class="mp-ico" aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/></svg><span>Pagos</span></button>
+      <button class="mp-tab" data-view="access" type="button"><svg class="mp-ico" aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg><span>Accesos</span></button>
+      <button class="mp-tab" data-view="codes" type="button"><svg class="mp-ico" aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg><span>Códigos</span></button>
+      <button class="mp-tab mp-tab-more" id="mp-more-tab" type="button" aria-controls="mp-more" aria-expanded="false"><svg class="mp-ico" aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Más</span><span class="mp-tab-badge" id="mp-more-badge" hidden></span></button>
+    </nav>
   </div>
 
   <!-- ───────────── MODAL: producto de catálogo ───────────── -->
@@ -1706,6 +1789,7 @@
   <script src="js/soportes.js"></script>
   <script src="js/full-renewals.js"></script>
   <script src="js/course-admin.js"></script>
+  <script src="js/mango.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
