@@ -8,6 +8,7 @@
 <link rel="icon" href="/assets/logo.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/cat.css">
 <style>
   :root { --cream: #FFFAF3; --bg: #EFE6DA; --brown: #241A10; --muted: #7A6552; --line: #D9CFC2; --orange: #FF7D1A; --yellow: #FFD373; --green: #25D366; --green-dark: #1E6B36; }
   * { box-sizing: border-box; }
@@ -80,6 +81,9 @@
   .device svg { flex-shrink: 0; }
   body.themed .device { background: var(--t-box); border-color: var(--t-line); color: var(--t-text); }
   .small { font-size: 12.5px; }
+  /* Gatito de los códigos (css/cat.css, js/cat.js) */
+  .page-cat { --ld-cat-size: 116px; }
+  #s-found .page-cat { --ld-cat-size: 104px; }
 </style>
 </head>
 <body>
@@ -87,13 +91,13 @@
   <div class="top"><span class="brand">MANGUITOPE</span><span class="pill" id="timer">…</span></div>
 
   <!-- Cargando -->
-  <section class="center" id="s-loading"><div class="spinner"></div><p class="muted">Abriendo tu link…</p></section>
+  <section class="center" id="s-loading"><span class="page-cat" data-cat="idle"></span><p class="muted">Abriendo tu link…</p></section>
 
   <!-- 1 · Esperando -->
   <section id="s-waiting" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
     <span class="label">ESPERANDO</span>
     <div class="center">
-      <div class="spinner"></div>
+      <span class="page-cat" data-cat="searching"></span>
       <h1 id="waiting-title">Esperando tu código de inicio de sesión…</h1>
       <p class="wait-status" id="waiting-status"></p>
     </div>
@@ -104,6 +108,7 @@
   <section id="s-found" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
     <span class="label ok" id="found-label">LLEGÓ TU CÓDIGO</span>
     <div class="center">
+      <span class="page-cat" data-cat="found"></span>
       <p class="muted" id="found-meta"></p>
       <div class="codebox" id="found-codebox"><p class="code" id="found-code"></p></div>
       <div class="totp-bar" id="totp-bar" hidden><i></i></div>
@@ -129,6 +134,7 @@
   <section id="s-advisor" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
     <span class="label">ATENCIÓN PERSONAL</span>
     <div class="center">
+      <span class="page-cat" data-cat="idle"></span>
       <h1>Este código lo entrega un asesor</h1>
       <p class="muted">Por seguridad, este tipo de código no se muestra aquí. Escríbenos y te ayudamos al toque.</p>
     </div>
@@ -139,7 +145,7 @@
   <section id="s-closed" hidden style="display:flex;flex-direction:column;flex:1;gap:16px">
     <span class="label" id="closed-label">CERRADO</span>
     <div class="center">
-      <div class="ok-circle" id="closed-icon">✓</div>
+      <span class="page-cat" id="closed-icon" data-cat="idle"></span>
       <h1 id="closed-title">¡Listo, disfruta!</h1>
       <p class="muted" id="closed-text">Esta consulta ya se cerró. Si necesitas otro código, vuelve a «Códigos» en tu cuenta.</p>
     </div>
@@ -147,6 +153,7 @@
   </section>
 </main>
 
+<script src="/js/cat.js"></script>
 <script>
 (() => {
   "use strict";
@@ -178,7 +185,7 @@
     timer.textContent = state === "expired" ? "Vencido" : "Cerrado";
     if (state === "expired") {
       document.getElementById("closed-label").textContent = "VENCIDO";
-      document.getElementById("closed-icon").textContent = "⏱";
+      if (window.LiordarkCat) window.LiordarkCat.set(document.getElementById("closed-icon"), "sad");
       document.getElementById("closed-title").textContent = "Este link ya venció";
       document.getElementById("closed-text").textContent = "Si todavía necesitas tu código, abre una consulta nueva desde «Códigos» en tu cuenta.";
     }

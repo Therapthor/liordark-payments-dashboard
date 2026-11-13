@@ -16,6 +16,7 @@
 <link rel="preload" href="fonts/outfit-700.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="css/style.css" />
 <link rel="stylesheet" href="css/mango.css" />
+<link rel="stylesheet" href="css/cat.css" />
 <script src="vendor/chart.umd.js"></script>
 </head>
 <body>
@@ -127,7 +128,8 @@
           </div>
 
           <div class="panel resumen-quick-action">
-            <button id="resumen-quick-assign-btn" class="btn-primary resumen-quick-assign-btn">➕ Agregar cliente a una cuenta</button>
+            <button id="resumen-quick-assign-btn" type="button" class="btn-primary resumen-quick-btn resumen-quick-assign-btn">➕ Agregar cliente</button>
+            <button id="resumen-bulk-add-btn" type="button" class="btn-mango resumen-quick-btn resumen-bulk-add-btn">⬆️ Subir cuentas</button>
           </div>
         </div>
 
@@ -1701,6 +1703,7 @@
   </div>
 
   <script src="js/access.js"></script>
+  <script src="js/cat.js"></script>
   <script src="js/codes.js"></script>
   <script src="js/codes-inbox.js"></script>
   <script src="js/code-viewer.js"></script>
