@@ -112,6 +112,48 @@
     return `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" data-fallback="${escapeHtml(fallbackText)}">`;
   }
 
+  // Redibujar SOLO si algo cambió: así una recarga de datos iguales no
+  // hace parpadear la lista ni cierra un desplegable abierto.
+  function setHtmlIfChanged(el, html) {
+    if (!el || el.__html === html) return false;
+    el.innerHTML = html;
+    el.__html = html;
+    return true;
+  }
+
+  // Lista por claves (una tarjeta por plataforma, una fila por ítem): cada
+  // hijo se rehace solo si su HTML cambió; los demás quedan intactos.
+  function patchKeyed(container, items) {
+    container.__html = null; // ya no vale el atajo de setHtmlIfChanged
+    const existing = new Map();
+    for (const child of Array.from(container.childNodes)) {
+      if (child.nodeType === 1 && child.dataset.key !== undefined && !existing.has(child.dataset.key)) existing.set(child.dataset.key, child);
+      else child.remove(); // «Cargando…», un error viejo, etc.
+    }
+    let prev = null;
+    for (const { key, html } of items) {
+      let node = existing.get(key);
+      existing.delete(key);
+      if (!node || node.__html !== html) {
+        const tpl = document.createElement("template");
+        tpl.innerHTML = html.trim();
+        const fresh = tpl.content.firstElementChild;
+        fresh.dataset.key = key;
+        fresh.__html = html;
+        if (node) node.replaceWith(fresh);
+        node = fresh;
+      }
+      const at = prev ? prev.nextElementSibling : container.firstElementChild;
+      if (at !== node) container.insertBefore(node, at);
+      prev = node;
+    }
+    existing.forEach(n => n.remove());
+  }
+
+  function keyedChild(container, key) {
+    return Array.from(container.children).find(c => c.dataset.key === key) || null;
+  }
+
   // ─────────────────────────────────────────────────────────────
   // ÍCONOS (SVG de trazo, color = currentColor; estilo en .ic del css)
   // ─────────────────────────────────────────────────────────────
@@ -271,6 +313,7 @@
     try { await api("/auth/logout", { method: "POST" }); } catch { /* no crítico */ }
     cartItems = [];
     cachedClients = [];
+    cachedCatalog = [];
     stopNotifPolling();
     showAuth();
   }
@@ -304,15 +347,16 @@
   function renderNotifications(list) {
     const el = document.getElementById("notif-list");
     if (!list || list.length === 0) {
-      el.innerHTML = '<div class="notif-empty">No tienes notificaciones todavía.</div>';
+      setHtmlIfChanged(el, '<div class="notif-empty">No tienes notificaciones todavía.</div>');
       return;
     }
-    el.innerHTML = list.map(n => `
+    // Se pide cada 10 s: solo se redibuja si algo cambió.
+    setHtmlIfChanged(el, list.map(n => `
       <div class="notif-item${n.readAt ? "" : " notif-item-unread"}">
         <div class="notif-item-msg">${escapeHtml(n.message)}</div>
         <div class="notif-item-time">${timeAgo(n.createdAt)}</div>
       </div>
-    `).join("");
+    `).join(""));
   }
 
   async function loadNotifications() {
@@ -413,8 +457,12 @@
     // Delegado al documento (no solo a los botones de nav) — así los
     // accesos rápidos de Inicio y las filas de "Más" (data-page) navegan
     // igual que la tab bar/sidebar, sin wiring aparte por cada uno.
+    // Solo botones/enlaces: #view-app también lleva data-page (la banda
+    // mango de Inicio, ver style.css) y con un closest("[data-page]")
+    // cualquier toque en la página la recargaba entera — las tarjetas
+    // parpadeaban y el desplegable de meses de Canva se cerraba solo.
     document.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-page]");
+      const btn = e.target.closest("button[data-page], a[data-page]");
       if (btn) switchPage(btn.dataset.page);
       // Cierra los menús «⋯» abiertos al tocar fuera de ellos.
       document.querySelectorAll("details.more-menu[open]").forEach(d => {
@@ -510,7 +558,8 @@
       const { catalog } = await api("/catalog");
       cachedCatalog = catalog || [];
     } catch {
-      cachedCatalog = [];
+      // Red momentánea: se queda el último catálogo (vaciarlo hacía
+      // desaparecer las tarjetas y el carrito por un instante).
     }
     return cachedCatalog;
   }
@@ -1440,21 +1489,52 @@
       </div>`;
   }
 
+  // Cada tarjeta se rehace solo si cambió (precio, stock o cantidad en el
+  // carrito) — las demás quedan quietas: nada de parpadeo.
   function renderComprarGrid() {
     const grid  = document.getElementById("catalog-grid");
     const empty = document.getElementById("catalog-empty");
-    if (cachedCatalog.length === 0) {
-      grid.innerHTML = "";
-      empty.hidden = false;
-    } else {
-      empty.hidden = true;
-      grid.innerHTML = cachedCatalog.map(catalogCardHtml).join("");
-    }
+    empty.hidden = cachedCatalog.length > 0;
+    patchKeyed(grid, cachedCatalog.map(p => ({ key: p.platform, html: catalogCardHtml(p) })));
     renderCart();
   }
 
   function cartTotalCents() {
     return cartItems.reduce((sum, i) => sum + Math.round(itemUnitPrice(i) * 100) * i.qty, 0);
+  }
+
+  function itemPlans(i) {
+    const p = catalogItem(i.platform);
+    return p && Array.isArray(p.plans) && p.plans.length ? p.plans : null;
+  }
+
+  // El plan elegido siempre es uno que existe (si el catálogo cambió, el primero).
+  function syncCartPlans() {
+    cartItems.forEach(i => {
+      const plans = itemPlans(i);
+      if (!plans) { delete i.months; return; }
+      if (!plans.some(pl => pl.months === i.months)) i.months = plans[0].months;
+    });
+  }
+
+  function planLabelFor(i) {
+    const plans = itemPlans(i);
+    const plan = plans && plans.find(pl => pl.months === i.months);
+    return plan ? plan.label : "";
+  }
+
+  // La fila no lleva el plan elegido ni el precio: así cambiar de plan no
+  // rehace el desplegable (se actualizan aparte, abajo).
+  function cartRowHtml(i) {
+    const p = catalogItem(i.platform);
+    const title = p ? p.title : i.platform;
+    const plans = itemPlans(i);
+    const planSelect = plans
+      ? `<select class="cart-plan-select" data-platform="${escapeHtml(i.platform)}" aria-label="Duración">
+           ${plans.map(pl => `<option value="${pl.months}">${escapeHtml(pl.label)} · S/ ${escapeHtml(pl.price)}</option>`).join("")}
+         </select>`
+      : "";
+    return `<div class="cart-row"><span>${escapeHtml(title)} ×${i.qty}${planSelect}</span><span class="cart-row-price"></span></div>`;
   }
 
   function renderCart() {
@@ -1468,19 +1548,19 @@
       return;
     }
     card.hidden = false;
-    list.innerHTML = cartItems.map(i => {
-      const p = catalogItem(i.platform);
-      const title = p ? p.title : i.platform;
-      const price = itemUnitPrice(i);
-      const plans = p && Array.isArray(p.plans) && p.plans.length ? p.plans : null;
-      const planSelect = plans
-        ? `<select class="cart-plan-select" data-platform="${escapeHtml(i.platform)}" aria-label="Duración">
-             ${plans.map(pl => `<option value="${pl.months}" ${pl.months === (i.months || plans[0].months) ? "selected" : ""}>${escapeHtml(pl.label)} · S/ ${escapeHtml(pl.price)}</option>`).join("")}
-           </select>`
-        : "";
-      return `<div class="cart-row"><span>${escapeHtml(title)} ×${i.qty}${planSelect}</span><span>S/ ${(price * i.qty).toFixed(2)}</span></div>`;
-    }).join("");
-    totalEl.textContent = money(cartTotalCents());
+    syncCartPlans();
+    patchKeyed(list, cartItems.map(i => ({ key: i.platform, html: cartRowHtml(i) })));
+    cartItems.forEach(i => {
+      const row = keyedChild(list, i.platform);
+      if (!row) return;
+      const sel = row.querySelector(".cart-plan-select");
+      if (sel && i.months && sel.value !== String(i.months)) sel.value = String(i.months);
+      const priceText = "S/ " + (itemUnitPrice(i) * i.qty).toFixed(2);
+      const priceEl = row.querySelector(".cart-row-price");
+      if (priceEl.textContent !== priceText) priceEl.textContent = priceText;
+    });
+    const totalText = money(cartTotalCents());
+    if (totalEl.textContent !== totalText) totalEl.textContent = totalText;
     buyBtn.disabled = false;
   }
 
@@ -1491,21 +1571,23 @@
     // Solo plataformas con precio de cuenta completa configurado (>0) —
     // sin esto se veían opciones "S/ 0" que el admin nunca llegó a precificar.
     const options = cachedCatalog.filter(p => Number(p.wholesaleFullPrice) > 0);
-    select.innerHTML = options.length
+    const changed = setHtmlIfChanged(select, options.length
       ? options.map(p => `<option value="${escapeHtml(p.platform)}">${escapeHtml(p.title)} — S/ ${escapeHtml(p.wholesaleFullPrice)}</option>`).join("")
-      : `<option value="">Sin plataformas disponibles</option>`;
-    if (previous && options.some(p => p.platform === previous)) select.value = previous;
+      : `<option value="">Sin plataformas disponibles</option>`);
+    if (changed && previous && options.some(p => p.platform === previous)) select.value = previous;
   }
 
   async function loadComprar() {
     const grid = document.getElementById("catalog-grid");
-    grid.innerHTML = `<p class="muted small">Cargando…</p>`;
+    // «Cargando…» solo la primera vez: después se deja lo que ya se ve
+    // y se actualiza en su sitio cuando llegan los datos.
+    if (!grid.querySelector(".catalog-card")) grid.innerHTML = `<p class="muted small">Cargando…</p>`;
     try {
       await fetchCatalog();
       renderComprarGrid();
       renderFullOrderPlatformOptions();
     } catch (err) {
-      grid.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+      if (!grid.querySelector(".catalog-card")) grid.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }
   }
 
@@ -1581,12 +1663,14 @@
       // por cada una que esté en el carrito (siempre qty=1 para estas).
       // YOUTUBE además pide la contraseña (se activa sobre la cuenta
       // propia del cliente, no una invitación).
+      syncCartPlans();
       const emailItems = cartItems.filter(i => catalogItem(i.platform)?.requiresEmail);
       document.getElementById("cart-checkout-emails").innerHTML = emailItems.map(i => {
         const title = catalogItem(i.platform)?.title || i.platform;
+        const planLabel = planLabelFor(i); // el plan que se va a cobrar, a la vista
         const needsPassword = !!catalogItem(i.platform)?.requiresPassword;
         return `
-          <label class="label" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}</label>
+          <label class="label" for="cart-email-${escapeHtml(i.platform)}">Correo para activar ${escapeHtml(title)}${planLabel ? ` (${escapeHtml(planLabel)})` : ""}</label>
           <input type="email" class="input cart-checkout-email-input" id="cart-email-${escapeHtml(i.platform)}" data-platform="${escapeHtml(i.platform)}"
             placeholder="cliente@correo.com">
           ${needsPassword ? `
@@ -1631,11 +1715,14 @@
         passwords[input.dataset.platform] = password;
       }
 
+      // Los meses van tal cual el desplegable del carrito (el servidor
+      // recalcula el precio con ese mismo plan).
+      syncCartPlans();
       const platforms = [];
       const months = {};
       cartItems.forEach(i => {
         for (let n = 0; n < i.qty; n++) platforms.push(i.platform);
-        if (i.months) months[i.platform] = i.months;
+        if (itemPlans(i) && i.months) months[i.platform] = i.months;
       });
 
       const submitBtn = e.target.querySelector('button[type="submit"]');

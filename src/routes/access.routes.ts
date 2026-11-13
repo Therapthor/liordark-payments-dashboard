@@ -37,6 +37,7 @@ import {
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
+import { plansFor } from "../services/plans.service";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
 import { listRenewalHistory } from "../db/renewal-history.repository";
@@ -50,8 +51,8 @@ import {
   getLastSeenCodeForEmail,
   saveIncomingCode,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES } from "../services/codes-lookup.service";
-import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES, loginApprovalOf, parseProviderDate, type CodeLookupResult } from "../services/codes-lookup.service";
+import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo, inboxInfoFor } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
 import { getCurrentTotp, normalizeTotpSecret } from "../utils/totp.util";
@@ -96,7 +97,14 @@ function profileWithStatus(p: ProfileWithAccount) {
 // bot — se edita ahí. Ver src/db/catalog.repository.ts.
 
 router.get("/platforms-catalog", (_req, res) => {
-  const platforms = listCatalogProducts(true).map(p => ({ platform: p.platform, hasProfiles: p.hasProfiles }));
+  // plans: CANVA/GEMINI se venden por meses (Mayoristas › Asignar cuenta los ofrece).
+  const platforms = listCatalogProducts(true).map(p => {
+    const plans = plansFor(p.platform);
+    return {
+      platform: p.platform, hasProfiles: p.hasProfiles,
+      ...(plans ? { plans: plans.map(pl => ({ months: pl.months, days: pl.days, label: pl.label })) } : {}),
+    };
+  });
   res.json({ platforms });
 });
 
@@ -547,13 +555,27 @@ router.post("/codes/lookup", async (req, res) => {
   if (!email) { res.status(400).json({ message: "Falta el correo." }); return; }
 
   const found = await withLookupContext({ origin: "busqueda" }, () => lookupAnySourceWithRetries(email, getLastSeenCodeForEmail(email)));
-  if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null }); return; }
+  if (!found) { res.json({ found: false, kind: null, value: null, sourceLabel: null, approval: null }); return; }
 
   res.json({
     found: true, kind: found.result.kind, value: found.result.value, sourceLabel: found.label,
-    receivedAt: found.result.providerReceivedAt ?? null,
+    ...lookupExtras(found.sourceId, email, found.result),
   });
 });
+
+// Lo que la búsqueda rápida de Códigos muestra junto al resultado: la
+// solicitud de inicio de sesión de Netflix (Aprobar / Rechazar), cuándo
+// llegó el correo y su id en la bandeja (para «Ver correo»).
+function lookupExtras(sourceId: string, email: string, result: CodeLookupResult) {
+  const inbox = inboxInfoFor(sourceId, email, result);
+  const received = parseProviderDate(result.providerReceivedAt);
+  return {
+    approval: loginApprovalOf(result),
+    receivedAt: result.providerReceivedAt ?? null,
+    receivedIso: received && !Number.isNaN(received.getTime()) ? received.toISOString() : inbox.seenIso,
+    inboxId: inbox.inboxId,
+  };
+}
 
 // "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) —
 // reintenta hasta ~1 minuto (no basta un solo intento, el correo puede
@@ -587,7 +609,10 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
     const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
     saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });
   }
-  res.json({ found: result.found, kind: result.kind, value: result.value });
+  res.json({
+    found: result.found, kind: result.kind, value: result.value, sourceLabel: codeSourceLabel(account.codeSource),
+    ...lookupExtras(account.codeSource, account.email, result),
+  });
 });
 
 // Renovar en dos pasos: "Renovar" solo marca pendiente de pago (no toca el

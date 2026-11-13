@@ -324,13 +324,35 @@
     scheduleTotpRefresh();
   }
 
-  async function load() {
-    try {
-      const { accounts } = await api("/codes");
-      cachedAccounts = accounts;
-      if (window.LiordarkCodesInbox) window.LiordarkCodesInbox.setAccountsCount(accounts.length);
-      renderAccountsList();
-    } catch { /* se reintenta al volver a entrar a la vista */ }
+  let loadedOnce = false;
+  let loadedAt = 0;        // cuándo llegó la lista (el 2FA cuenta desde ahí)
+  let loadPromise = null;
+
+  // Lista fresca. Falla hacia arriba (la búsqueda rápida necesita saberlo);
+  // load() es la versión silenciosa de siempre.
+  async function fetchAccounts() {
+    const { accounts } = await api("/codes");
+    cachedAccounts = accounts;
+    loadedOnce = true;
+    loadedAt = Date.now();
+    if (window.LiordarkCodesInbox) window.LiordarkCodesInbox.setAccountsCount(accounts.length);
+    renderAccountsList();
+    refreshSugsIfTyping();
+    return accounts;
+  }
+
+  function load() {
+    const p = fetchAccounts().catch(() => { /* se reintenta al volver a entrar a la vista */ });
+    loadPromise = p;
+    p.finally(() => { if (loadPromise === p) loadPromise = null; });
+    return p;
+  }
+
+  // La búsqueda rápida necesita la lista para saber si el correo es de una
+  // cuenta guardada: si todavía no llegó, la espera (una sola vez).
+  function ensureAccounts() {
+    if (loadedOnce) return Promise.resolve();
+    return loadPromise || load();
   }
 
   function initAccountsListActions() {
@@ -389,13 +411,625 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // BÚSQUEDA RÁPIDA — pegar el correo + Enter → código.
+  //  · Correo de una cuenta guardada: se consulta su fuente (lookup-now);
+  //    si la cuenta tiene clave 2FA, su código vivo con los segundos que le
+  //    quedan (sin consultar nada externo).
+  //  · Correo desconocido: se busca en todas las fuentes (/codes/lookup).
+  //  · Sugerencias mientras se escribe (↑/↓, Enter, Esc), las últimas 6
+  //    búsquedas como chips y los atajos «/» y Ctrl/⌘+K.
+  // ─────────────────────────────────────────────────────────────
+
+  const RECENT_KEY = "liordark.codes.recent";
+  const RECENT_MAX = 6;
+  const SUGS_MAX = 8;
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const $ = (id) => document.getElementById(id);
+
+  // Marca y color de la plataforma (los mismos de la Bandeja).
+  const PLATFORM_MARKS = [
+    [/netflix/i, "netflix", "N", "Netflix"], [/disney/i, "disney", "D+", "Disney+"],
+    [/prime|amazon/i, "prime", "P", "Prime Video"], [/crunchy/i, "crunchy", "C", "Crunchyroll"],
+    [/chatgpt|openai/i, "chatgpt", "AI", "ChatGPT"], [/canva/i, "canva", "C", "Canva"],
+  ];
+  function platformOf(name) {
+    const hit = PLATFORM_MARKS.find(([re]) => re.test(name || ""));
+    return hit ? { cls: hit[1], mark: hit[2], name: hit[3] }
+      : { cls: "other", mark: (name || "?").slice(0, 1).toUpperCase(), name: "" };
+  }
+
+  function safeUrl(u) {
+    return /^https?:\/\//i.test(String(u || "")) ? String(u) : null;
+  }
+
+  function accountsByEmail(email) {
+    const e = String(email || "").trim().toLowerCase();
+    return e ? cachedAccounts.filter(a => String(a.email || "").trim().toLowerCase() === e) : [];
+  }
+
+  // ── Recientes (localStorage; si está bloqueado, solo esta sesión) ──
+  let recentMem = [];
+
+  function readRecent() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      if (Array.isArray(raw)) {
+        recentMem = raw.map(x => (typeof x === "string" ? x : x && x.email))
+          .filter(x => typeof x === "string" && x.trim()).slice(0, RECENT_MAX);
+      }
+    } catch { /* bloqueado o dañado: queda lo de esta sesión */ }
+    return recentMem;
+  }
+
+  function pushRecent(email) {
+    const e = String(email || "").trim();
+    if (!e) return;
+    recentMem = [e, ...readRecent().filter(x => x.toLowerCase() !== e.toLowerCase())].slice(0, RECENT_MAX);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentMem)); } catch { /* bloqueado */ }
+    renderRecent();
+  }
+
+  function renderRecent() {
+    const box = $("cx-quick-recent");
+    if (!box) return;
+    const list = readRecent();
+    box.hidden = list.length === 0;
+    box.innerHTML = list.length
+      ? `<span class="cx-q-recent-label">Recientes</span>` + list.map(e =>
+          `<button type="button" class="cx-q-chip" data-q-recent="${escapeHtml(e)}" title="Buscar ${escapeHtml(e)}">${escapeHtml(e)}</button>`).join("")
+      : "";
+  }
+
+  // ── Sugerencias ──
+  let sugs = { items: [], active: -1 };
+  let sugsWanted = false;  // el admin está escribiendo (no recién buscó)
+
+  function suggestionsFor(text) {
+    const q = String(text || "").trim().toLowerCase();
+    if (!q) return [];
+    const scored = [];
+    for (const a of cachedAccounts) {
+      const email = String(a.email || "").toLowerCase();
+      const i = email.indexOf(q);
+      const score = email === q ? 0 : i === 0 ? 1 : i > 0 ? 2 : String(a.platform || "").toLowerCase().includes(q) ? 3 : -1;
+      if (score >= 0) scored.push({ score, a });
+    }
+    scored.sort((x, y) => x.score - y.score || String(x.a.email).localeCompare(String(y.a.email)));
+    return scored.slice(0, SUGS_MAX).map(s => s.a);
+  }
+
+  function renderSugs() {
+    const box = $("cx-quick-sugs"), input = $("cx-quick-input");
+    const open = sugs.items.length > 0;
+    box.hidden = !open;
+    input.setAttribute("aria-expanded", String(open));
+    box.innerHTML = sugs.items.map((a, i) => {
+      const p = platformOf(a.platform);
+      const sub = [a.platform, a.totp ? "2FA" : a.codeSourceLabel].filter(Boolean).join(" · ");
+      return `
+        <li id="cx-q-sug-${i}" class="cx-q-sug${i === sugs.active ? " active" : ""}" role="option" aria-selected="${i === sugs.active}" data-q-sug="${i}">
+          <span class="cx-mark p-${p.cls}" aria-hidden="true">${escapeHtml(p.mark)}</span>
+          <span class="cx-q-sug-text"><strong>${escapeHtml(a.email)}</strong><span>${escapeHtml(sub)}</span></span>
+        </li>`;
+    }).join("");
+    if (sugs.active >= 0) {
+      input.setAttribute("aria-activedescendant", "cx-q-sug-" + sugs.active);
+      const el = box.querySelector(".cx-q-sug.active");
+      if (el) el.scrollIntoView({ block: "nearest" });
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function updateSugs() {
+    const keep = sugs.active >= 0 && sugs.items[sugs.active] ? sugs.items[sugs.active].id : null;
+    sugs.items = suggestionsFor($("cx-quick-input").value);
+    sugs.active = keep == null ? -1 : sugs.items.findIndex(a => a.id === keep);
+    renderSugs();
+  }
+
+  function closeSugs() {
+    sugsWanted = false;
+    if (!sugs.items.length && sugs.active < 0) return;
+    sugs = { items: [], active: -1 };
+    renderSugs();
+  }
+
+  // La lista llegó mientras el admin escribía: se completan las sugerencias.
+  function refreshSugsIfTyping() {
+    const input = $("cx-quick-input");
+    if (input && sugsWanted && document.activeElement === input) updateSugs();
+  }
+
+  function moveSug(delta) {
+    if (!sugs.items.length) {
+      sugsWanted = true;
+      updateSugs();
+      if (!sugs.items.length) return;
+    }
+    const n = sugs.items.length;
+    sugs.active = sugs.active < 0 ? (delta > 0 ? 0 : n - 1) : (sugs.active + delta + n) % n;
+    renderSugs();
+  }
+
+  function chooseSug(i) {
+    const a = sugs.items[i];
+    if (!a) return;
+    setQuickText(a.email);
+    closeSugs();
+    runQuick({ account: a, email: a.email });
+  }
+
+  function setQuickText(text) {
+    $("cx-quick-input").value = text;
+    syncClear();
+  }
+
+  function syncClear() {
+    $("cx-quick-clear").hidden = !$("cx-quick-input").value;
+  }
+
+  // ── La búsqueda ──
+  let quick = null;      // lo que muestra la tarjeta: { seq, target, state, ... }
+  let quickSeq = 0;      // cada búsqueda nueva deja sin efecto la anterior
+  let quickTimer = null; // reloj de «Buscando… N s» o del código 2FA
+
+  function stopQuickTimer() {
+    clearInterval(quickTimer);
+    quickTimer = null;
+  }
+
+  async function submitQuick() {
+    const input = $("cx-quick-input");
+    const text = input.value.trim();
+    closeSugs();
+    if (!text) { input.focus(); return; }
+    await ensureAccounts();
+    const exact = accountsByEmail(text);
+    if (exact.length) { runQuick({ account: exact[0], email: exact[0].email }); return; }
+    if (EMAIL_RE.test(text)) { runQuick({ account: null, email: text }); return; }
+    // Parte del correo: si solo una cuenta coincide, esa; si no, a elegir.
+    const partial = suggestionsFor(text);
+    if (partial.length === 1) {
+      setQuickText(partial[0].email);
+      runQuick({ account: partial[0], email: partial[0].email });
+      return;
+    }
+    quickSeq++;
+    stopQuickTimer();
+    quick = { state: "hint", text, many: partial.length > 1, target: null };
+    renderQuick();
+    if (partial.length) { sugsWanted = true; updateSugs(); }
+  }
+
+  function sameTarget(t) {
+    if (!quick || !quick.target) return false;
+    const cur = quick.target;
+    return t.account
+      ? !!cur.account && cur.account.id === t.account.id
+      : !cur.account && cur.email.toLowerCase() === t.email.toLowerCase();
+  }
+
+  async function runQuick(t) {
+    const target = { account: t.account || null, email: String(t.account ? t.account.email : t.email || "").trim() };
+    if (!target.email) return;
+    if (quick && quick.state === "searching" && sameTarget(target)) return; // ya se está buscando
+    const seq = ++quickSeq;
+    stopQuickTimer();
+    pushRecent(target.email);
+    quick = { seq, target, state: "searching", startedAt: Date.now() };
+    renderQuick();
+
+    if (target.account && target.account.totp) { showTotp(seq, false); return; }
+
+    quickTimer = setInterval(paintElapsed, 1000);
+    try {
+      const res = target.account
+        ? await api("/codes/" + target.account.id + "/lookup-now", { method: "POST", body: "{}" })
+        : await api("/codes/lookup", { method: "POST", body: JSON.stringify({ email: target.email }) });
+      if (seq !== quickSeq) return;
+      quick.result = res;
+      quick.state = res.found ? "found" : "notfound";
+      // La lista de «Cuentas» también muestra el código nuevo.
+      if (target.account && res.found) load();
+    } catch (err) {
+      if (seq !== quickSeq) return;
+      quick.state = "error";
+      quick.error = err.message || "No se pudo consultar.";
+    }
+    stopQuickTimer();
+    renderQuick();
+  }
+
+  function paintElapsed() {
+    const el = document.querySelector("#cx-quick-result [data-q-elapsed]");
+    if (el && quick && quick.startedAt) el.textContent = Math.floor((Date.now() - quick.startedAt) / 1000) + " s";
+  }
+
+  // 2FA: el código se calcula en el servidor al pedir la lista (sin
+  // consultar nada externo). Se muestra al toque si el de la lista sigue
+  // vigente; al rotar, se pide la lista de nuevo.
+  async function showTotp(seq, fresh) {
+    const id = quick.target.account.id;
+    let a = cachedAccounts.find(x => x.id === id);
+    const msLeft = a && a.totp ? loadedAt + a.totp.secondsRemaining * 1000 - Date.now() : 0;
+    if (fresh || msLeft < 2000) {
+      try {
+        await fetchAccounts();
+      } catch (err) {
+        if (seq !== quickSeq) return;
+        quick.state = "error";
+        quick.error = err.message || "No se pudo consultar.";
+        renderQuick();
+        return;
+      }
+      if (seq !== quickSeq) return;
+      a = cachedAccounts.find(x => x.id === id);
+    }
+    if (!a || !a.totp) {
+      quick.state = "error";
+      quick.error = "Esta cuenta ya no tiene la clave 2FA guardada.";
+      renderQuick();
+      return;
+    }
+    quick.target.account = a;
+    quick.state = "totp";
+    quick.totpPaused = false;
+    quick.totp = { code: a.totp.code, deadline: loadedAt + a.totp.secondsRemaining * 1000 + 300 };
+    stopQuickTimer();
+    renderQuick();
+    quickTimer = setInterval(() => tickTotp(seq), 1000);
+  }
+
+  function totpLeft() {
+    return Math.max(0, Math.ceil((quick.totp.deadline - Date.now()) / 1000));
+  }
+
+  function tickTotp(seq) {
+    if (seq !== quickSeq || !quick || quick.state !== "totp") { stopQuickTimer(); return; }
+    const left = totpLeft();
+    paintTotp(left);
+    if (left > 0) return;
+    stopQuickTimer();
+    // Fuera de la vista no se pide nada: se retoma al volver.
+    if (document.hidden || $("view-codes").hidden) { quick.totpPaused = true; return; }
+    showTotp(seq, true);
+  }
+
+  function paintTotp(left) {
+    const box = $("cx-quick-result");
+    const ring = box.querySelector("[data-q-ring]");
+    const num = box.querySelector("[data-q-ring] .codes-timer-num");
+    const text = box.querySelector("[data-q-left]");
+    if (ring) ring.style.setProperty("--pct", String(Math.max(0, (left / TOTP_PERIOD_SECONDS) * 100)));
+    if (num) num.textContent = left + "s";
+    if (text) text.textContent = String(left);
+  }
+
+  function resumeTotp() {
+    if (quick && quick.state === "totp" && quick.totpPaused && !$("view-codes").hidden && !document.hidden) {
+      showTotp(quick.seq, true);
+    }
+  }
+
+  // ── La tarjeta del resultado ──
+
+  function receivedDate(res) {
+    if (res.receivedIso) {
+      const d = new Date(res.receivedIso);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    return res.receivedAt ? emailDateFromSnippet(res.receivedAt) : null;
+  }
+
+  function ageHtml(res) {
+    const d = receivedDate(res);
+    if (!d) return "sin hora de llegada";
+    const age = Date.now() - d.getTime();
+    const hora = d.toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "numeric", minute: "2-digit" });
+    return `llegó ${agoText(age)} (${escapeHtml(hora)})` +
+      (age > CODE_STALE_MS ? ` · <b class="cx-q-stale">⚠️ puede estar vencido</b>` : "");
+  }
+
+  function codeValueHtml(code) {
+    return `<button type="button" class="cx-code big cx-q-code" data-q-copy="${escapeHtml(code)}" title="Toca para copiar">${escapeHtml(code)}</button>
+      <span class="cx-q-copyhint" data-q-copyhint>Toca el código para copiarlo</span>`;
+  }
+
+  // Netflix «Aprueba la nueva solicitud de inicio de sesión»: igual que en
+  // la Bandeja (Aprobar / Rechazar, con el dispositivo que pidió entrar).
+  function approvalHtml(a) {
+    const deny = safeUrl(a.denyUrl);
+    return `<div class="cx-approval">
+        <span class="cx-approval-device">Solicitud de inicio de sesión${a.device ? " · " + escapeHtml(a.device) : ""}</span>
+        <span class="cx-approval-btns">
+          <a class="cx-linkbtn big" href="${escapeHtml(safeUrl(a.approveUrl))}" target="_blank" rel="noopener noreferrer">Aprobar</a>
+          ${deny ? `<a class="cx-linkbtn deny big" href="${escapeHtml(deny)}" target="_blank" rel="noopener noreferrer">Rechazar</a>` : ""}
+        </span>
+      </div>`;
+  }
+
+  function foundValueHtml(res) {
+    if (res.approval && safeUrl(res.approval.approveUrl)) return approvalHtml(res.approval);
+    if (res.kind === "link") {
+      const url = safeUrl(res.value);
+      return url
+        ? `<a class="cx-linkbtn big" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir enlace</a>`
+        : `<p class="cx-novalue">${escapeHtml(res.value)}</p>`;
+    }
+    return codeValueHtml(res.value);
+  }
+
+  function statusHtml(kind, title, sub) {
+    const icon = kind === "spin" ? `<span class="cx-q-spin" aria-hidden="true"></span>`
+      : `<span class="cx-q-icon" aria-hidden="true">${kind === "bad" ? "!" : kind === "warn" ? "…" : "?"}</span>`;
+    return `<div class="cx-q-status ${kind}">${icon}<div><strong>${title}</strong><span>${sub}</span></div></div>`;
+  }
+
+  // Otras cuentas guardadas con el mismo correo (otra plataforma o fuente).
+  function othersHtml(t) {
+    if (!t.account) return "";
+    const others = accountsByEmail(t.email).filter(o => o.id !== t.account.id);
+    if (!others.length) return "";
+    return `<p class="cx-q-others"><span>Este correo también está en:</span>${others.map(o => {
+      const label = [o.platform, o.totp ? "2FA" : o.codeSourceLabel].filter(Boolean).join(" · ");
+      return `<button type="button" class="cx-q-chip" data-q-acc="${escapeHtml(o.id)}" title="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+    }).join("")}</p>`;
+  }
+
+  function quickCardHtml() {
+    const q = quick;
+    if (q.state === "hint") {
+      return `<article class="cx-q-card is-hint">${q.many
+        ? statusHtml("warn", `Hay varias cuentas con «${escapeHtml(q.text)}»`, "Elige una de la lista con ↑/↓ y Enter.")
+        : statusHtml("warn", `Ninguna cuenta guardada tiene «${escapeHtml(q.text)}»`, "Escribe el correo completo para buscarlo en todas las fuentes.")}</article>`;
+    }
+
+    const t = q.target, a = t.account, res = q.result || {};
+    const p = platformOf(a ? a.platform : res.sourceLabel);
+    const title = a ? a.platform : (p.name || (q.state === "found" ? "Código" : "Todas las fuentes"));
+    const retry = `<button type="button" class="cx-ghost-btn" data-q-act="retry">Reintentar</button>`;
+    const share = a && window.LiordarkCodeViewer ? `<button type="button" class="cx-ghost-btn" data-q-act="share">Compartir link</button>` : "";
+    let pill = "", body = "", meta = "", actions = "";
+
+    if (q.state === "searching") {
+      body = statusHtml("spin", a ? "Buscando el código…" : "Buscando en todas las fuentes…",
+        `<b data-q-elapsed aria-hidden="true">0 s</b> · la página del proveedor puede tardar hasta 1 minuto`);
+    } else if (q.state === "totp") {
+      const left = totpLeft();
+      pill = `<span class="cx-pill new">2FA en vivo</span>`;
+      body = `<div class="cx-q-value">${codeValueHtml(q.totp.code)}
+          <span class="cx-q-totp" aria-hidden="true"><span class="codes-timer" data-q-ring style="--pct:${(left / TOTP_PERIOD_SECONDS) * 100}"><span class="codes-timer-num">${left}s</span></span>
+          <span>Cambia en <b data-q-left>${left}</b> s</span></span>
+        </div>`;
+      meta = `${escapeHtml(a.codeSourceLabel || "Código 2FA")} · un código nuevo cada 30 s`;
+      actions = retry + share;
+    } else if (q.state === "found") {
+      const d = receivedDate(res);
+      const age = d ? Date.now() - d.getTime() : null;
+      pill = age == null ? "" : age > CODE_STALE_MS
+        ? `<span class="cx-pill muted">Viejo</span>` : age < 10 * 60 * 1000 ? `<span class="cx-pill new">Nuevo</span>` : "";
+      body = `<div class="cx-q-value">${foundValueHtml(res)}</div>`;
+      meta = `${escapeHtml(res.sourceLabel || (a && a.codeSourceLabel) || "")} · ${ageHtml(res)}`;
+      const link = res.approval ? safeUrl(res.approval.approveUrl) : res.kind === "link" ? safeUrl(res.value) : null;
+      actions = retry +
+        (link ? `<button type="button" class="cx-ghost-btn" data-q-copy="${escapeHtml(link)}">${res.approval ? "Copiar link de Aprobar" : "Copiar enlace"}</button>` : "") +
+        (res.inboxId ? `<button type="button" class="cx-ghost-btn" data-mail="${escapeHtml(res.inboxId)}">Ver correo</button>` : "") +
+        share;
+    } else if (q.state === "notfound") {
+      body = a
+        ? statusHtml("warn", "Todavía no hay código nuevo para esa cuenta.", "Pide el código en la app y toca Reintentar.")
+        : statusHtml("warn", `No se encontró ningún código reciente para ${escapeHtml(t.email)}.`, "Se buscó en todas las fuentes. Pide el código en la app y toca Reintentar.");
+      actions = retry + share;
+    } else {
+      body = statusHtml("bad", "No se pudo consultar.", escapeHtml(q.error || ""));
+      actions = retry + share;
+    }
+
+    return `
+      <article class="cx-q-card p-${p.cls} is-${q.state}">
+        <header class="cx-q-head">
+          <span class="cx-mark p-${p.cls}" aria-hidden="true">${escapeHtml(p.mark)}</span>
+          <div class="cx-q-who"><strong>${escapeHtml(title)}</strong><span class="cx-q-email">${escapeHtml(t.email)}</span></div>
+          ${pill}
+        </header>
+        ${body}
+        ${meta ? `<p class="cx-q-meta">${meta}</p>` : ""}
+        ${actions ? `<div class="cx-q-actions">${actions}</div>` : ""}
+        ${q.state === "searching" ? "" : othersHtml(t)}
+      </article>`;
+  }
+
+  function renderQuick() {
+    const box = $("cx-quick-result");
+    if (!quick) { box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    box.innerHTML = quickCardHtml();
+  }
+
+  async function quickCopy(text, el) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      window.prompt("Copia:", text);
+      return;
+    }
+    const isCode = el.classList.contains("cx-q-code");
+    const hint = isCode ? el.parentElement.querySelector("[data-q-copyhint]") : null;
+    const prev = el.textContent;
+    el.classList.add("copied");
+    if (hint) { hint.textContent = "¡Copiado!"; hint.classList.add("ok"); }
+    if (!isCode) el.textContent = "Copiado ✓";
+    setTimeout(() => {
+      el.classList.remove("copied");
+      if (!isCode) el.textContent = prev;
+      if (hint) { hint.textContent = "Toca el código para copiarlo"; hint.classList.remove("ok"); }
+    }, 1400);
+  }
+
+  // ── Mostrar la vista y el buscador ──
+
+  function showCodesView() {
+    if (window.LiordarkApp && typeof window.LiordarkApp.switchView === "function") {
+      window.LiordarkApp.switchView("codes");
+      return;
+    }
+    const tab = document.querySelector('.tab-btn[data-view="codes"]');
+    if (tab) tab.click();
+  }
+
+  // Lleva el buscador a la vista, debajo de la barra de arriba (fija).
+  function revealQuick() {
+    const section = document.querySelector(".cx-quick");
+    if (!section) return;
+    const bar = document.querySelector(".topbar");
+    const top = section.getBoundingClientRect().top + window.scrollY - (bar ? bar.offsetHeight : 0) - 12;
+    window.scrollTo({ top: Math.max(0, top) });
+  }
+
+  function isDesktop() {
+    return !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+  }
+
+  function focusQuick() {
+    if ($("view-codes").hidden) showCodesView();
+    const input = $("cx-quick-input");
+    input.focus({ preventScroll: true });
+    input.select();
+    const r = input.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) revealQuick();
+  }
+
+  function isTypingField(el) {
+    if (!el || el === document.body) return false;
+    if (el.isContentEditable) return true;
+    if (el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
+    if (el.tagName === "INPUT") return !/^(button|submit|reset|checkbox|radio|range|color|file|image)$/i.test(el.type);
+    return false;
+  }
+
+  function overlayOpen() {
+    if (document.querySelector("dialog[open], .modal-backdrop:not([hidden])")) return true;
+    return ["cv-drawer-back", "cv-share-back"].some(id => { const el = $(id); return !!el && !el.hidden; });
+  }
+
+  // «/» y Ctrl/⌘+K: al buscador desde cualquier vista, salvo escribiendo
+  // en otro campo o con una ventana abierta.
+  function onShortcut(e) {
+    const slash = e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey;
+    const cmdK = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && String(e.key).toLowerCase() === "k";
+    if ((!slash && !cmdK) || e.defaultPrevented || e.isComposing) return;
+    const app = $("app");
+    if (app && app.hidden) return;
+    const input = $("cx-quick-input");
+    if (e.target === input) {
+      if (cmdK) { e.preventDefault(); input.select(); }
+      return;
+    }
+    if (isTypingField(e.target) || overlayOpen()) return;
+    e.preventDefault();
+    focusQuick();
+  }
+
+  function initQuick() {
+    const form = $("cx-quick-form");
+    const input = $("cx-quick-input");
+    const sugsBox = $("cx-quick-sugs");
+    if (!form || !input) return;
+
+    input.addEventListener("input", () => { sugsWanted = true; syncClear(); updateSugs(); });
+    input.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== input) closeSugs(); }, 150));
+    input.addEventListener("keydown", (e) => {
+      if (e.isComposing) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); moveSug(1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); moveSug(-1); }
+      else if (e.key === "Escape") { if (sugs.items.length) { e.preventDefault(); closeSugs(); } }
+      else if (e.key === "Enter" && sugs.active >= 0 && sugs.items[sugs.active]) { e.preventDefault(); chooseSug(sugs.active); }
+    });
+    form.addEventListener("submit", (e) => { e.preventDefault(); submitQuick(); });
+
+    // Clic en una sugerencia sin que el campo pierda el foco.
+    sugsBox.addEventListener("mousedown", (e) => e.preventDefault());
+    sugsBox.addEventListener("click", (e) => {
+      const li = e.target.closest("[data-q-sug]");
+      if (li) chooseSug(Number(li.dataset.qSug));
+    });
+
+    $("cx-quick-clear").addEventListener("click", () => {
+      setQuickText("");
+      closeSugs();
+      input.focus();
+    });
+
+    $("cx-quick-recent").addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-q-recent]");
+      if (!chip) return;
+      setQuickText(chip.dataset.qRecent);
+      submitQuick();
+    });
+
+    // «Ver correo» (data-mail) lo abre la Bandeja (codes-inbox.js) en #cx-mail.
+    $("cx-quick-result").addEventListener("click", (e) => {
+      const copyEl = e.target.closest("[data-q-copy]");
+      if (copyEl) { quickCopy(copyEl.dataset.qCopy, copyEl); return; }
+      const other = e.target.closest("[data-q-acc]");
+      if (other) {
+        const a = cachedAccounts.find(x => String(x.id) === other.dataset.qAcc);
+        if (a) { setQuickText(a.email); runQuick({ account: a, email: a.email }); }
+        return;
+      }
+      const act = e.target.closest("[data-q-act]");
+      if (!act || act.disabled || !quick || !quick.target) return;
+      if (act.dataset.qAct === "retry") runQuick(quick.target);
+      if (act.dataset.qAct === "share" && quick.target.account && window.LiordarkCodeViewer) {
+        const a = quick.target.account;
+        window.LiordarkCodeViewer.share({ id: Number(a.id), platform: a.platform, email: a.email, totp: !!a.totp });
+      }
+    });
+
+    document.addEventListener("keydown", onShortcut);
+    document.addEventListener("visibilitychange", resumeTotp);
+    if (/Mac|iPhone|iPad/i.test(navigator.platform || "")) {
+      const ctrl = document.querySelector(".cx-quick-keys kbd:nth-of-type(2)");
+      if (ctrl) ctrl.textContent = "⌘";
+    }
+    renderRecent();
+  }
+
+  // Al entrar a la vista (app.js → switchView): recientes al día, 2FA
+  // retomado y, en PC, el cursor listo en el buscador para pegar.
+  function onOpen() {
+    init();
+    renderRecent();
+    resumeTotp();
+    const input = $("cx-quick-input");
+    if (input && isDesktop() && document.activeElement !== input && !overlayOpen()) {
+      input.focus({ preventScroll: true });
+      input.select();
+    }
+  }
+
+  // Desde otras vistas (ej. «🔢 Código» en Accesos): abre Códigos, pone el
+  // correo y lo busca.
+  async function openFor(email) {
+    init();
+    const text = String(email ?? "").trim();
+    if ($("view-codes").hidden) showCodesView();
+    setQuickText(text);
+    closeSugs();
+    revealQuick();
+    if (text) await submitQuick();
+  }
+
   let initialized = false;
   function init() {
     if (initialized) return;
     initialized = true;
     initSearchForm();
     initAccountsListActions();
+    initQuick();
   }
 
-  window.LiordarkCodes = { init, load };
+  window.LiordarkCodes = { init, load, onOpen, openFor };
 })();

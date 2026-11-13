@@ -2,9 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#FFC93C" />
 <title>Liordark — Panel de Pagos</title>
+<link rel="preload" href="fonts/nunito-sans-700.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/outfit-700.woff2" as="font" type="font/woff2" crossorigin />
 <link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/mango.css" />
 <script src="vendor/chart.umd.js"></script>
 </head>
 <body>
@@ -12,7 +16,7 @@
   <!-- ───────────── LOGIN ───────────── -->
   <div id="login-screen" class="login-screen" hidden>
     <form id="login-form" class="login-card">
-      <div class="login-logo">💸</div>
+      <div class="login-logo" aria-hidden="true">L</div>
       <h1>Panel de Pagos</h1>
       <p class="login-sub">Liordark</p>
       <input id="login-password" type="password" placeholder="Contraseña" autocomplete="current-password" required />
@@ -248,6 +252,28 @@
               <button type="button" id="cx-watch-now" class="cx-ghost-btn">Revisar ahora</button>
             </div>
           </header>
+
+          <!-- Búsqueda rápida: pegar el correo + Enter → código (ver codes.js). -->
+          <section class="cx-quick" aria-label="Buscar código por correo">
+            <form id="cx-quick-form" class="cx-quick-form" autocomplete="off" novalidate>
+              <label class="cx-quick-label" for="cx-quick-input">
+                <span>Buscar código</span>
+                <span class="cx-quick-keys">Atajo: <kbd>/</kbd> o <kbd>Ctrl</kbd>+<kbd>K</kbd></span>
+              </label>
+              <div class="cx-quick-field">
+                <span class="cx-quick-icon" aria-hidden="true">🔎</span>
+                <input id="cx-quick-input" class="cx-quick-input" type="text" inputmode="email" autocomplete="off"
+                  autocapitalize="off" spellcheck="false" enterkeyhint="search"
+                  placeholder="Pega el correo y presiona Enter"
+                  role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cx-quick-sugs" />
+                <button type="button" id="cx-quick-clear" class="cx-quick-clear" aria-label="Borrar" hidden>✕</button>
+                <button type="submit" class="cx-quick-go">Buscar</button>
+              </div>
+              <ul id="cx-quick-sugs" class="cx-quick-sugs" role="listbox" aria-label="Cuentas guardadas" hidden></ul>
+            </form>
+            <div id="cx-quick-recent" class="cx-quick-recent" hidden></div>
+            <div id="cx-quick-result" class="cx-quick-result" aria-live="polite" hidden></div>
+          </section>
 
           <div id="cx-health" class="cx-health" aria-label="Estado de cada fuente"></div>
           <article id="cx-hero" class="cx-hero" hidden></article>
@@ -511,6 +537,17 @@
         </div>
 
         <div id="customers-section-blocked" hidden>
+          <div class="panel" style="margin-bottom:20px">
+            <div class="panel-header">
+              <h2>🔓 Desbloqueo general</h2>
+              <div class="panel-header-actions">
+                <button id="unlock-all-btn" class="btn-primary" type="button">🔓 Desbloquear a todos</button>
+              </div>
+            </div>
+            <p class="panel-hint">Quita de una vez todos los bloqueos temporales: clientes y mayoristas bloqueados por intentos, e IPs bloqueadas. Los «🚫 Números bloqueados» no se tocan.</p>
+            <p id="unlock-all-result" class="panel-hint" hidden></p>
+          </div>
+
           <div class="panel">
             <div class="panel-header"><h2>🔒 Bloqueo temporal por intentos</h2></div>
             <p class="panel-hint">Fallaron el PIN varias veces (cada 2 fallos: 1 h → 8 h → 2 días → 7 días → 30 días), desde su número o su conexión. «Quitar bloqueo» lo deja entrar al instante: limpia su número y su conexión, y por 24 h ningún bloqueo por conexión lo frena. También está en cada cliente de la pestaña Web.</p>
@@ -1467,6 +1504,9 @@
       </label>
       <label>Plataforma
         <select id="wholesaler-assign-platform" required></select>
+      </label>
+      <label id="wholesaler-assign-plan-wrap" hidden>Plan
+        <select id="wholesaler-assign-plan"></select>
       </label>
       <div id="wholesaler-assign-manual-fields" class="field-group" hidden>
         <label>Correo
