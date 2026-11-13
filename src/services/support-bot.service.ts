@@ -810,7 +810,7 @@ export async function getBotTotpForCustomer(
   if (!account?.totpSecret) return null;
 
   try {
-    const totp = await getCurrentTotp(account.totpSecret);
+    const totp = getCurrentTotp(account.totpSecret);
     return { ...totp, expiresInSeconds: Math.ceil(expiresInMs / 1000) };
   } catch (err: any) {
     console.error("⚠️ Clave 2FA inválida en la cuenta", payload.accountId, "-", err?.message);

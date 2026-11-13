@@ -951,6 +951,16 @@
   // sale de una clave TOTP — el campo para pegarla solo aparece con esta opción.
   const TOTP_SOURCE_ID = "streaming_market_2fa";
 
+  // Misma regla que normalizeTotpSecret (src/utils/totp.util.ts): sin
+  // espacios ni guiones, en mayúsculas, solo A–Z y 2–7, al menos 16
+  // caracteres y un largo que corresponda a bytes enteros. null = no sirve.
+  function normalizeTotpSecret(raw) {
+    const key = String(raw || "").replace(/[\s-]+/g, "").toUpperCase();
+    if (!/^[A-Z2-7]+$/.test(key) || key.length < 16 || ![0, 2, 4, 5, 7].includes(key.length % 8)) return null;
+    return key;
+  }
+  const TOTP_INVALID_MSG = "La clave 2FA no es válida: debe tener al menos 16 caracteres, solo letras A–Z y números 2–7 (los espacios y guiones se quitan solos). Revisa que la copiaste completa.";
+
   // Fuentes que leen la bandeja privada que da el proveedor (link por cuenta).
   const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney"];
 
@@ -1016,6 +1026,11 @@
       errorEl.hidden = true;
       if (needsInbox && !inboxUrl) {
         errorEl.textContent = "Pega el link de la bandeja que te dio el proveedor (https://mibalu.fun/buzon/…).";
+        errorEl.hidden = false;
+        return;
+      }
+      if (codesEnabled && totpSecret && !normalizeTotpSecret(totpSecret)) {
+        errorEl.textContent = TOTP_INVALID_MSG;
         errorEl.hidden = false;
         return;
       }

@@ -53,13 +53,28 @@ import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSource
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
-import { getCurrentTotp } from "../utils/totp.util";
+import { getCurrentTotp, normalizeTotpSecret } from "../utils/totp.util";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 
 const router = Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const TOTP_SECRET_INVALID_MESSAGE =
+  "La clave 2FA no es válida: debe tener al menos 16 caracteres, solo letras A–Z y números 2–7 " +
+  "(los espacios y guiones se quitan solos). Revisa que la copiaste completa.";
+
+/** Código 2FA de una cuenta para la lista de Códigos — una clave mala en
+ *  UNA cuenta nunca tumba la lista entera: esa cuenta sale sin código. */
+function safeTotp(secret: string, accountId: number): { code: string; secondsRemaining: number } | null {
+  try {
+    return getCurrentTotp(secret);
+  } catch {
+    console.warn(`⚠️ Clave 2FA inválida en la cuenta ${accountId} (Códigos la muestra sin código).`);
+    return null;
+  }
+}
 
 // ── serialización — agrega estado/días calculados a la cuenta ──
 
@@ -427,8 +442,11 @@ router.post("/accounts/:id/code-source", (req, res) => {
 // los dos mecanismos.
 router.post("/accounts/:id/totp-secret", (req, res) => {
   const accountId = Number(req.params.id);
-  const secret = typeof req.body?.totpSecret === "string" && req.body.totpSecret.trim() ? req.body.totpSecret.trim() : null;
   if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const raw = typeof req.body?.totpSecret === "string" ? req.body.totpSecret.trim() : "";
+  // Se guarda ya limpia (sin espacios ni guiones, en mayúsculas).
+  const secret = raw ? normalizeTotpSecret(raw) : null;
+  if (raw && !secret) { res.status(400).json({ message: TOTP_SECRET_INVALID_MESSAGE }); return; }
   setAccountTotpSecret(accountId, secret);
   res.json({ account: withStatus(getAccountById(accountId)!) });
 });
@@ -495,7 +513,7 @@ router.post("/codes/watch-now", async (_req, res) => {
   res.json({ checked, watcher: watcherInfo() });
 });
 
-router.get("/codes", async (_req, res) => {
+router.get("/codes", (_req, res) => {
   // Varias cuentas suelen compartir el mismo login (ej. ChatGPT, una por
   // cliente) — el código es el mismo para todas, así que se muestra una
   // fila por correo+fuente en vez de repetirla. La fila usa la primera
@@ -507,7 +525,7 @@ router.get("/codes", async (_req, res) => {
     if (group) group.push(a); else groups.set(key, [a]);
   }
 
-  const accounts = await Promise.all([...groups.values()].map(async group => {
+  const accounts = [...groups.values()].map(group => {
     const a = group[0]!;
     const { totpSecret, ...rest } = a;
     const latestCodeRaw = group
@@ -528,9 +546,9 @@ router.get("/codes", async (_req, res) => {
       // 2FA por TOTP — se calcula al vuelo, sin consultar nada externo.
       // No se manda la clave en sí, solo el código ya calculado.
       hasTotp: !!totpSecret,
-      totp: totpSecret ? await getCurrentTotp(totpSecret) : null,
+      totp: totpSecret ? safeTotp(totpSecret, a.id) : null,
     };
-  }));
+  });
   res.json({ accounts });
 });
 
