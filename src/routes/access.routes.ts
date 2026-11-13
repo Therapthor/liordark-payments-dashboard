@@ -36,6 +36,7 @@ import {
 import { listPendingAssignments, countPendingAssignments } from "../db/pending-assignments.repository";
 import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection } from "../db/renewal-pay-links.repository";
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
+import { plansFor } from "../services/plans.service";
 import { listProviders } from "../db/provider.repository";
 import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
 import { listRenewalHistory } from "../db/renewal-history.repository";
@@ -80,7 +81,14 @@ function profileWithStatus(p: ProfileWithAccount) {
 // bot — se edita ahí. Ver src/db/catalog.repository.ts.
 
 router.get("/platforms-catalog", (_req, res) => {
-  const platforms = listCatalogProducts(true).map(p => ({ platform: p.platform, hasProfiles: p.hasProfiles }));
+  // plans: CANVA/GEMINI se venden por meses (Mayoristas › Asignar cuenta los ofrece).
+  const platforms = listCatalogProducts(true).map(p => {
+    const plans = plansFor(p.platform);
+    return {
+      platform: p.platform, hasProfiles: p.hasProfiles,
+      ...(plans ? { plans: plans.map(pl => ({ months: pl.months, days: pl.days, label: pl.label })) } : {}),
+    };
+  });
   res.json({ platforms });
 });
 

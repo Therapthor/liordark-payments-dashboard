@@ -122,13 +122,20 @@
     return tr;
   }
 
+  // Redibuja la tabla solo si algo cambió: el sondeo cada 20 s y el volver
+  // a la pestaña la rehacían entera aunque todo siguiera igual (parpadeo).
+  function fillTbody(tbody, rows) {
+    const sig = rows.map(r => r.outerHTML).join("");
+    if (tbody.__sig === sig) return;
+    tbody.__sig = sig;
+    tbody.replaceChildren(...rows);
+  }
+
   function renderWholesalersList() {
     const tbody = document.getElementById("wholesalers-tbody");
     const empty = document.getElementById("wholesalers-empty");
-    tbody.innerHTML = "";
-    if (cachedWholesalers.length === 0) { empty.hidden = false; return; }
-    empty.hidden = true;
-    for (const w of cachedWholesalers) tbody.appendChild(renderWholesalerRow(w));
+    empty.hidden = cachedWholesalers.length > 0;
+    fillTbody(tbody, cachedWholesalers.map(renderWholesalerRow));
   }
 
   function initWholesalersListActions() {
@@ -307,6 +314,28 @@
       .join("");
   }
 
+  // CANVA/GEMINI se venden por meses (1, 3, 6 o 12): el plan elegido fija
+  // la fecha de «Vence el» y se guarda en la cuenta (sale en «Pendientes»).
+  function assignPlans(platform) {
+    const p = platformCatalog.find(x => x.platform === platform);
+    return p && Array.isArray(p.plans) && p.plans.length ? p.plans : null;
+  }
+
+  function selectedAssignPlan() {
+    const plans = assignPlans(document.getElementById("wholesaler-assign-platform").value);
+    if (!plans) return null;
+    const months = Number(document.getElementById("wholesaler-assign-plan").value);
+    return plans.find(pl => pl.months === months) || plans[0];
+  }
+
+  function populateAssignPlanSelect() {
+    const plans = assignPlans(document.getElementById("wholesaler-assign-platform").value);
+    document.getElementById("wholesaler-assign-plan-wrap").hidden = !plans;
+    document.getElementById("wholesaler-assign-plan").innerHTML = (plans || [])
+      .map(pl => `<option value="${pl.months}">${escapeHtml(pl.label)}${pl.months === 12 ? " (12 meses)" : ""}</option>`)
+      .join("");
+  }
+
   function updateAssignFieldsVisibility() {
     const mode = document.getElementById("wholesaler-assign-mode").value;
     const platform = document.getElementById("wholesaler-assign-platform").value;
@@ -328,7 +357,8 @@
   // el admin la corrige si la compra fue hace unos días.
   function updateAssignExpiryDefaults() {
     const platform = document.getElementById("wholesaler-assign-platform").value;
-    const days = /canva/i.test(platform) ? 365 : 30;
+    const plan = selectedAssignPlan();
+    const days = plan ? plan.days : /canva/i.test(platform) ? 365 : 30;
     document.getElementById("wholesaler-assign-expires").value = todayPlusDaysISO(days);
     document.getElementById("wholesaler-assign-stock-expires").value = todayPlusDaysISO(days);
   }
@@ -340,6 +370,7 @@
     document.getElementById("wholesaler-assign-error").hidden = true;
     await loadPlatformCatalog();
     populateAssignPlatformSelect();
+    populateAssignPlanSelect();
     updateAssignFieldsVisibility();
     updateAssignExpiryDefaults();
     document.getElementById("wholesaler-assign-modal").hidden = false;
@@ -351,9 +382,11 @@
     });
     document.getElementById("wholesaler-assign-mode").addEventListener("change", updateAssignFieldsVisibility);
     document.getElementById("wholesaler-assign-platform").addEventListener("change", () => {
+      populateAssignPlanSelect();
       updateAssignFieldsVisibility();
       updateAssignExpiryDefaults();
     });
+    document.getElementById("wholesaler-assign-plan").addEventListener("change", updateAssignExpiryDefaults);
     document.getElementById("wholesaler-assign-for-self").addEventListener("change", updateAssignFieldsVisibility);
 
     document.getElementById("wholesaler-assign-form").addEventListener("submit", async (e) => {
@@ -366,6 +399,8 @@
       const platform = document.getElementById("wholesaler-assign-platform").value;
       const forSelf = document.getElementById("wholesaler-assign-for-self").checked;
       const body = { mode, platform, forSelf };
+      const plan = selectedAssignPlan();
+      if (plan) body.months = plan.months;
       if (!forSelf) {
         body.clientPhone = document.getElementById("wholesaler-assign-phone").value.trim();
       }
@@ -545,10 +580,8 @@
   function renderQueueList() {
     const tbody = document.getElementById("wholesalers-queue-tbody");
     const empty = document.getElementById("wholesalers-queue-empty");
-    tbody.innerHTML = "";
-    if (cachedQueue.length === 0) { empty.hidden = false; return; }
-    empty.hidden = true;
-    for (const o of cachedQueue) tbody.appendChild(renderQueueRow(o));
+    empty.hidden = cachedQueue.length > 0;
+    fillTbody(tbody, cachedQueue.map(renderQueueRow));
   }
 
   function initQueueActions() {
