@@ -26,6 +26,7 @@ import { touchWholesalerActivity } from "../db/wholesaler.repository";
 import { unlockWholesalerLogin } from "../services/login-unlock.service";
 import { renewAccount } from "../services/access.service";
 import type { Wholesaler } from "../db/wholesaler.repository";
+import { plansFor, planFor, planExpiresAt } from "../services/plans.service";
 
 // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM no tienen stock de perfiles — se
 // activan a mano (mismo criterio que wholesaler.routes.ts, duplicado acá
@@ -161,10 +162,22 @@ router.post("/:id/assign-account", (req, res) => {
 
   const orderRef = "admin-assign:" + wholesalerId + ":" + Date.now();
 
+  // Planes por meses (CANVA, GEMINI): el admin elige 1, 3, 6 o 12 meses —
+  // queda guardado en la cuenta (sale en «Pendientes» como «Plan 3 meses»)
+  // y, si no mandó fecha, el vencimiento sale del plan.
+  let plan: ReturnType<typeof planFor> = null;
+  const rawMonths = req.body?.months;
+  if (plansFor(platform) && rawMonths !== undefined && rawMonths !== null && rawMonths !== "") {
+    plan = planFor(platform, rawMonths);
+    if (!plan) return res.status(400).json({ message: `Elige un plan válido para "${platform}" (1, 3, 6 o 12 meses).` });
+  }
+  const planMonths = plan?.months;
+  const bodyExpiresAt = () => String(req.body?.expiresAt ?? "").trim() || (plan ? planExpiresAt(plan) : "");
+
   if (mode === "manual") {
     const email      = String(req.body?.email ?? "").trim();
     const password   = String(req.body?.password ?? "").trim();
-    const expiresAt  = String(req.body?.expiresAt ?? "").trim();
+    const expiresAt  = bodyExpiresAt();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: "Falta un correo válido." });
     }
@@ -172,7 +185,7 @@ router.post("/:id/assign-account", (req, res) => {
     if (!DATE_RE.test(expiresAt)) return res.status(400).json({ message: "Falta la fecha de vencimiento." });
 
     const created = createManualActivationForWholesaler({
-      platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
+      platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef, planMonths,
       // Una cuenta completa ya lista (Netflix, Disney…) no tiene nada que
       // activar: antes caía igual en "Activación pendiente".
       activationPending: isManualActivationPlatform(platform),
@@ -184,7 +197,7 @@ router.post("/:id/assign-account", (req, res) => {
   // mode === "stock"
   if (isManualActivationPlatform(platform)) {
     const email     = String(req.body?.email ?? "").trim();
-    const expiresAt = String(req.body?.expiresAt ?? "").trim();
+    const expiresAt = bodyExpiresAt();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: "Falta un correo válido para activar esta plataforma." });
     }
@@ -195,7 +208,7 @@ router.post("/:id/assign-account", (req, res) => {
     if (!DATE_RE.test(expiresAt)) return res.status(400).json({ message: "Falta la fecha de vencimiento." });
 
     const created = createManualActivationForWholesaler({
-      platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef,
+      platform, email, password, expiresAt, wholesalerId, clientPhone, orderRef, planMonths,
     });
     touchWholesalerActivity(wholesalerId);
     return res.status(201).json({ ok: true, account: { platform, email: created.email } });
