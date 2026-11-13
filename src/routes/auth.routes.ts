@@ -10,7 +10,7 @@ import {
 } from "../db/security.repository";
 import { requireAuth } from "../middleware/auth.middleware";
 import { clientIp, ipHeadersSummary, isPublicIp, isAdminHost } from "../services/security.service";
-import { registrationOptions, registerPasskey, loginOptions, verifyPasskeyLogin } from "../services/passkey.service";
+import { registrationOptions, registerPasskey, loginOptions, verifyPasskeyLogin, passkeyOnlyStatus } from "../services/passkey.service";
 import { env } from "../config/env";
 import axios from "axios";
 
@@ -33,6 +33,7 @@ const MAX_FAILS_TRUSTED = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const fails = new Map<string, { count: number; lockedUntil: number }>();
 const BLOCKED_MSG = "Esta conexión quedó bloqueada por contraseñas incorrectas. Entra con tu llave de acceso o desde un dispositivo donde ya iniciaste sesión.";
+const PASSKEY_ONLY_MSG = "La entrada con contraseña está desactivada: entra con tu llave de acceso (Face ID o huella).";
 
 // Intentos fallidos de TODAS las IPs juntas. El 8-nov alguien probó
 // contraseñas con una IP distinta (inventada) en cada intento, así el
@@ -84,6 +85,12 @@ function openSession(req: import("express").Request, res: import("express").Resp
 }
 
 router.post("/login", (req, res) => {
+  // Con llaves registradas solo entra la llave: la contraseña ni se revisa.
+  if (passkeyOnlyStatus().active) {
+    res.status(403).json({ message: PASSKEY_ONLY_MSG, passkeyOnly: true });
+    return;
+  }
+
   const now = Date.now();
   const ip = clientIp(req);
   const trusted = isTrustedDevice(req.cookies?.[TRUSTED_COOKIE]);
@@ -197,6 +204,7 @@ router.post("/passkey/register/verify", requireAuth, async (req, res) => {
 router.get("/passkeys", requireAuth, (_req, res) => {
   res.json({
     passkeys: listPasskeys().map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt })),
+    passkeyOnly: passkeyOnlyStatus(),
   });
 });
 
@@ -229,12 +237,15 @@ router.post("/logout", (req, res) => {
 router.get("/login-status", (req, res) => {
   const ip = clientIp(req);
   const blocked = !isTrustedDevice(req.cookies?.[TRUSTED_COOKIE]) && isPublicIp(ip) && isPanelIpBlocked(ip);
-  res.json(blocked ? { blocked: true, ip } : { blocked: false });
+  const passkeyOnly = passkeyOnlyStatus().active;
+  res.json(blocked ? { blocked: true, ip, passkeyOnly } : { blocked: false, passkeyOnly });
 });
 
+// passkeyOnly: la pantalla de entrada muestra solo «Entrar con llave de acceso».
 router.get("/me", (req, res) => {
   const token = req.cookies?.[SESSION_COOKIE];
-  res.json({ authenticated: verifySessionToken(token) });
+  const authenticated = verifySessionToken(token);
+  res.json(authenticated ? { authenticated } : { authenticated, passkeyOnly: passkeyOnlyStatus().active });
 });
 
 // ── Seguridad: dispositivos con sesión abierta ──

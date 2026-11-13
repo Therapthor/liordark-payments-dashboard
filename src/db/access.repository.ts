@@ -728,12 +728,16 @@ export function listWholesalerClients(wholesalerId: number): WholesalerClientPro
   const rows = db.prepare(`
     SELECT p.id, p.account_id AS accountId, p.slot_number AS slotNumber, p.profile_name AS profileName,
            p.client_phone AS clientPhone, p.renewal_status AS renewalStatus, p.order_ref AS orderRef,
-           p.updated_at AS updatedAt, a.platform AS platform, a.expires_at AS expiresAt,
+           p.updated_at AS updatedAt, a.platform AS platform,
+           -- Cuenta ya renovada con el proveedor: quien no pagó se corta en la
+           -- fecha original (renewal_cleanup_due_at), no en la nueva.
+           CASE WHEN a.renewal_cleanup_due_at IS NOT NULL AND COALESCE(p.renewal_status, '') != 'yes'
+                THEN a.renewal_cleanup_due_at ELSE a.expires_at END AS expiresAt,
            a.email AS email, a.password AS password, a.has_profiles AS accountHasProfiles
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id = ? AND p.client_phone != ''
-    ORDER BY a.expires_at ASC
+    ORDER BY expiresAt ASC
   `).all(wholesalerId) as any[];
   return rows.map(r => ({ ...r, accountHasProfiles: r.accountHasProfiles === 1 })) as WholesalerClientProfile[];
 }
@@ -1216,46 +1220,12 @@ export function markSmsReminderSent(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET sms_reminder_sent_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
-/** Sub-clientes de este mayorista que vencen EXACTO en `days` días y todavía
- *  no generaron la campanita de "cliente por vencer" en mayorista.liordark.com
- *  (se limpia solo al renovar la cuenta — ver resetRenewalMarkers). */
-export function listUnnotifiedExpiringClientsForWholesaler(
-  wholesalerId: number, days: number
-): { profileId: number; platform: string; email: string }[] {
-  const today = limaTodayISOLocal();
-  const limit = addDaysISOLocal(today, days);
-  return db.prepare(`
-    SELECT p.id AS profileId, a.platform AS platform, a.email AS email
-    FROM access_profiles p
-    JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId
-      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
-  `).all({ wholesalerId, limit }) as { profileId: number; platform: string; email: string }[];
-}
-
-/** Igual que arriba pero para TODOS los mayoristas a la vez — usado por el
- *  job proactivo (ver index.ts) para que la campanita se genere sola sin
- *  depender de que el mayorista entre a pedir sus notificaciones. */
-export function listAllUnnotifiedExpiringClientsForWholesalers(
-  days: number
-): { profileId: number; wholesalerId: number; platform: string; email: string }[] {
-  const today = limaTodayISOLocal();
-  const limit = addDaysISOLocal(today, days);
-  return db.prepare(`
-    SELECT p.id AS profileId, p.wholesaler_id AS wholesalerId, a.platform AS platform, a.email AS email
-    FROM access_profiles p
-    JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id IS NOT NULL
-      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
-  `).all({ limit }) as { profileId: number; wholesalerId: number; platform: string; email: string }[];
-}
-
 /** Marca que ya se le avisó por la campanita del panel mayorista — evita repetir en el próximo polling. */
 export function markExpiryNotified(profileId: number): void {
   db.prepare(`UPDATE access_profiles SET expiry_notified_at = datetime('now') WHERE id = ?`).run(profileId);
 }
 
-/** Igual que listUnnotifiedExpiringClientsForWholesaler, pero para UN cliente
+/** Clientes que vencen en `days` días y aún no tienen su campanita, para UN cliente
  *  RETAIL (no mayorista) — campanita de liordark.com (ver GET /api/store/notifications). */
 export function listUnnotifiedExpiringClientsForCustomer(
   phone: string, days: number

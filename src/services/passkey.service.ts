@@ -77,6 +77,18 @@ export function passkeyCount(): number {
   return listPasskeys().length;
 }
 
+/**
+ * ENTRADA SOLO CON LLAVE (pedido del dueño): con al menos una llave de
+ * acceso registrada, la contraseña ya no abre el panel. Sin llaves, la
+ * contraseña sigue funcionando: el dueño nunca queda afuera. Emergencia:
+ * PANEL_PASSWORD_LOGIN=on en el servidor la vuelve a habilitar.
+ */
+export function passkeyOnlyStatus(): { active: boolean; passkeys: number; override: boolean } {
+  const passkeys = passkeyCount();
+  const override = env.PANEL_PASSWORD_LOGIN;
+  return { active: passkeys > 0 && !override, passkeys, override };
+}
+
 // ── Registrar una llave (con sesión abierta) ──
 
 export async function registrationOptions(res: Response) {

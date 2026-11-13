@@ -41,6 +41,9 @@ export const env = {
   // se registran. Solo se cambian para probar en local.
   PANEL_RP_ID:  process.env.PANEL_RP_ID || "panel.liordark.com",
   PANEL_ORIGIN: process.env.PANEL_ORIGIN || `https://${process.env.PANEL_RP_ID || "panel.liordark.com"}`,
+  // Emergencia: con «on» la contraseña vuelve a abrir el panel aunque haya
+  // llaves de acceso registradas (normalmente, con llaves solo entra la llave).
+  PANEL_PASSWORD_LOGIN: String(process.env.PANEL_PASSWORD_LOGIN ?? "").trim().toLowerCase() === "on",
 
   // Mismas credenciales que ya usa el bot — el panel sube ahí la imagen
   // principal del menú de WhatsApp (Configuración > Flujo).

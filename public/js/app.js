@@ -200,13 +200,34 @@
   // AUTH
   // ─────────────────────────────────────────────────────────────
 
-  function showLogin() {
+  // Entrada solo con llave (hay llaves registradas): sin contraseña, un
+  // solo botón grande «Entrar con llave de acceso» y una línea de ayuda.
+  const passkeySupported = !!(window.LiordarkPasskey && window.LiordarkPasskey.supported());
+  function setLoginMode(passkeyOnly) {
+    const form = document.getElementById("login-form");
+    const pwd = document.getElementById("login-password");
+    const pk = document.getElementById("login-passkey");
+    form.classList.toggle("login-passkey-only", passkeyOnly);
+    pwd.hidden = passkeyOnly;
+    pwd.disabled = passkeyOnly;
+    form.querySelector('button[type="submit"]').hidden = passkeyOnly;
+    document.getElementById("login-passkey-or").hidden = passkeyOnly || !passkeySupported;
+    pk.hidden = !passkeyOnly && !passkeySupported;
+    pk.classList.toggle("login-passkey-main", passkeyOnly);
+    document.getElementById("login-passkey-hint").hidden = !passkeyOnly;
+  }
+
+  function showLogin(passkeyOnly) {
+    if (typeof passkeyOnly === "boolean") setLoginMode(passkeyOnly);
     document.getElementById("login-screen").hidden = false;
     document.getElementById("app").hidden = true;
     // Conexión ya bloqueada: GAME OVER de entrada.
     fetch("/api/auth/login-status", { credentials: "include" })
       .then(r => r.json())
-      .then(d => { if (d && d.blocked && window.LiordarkGameOver) window.LiordarkGameOver.show(d.ip); })
+      .then(d => {
+        if (d && typeof d.passkeyOnly === "boolean") setLoginMode(d.passkeyOnly);
+        if (d && d.blocked && window.LiordarkGameOver) window.LiordarkGameOver.show(d.ip);
+      })
       .catch(() => {});
   }
   function showApp() {
@@ -216,9 +237,9 @@
 
   async function checkAuth() {
     try {
-      const { authenticated } = await api("/auth/me");
+      const { authenticated, passkeyOnly } = await api("/auth/me");
       if (authenticated) { showApp(); boot(); }
-      else showLogin();
+      else showLogin(!!passkeyOnly);
     } catch {
       showLogin();
     }
@@ -236,6 +257,13 @@
         body: JSON.stringify({ password }),
       });
       const data = await res.json().catch(() => ({}));
+      // Alguien registró una llave mientras esta pantalla estaba abierta.
+      if (res.status === 403 && data?.passkeyOnly) {
+        setLoginMode(true);
+        errorEl.textContent = data.message;
+        errorEl.hidden = false;
+        return;
+      }
       if (res.status === 403 && data?.blocked && window.LiordarkGameOver) {
         window.LiordarkGameOver.show(data.ip);
         errorEl.textContent = data.message || "Conexión bloqueada.";
@@ -251,12 +279,15 @@
     }
   });
 
-  // Entrar con llave de acceso (Face ID / huella).
+  // Entrar con llave de acceso (Face ID / huella). En «solo con llave» el
+  // botón se muestra siempre (si el navegador no admite llaves, lo dice).
   (() => {
     const btn = document.getElementById("login-passkey");
-    if (!btn || !window.LiordarkPasskey || !window.LiordarkPasskey.supported()) return;
-    btn.hidden = false;
-    document.getElementById("login-passkey-or").hidden = false;
+    if (!btn || !window.LiordarkPasskey) return;
+    if (passkeySupported) {
+      btn.hidden = false;
+      document.getElementById("login-passkey-or").hidden = false;
+    }
     btn.addEventListener("click", async () => {
       const errorEl = document.getElementById("login-error");
       errorEl.hidden = true;

@@ -169,6 +169,8 @@ const PANEL_CSP = [
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob: https:",
   "connect-src 'self'",
+  // App instalable (ícono en el celular): el manifest sale del mismo panel.
+  "manifest-src 'self'",
   "frame-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
