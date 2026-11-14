@@ -101,10 +101,11 @@
   --mp-display: "Outfit", "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Movimiento: corto y suave (ease-out), solo transform/opacity */
-  --mp-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --mp-dur: 200ms;
-  --mp-dur-fast: 150ms;
-  --mp-dur-slow: 250ms;
+  /* Curva y tiempos de iOS: arranca rápido y frena suave */
+  --mp-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --mp-dur: 220ms;
+  --mp-dur-fast: 160ms;
+  --mp-dur-slow: 340ms;
 
   --mp-sidebar-w: 248px;
   --mp-gutter: 40px;          /* margen lateral del contenido (PC) */
@@ -2027,3 +2028,25 @@ button.mp-kpi:active { transform: scale(0.98); }
 .sl-row-price { flex: none; font-weight: 800; }
 .sl-row .access-platform-count { flex: none; }
 .sl-row .access-platform-count { align-self: center; margin: 0; }
+
+/* ── Sensación tipo iPhone ──
+   Al tocar, botones y tarjetas se hunden un poquito (respuesta inmediata);
+   al soltar vuelven con la curva de iOS. Solo transform: no recalcula la página. */
+:where(.btn-primary, .btn-secondary, .btn-mango, .btn-danger, .btn-ghost, .icon-btn, .icon-btn-sm,
+       .mp-kpi, .mp-tab, .mp-nav-item, .mp-band-sec-btn, .sl-row, .access-platform-card,
+       .mp-more-row, .config-subnav-item, .tab-btn, .feed-item) {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+:where(.btn-primary, .btn-secondary, .btn-mango, .btn-danger, .btn-ghost, .icon-btn, .icon-btn-sm,
+       .mp-kpi, .mp-band-sec-btn, .sl-row, .access-platform-card, .mp-more-row):active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 90ms ease-out;
+}
+.mp-tab:active, .mp-nav-item:active { transform: scale(0.94); transition: transform 90ms ease-out; }
+/* Ventanas: el fondo se oscurece y se desenfoca suave, como en iOS */
+.modal-backdrop:not([hidden]) { -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+@media (prefers-reduced-motion: reduce) {
+  :where(.btn-primary, .btn-secondary, .btn-mango, .btn-danger, .btn-ghost, .icon-btn, .icon-btn-sm,
+         .mp-kpi, .mp-band-sec-btn, .sl-row, .access-platform-card, .mp-more-row, .mp-tab, .mp-nav-item):active { transform: none; }
+}

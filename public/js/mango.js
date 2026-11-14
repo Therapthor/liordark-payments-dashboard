@@ -283,10 +283,38 @@
   setInterval(renderBand, 60_000);
 
   // ─── Movimiento: entrada suave (transform/opacity, 150–250 ms) ───
+  // Movimiento tipo iPhone: curva de iOS, solo opacidad y transform (los
+  // hace la tarjeta gráfica) y con Web Animations, sin forzar al navegador
+  // a recalcular la página (antes «void offsetWidth» trababa las vistas grandes).
+  const IOS_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
+  const ANIMS = {
+    "mp-anim-view":  { kf: [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], ms: 340 },
+    "mp-anim-title": { kf: [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], ms: 260 },
+    "mp-anim-pop":   { kf: [{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1, transform: "none" }], ms: 240 },
+    "mp-anim-sheet": { kf: [{ transform: "translateY(100%)" }, { transform: "none" }], ms: 440 },
+  };
+  const running = new WeakMap();
+  function play(el, a, delay = 0) {
+    const prev = running.get(el);
+    if (prev) prev.cancel();
+    const anim = el.animate(a.kf, { duration: a.ms, delay, easing: IOS_EASE, fill: "backwards" });
+    running.set(el, anim);
+    anim.onfinish = anim.oncancel = () => { if (running.get(el) === anim) running.delete(el); };
+  }
   function animateIn(el, cls) {
     if (!el || mqReduce.matches) return;
+    const a = ANIMS[cls];
+    if (a && typeof el.animate === "function") {
+      // Vistas: las tarjetas entran una tras otra (escalonado corto).
+      if (cls === "mp-anim-view") {
+        const kids = Array.from(el.children).filter((k) => !k.hidden).slice(0, 8);
+        if (kids.length > 1) { kids.forEach((k, i) => play(k, a, i * 35)); return; }
+      }
+      play(el, a);
+      return;
+    }
     el.classList.remove(cls);
-    void el.offsetWidth; // reinicia la animación
+    void el.offsetWidth; // reinicia la animación (navegadores viejos)
     el.classList.add(cls);
     el.addEventListener("animationend", () => el.classList.remove(cls), { once: true });
   }
@@ -859,6 +887,9 @@
       window.Chart.defaults.font.weight = "600";
       window.Chart.defaults.color = "#8A6E4B";
       window.Chart.defaults.borderColor = "#F5EADA";
+      // Animación corta: menos cuadros dibujando el gráfico = sin tirones.
+      window.Chart.defaults.animation.duration = 450;
+      window.Chart.defaults.animation.easing = "easeOutQuart";
     } catch { /* versión sin defaults editables — no crítico */ }
   }
 

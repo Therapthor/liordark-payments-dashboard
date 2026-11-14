@@ -1097,6 +1097,7 @@
   let chart = null;
   let lastChartLoad = 0;
 
+  let chartSig = "";
   async function loadChart() {
     const { days } = await api("/history?days=30");
     const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date));
@@ -1106,10 +1107,18 @@
     const today  = todayLima();
 
     const canvas = document.getElementById("chart-daily");
-    if (!canvas) return;
+    if (!canvas || typeof Chart === "undefined") return;
+    lastChartLoad = Date.now();
+    // Mismos números que ya están dibujados: no se redibuja (sin tirones).
+    const sig = labels.join(",") + "|" + totals.join(",") + "|" + today;
+    if (sig === chartSig && chart) return;
+    chartSig = sig;
     const ctx = canvas.getContext("2d");
     const barColors = ordered.map(d => d.date === today ? "#1F6B44" : "rgba(31,107,68,0.45)");
 
+    if (chart) { chart.destroy(); chart = null; }
+    // Se dibuja después de que la vista ya apareció (no compite con la animación).
+    await new Promise(r => (window.requestIdleCallback ? requestIdleCallback(r, { timeout: 400 }) : setTimeout(r, 120)));
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
       type: "bar",

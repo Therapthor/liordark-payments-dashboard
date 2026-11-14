@@ -5,6 +5,8 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import path from "path";
+import fs from "fs";
+import crypto from "crypto";
 import { env } from "./config/env";
 import { db } from "./db/db";
 import { startSync, stopSync } from "./services/sync.service";
@@ -181,7 +183,30 @@ const PANEL_CSP = [
 // Tienda y mayorista: nadie más puede meterlas en un iframe (clic engañoso
 // para gastar saldo) y no se cargan plugins ni <base> ajenos (auditoría M2).
 const SITE_CSP = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
-const panelStatic      = express.static(path.resolve(process.cwd(), "public"), noCacheHeaders);
+// PANEL MÁS RÁPIDO: cada JS/CSS del panel se pide con «?v=<huella del
+// archivo>» (se calcula al arrancar). Con esa huella el navegador lo guarda
+// un año sin volver a preguntar; cuando un deploy cambia el archivo, cambia
+// la huella y se baja el nuevo. El HTML sigue «no-cache».
+const PANEL_DIR = path.resolve(process.cwd(), "public");
+function buildPanelIndex(): string | null {
+  try {
+    const html = fs.readFileSync(path.join(PANEL_DIR, "index.html"), "utf8");
+    return html.replace(/(src|href)="((?:js|css|vendor)\/[^"?#]+\.(?:js|css))"/g, (m, attr: string, rel: string) => {
+      try {
+        const h = crypto.createHash("sha1").update(fs.readFileSync(path.join(PANEL_DIR, rel))).digest("hex").slice(0, 10);
+        return `${attr}="${rel}?v=${h}"`;
+      } catch { return m; }
+    });
+  } catch { return null; }
+}
+const PANEL_INDEX = buildPanelIndex();
+const panelStatic      = express.static(PANEL_DIR, {
+  setHeaders: (res: any, filePath: string) => {
+    const versioned = !!res.req?.query?.v && /\.(js|css)$/i.test(filePath);
+    res.setHeader("Cache-Control", versioned ? "public, max-age=31536000, immutable"
+      : LONG_CACHE_EXT.test(filePath) ? "public, max-age=604800" : "no-cache");
+  },
+});
 const wholesaleStatic  = express.static(path.resolve(process.cwd(), "public-wholesale"), noCacheHeaders);
 
 // liordark.com/codigo/<token> — página del link temporal de códigos.
@@ -232,6 +257,11 @@ app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "same-origin");
+    if (PANEL_INDEX && req.method === "GET" && (req.path === "/" || req.path === "/index.html")) {
+      res.setHeader("Cache-Control", "no-cache");
+      res.type("html").send(PANEL_INDEX);
+      return;
+    }
     panelStatic(req, res, next);
   }
 });

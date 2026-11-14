@@ -640,6 +640,8 @@
     return `${parts[2]}/${parts[1]}`;
   }
 
+  let chartObserver = null;
+  let chartSig = "";
   async function loadStats() {
     try {
       const { totalCustomers, customersWithEmail, registrationsThisMonth } = await api("/stats");
@@ -651,11 +653,15 @@
 
       const labels    = registrationsThisMonth.map(r => fmtDayShort(r.date));
       const counts    = registrationsThisMonth.map(r => r.count);
+      // Se refresca cada 20 s: si los números no cambiaron, el gráfico no se
+      // vuelve a dibujar (antes se redibujaba igual y daba un tirón).
+      const sig = labels.join(",") + "|" + counts.join(",");
+      if (sig === chartSig && (statsChart || chartObserver)) return;
+      chartSig = sig;
       const todayIdx  = registrationsThisMonth.length - 1;
       const barColors = registrationsThisMonth.map((_, i) => i === todayIdx ? "#FFB21A" : "rgba(255,201,60,0.6)");
 
-      if (statsChart) statsChart.destroy();
-      statsChart = new Chart(canvas.getContext("2d"), {
+      const chartConfig = {
         type: "bar",
         data: {
           labels,
@@ -675,7 +681,23 @@
             y: { beginAtZero: true, ticks: { color: "#9a9a9a", font: { size: 11 }, precision: 0 }, grid: { color: "#efefef" } },
           },
         },
-      });
+      };
+
+      if (statsChart) { statsChart.destroy(); statsChart = null; }
+      if (chartObserver) { chartObserver.disconnect(); chartObserver = null; }
+      const draw = () => { statsChart = new Chart(canvas.getContext("2d"), chartConfig); };
+      // Se dibuja recién cuando el gráfico está por verse (va al final de la
+      // vista): abrir Clientes no espera a pintar un gráfico que no se ve.
+      if ("IntersectionObserver" in window) {
+        chartObserver = new IntersectionObserver((entries) => {
+          if (!entries.some((en) => en.isIntersecting)) return;
+          chartObserver.disconnect(); chartObserver = null;
+          draw();
+        }, { rootMargin: "150px" });
+        chartObserver.observe(canvas);
+      } else {
+        draw();
+      }
     } catch { /* no crítico — la lista de clientes ya se mostró igual */ }
   }
 
