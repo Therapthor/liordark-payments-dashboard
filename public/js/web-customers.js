@@ -643,7 +643,7 @@
       const labels    = registrationsThisMonth.map(r => fmtDayShort(r.date));
       const counts    = registrationsThisMonth.map(r => r.count);
       const todayIdx  = registrationsThisMonth.length - 1;
-      const barColors = registrationsThisMonth.map((_, i) => i === todayIdx ? "#d6900f" : "rgba(245,166,35,0.55)");
+      const barColors = registrationsThisMonth.map((_, i) => i === todayIdx ? "#FFB21A" : "rgba(255,201,60,0.6)");
 
       if (statsChart) statsChart.destroy();
       statsChart = new Chart(canvas.getContext("2d"), {

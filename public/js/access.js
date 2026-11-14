@@ -178,6 +178,7 @@
 
     const { platforms } = await api("/platforms");
     cachedPlatformSummaries = platforms;
+    renderAccessKpis(platforms);
     const container = document.getElementById("access-platforms");
     const empty = document.getElementById("access-empty");
 
@@ -192,6 +193,24 @@
     container.querySelectorAll(".access-platform-card").forEach(card => {
       card.addEventListener("click", () => openPlatformDetail(card.dataset.platform));
     });
+  }
+
+  // Tiras de números arriba (Mango Pro): cuentas, perfiles libres,
+  // clientes y plataformas sin stock (sin contar las de activación a mano).
+  function renderAccessKpis(platforms) {
+    const box = document.getElementById("access-kpis");
+    if (!box) return;
+    const sum = (k) => platforms.reduce((n, p) => n + (Number(p[k]) || 0), 0);
+    const accounts = sum("accountCount");
+    const free = sum("sellableCount");
+    const clients = sum("occupiedCount");
+    const noStock = platforms.filter(p => !p.sellableCount && !/canva|gemini|youtube/i.test(p.platform || "")).length;
+    box.innerHTML = `
+      <div class="mp-kpi"><b>${accounts}</b><span>Cuentas</span></div>
+      <div class="mp-kpi is-green"><b>${free}</b><span>Perfiles libres</span></div>
+      <div class="mp-kpi is-blue"><b>${clients}</b><span>Clientes</span></div>
+      <div class="mp-kpi ${noStock ? "is-peach" : "is-soft"}"><b>${noStock}</b><span>Sin stock</span></div>`;
+    if (window.MP && window.MP.band) window.MP.band.setEyebrow("access", `${accounts} cuentas · ${free} perfiles libres`);
   }
 
   function renderPlatformCard(p) {

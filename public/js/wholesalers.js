@@ -131,6 +131,19 @@
     tbody.replaceChildren(...rows);
   }
 
+  // Tira de números (Mango Pro): pedidos en cola, mayoristas activos, saldo total.
+  function renderWholesalersKpis() {
+    const box = document.getElementById("wholesalers-kpis");
+    if (!box) return;
+    const queued = cachedQueue.filter(o => o.status === "queued").length;
+    const active = cachedWholesalers.filter(w => w.status === "active").length;
+    const balance = cachedWholesalers.reduce((n, w) => n + (Number(w.balanceCents) || 0), 0);
+    box.innerHTML = `
+      <div class="mp-kpi ${queued ? "is-peach" : "is-soft"}"><b>${queued}</b><span>En cola</span></div>
+      <div class="mp-kpi is-blue"><b>${active}</b><span>Activos</span></div>
+      <div class="mp-kpi is-green"><b>${escapeHtml(fmtMoney(balance))}</b><span>Saldo total</span></div>`;
+  }
+
   function renderWholesalersList() {
     const tbody = document.getElementById("wholesalers-tbody");
     const empty = document.getElementById("wholesalers-empty");
@@ -671,6 +684,7 @@
     const [{ wholesalers }, { queue }] = await Promise.all([api("/"), api("/full-account-queue")]);
     cachedWholesalers = wholesalers;
     cachedQueue        = queue;
+    renderWholesalersKpis();
     renderWholesalersList();
     renderQueueList();
     updateQueueBadge();

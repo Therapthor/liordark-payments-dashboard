@@ -101,7 +101,22 @@
       </div>`;
   }
 
+  // Tira de números (Mango Pro): nuevos, en revisión, resueltos.
+  function renderKpis() {
+    const box = $("soportes-kpis");
+    if (!box) return;
+    const n = (fn) => tickets.filter(fn).length;
+    const fresh = n(t => t.status === "pending");
+    const seen = n(t => t.status === "seen");
+    const done = n(t => t.status === "attended");
+    box.innerHTML = `
+      <div class="mp-kpi ${fresh ? "is-peach" : "is-soft"}"><b>${fresh}</b><span>Nuevos</span></div>
+      <div class="mp-kpi ${seen ? "is-warn" : "is-soft"}"><b>${seen}</b><span>En revisión</span></div>
+      <div class="mp-kpi is-green"><b>${done}</b><span>Resueltos</span></div>`;
+  }
+
   function render() {
+    renderKpis();
     const list = $("soportes-list");
     const shown = tickets.filter(t => filter === "all" || (filter === "open" ? t.status !== "attended" : t.status === "attended"));
     list.innerHTML = shown.map(renderCard).join("");

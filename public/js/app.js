@@ -319,7 +319,21 @@
   const ADMIN_VIEW_KEY = "ldp_admin_view";
   const VALID_VIEWS = ["resumen", "access", "codes", "wholesalers", "web-customers", "course", "history", "renewals", "config", "soportes"];
 
+  // «Pagos» no es una vista: abre la última sub-vista usada (Historial o
+  // Renovaciones). Así el mismo botón sirve en la barra lateral (PC) y en
+  // la barra de pestañas de abajo (celular).
+  const PAGOS_VIEW_KEY = "ldp_admin_pagos_view";
+  function lastPagosView() {
+    try {
+      const v = localStorage.getItem(PAGOS_VIEW_KEY);
+      if (v === "history" || v === "renewals") return v;
+    } catch { /* localStorage bloqueado */ }
+    return "history";
+  }
+
   function switchView(view) {
+    if (view === "pagos") view = lastPagosView();
+    if (!VALID_VIEWS.includes(view)) return;
     try { localStorage.setItem(ADMIN_VIEW_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
 
     document.getElementById("view-live").hidden          = view !== "resumen";
@@ -334,13 +348,16 @@
     document.getElementById("view-soportes").hidden      = view !== "soportes";
 
     const isPagos = view === "history" || view === "renewals";
-    document.getElementById("pagos-toggle").classList.toggle("active", isPagos);
-    document.querySelectorAll(".tab-dropdown-item").forEach(item => {
-      item.classList.toggle("active", item.dataset.view === view);
+    if (isPagos) { try { localStorage.setItem(PAGOS_VIEW_KEY, view); } catch { /* localStorage bloqueado */ } }
+    // Todos los accesos a una vista (barra lateral, pestañas de abajo,
+    // pantalla «Más», selector Historial | Renovaciones) se marcan igual.
+    document.querySelectorAll("[data-view]").forEach(btn => {
+      const on = btn.dataset.view === view || (btn.dataset.view === "pagos" && isPagos);
+      btn.classList.toggle("active", on);
+      if (on) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current");
     });
-    document.querySelectorAll('.tab-btn[data-view]:not(.tab-dropdown-toggle)').forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.view === view);
-    });
+
+    document.dispatchEvent(new CustomEvent("mp:view", { detail: { view } }));
 
     if (view === "history") { loadHistory(); loadChart(); }
     if (view === "renewals") {
@@ -404,30 +421,10 @@
   }
 
   function initTabs() {
-    const dropdown = document.getElementById("pagos-dropdown");
-    const menu     = document.getElementById("pagos-menu");
-
-    document.getElementById("pagos-toggle").addEventListener("click", (e) => {
-      e.stopPropagation();
-      menu.hidden = !menu.hidden;
-    });
-
-    document.querySelectorAll(".tab-dropdown-item").forEach(btn => {
-      btn.addEventListener("click", () => {
-        menu.hidden = true;
-        switchView(btn.dataset.view);
-      });
-    });
-
-    document.querySelectorAll('.tab-btn[data-view]:not(.tab-dropdown-toggle)').forEach(btn => {
-      btn.addEventListener("click", () => {
-        menu.hidden = true;
-        switchView(btn.dataset.view);
-      });
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!dropdown.contains(e.target)) menu.hidden = true;
+    // Cualquier botón con data-view cambia de vista (barra lateral, barra
+    // de pestañas del celular, pantalla «Más», selector de Pagos).
+    document.querySelectorAll("[data-view]").forEach(btn => {
+      btn.addEventListener("click", () => switchView(btn.dataset.view));
     });
   }
 
@@ -1104,7 +1101,7 @@
     const canvas = document.getElementById("chart-daily");
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    const barColors = ordered.map(d => d.date === today ? "#16a34a" : "rgba(22,163,74,0.55)");
+    const barColors = ordered.map(d => d.date === today ? "#1F6B44" : "rgba(31,107,68,0.45)");
 
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
