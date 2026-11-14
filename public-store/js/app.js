@@ -836,7 +836,7 @@
       <section class="cbv cbv-4" aria-label="Arma tu combo">
         <div class="cbv4-pill">
           <span class="cbv4-chips" aria-hidden="true">${chips(3, "xs", "cbv4-chip")}</span>
-          <p class="cbv4-text"><b>Arma tu combo</b><span>2 o más plataformas, hasta −${max}%</span></p>
+          <p class="cbv4-text"><b>Arma tu combo</b><span>Elige 2 o más y paga hasta ${max}% menos</span></p>
           <span class="cbv4-badge" aria-hidden="true">−${max}%</span>
           ${btn("Armar", "cbv4-btn")}
         </div>
@@ -853,7 +853,7 @@
         <div class="cbv5-body">
           <p class="cbv-kicker">Arma tu combo</p>
           <p class="cbv5-bubble">¡Psst! Junta <b>2 o más</b> plataformas y te hago hasta <b>${max}% de descuento</b>.</p>
-          ${btn("Armar mi combo")}
+          <div class="cbv5-row">${btn("Armar mi combo")}<ul class="cbv5-tiers">${tiers}</ul></div>
         </div>
       </section>`;
   }
