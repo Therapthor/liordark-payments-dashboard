@@ -495,7 +495,7 @@ export type SoldProfile = {
  * asignó a un mayorista (Accesos > Asignar a mayorista) es SU inventario,
  * nunca se le puede vender por error a un cliente normal de retail.
  */
-export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string): SoldProfile | null => {
+export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string, preferAccountId: number | null = null): SoldProfile | null => {
   const plat = platform.trim().toUpperCase();
   const digits = normalizePeruPhone(clientPhone);
   const floor = minSellableDateISO();
@@ -508,9 +508,9 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
     JOIN access_accounts a ON a.id = p.account_id
     WHERE a.platform = ? AND p.client_phone = '' AND p.wholesaler_id IS NULL
       AND a.expires_at IS NOT NULL AND a.expires_at >= ?
-    ORDER BY a.expires_at ASC
+    ORDER BY (a.id = ?) DESC, a.expires_at ASC
     LIMIT 1
-  `).get(plat, floor) as any;
+  `).get(plat, floor, preferAccountId) as any;
 
   if (!row) return null;
 

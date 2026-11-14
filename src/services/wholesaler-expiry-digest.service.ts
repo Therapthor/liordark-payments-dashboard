@@ -4,7 +4,7 @@ import { limaTodayISO, addDaysISO } from "./access.service";
 
 // ─────────────────────────────────────────────────────────────
 // AVISO DE RENOVACIÓN PARA MAYORISTAS — en vez de un aviso por cada perfil,
-// UN resumen por mayorista a 3 días, a 1 día y el mismo día del vencimiento
+// UN resumen por mayorista 1 día antes del vencimiento (solo ese día)
 // (solo la campanita de mayorista.liordark.com, nunca WhatsApp). Al tocarlo
 // se abre Clientes › «Por vencer».
 //
@@ -31,7 +31,7 @@ db.exec(`
 `);
 
 /** Días antes del vencimiento en que sale el resumen (0 = «vencen hoy»). */
-export const DIGEST_THRESHOLDS = [3, 1, 0] as const;
+export const DIGEST_THRESHOLDS = [1] as const; // pedido del dueño: solo el día antes
 const CUTOVER_TIME = "10 p. m."; // RENEWAL_CUTOVER_HOUR_LIMA en index.ts
 
 function ddmm(iso: string): string {

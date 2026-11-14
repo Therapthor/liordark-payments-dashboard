@@ -1688,6 +1688,13 @@
     document.getElementById("resumen-quick-assign-btn").addEventListener("click", () => {
       if (window.LiordarkAccess) window.LiordarkAccess.openComboOrderModal();
     });
+    // «Generar link»: Clientes › Links de venta, con el celular listo para escribir.
+    document.getElementById("resumen-sale-link-btn").addEventListener("click", () => {
+      switchView("web-customers");
+      const tab = document.querySelector('[data-customers-section="ventas"]');
+      if (tab) tab.click();
+      setTimeout(() => { const ph = document.getElementById("sl-phone"); if (ph) ph.focus(); }, 120);
+    });
     // «Subir cuentas»: el formulario «Agregar cuentas» de Accesos.
     document.getElementById("resumen-bulk-add-btn").addEventListener("click", () => {
       if (window.LiordarkAccess && typeof window.LiordarkAccess.openBulkAdd === "function") {

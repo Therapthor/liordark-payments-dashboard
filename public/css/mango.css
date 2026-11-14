@@ -1972,3 +1972,30 @@ button.mp-kpi:active { transform: scale(0.98); }
   .catalog-item { gap: 10px 12px; padding: 12px; }
   .catalog-price { text-align: left; }
 }
+
+/* Resumen: atajos «Subir cuentas» y «Generar link» junto a «Agregar cliente» (PC) */
+.mp-band-secondary { display: none; align-items: center; gap: 10px; }
+.app[data-mp-view="resumen"] .mp-band-secondary { display: flex; }
+.mp-band-sec-btn {
+  min-height: 46px; padding: 0 18px;
+  border: none; border-radius: 16px;
+  background: #fff; color: var(--mp-ink);
+  font-family: var(--mp-display); font-size: 15px; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  box-shadow: 0 10px 20px -16px rgba(43, 27, 14, 0.6);
+}
+.mp-band-sec-btn:hover { background: var(--mp-soft); }
+@media (min-width: 900px) {
+  .mp-hero-actions > .resumen-bulk-add-btn,
+  .mp-hero-actions > .resumen-sale-link-btn { display: none; }
+}
+@media (max-width: 899px) {
+  .app[data-mp-view="resumen"] .mp-band-secondary { display: none; }
+  .mp-hero-actions { flex-direction: row; }
+  .mp-hero-actions > .btn-secondary { flex: 1 1 0; min-width: 0; padding: 0 10px; }
+}
+
+/* Pedido: cantidad de perfiles por plataforma */
+.combo-qty { min-width: 64px; min-height: 36px; border-radius: 10px; font: inherit; font-weight: 700; }
+.combo-qty:disabled { opacity: 0.45; }
+.combo-order-platforms li > label { flex: 1 1 auto; }

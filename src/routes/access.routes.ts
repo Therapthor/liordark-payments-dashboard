@@ -298,14 +298,20 @@ router.post("/combo-order", (req, res) => {
     return;
   }
 
+  if (platforms.length > 30) { res.status(400).json({ message: "Máximo 30 perfiles por pedido." }); return; }
+
   const orderRef = "COMBO-" + digits + "-" + Date.now();
   const sold: SoldProfile[] = [];
   const failed: string[] = [];
+  // Varios perfiles de la misma plataforma (cantidad ×2, ×3…): salen de la
+  // misma cuenta mientras le queden perfiles libres.
+  const lastAccount = new Map<string, number>();
 
   for (const platform of platforms) {
     if (typeof platform !== "string" || !platform.trim()) continue;
-    const result = sellProfile(platform, digits, orderRef);
-    if (result) sold.push(result); else failed.push(platform);
+    const key = platform.trim().toUpperCase();
+    const result = sellProfile(platform, digits, orderRef, lastAccount.get(key) ?? null);
+    if (result) { sold.push(result); lastAccount.set(key, result.accountId); } else failed.push(platform);
   }
 
   res.status(sold.length > 0 ? 201 : 409).json({ orderRef, sold, failed });

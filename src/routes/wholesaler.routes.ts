@@ -700,7 +700,7 @@ router.post("/renewals/:profileId/mark-reminded", (req, res) => {
 
 // "Cuentas por vencer" no tiene un evento propio: se genera acá, cada vez
 // que el mayorista pide sus notificaciones (polling del front) y en el job
-// proactivo de index.ts. Un resumen por mayorista a 3 días, 1 día y el mismo
+// proactivo de index.ts. Un resumen por mayorista 1 día antes (solo ese
 // día (antes era un aviso por cada perfil). Ver wholesaler-expiry-digest.service.ts.
 function generateExpiryNotifications(wholesalerId: number): void {
   generateWholesalerExpiryDigests({ wholesalerId });

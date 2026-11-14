@@ -1697,19 +1697,30 @@
       return;
     }
 
+    // Cantidad: a veces el cliente lleva 2 o 3 perfiles iguales (salen de la misma cuenta si alcanza).
     list.innerHTML = platforms.map(p => {
       const free = p.sellableCount;
       const disabled = free > 0 ? "" : "disabled";
+      const max = Math.min(free, 10);
+      const opts = Array.from({ length: Math.max(max, 1) }, (_, i) => `<option value="${i + 1}">×${i + 1}</option>`).join("");
       return `
         <li>
           <label>
             <input type="checkbox" value="${escapeHtml(p.platform)}" ${disabled} />
             ${escapeHtml(p.platform)}
           </label>
+          <select class="combo-qty" aria-label="Cantidad de perfiles de ${escapeHtml(p.platform)}" disabled>${opts}</select>
           <span class="access-platform-count ${free > 0 ? "has-stock" : "no-stock"}">${free} disponible(s)</span>
         </li>
       `;
     }).join("");
+    list.querySelectorAll("input[type=checkbox]").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const sel = cb.closest("li").querySelector(".combo-qty");
+        sel.disabled = !cb.checked;
+        if (!cb.checked) sel.value = "1";
+      });
+    });
   }
 
   function buildComboMessage(sold) {
@@ -1729,9 +1740,11 @@
       errorEl.hidden = true;
 
       const phone = document.getElementById("combo-order-phone").value.trim();
-      const platforms = Array.from(
-        document.querySelectorAll("#combo-order-platforms input[type=checkbox]:checked")
-      ).map(cb => cb.value);
+      const platforms = [];
+      document.querySelectorAll("#combo-order-platforms input[type=checkbox]:checked").forEach(cb => {
+        const qty = Math.max(1, Number(cb.closest("li").querySelector(".combo-qty")?.value) || 1);
+        for (let i = 0; i < qty; i++) platforms.push(cb.value);
+      });
 
       if (!phone) { errorEl.textContent = "Falta el teléfono del cliente."; errorEl.hidden = false; return; }
       if (platforms.length === 0) { errorEl.textContent = "Elige al menos una plataforma."; errorEl.hidden = false; return; }
@@ -1752,7 +1765,7 @@
         window.open(waLink(phone, buildComboMessage(sold)), "_blank");
 
         if (failed.length > 0) {
-          alert("Se vendieron " + sold.length + " plataforma(s). Sin stock para: " + failed.join(", ") + ".");
+          alert("Se vendieron " + sold.length + " perfil(es). Sin stock para: " + failed.join(", ") + ".");
         }
 
         await refresh();
