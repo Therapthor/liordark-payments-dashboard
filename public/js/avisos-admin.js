@@ -80,7 +80,7 @@
               <input type="file" accept="image/jpeg,image/png,image/webp" data-role="file">
               <span data-role="file-label">${a.imageUrl ? "Cambiar imagen" : "Subir imagen"}</span>
             </label>
-            <p class="panel-hint">JPG, PNG o WEBP · hasta ${state.maxMb} MB. Se muestra completa, sin recortar (vertical o cuadrada se ve mejor en el celular).</p>
+            <p class="panel-hint">JPG, PNG o WEBP · hasta ${INPUT_MAX_MB} MB. Se muestra completa, sin recortar; si es muy pesada la achicamos sola para que cargue rápido. Vertical o cuadrada se ve mejor en el celular.</p>
           </div>
         </div>
 
@@ -158,18 +158,71 @@
     form.querySelector('[data-role="file-label"]').textContent = "Cambiar imagen";
   }
 
-  function onFile(form, input) {
+  // nginx corta los envíos de más de ~1 MB (por eso el Curso sube por
+  // partes). Una imagen grande se achica acá antes de mandarla: lado
+  // mayor 1600 px como mucho, misma proporción, sin recortar.
+  const INPUT_MAX_MB = 15;
+  const SEND_MAX = 900 * 1024;
+  const MAX_SIDE = 1600;
+
+  function decode(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo abrir la imagen.")); };
+      img.src = url;
+    });
+  }
+  function toBlob(canvas, type, q) {
+    return new Promise(resolve => canvas.toBlob(resolve, type, q));
+  }
+  async function optimize(file) {
+    const img = await decode(file);
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (file.size <= SEND_MAX && Math.max(w, h) <= MAX_SIDE) return file;
+    const base = file.name.replace(/\.[a-z0-9]+$/i, "") || "aviso";
+    for (const side of [MAX_SIDE, 1280, 1080]) {
+      const k = Math.min(1, side / Math.max(w, h));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * k);
+      canvas.height = Math.round(h * k);
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      for (const q of [0.9, 0.82, 0.74]) {
+        let blob = await toBlob(canvas, "image/webp", q);
+        if (!blob || blob.type !== "image/webp") {
+          // Safari no guarda WEBP: JPG con fondo blanco.
+          const c2 = document.createElement("canvas");
+          c2.width = canvas.width; c2.height = canvas.height;
+          const x = c2.getContext("2d");
+          x.fillStyle = "#fff"; x.fillRect(0, 0, c2.width, c2.height); x.drawImage(canvas, 0, 0);
+          blob = await toBlob(c2, "image/jpeg", q);
+        }
+        if (blob && blob.size <= SEND_MAX) {
+          return new File([blob], base + (blob.type === "image/webp" ? ".webp" : ".jpg"), { type: blob.type });
+        }
+      }
+    }
+    throw new Error("No pudimos achicar la imagen. Prueba guardándola en JPG.");
+  }
+
+  async function onFile(form, input) {
     const t = form.dataset.target;
     const file = input.files && input.files[0];
     input.value = "";
     if (!file) return;
     if (!TYPES.includes(file.type)) { showMsg(form, "Esa imagen no sirve: usa JPG, PNG o WEBP.", "error"); return; }
-    if (file.size > state.maxMb * 1024 * 1024) {
-      showMsg(form, `La imagen pesa más de ${state.maxMb} MB. Guárdala más liviana (por ejemplo en JPG) y vuelve a subirla.`, "error");
+    if (file.size > INPUT_MAX_MB * 1024 * 1024) {
+      showMsg(form, `La imagen pesa más de ${INPUT_MAX_MB} MB. Guárdala más liviana (por ejemplo en JPG) y vuelve a subirla.`, "error");
       return;
     }
+    showMsg(form, "Preparando la imagen…", "info");
+    let ready;
+    try { ready = await optimize(file); } catch (err) { showMsg(form, err.message, "error"); return; }
     if (pending[t]) URL.revokeObjectURL(pending[t].url);
-    pending[t] = { file, url: URL.createObjectURL(file) };
+    pending[t] = { file: ready, url: URL.createObjectURL(ready) };
     setPreviewImage(form, pending[t].url);
     showMsg(form, "Imagen lista. Toca «Guardar» para publicarla.", "info");
   }
