@@ -1491,3 +1491,6 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   font-family: inherit; font-size: 18px; letter-spacing: 1px; color: var(--text);
 }
 .renew-lookup .form-error { margin: 0; }
+
+/* «Ver códigos» en la ventana de compra lista */
+.checkout-codes-btn { margin-bottom: 10px; }
