@@ -2050,3 +2050,19 @@ button.mp-kpi:active { transform: scale(0.98); }
   :where(.btn-primary, .btn-secondary, .btn-mango, .btn-danger, .btn-ghost, .icon-btn, .icon-btn-sm,
          .mp-kpi, .mp-band-sec-btn, .sl-row, .access-platform-card, .mp-more-row, .mp-tab, .mp-nav-item):active { transform: none; }
 }
+
+/* Códigos: con un resultado de búsqueda a la vista, «Último código» se oculta (se veían dos tarjetas) */
+.cx-hero.cx-hero-off { display: none !important; }
+/* Búsqueda rápida: elegir código o enlace (Pally con opciones) */
+.cx-q-choose { padding: 6px 0 4px; }
+.cx-q-choose p { margin: 0 0 12px; font-weight: 700; opacity: .85; }
+.cx-q-choose-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.cx-q-choose-btn {
+  flex: 1 1 220px; min-height: 52px; padding: 0 18px;
+  border: none; border-radius: 16px; cursor: pointer;
+  background: var(--mp-mango, #FFC93C); color: var(--mp-ink, #2B1B0E);
+  font-family: var(--mp-display); font-size: 16px; font-weight: 800;
+  transition: transform 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.cx-q-choose-btn + .cx-q-choose-btn { background: #fff; }
+.cx-q-choose-btn:active { transform: scale(0.97); }
