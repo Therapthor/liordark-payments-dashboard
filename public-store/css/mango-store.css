@@ -68,7 +68,7 @@ a { color: var(--leaf); }
 /* ─── Banda mango (header) ────────────────────────────────── */
 
 .topbar.store-band {
-  position: relative; display: block;
+  position: relative; z-index: auto; display: block;
   background: var(--mango); color: var(--ink);
   border: none; border-radius: 0 0 32px 32px;
   padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(var(--band-overlap) + 22px);
@@ -147,9 +147,9 @@ body:not([data-page]) .band-hero[data-hero="catalog"],
 body[data-page="catalog"] .band-hero[data-hero="catalog"],
 body[data-page="dashboard"] .band-hero[data-hero="dashboard"],
 body[data-page="codes"] .band-hero[data-hero="codes"] { display: block; animation: mpRise var(--dur-slow) var(--ease) both; }
-body[data-page="codes"] .band-hero-cat { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+body[data-page="codes"] .band-hero.band-hero-cat[data-hero="codes"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .band-kicker { margin: 0 0 2px; font-size: 12.5px; font-weight: 800; color: var(--chip-ink); }
-.band-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; }
+.band-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; text-wrap: balance; }
 .band-sub { margin: 6px 0 0; font-size: 14px; font-weight: 600; color: #5C3F12; max-width: 40ch; }
 .band-perks { display: none; list-style: none; margin: 16px 0 0; padding: 0; flex-wrap: wrap; gap: 8px; }
 .band-perks li {
@@ -159,12 +159,15 @@ body[data-page="codes"] .band-hero-cat { display: flex; align-items: center; jus
 }
 .band-perks .ic { width: 17px; height: 17px; color: var(--leaf); }
 .band-cat { --ld-cat-size: 92px; margin: -6px 0 -10px; }
+/* Dibujo de la banda en PC: fichas de plataformas flotando */
+.band-art { display: none; }
 
 /* Contenido: la primera tarjeta flota sobre la banda */
 .content {
+  --pad: 16px;
   position: relative; z-index: 1;
-  max-width: 1120px; margin: calc(var(--band-overlap) * -1) auto 0;
-  padding: 0 16px calc(var(--tabbar-h) + 28px);
+  max-width: calc(1120px + 2 * var(--pad)); margin: calc(var(--band-overlap) * -1) auto 0;
+  padding: 0 var(--pad) calc(var(--tabbar-h) + 28px);
 }
 .page { animation: mpFadeIn var(--dur-slow) var(--ease) both; }
 #page-dashboard > h2, #page-codes > h2 {
@@ -245,26 +248,26 @@ body[data-page="codes"] .band-hero-cat { display: flex; align-items: center; jus
 
 /* «Arma tu combo»: tarjeta blanca que flota sobre la banda */
 .build-combo-prompt {
-  display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "icons text badge" "btn btn btn";
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "icons badge" "text text" "btn btn";
   align-items: center; gap: 12px 14px;
   margin: 0 0 6px; padding: 16px;
   background: #fff; border-radius: 26px; box-shadow: var(--shadow-pop);
   text-align: left;
 }
 .build-combo-prompt-deco1, .build-combo-prompt-deco2, .build-combo-prompt-arrow { display: none; }
-.build-combo-prompt-icons { grid-area: icons; width: 84px; height: 44px; }
+.build-combo-prompt-icons { grid-area: icons; width: 108px; height: 44px; }
 .build-combo-prompt-icon {
   width: 44px; height: 44px; border-radius: 15px; border: 3px solid #fff; box-shadow: none;
   font-family: var(--font-display); font-weight: 800; font-size: 13px;
 }
 .build-combo-prompt-icon--netflix { left: 0; background: #FFE1E1; color: #B42318; }
-.build-combo-prompt-icon--disney  { left: 20px; background: #E1E9FF; color: #2D4FB3; font-size: 12px; }
-.build-combo-prompt-icon--max     { left: 40px; background: #EDE4FF; color: #5B2DB3; }
+.build-combo-prompt-icon--disney  { left: 32px; background: #E1E9FF; color: #2D4FB3; font-size: 12px; }
+.build-combo-prompt-icon--max     { left: 64px; background: #EDE4FF; color: #5B2DB3; }
 .build-combo-prompt-text-wrap { grid-area: text; min-width: 0; }
 .build-combo-prompt-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--ink); line-height: 1.2; }
 .build-combo-prompt-desc { margin-top: 3px; font-size: 12.5px; color: var(--muted-2); }
 .build-combo-prompt-badge {
-  grid-area: badge; width: 60px; height: 60px; border-radius: 20px;
+  grid-area: badge; width: 56px; height: 56px; border-radius: 18px;
   background: var(--mango); box-shadow: none;
 }
 .build-combo-prompt-badge-top { font-family: var(--font-body); font-weight: 800; font-size: 10.5px; color: var(--chip-ink); }
@@ -524,6 +527,8 @@ body[data-page="codes"] .band-hero-cat { display: flex; align-items: center; jus
 .checkout-reserved-body p { font-size: 14px; color: var(--muted-2); margin: 0 0 6px; }
 .checkout-reserved-order { background: var(--soft); border-radius: 16px; padding: 12px 14px; font-size: 13.5px; margin: 0 0 6px; }
 #checkout-reserved-goto-dashboard, #checkout-goto-dashboard { background: var(--leaf); min-height: 52px; }
+/* «Ver códigos» (al terminar la compra): botón secundario beige, sin emoji */
+.checkout-codes-btn, #checkout-goto-codes { min-height: 52px; margin-bottom: 0; background: var(--soft); color: var(--ink); }
 
 .checkout-success-header { background: var(--leaf-soft); }
 .checkout-success-header .success-check { background: var(--leaf); color: #fff; }
@@ -534,6 +539,7 @@ body[data-page="codes"] .band-hero-cat { display: flex; align-items: center; jus
 #checkout-success-accounts .success-account-head {
   grid-template-columns: auto 1fr auto; grid-template-areas: "chip name actions"; gap: 10px; margin-bottom: 6px;
 }
+#checkout-success-accounts .success-account-head .success-account-platform { align-self: center; }
 #checkout-success-accounts .success-copy-btn {
   min-height: 36px; padding: 0 12px; border-radius: 12px;
   background: var(--leaf-soft); color: var(--leaf-ink); font-size: 12.5px; font-weight: 800;
@@ -696,8 +702,8 @@ body.theme-codes-dark { background: var(--bg); }
   display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
 }
 .build-combo-summary { margin: 12px 0; padding-top: 10px; border-top: 2px dashed var(--border); }
-.build-combo-discount-label { font-weight: 800; color: var(--leaf-ink); font-size: 13px; }
-.build-combo-total { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--ink); }
+.build-combo-discount-label { flex: 1; min-width: 0; font-weight: 800; color: var(--leaf-ink); font-size: 13px; }
+.build-combo-total { font-family: var(--font-display); font-weight: 800; font-size: 26px; color: var(--ink); white-space: nowrap; }
 .build-combo-cta {
   min-height: 52px; border-radius: 16px; background: var(--leaf); color: #fff;
   font-family: var(--font-display); font-weight: 700; font-size: 16px;
@@ -779,7 +785,7 @@ body.theme-codes-dark { background: var(--bg); }
   #checkout-modal .checkout-success-body, #checkout-modal #checkout-error {
     padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
   }
-  .build-combo-card.modal-card--wide { height: 92vh; height: 92dvh; }
+  .build-combo-card.modal-card--wide { height: auto; }
   .build-combo-body { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
   .chat-card { height: 88vh; height: 88dvh; }
   .chat-buttons-only { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
@@ -794,7 +800,7 @@ body.theme-codes-dark { background: var(--bg); }
 @media (max-width: 359px) {
   .product-grid { grid-template-columns: minmax(0, 1fr); }
   .build-combo-prompt-badge { display: none; }
-  .build-combo-prompt { grid-template-areas: "icons text text" "btn btn btn"; }
+  .build-combo-prompt { grid-template-areas: "icons icons" "text text" "btn btn"; }
 }
 
 /* ─── PC (≥760px): menú arriba, en la banda ───────────────── */
@@ -816,6 +822,7 @@ body.theme-codes-dark { background: var(--bg); }
     background: none; border-radius: 0; box-shadow: none;
   }
   .topnav-group { display: inline-flex; align-items: center; gap: 4px; }
+  .topnav > *, .topnav-group > * { order: 0 !important; }
   #nav-guest-actions { margin-left: auto; gap: 8px; }
   .topnav .nav-btn, .topnav .nav-support-btn, .topnav .btn-login-top, .topnav .btn-gold-top {
     flex: 0 0 auto; flex-direction: row; gap: 8px; min-height: 44px; padding: 0 16px;
@@ -835,19 +842,29 @@ body.theme-codes-dark { background: var(--bg); }
   .band-title { font-size: 46px; }
   .band-sub { font-size: 16px; margin-top: 10px; }
   .band-perks { display: flex; }
+  .band-hero[data-hero="catalog"] { position: relative; }
+  .band-art {
+    position: absolute; right: 24px; top: -6px;
+    display: grid; grid-template-columns: repeat(3, 72px); gap: 14px;
+    padding: 18px; border-radius: 30px; background: rgba(255,255,255,.4);
+    transform: rotate(-5deg);
+  }
+  .band-art .plat { width: 72px; height: 72px; border-radius: 22px; font-size: 20px; box-shadow: 0 12px 22px -16px rgba(43,27,14,.7); }
+  .band-art .plat:nth-child(2) { transform: translateY(-10px); }
+  .band-art .plat:nth-child(5) { transform: translateY(-10px); }
   .band-cat { --ld-cat-size: 118px; margin: -20px 10px -30px 0; }
 
-  .content { padding: 0 32px 64px; }
+  .content { --pad: 32px; padding-bottom: 64px; }
   .email-toast { bottom: 24px; }
 
   .build-combo-prompt {
     grid-template-columns: auto 1fr auto auto; grid-template-areas: "icons text badge btn";
     gap: 22px; padding: 20px 22px;
   }
-  .build-combo-prompt-icons { width: 104px; height: 52px; }
+  .build-combo-prompt-icons { width: 128px; height: 52px; }
   .build-combo-prompt-icon { width: 52px; height: 52px; border-radius: 18px; font-size: 15px; }
-  .build-combo-prompt-icon--disney { left: 26px; }
-  .build-combo-prompt-icon--max { left: 52px; }
+  .build-combo-prompt-icon--disney { left: 38px; }
+  .build-combo-prompt-icon--max { left: 76px; }
   .build-combo-prompt-title { font-size: 19px; }
   .build-combo-prompt-desc { font-size: 14px; }
   .build-combo-prompt-badge { width: 68px; height: 68px; border-radius: 22px; }
@@ -879,10 +896,12 @@ body.theme-codes-dark { background: var(--bg); }
   .build-combo-cart { position: sticky; top: 0; }
 }
 
+@media (max-width: 1040px) { .band-art { display: none !important; } }
+
 @media (min-width: 1100px) {
   .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .topbar.store-band { padding-left: 40px; padding-right: 40px; }
-  .content { padding-left: 40px; padding-right: 40px; }
+  .content { --pad: 40px; }
 }
 
 @media (hover: none) {
@@ -893,4 +912,69 @@ body.theme-codes-dark { background: var(--bg); }
   :where(.btn-primary, .btn-ghost, .btn-secondary, .product-card, .nav-btn, .build-combo-add-btn,
          .build-combo-cta, .chat-bot-option, .codes-open-btn, .yape-copy-btn, .detail-plan):active { transform: none; }
   .product-card:hover { transform: none; }
+}
+
+/* ═══ liordark.com/renovar (renovar.html) ═══════════════════ */
+
+.renew-page {
+  position: relative; min-height: 100vh; min-height: 100dvh;
+  padding: calc(22px + env(safe-area-inset-top, 0px)) 16px 48px;
+  background: var(--bg);
+}
+.renew-page::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 250px;
+  background: radial-gradient(circle at calc(100% + 40px) -60px, var(--mango-deep) 0 170px, transparent 171px), var(--mango);
+  border-radius: 0 0 32px 32px;
+}
+.renew-page > * { position: relative; }
+.renew-brand {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+  font-family: var(--font-display); font-weight: 800; font-size: 21px; color: var(--ink); letter-spacing: -0.01em;
+}
+.renew-brand img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.renew-subtitle { font-size: 14px; font-weight: 800; color: var(--chip-ink); margin-bottom: 22px; }
+.renew-card {
+  max-width: 440px; border-radius: 28px; background: #fff;
+  box-shadow: 0 30px 60px -28px rgba(43,27,14,.5);
+  animation: mpPop var(--dur-slow) var(--ease) both;
+}
+.renew-card .checkout-state { padding: 26px 22px 22px; }
+.renew-card h2 { font-family: var(--font-display); font-weight: 800; font-size: 22px; }
+.renew-card a.btn-primary, .renew-card a.btn-ghost { display: flex !important; align-items: center; justify-content: center; }
+#renew-pack-timer { color: var(--ink) !important; }
+.renew-lookup-field {
+  align-self: stretch; min-height: 56px; border: 2px solid var(--border); border-radius: 16px; padding: 0 14px; background: #fff;
+}
+.renew-lookup-field:focus-within { border-color: var(--mango-deep); box-shadow: 0 0 0 4px rgba(255,201,60,.28); }
+.renew-lookup-prefix { font-weight: 800; color: var(--muted-2); font-size: 16px; }
+.renew-lookup-field input { width: 100%; font-family: var(--font-display); font-weight: 700; font-size: 20px; padding: 14px 0; }
+.renew-lookup .btn-primary { min-height: 52px; font-size: 16px; }
+.renew-picker-list { gap: 8px; }
+.renew-picker-item { background: var(--soft); border-radius: 18px; padding: 10px 10px 10px 14px; }
+.renew-picker-name { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.renew-picker-days { font-size: 12.5px; font-weight: 700; color: var(--muted-2); }
+.renew-picker-btn {
+  min-height: 42px; padding: 0 16px; border-radius: 13px; background: var(--leaf); color: #fff;
+  font-family: var(--font-display); font-weight: 700; font-size: 14px;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.renew-pack-item input { width: 22px; height: 22px; accent-color: var(--leaf); }
+.renew-pack-hint { font-size: 13px; font-weight: 800; color: var(--muted-2); }
+.renew-pack-promo { background: var(--leaf-soft); color: var(--leaf-ink); border-radius: 14px; padding: 8px 12px; font-weight: 800; }
+.renew-pack-promo:empty { display: none; }
+.renew-pack-sum { border-top: 2px dashed var(--border); }
+.renew-pack-sum-total { font-family: var(--font-display); }
+.renew-pack-pay-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+.renew-pack-qr { border-radius: 20px; border: 2px solid var(--border); }
+.confetti-burst { width: 60px; height: 60px; }
+
+@media (min-width: 760px) {
+  .renew-page { padding-top: 48px; }
+  .renew-page::before { height: 300px; border-radius: 0 0 44px 44px; }
+  .renew-brand { font-size: 24px; }
+}
+
+/* Ruedita chica dentro de las píldoras de espera */
+.checkout-state .spinner-sm, .checkout-waiting .spinner, .checkout-state .checkout-waiting .spinner {
+  width: 16px; height: 16px; border-width: 2px; margin: 0; flex-shrink: 0;
 }

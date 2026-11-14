@@ -1,0 +1,155 @@
+/* ═══════════════════════════════════════════════════════════════
+   Páginas sueltas de la tienda con link propio — «Mango Pro»:
+   liordark.com/codigo/<token> (codigo.html) y
+   liordark.com/cambiar-pin/<token> (cambiar-pin.html).
+   Banda mango arriba y una tarjeta blanca con el contenido.
+   (Fuentes y colores: css/mango-base.css)
+   ═══════════════════════════════════════════════════════════════ */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; overflow-x: hidden; }
+[hidden] { display: none !important; }
+body {
+  position: relative; min-height: 100vh; min-height: 100dvh;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+}
+body::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 230px;
+  background: radial-gradient(circle at calc(100% + 40px) -60px, var(--mango-deep) 0 170px, transparent 171px), var(--mango);
+  border-radius: 0 0 32px 32px;
+}
+:focus-visible { outline: 3px solid var(--mango-deep); outline-offset: 2px; }
+
+.phone {
+  position: relative; width: 100%; max-width: 460px; margin: 0 auto;
+  min-height: 100vh; min-height: 100dvh;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 16px;
+}
+.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 46px; }
+.brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--font-display); font-weight: 800; font-size: 19px; letter-spacing: -0.01em;
+}
+.brand-logo-wrap {
+  width: 44px; height: 44px; border-radius: 50%; background: #fff; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 14px -10px rgba(43,27,14,.7);
+}
+.brand-logo-wrap img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+.pill {
+  font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: #fff; color: var(--ink); padding: 8px 14px; border-radius: 999px;
+  box-shadow: 0 6px 14px -10px rgba(43,27,14,.7);
+}
+.pill.off { background: rgba(255,255,255,.55); color: var(--chip-ink); box-shadow: none; }
+
+/* La tarjeta blanca: cada estado (cargando, esperando, llegó…) */
+.phone > section {
+  flex: 1; display: flex; flex-direction: column; gap: 16px;
+  background: #fff; border-radius: 28px; padding: 22px 18px 18px;
+  box-shadow: 0 30px 60px -30px rgba(43,27,14,.55);
+  animation: mpPop var(--dur-slow) var(--ease) both;
+}
+.phone > section.center { justify-content: center; }
+.center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
+
+.label {
+  align-self: flex-start; display: inline-flex; align-items: center;
+  font-size: 11.5px; font-weight: 800; letter-spacing: .06em;
+  background: var(--chip-bg); color: var(--chip-ink); padding: 5px 11px; border-radius: 999px;
+}
+.label.ok { background: var(--leaf-soft); color: var(--leaf-ink); }
+h1 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; text-wrap: balance; }
+.muted { font-size: 14px; color: var(--muted-2); line-height: 1.5; margin: 0; }
+.small { font-size: 12.5px; }
+.wait-status { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.45; color: var(--muted); min-height: 19px; }
+
+.spinner {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 5px solid var(--border); border-top-color: var(--mango-deep);
+  animation: mpSpin .9s linear infinite;
+}
+
+/* Botones */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  min-height: 52px; padding: 0 18px; border: 0; border-radius: 16px; cursor: pointer;
+  font-family: var(--font-display); font-weight: 700; font-size: 16px; line-height: 1.1;
+  text-align: center; text-decoration: none;
+  transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+}
+.btn.orange, .btn.green { background: var(--leaf); color: #fff; box-shadow: 0 10px 20px -14px rgba(31,107,68,.9); }
+.btn.orange:hover, .btn.green:hover { background: var(--leaf-hover); }
+.btn.dark { display: inline-flex; width: auto; min-height: 46px; padding: 0 22px; font-size: 15px; background: var(--mango); color: var(--ink); }
+.btn.dark:hover { background: var(--mango-deep); }
+.btn.light { background: var(--soft); color: var(--ink); }
+.btn.light:hover { background: #EFE5D6; }
+.btn:disabled { opacity: .55; cursor: default; box-shadow: none; }
+.btn:active:not(:disabled), .link:active { transform: scale(0.97); transition: transform 90ms ease-out; }
+.link {
+  min-height: 44px; padding: 0 10px; background: none; border: 0; cursor: pointer;
+  font-family: var(--font-body); font-size: 13.5px; font-weight: 800; color: var(--leaf); text-decoration: none;
+}
+.actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* Código */
+.codebox {
+  width: 100%; padding: 16px 12px; border-radius: 22px;
+  background: var(--chip-bg); border: 2px solid var(--mango);
+}
+.code {
+  margin: 0; font-family: var(--font-display); font-weight: 800;
+  font-size: 52px; letter-spacing: .14em; line-height: 1.1; white-space: nowrap; word-break: break-all;
+}
+.code.long { font-size: 38px; letter-spacing: .08em; }
+.totp-bar { width: 200px; height: 7px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.totp-bar > i { display: block; height: 100%; background: var(--leaf); border-radius: 99px; transition: width 1s linear; }
+.totp-bar.low > i { background: var(--danger); }
+.mail { width: 100%; height: 420px; border: 2px solid var(--border); border-radius: 16px; background: #fff; }
+.approval { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.device {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px; border-radius: 18px; background: var(--chip-bg); border: 2px solid var(--mango);
+  font-family: var(--font-display); font-size: 18px; font-weight: 700;
+}
+.device svg { flex-shrink: 0; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  z-index: 50; max-width: calc(100vw - 32px);
+  background: var(--ink); color: var(--cream); padding: 11px 18px; border-radius: 999px;
+  font-weight: 800; font-size: 14px; box-shadow: 0 10px 30px -10px rgba(0,0,0,.45);
+  animation: mpFadeIn var(--dur) var(--ease) both;
+}
+/* Gatito de los códigos (css/cat.css, js/cat.js) */
+.page-cat { --ld-cat-size: 116px; }
+#s-found .page-cat { --ld-cat-size: 96px; }
+
+/* Cambiar PIN */
+form { width: 100%; display: flex; flex-direction: column; gap: 14px; text-align: left; }
+form label { font-size: 12.5px; font-weight: 800; color: var(--muted-2); letter-spacing: .02em; display: flex; flex-direction: column; gap: 6px; }
+.pin {
+  width: 100%; min-height: 64px; padding: 0 0 0 18px;
+  font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: 18px; text-align: center;
+  border-radius: 18px; border: 2px solid var(--border); background: #fff; color: var(--ink);
+}
+.pin:focus { outline: none; border-color: var(--mango-deep); box-shadow: 0 0 0 4px rgba(255,201,60,.28); }
+.err { color: var(--danger); font-size: 13px; font-weight: 700; margin: 0; min-height: 18px; text-align: center; }
+.circle {
+  width: 64px; height: 64px; border-radius: 22px;
+  display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800;
+}
+.circle.ok { background: var(--leaf); color: #fff; }
+.circle.off { background: var(--chip-bg); color: var(--chip-ink); }
+.phone-tag {
+  font-family: var(--font-display); font-weight: 700; font-size: 15px;
+  background: var(--soft); border-radius: 999px; padding: 7px 16px;
+}
+
+@media (min-width: 760px) {
+  body::before { height: 300px; border-radius: 0 0 44px 44px; }
+  .phone { padding-top: 32px; padding-bottom: 32px; min-height: 0; }
+  .phone > section { min-height: 560px; }
+}

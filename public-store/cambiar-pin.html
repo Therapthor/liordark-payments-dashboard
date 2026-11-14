@@ -6,43 +6,16 @@
 <meta name="robots" content="noindex">
 <title>Cambia tu PIN — Manguitope</title>
 <link rel="icon" href="/assets/logo.webp">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-  :root { --cream: #FFFAF3; --bg: #EFE6DA; --brown: #241A10; --muted: #7A6552; --line: #D9CFC2; --orange: #FF7D1A; --yellow: #FFD373; --green-dark: #1E6B36; --red: #B3261E; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body { background: var(--bg); color: var(--brown); font-family: Manrope, system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 16px; }
-  [hidden] { display: none !important; }
-  .phone { width: 100%; max-width: 420px; min-height: calc(100vh - 32px); background: var(--cream); border-radius: 28px; border: 1px solid var(--line); padding: 22px 20px; display: flex; flex-direction: column; gap: 16px; }
-  .top { display: flex; justify-content: space-between; align-items: center; }
-  .brand { font-size: 14px; font-weight: 800; letter-spacing: 1px; }
-  .pill { font-size: 12px; font-weight: 800; background: var(--yellow); padding: 5px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
-  .pill.off { background: #EADBC8; color: var(--muted); }
-  .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
-  .spinner { width: 56px; height: 56px; border-radius: 50%; border: 6px solid #EADBC8; border-top-color: var(--orange); animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  h1 { margin: 0; font-size: 22px; }
-  .muted { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0; }
-  form { width: 100%; display: flex; flex-direction: column; gap: 14px; text-align: left; }
-  label { font-size: 12px; font-weight: 800; color: var(--muted); letter-spacing: .5px; display: flex; flex-direction: column; gap: 6px; }
-  .pin { width: 100%; font: inherit; font-size: 32px; font-weight: 800; letter-spacing: 18px; text-align: center; padding: 12px 0 12px 18px; border-radius: 14px; border: 2px solid var(--line); background: #fff; color: var(--brown); }
-  .pin:focus { outline: none; border-color: var(--orange); }
-  .err { color: var(--red); font-size: 13px; font-weight: 700; margin: 0; min-height: 18px; text-align: center; }
-  .btn { border: 0; border-radius: 12px; padding: 15px; font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; text-align: center; text-decoration: none; display: block; width: 100%; }
-  .btn.orange { background: var(--orange); color: #fff; }
-  .btn.dark { background: var(--brown); color: var(--cream); }
-  .btn:disabled { opacity: .6; cursor: default; }
-  .circle { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
-  .circle.ok { background: #E9F9EF; color: var(--green-dark); }
-  .circle.off { background: #EADBC8; color: var(--muted); }
-  .phone-tag { font-weight: 800; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; }
-</style>
+<meta name="theme-color" content="#FFC93C">
+<link rel="preload" href="/fonts/outfit-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito-sans-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/mango-base.css">
+<link rel="stylesheet" href="/css/mango-link.css">
 </head>
 <body>
 <main class="phone">
   <div class="top">
-    <span class="brand">MANGUITOPE</span>
+    <span class="brand"><span class="brand-logo-wrap"><img src="/assets/logo.webp" alt=""></span>Manguitope</span>
     <span class="pill" id="timer" hidden></span>
   </div>
 

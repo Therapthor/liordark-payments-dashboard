@@ -6,89 +6,16 @@
 <meta name="robots" content="noindex">
 <title>Tu código — Manguitope</title>
 <link rel="icon" href="/assets/logo.webp">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#FFC93C">
+<link rel="preload" href="/fonts/outfit-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito-sans-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/mango-base.css">
 <link rel="stylesheet" href="/css/cat.css">
-<style>
-  :root { --cream: #FFFAF3; --bg: #EFE6DA; --brown: #241A10; --muted: #7A6552; --line: #D9CFC2; --orange: #FF7D1A; --yellow: #FFD373; --green: #25D366; --green-dark: #1E6B36; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; }
-  body { background: var(--bg); color: var(--brown); font-family: Manrope, system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 16px; }
-  [hidden] { display: none !important; }
-  .phone { width: 100%; max-width: 420px; min-height: calc(100vh - 32px); background: var(--cream); border-radius: 28px; border: 1px solid var(--line); padding: 22px 20px; display: flex; flex-direction: column; gap: 16px; }
-  .top { display: flex; justify-content: space-between; align-items: center; }
-  .brand { font-size: 14px; font-weight: 800; letter-spacing: 1px; }
-  .pill { font-size: 12px; font-weight: 800; background: var(--yellow); padding: 5px 10px; border-radius: 999px; }
-  .pill.off { background: #EADBC8; color: var(--muted); }
-  .label { font-size: 12px; font-weight: 800; color: var(--muted); letter-spacing: .5px; }
-  .label.ok { color: var(--green-dark); }
-  .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; }
-  .spinner { width: 64px; height: 64px; border-radius: 50%; border: 6px solid #EADBC8; border-top-color: var(--orange); animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  h1 { margin: 0; font-size: 20px; }
-  .muted { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0; }
-  .code { font-size: 56px; font-weight: 800; letter-spacing: 10px; margin: 0; word-break: break-all; }
-  .btn { border: 0; border-radius: 12px; padding: 15px; font: inherit; font-weight: 800; font-size: 16px; cursor: pointer; text-align: center; text-decoration: none; display: block; width: 100%; }
-  .btn.orange { background: var(--orange); color: #fff; }
-  .btn.green { background: var(--green); color: #0b2e18; }
-  .btn.dark { background: var(--brown); color: var(--cream); padding: 11px 24px; font-size: 14px; width: auto; display: inline-block; }
-  .btn.light { background: #fff; color: var(--brown); border: 1px solid var(--line); font-weight: 700; font-size: 15px; }
-  .btn:disabled { opacity: .6; cursor: default; }
-  .link { background: none; border: 0; font: inherit; font-size: 13px; color: var(--muted); text-decoration: underline; cursor: pointer; }
-  .ok-circle { width: 64px; height: 64px; border-radius: 50%; background: #E9F9EF; color: var(--green-dark); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
-  .mail { width: 100%; height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-  .actions { display: flex; flex-direction: column; gap: 10px; }
-  /* Temas por plataforma: solo sus colores, sin logos oficiales. */
-  body.themed { --cream: var(--t-card); --bg: var(--t-bg); --brown: var(--t-text); --muted: var(--t-muted); --line: var(--t-line); --orange: var(--t-accent); --yellow: var(--t-accent); --green: var(--t-text); --green-dark: var(--t-text); }
-  body.themed .phone { background: linear-gradient(180deg, var(--t-top) 0%, var(--t-card) 28%); border-color: var(--t-line); }
-  body.themed .brand { color: var(--t-text); }
-  body.themed .pill { background: var(--t-accent); color: var(--t-on-accent); }
-  body.themed .pill.off { background: var(--t-line); color: var(--t-muted); }
-  body.themed .label { color: var(--t-muted); }
-  body.themed .label.ok { color: var(--t-accent); }
-  body.themed .spinner { border-color: var(--t-line); border-top-color: var(--t-accent); }
-  body.themed .code { color: var(--t-text); font-size: 64px; letter-spacing: 14px; text-shadow: 0 0 24px var(--t-glow); }
-  body.themed .codebox { background: var(--t-box); border: 1px solid var(--t-line); border-radius: 12px; padding: 18px 22px; }
-  body.themed .btn.orange { background: var(--t-accent); color: var(--t-on-accent); }
-  body.themed .btn.green { background: var(--t-text); color: var(--t-bg); }
-  body.themed .btn.dark { background: var(--t-line); color: var(--t-text); }
-  body.themed .btn.light { background: transparent; color: var(--t-text); border: 1px solid var(--t-line); }
-  body.themed .link { color: var(--t-muted); }
-  body.themed .ok-circle { background: var(--t-line); color: var(--t-accent); }
-  .wait-status { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); min-height: 19px; }
-  body.themed .wait-status { color: var(--t-muted); }
-  body.themed .mail { border-color: var(--t-line); background: var(--t-box); }
-  body.themed .toast { background: var(--t-accent); color: var(--t-on-accent); }
-  /* Netflix: negro, rojo, blanco */
-  body.t-netflix { --t-bg: #000; --t-card: #141414; --t-top: #1C0A0B; --t-box: #000; --t-text: #fff; --t-muted: #B3B3B3; --t-line: #2B2B2B; --t-accent: #E50914; --t-on-accent: #fff; --t-glow: rgba(229,9,20,.35); }
-  /* Disney+: azul noche y azul brillante */
-  body.t-disney { --t-bg: #040714; --t-card: #0B1530; --t-top: #1A2A5C; --t-box: #040714; --t-text: #F9F9F9; --t-muted: #A9B4CF; --t-line: #26345C; --t-accent: #0063E5; --t-on-accent: #fff; --t-glow: rgba(2,231,245,.35); }
-  /* Prime Video: azul pizarra y celeste */
-  body.t-prime { --t-bg: #0B1218; --t-card: #0F171E; --t-top: #1A2B38; --t-box: #0B1218; --t-text: #fff; --t-muted: #8197A4; --t-line: #26343F; --t-accent: #00A8E1; --t-on-accent: #0B1218; --t-glow: rgba(0,168,225,.35); }
-  /* Crunchyroll: negro y naranja */
-  body.t-crunchy { --t-bg: #000; --t-card: #141519; --t-top: #2A1607; --t-box: #000; --t-text: #fff; --t-muted: #A0A0A0; --t-line: #2C2D33; --t-accent: #F47521; --t-on-accent: #000; --t-glow: rgba(244,117,33,.35); }
-  /* ChatGPT: gris oscuro y verde */
-  body.t-chatgpt { --t-bg: #171717; --t-card: #212121; --t-top: #0F2A22; --t-box: #171717; --t-text: #ECECEC; --t-muted: #B4B4B4; --t-line: #383838; --t-accent: #10A37F; --t-on-accent: #fff; --t-glow: rgba(16,163,127,.35); }
-  .code { white-space: nowrap; }
-  .code.long, body.themed .code.long { font-size: 44px; letter-spacing: 7px; }
-  .totp-bar { width: 200px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
-  .totp-bar > i { display: block; height: 100%; background: var(--orange); border-radius: 99px; transition: width 1s linear; }
-  .totp-bar.low > i { background: #E5484D; }
-  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--brown); color: var(--cream); padding: 10px 16px; border-radius: 999px; font-weight: 700; font-size: 14px; }
-  /* Solicitud de inicio de sesión (Netflix): Aprobar / Rechazar */
-  .approval { width: 100%; display: flex; flex-direction: column; gap: 10px; }
-  .device { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: #fff; font-size: 19px; font-weight: 800; }
-  .device svg { flex-shrink: 0; }
-  body.themed .device { background: var(--t-box); border-color: var(--t-line); color: var(--t-text); }
-  .small { font-size: 12.5px; }
-  /* Gatito de los códigos (css/cat.css, js/cat.js) */
-  .page-cat { --ld-cat-size: 116px; }
-  #s-found .page-cat { --ld-cat-size: 104px; }
-</style>
+<link rel="stylesheet" href="/css/mango-link.css">
 </head>
 <body>
 <main class="phone">
-  <div class="top"><span class="brand">MANGUITOPE</span><span class="pill" id="timer">…</span></div>
+  <div class="top"><span class="brand"><span class="brand-logo-wrap"><img src="/assets/logo.webp" alt=""></span>Manguitope</span><span class="pill" id="timer">…</span></div>
 
   <!-- Cargando -->
   <section class="center" id="s-loading"><span class="page-cat" data-cat="idle"></span><p class="muted">Abriendo tu link…</p></section>
