@@ -120,3 +120,34 @@ export async function deleteChatMedia(publicId: string, resourceType: string): P
     console.error("⚠️ No se pudo borrar media del chat en Cloudinary:", publicId, err?.message);
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// AVISOS (ventana con imagen de la tienda / mayoristas). Cada imagen es
+// su propio recurso; al reemplazarla se borra la anterior.
+// ─────────────────────────────────────────────────────────────
+
+export async function uploadAvisoImage(fileBuffer: Buffer): Promise<{ url: string; publicId: string }> {
+  if (!isCloudinaryConfigured()) throw new Error("Cloudinary no está configurado.");
+  ensureConfigured();
+  const folder = `${env.CLOUDINARY_FOLDER_UTILS || "utilitarios"}/avisos`;
+  const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream({ folder, resource_type: "image" }, (err, result) => {
+      if (err || !result) reject(err ?? new Error("Cloudinary no devolvió resultado"));
+      else resolve(result);
+    });
+    stream.end(fileBuffer);
+  });
+  // f_auto,q_auto: Cloudinary entrega WEBP/AVIF liviano a cada celular.
+  const url = uploaded.secure_url.replace("/image/upload/", "/image/upload/f_auto,q_auto,w_1200,c_limit/");
+  return { url, publicId: uploaded.public_id };
+}
+
+export async function deleteAvisoImage(publicId: string): Promise<void> {
+  if (!publicId || !isCloudinaryConfigured()) return;
+  ensureConfigured();
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+  } catch (err: any) {
+    console.error("⚠️ No se pudo borrar la imagen vieja del aviso en Cloudinary:", publicId, err?.message);
+  }
+}
