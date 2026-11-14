@@ -380,7 +380,7 @@
       const form = e.target.closest(".aviso-form");
       if (!form) return;
       if (e.target.matches('[data-role="file"]')) onFile(form, e.target);
-      if (e.target.name === "buttonType") syncVisibility(form);
+      if (e.target.name === "buttonType") { syncVisibility(form); showMsg(form, ""); }
     });
     grid.addEventListener("click", (e) => {
       const form = e.target.closest(".aviso-form");
@@ -399,6 +399,10 @@
 
   async function load() {
     initEvents();
+    // En el celular la barra de secciones se desliza: que se vea «Avisos».
+    const tab = document.querySelector('.config-subnav-item[data-config-section="avisos"]');
+    const bar = tab && tab.parentElement;
+    if (bar && bar.scrollWidth > bar.clientWidth) bar.scrollLeft += tab.getBoundingClientRect().left - bar.getBoundingClientRect().left - (bar.clientWidth - tab.offsetWidth) / 2;
     const grid = document.getElementById("avisos-grid");
     // Si hay una imagen elegida sin guardar, no se pisa lo que está editando.
     if (state && Object.keys(pending).length) return;
