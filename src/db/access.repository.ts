@@ -923,24 +923,46 @@ type ReplaceSource =
 /** wholesalerId: null busca la cuenta/garantía de un cliente retail; un id
  *  busca la de ESE mayorista — nunca se cruzan entre sí aunque coincida
  *  plataforma+correo. */
+const NO_SOURCE_MSG = "No encontré la cuenta actual de este cliente en Accesos: puede que ya no tenga una de esta plataforma o que tenga varias. Búscalo en Accesos por su número.";
+
 function findReplaceSource(clientPhone: string, platform: string, email: string, wholesalerId: number | null): ReplaceSource | null {
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return null;
+  const d9 = last9(digits);
   const plat = platform.trim().toUpperCase();
-  const mail = email.trim();
+  const mail = email.trim().toLowerCase();
 
-  const profileRow = db.prepare(`
+  // Se busca de lo más exacto a lo más amplio. Antes solo valía el correo
+  // EXACTO del reporte: si después se editó la cuenta (correo nuevo), o el
+  // correo venía con otras mayúsculas, salía «No se encontró la cuenta
+  // actual del cliente» y no dejaba reemplazar.
+  type Row = { profileId: number; preservedExpiresAt: string | null };
+  const profileBase = `
     SELECT p.id AS profileId, COALESCE(p.expires_override, a.expires_at) AS preservedExpiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ? AND p.wholesaler_id IS ?
-    LIMIT 1
-  `).get(last9(digits), plat, mail, wholesalerId) as { profileId: number; preservedExpiresAt: string | null } | undefined;
-  if (profileRow) return { kind: "profile", profileId: profileRow.profileId, preservedExpiresAt: profileRow.preservedExpiresAt };
+    WHERE substr(p.client_phone, -9) = ? AND upper(trim(a.platform)) = ?`;
+  // 1) Mismo correo (sin importar mayúsculas) y mismo dueño (retail o ese mayorista).
+  let row = db.prepare(`${profileBase} AND lower(trim(a.email)) = ? AND p.wholesaler_id IS ? LIMIT 1`)
+    .get(d9, plat, mail, wholesalerId) as Row | undefined;
+  // 2) Mismo correo, aunque el perfil figure con otro dueño.
+  if (!row) row = db.prepare(`${profileBase} AND lower(trim(a.email)) = ? LIMIT 1`).get(d9, plat, mail) as Row | undefined;
+  if (row) return { kind: "profile", profileId: row.profileId, preservedExpiresAt: row.preservedExpiresAt };
 
-  const override = findManualOverride(clientPhone, plat, mail, wholesalerId);
-  if (override) return { kind: "override", overrideId: override.id, preservedExpiresAt: override.expiresAt };
+  const ovBase = `SELECT id, expires_at AS expiresAt FROM manual_account_overrides
+    WHERE substr(client_phone, -9) = ? AND upper(trim(platform)) = ?`;
+  const ov = db.prepare(`${ovBase} AND lower(trim(email)) = ? ORDER BY (wholesaler_id IS ?) DESC LIMIT 1`)
+    .get(d9, plat, mail, wholesalerId) as { id: number; expiresAt: string | null } | undefined;
+  if (ov) return { kind: "override", overrideId: ov.id, preservedExpiresAt: ov.expiresAt };
 
+  // 3) El correo ya no coincide (la cuenta se editó o el cliente se movió):
+  //    si el cliente tiene UNA sola cuenta de esa plataforma, es esa.
+  const profiles = db.prepare(`${profileBase} LIMIT 2`).all(d9, plat) as Row[];
+  const overrides = db.prepare(`${ovBase} LIMIT 2`).all(d9, plat) as { id: number; expiresAt: string | null }[];
+  if (profiles.length + overrides.length === 1) {
+    if (profiles.length === 1) return { kind: "profile", profileId: profiles[0]!.profileId, preservedExpiresAt: profiles[0]!.preservedExpiresAt };
+    return { kind: "override", overrideId: overrides[0]!.id, preservedExpiresAt: overrides[0]!.expiresAt };
+  }
   return null;
 }
 
@@ -1013,7 +1035,7 @@ export const replaceClientAccount = db.transaction((params: {
   expiresAt?: string;
 }): { accountId: number; email: string } => {
   const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
-  if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
+  if (!source) throw new Error(NO_SOURCE_MSG);
 
   const freeProfileId = findFreeProfileId(params.targetAccountId);
   if (!freeProfileId) throw new Error("La cuenta elegida no tiene perfiles libres.");
@@ -1040,7 +1062,7 @@ export const replaceClientAccountManual = db.transaction((params: {
   expiresAt?: string; // ver replaceClientAccount
 }): { email: string } => {
   const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
-  if (!source) throw new Error("No se encontró la cuenta actual del cliente.");
+  if (!source) throw new Error(NO_SOURCE_MSG);
 
   releaseReplaceSource(source);
   createManualOverride({
