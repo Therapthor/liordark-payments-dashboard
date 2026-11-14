@@ -1552,6 +1552,11 @@
     const container = document.getElementById("checkout-success-accounts");
     container.innerHTML = newAccounts.map(successAccountHtml).join("");
     wireSuccessCopyButtons(container, newAccounts);
+    // «Ver códigos»: solo si alguna de sus cuentas tiene códigos (ej. Netflix
+    // con código de inicio de sesión). Lleva directo a su sección Códigos.
+    const codesBtn = document.getElementById("checkout-goto-codes");
+    codesBtn.hidden = true;
+    refreshCodesAvailability().then(has => { codesBtn.hidden = !has; }).catch(() => {});
     showCheckoutState("success");
   }
 
@@ -1662,6 +1667,10 @@
     document.getElementById("checkout-close").addEventListener("click", closeCheckout);
     document.getElementById("checkout-retry").addEventListener("click", closeCheckout);
     document.getElementById("checkout-goto-dashboard").addEventListener("click", closeCheckout);
+    document.getElementById("checkout-goto-codes").addEventListener("click", () => {
+      closeCheckout();
+      switchPage("codes");
+    });
     document.getElementById("checkout-reserved-goto-dashboard").addEventListener("click", () => {
       closeCheckout();
       switchPage("dashboard");
