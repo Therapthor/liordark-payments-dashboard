@@ -1,0 +1,121 @@
+/* ═══════════════════════════════════════════════════════════════
+   Avisos (mayoristas) — ventana con imagen al entrar (la arma el admin en
+   Configuración › Avisos). Diseño Mango Pro: PC = tarjeta centrada,
+   celular (<760px) = hoja que sube desde abajo.
+   El mismo diseño está en public-store/css/avisos.css y en la
+   vista previa del panel (public/css/avisos-admin.css).
+   ═══════════════════════════════════════════════════════════════ */
+
+.aviso-lock, .aviso-lock body { overflow: hidden; }
+
+.aviso-backdrop {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(43,27,14,.45);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  overscroll-behavior: contain;
+  animation: avisoFadeIn 260ms cubic-bezier(0.32,0.72,0,1) both;
+}
+.aviso-card {
+  position: relative; box-sizing: border-box;
+  width: 100%; max-width: 440px; max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 14px 16px;
+  border-radius: 28px;
+  background: #fff; color: #2B1B0E;
+  font-family: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 30px 60px -20px rgba(43,27,14,.5);
+  animation: avisoCardIn 460ms cubic-bezier(0.32,0.72,0,1) both;
+}
+.aviso-card:focus { outline: none; }
+.aviso-media { display: flex; justify-content: center; }
+.aviso-media img {
+  display: block; width: auto; height: auto; max-width: 100%;
+  max-height: min(62vh, 620px);
+  border-radius: 18px; background: #F6EFE4;
+}
+.aviso-title {
+  margin: 14px 6px 2px; text-align: center;
+  font-family: "Outfit", "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 18px; font-weight: 800; line-height: 1.3; letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.aviso-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.aviso-cta, .aviso-close-text {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; min-height: 50px; padding: 0 18px; border: none; border-radius: 16px;
+  font-family: "Outfit", "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px; font-weight: 700; line-height: 1.1; cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.32,0.72,0,1), background-color 160ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.aviso-cta { background: #1F6B44; color: #fff; box-shadow: 0 10px 20px -14px rgba(31,107,68,.9); }
+.aviso-cta:hover { background: #185A39; }
+.aviso-close-text { min-height: 44px; background: transparent; color: #6E5638; font-size: 15px; }
+.aviso-close-text:hover { background: #F6EFE4; }
+.aviso-cta:active, .aviso-close-text:active { transform: scale(.97); }
+.aviso-x {
+  position: absolute; top: 22px; right: 22px; z-index: 2;
+  width: 36px; height: 36px; padding: 0; border: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.88); color: #2B1B0E;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px -6px rgba(43,27,14,.5);
+  font-size: 15px; font-weight: 800; cursor: pointer;
+}
+.aviso-x:active { transform: scale(.92); }
+.aviso-cta:focus-visible, .aviso-close-text:focus-visible, .aviso-x:focus-visible { outline: 3px solid #FFB21A; outline-offset: 2px; }
+
+.aviso-backdrop.is-closing { animation: avisoFadeOut 240ms cubic-bezier(0.32,0.72,0,1) forwards; pointer-events: none; }
+.aviso-backdrop.is-closing .aviso-card { animation: avisoCardOut 220ms cubic-bezier(0.32,0.72,0,1) forwards; }
+
+@keyframes avisoFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes avisoFadeOut { to { opacity: 0; } }
+@keyframes avisoCardIn  { from { opacity: 0; transform: translateY(16px) scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes avisoCardOut { to { opacity: 0; transform: translateY(10px) scale(.97); } }
+@keyframes avisoSheetIn  { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes avisoSheetOut { to { transform: translateY(100%); } }
+
+/* ─── Celular: hoja desde abajo ─── */
+@media (max-width: 759px) {
+  .aviso-backdrop { align-items: flex-end; padding: 0; }
+  .aviso-card {
+    max-width: 560px; margin: 0 auto;
+    max-height: 92vh; max-height: 92dvh;
+    border-radius: 28px 28px 0 0;
+    padding: 22px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -10px 40px -20px rgba(43,27,14,.45);
+    animation: avisoSheetIn 500ms cubic-bezier(0.32,0.72,0,1) both;
+  }
+  .aviso-card::before {
+    content: ""; position: absolute; top: 8px; left: 50%; width: 40px; height: 5px; margin-left: -20px;
+    border-radius: 99px; background: rgba(43,27,14,.18);
+  }
+  .aviso-x { top: 30px; right: 22px; }
+  .aviso-media img { max-height: 58vh; max-height: 58dvh; }
+  .aviso-backdrop.is-closing .aviso-card { animation: avisoSheetOut 260ms cubic-bezier(0.32,0.72,0,1) forwards; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aviso-backdrop, .aviso-card { animation-duration: 1ms !important; }
+  .aviso-backdrop.is-closing { animation: avisoFadeOut 120ms linear forwards !important; }
+  .aviso-backdrop.is-closing .aviso-card { animation: none !important; }
+}
+
+/* Modo oscuro del panel mayorista */
+:root[data-theme="dark"] .aviso-card { background: #231A11; color: #FBEFD9; box-shadow: 0 30px 60px -20px rgba(0,0,0,.7); }
+:root[data-theme="dark"] .aviso-media img { background: #2E2318; }
+:root[data-theme="dark"] .aviso-close-text { color: #D6BE9C; }
+:root[data-theme="dark"] .aviso-close-text:hover { background: #2E2318; }
+:root[data-theme="dark"] .aviso-cta { background: #2A7F51; }
+:root[data-theme="dark"] .aviso-x { background: rgba(35,26,17,.85); color: #FBEFD9; }
+:root[data-theme="dark"] .aviso-card::before { background: rgba(251,239,217,.22); }
+
+/* «Ir a un producto»: la tarjeta del producto en Comprar se resalta un momento. */
+.catalog-card.aviso-focus { animation: avisoFocus 1600ms cubic-bezier(0.32,0.72,0,1) both; }
+@keyframes avisoFocus {
+  0%, 60% { box-shadow: 0 0 0 3px #1F6B44, 0 14px 30px -16px rgba(31,107,68,.8); }
+  100% { box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) { .catalog-card.aviso-focus { animation: none; outline: 3px solid #1F6B44; } }

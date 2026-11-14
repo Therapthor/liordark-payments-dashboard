@@ -608,7 +608,8 @@
   }
 
   // Para js/compras-recientes.js (aviso «Alguien compró…»): misma ficha.
-  window.LiordarkStore = { platformChip };
+  // y para js/avisos.js (botón del aviso: abrir un producto o «Arma tu combo»).
+  window.LiordarkStore = { platformChip, openProductDetail, openComboBuilder };
 
   function productImgHtml(p, kind) {
     const { mono, tone } = kind === "combo" ? { mono: "COMBO", tone: "" } : platformStyle(p.platform);
