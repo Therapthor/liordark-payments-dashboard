@@ -142,7 +142,7 @@
     const list = document.getElementById("sec-passkeys");
     try {
       const { passkeys, passkeyOnly } = await api("/passkeys");
-      // Con al menos una llave, la contraseña ya no abre el panel.
+      // Cuando una llave ya sirvió para entrar, la contraseña deja de abrir el panel.
       const st = document.getElementById("sec-passkey-only");
       if (st && passkeyOnly) {
         const n = passkeyOnly.passkeys;
@@ -150,7 +150,9 @@
           ? `Entrada solo con llave de acceso: activada (${n} ${n === 1 ? "llave" : "llaves"})`
           : n > 0 && passkeyOnly.override
             ? "Entrada solo con llave de acceso: apagada por emergencia (PANEL_PASSWORD_LOGIN=on), la contraseña también abre el panel"
-            : "Desactivada: registra una llave para activarla";
+            : n > 0
+              ? "Se activa la primera vez que entres con tu llave (Face ID o huella)"
+              : "Desactivada: registra una llave para activarla";
       }
       list.innerHTML = passkeys.map(p => `
         <li class="sec-session">

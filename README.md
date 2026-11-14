@@ -23,7 +23,7 @@ Completa:
 - `DASHBOARD_API_KEY` — debe ser **idéntica** a `DASHBOARD_API_KEY` en el `.env` del bot
 - `DASHBOARD_PASSWORD` — contraseña para entrar al panel
 - `SESSION_SECRET` — cualquier cadena larga y aleatoria
-- `PANEL_PASSWORD_LOGIN` — *(opcional, solo emergencias)*. Con al menos una llave de acceso (Face ID / huella) registrada en Configuración › Seguridad, el panel **solo** se abre con la llave: la contraseña se rechaza (403). Si se pierde el acceso a la llave, poner `PANEL_PASSWORD_LOGIN=on` y reiniciar el panel vuelve a habilitar la contraseña; quitarlo (o borrar todas las llaves) lo deja como estaba. Sin llaves registradas, la contraseña siempre funciona. Agregar una llave nueva sigue pidiendo la sesión abierta + la contraseña del panel.
+- `PANEL_PASSWORD_LOGIN` — *(opcional, solo emergencias)*. Cuando una llave de acceso (Face ID / huella) registrada en Configuración › Seguridad ya sirvió para entrar al menos una vez, el panel **solo** se abre con la llave: la contraseña se rechaza (403). Una llave registrada pero nunca usada no apaga la contraseña. Si se pierde el acceso a la llave, poner `PANEL_PASSWORD_LOGIN=on` y reiniciar el panel vuelve a habilitar la contraseña; quitarlo (o borrar todas las llaves) lo deja como estaba. Sin llaves registradas, la contraseña siempre funciona. Agregar una llave nueva sigue pidiendo la sesión abierta + la contraseña del panel.
 
 ## Desarrollo
 
