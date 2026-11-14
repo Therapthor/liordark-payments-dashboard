@@ -46,10 +46,20 @@
   }
 
   function renderChips() {
-    $("sl-products").innerHTML = options.products.map(p => `
-      <button type="button" class="sl-chip${picked.includes(p.platform) ? " active" : ""}" data-platform="${esc(p.platform)}">
-        ${esc(p.title)}<small>S/ ${esc(p.price)}</small>
-      </button>`).join("") || `<span class="panel-hint">No hay productos activos.</span>`;
+    // Lista ordenada (A→Z), una fila por producto con su precio y stock,
+    // igual que «Agregar cliente»: tocar la fila la marca o desmarca.
+    const sorted = [...options.products].sort((a, b) => String(a.title).localeCompare(String(b.title), "es"));
+    $("sl-products").innerHTML = sorted.map(p => {
+      const on = picked.includes(p.platform);
+      const n = Number(p.available ?? 0);
+      return `
+      <button type="button" class="sl-row${on ? " active" : ""}" data-platform="${esc(p.platform)}" aria-pressed="${on}">
+        <span class="sl-row-check" aria-hidden="true">${on ? "✓" : ""}</span>
+        <span class="sl-row-name">${esc(p.title)}</span>
+        <span class="sl-row-price">S/ ${esc(p.price)}</span>
+        <span class="access-platform-count ${n > 0 ? "has-stock" : "no-stock"}">${n} disp.</span>
+      </button>`;
+    }).join("") || `<span class="panel-hint">No hay productos activos.</span>`;
     $("sl-combos").innerHTML = options.combos.map(c => `
       <button type="button" class="sl-chip${comboId === c.id ? " active" : ""}" data-combo="${c.id}">
         ${esc(c.name)}<small>S/ ${esc(c.price)}</small>

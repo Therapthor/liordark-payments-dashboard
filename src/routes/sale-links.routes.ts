@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { listPlatforms } from "../db/access.repository";
 import { Router, type Request, type Response } from "express";
 import { env } from "../config/env";
 import { listCatalogProducts } from "../db/catalog.repository";
@@ -101,11 +102,15 @@ export const saleLinksAdminRoutes = Router();
 
 // Productos y combos para el formulario (con planes por meses).
 saleLinksAdminRoutes.get("/options", (_req, res) => {
+  // Perfiles vendibles por plataforma: la lista muestra «N disponible(s)»
+  // igual que «Agregar cliente».
+  const stock = new Map(listPlatforms().map(s => [s.platform, s.sellableCount]));
   res.json({
     products: listCatalogProducts(true).map(p => {
       const plans = plansFor(p.platform);
       return {
         platform: p.platform, title: p.title,
+        available: stock.get(p.platform.trim().toUpperCase()) ?? 0,
         price: plans ? money(plans[0]!.price) : p.price,
         plans: plans ? plans.map(pl => ({ months: pl.months, label: pl.label, price: money(pl.price) })) : null,
       };

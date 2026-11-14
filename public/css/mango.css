@@ -2004,3 +2004,26 @@ button.mp-kpi:active { transform: scale(0.98); }
 .sale-link-modal-card { max-width: 560px; }
 #sale-link-modal-body > .panel { box-shadow: none; padding: 0; margin: 0; background: transparent; border: none; }
 #sale-link-modal-body > .panel > .panel-header { display: none; }
+
+/* «Generar link»: productos en lista ordenada, como «Agregar cliente» */
+.sl-rows { display: flex; flex-direction: column; gap: 8px; }
+.sl-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 50px; padding: 8px 14px;
+  border: 1.5px solid var(--mp-line); border-radius: 14px;
+  background: #fff; color: var(--mp-ink);
+  font: inherit; font-weight: 700; text-align: left; cursor: pointer;
+}
+.sl-row:hover { background: var(--mp-soft); }
+.sl-row.active { border-color: var(--mp-mango-deep); background: var(--mp-warn-bg); }
+.sl-row-check {
+  flex: none; width: 22px; height: 22px; border-radius: 7px;
+  border: 2px solid var(--mp-line); background: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1; color: #fff;
+}
+.sl-row.active .sl-row-check { background: var(--mp-leaf, #1F6B44); border-color: var(--mp-leaf, #1F6B44); }
+.sl-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-row-price { flex: none; font-weight: 800; }
+.sl-row .access-platform-count { flex: none; }
+.sl-row .access-platform-count { align-self: center; margin: 0; }

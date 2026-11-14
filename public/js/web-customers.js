@@ -107,9 +107,17 @@
     const lockBadge = c.lockedUntil
       ? `<span class="web-customer-status web-customer-status-locked">🔒 Bloqueada por intentos · hasta ${escapeHtml(formatDate(c.lockedUntil))}</span>`
       : "";
-    // Siempre a mano: aunque el panel no vea el bloqueo (ej. conexión
-    // compartida bloqueada por otros), lo deja entrar al instante.
-    const unlockBtn = `<button class="${c.lockedUntil || c.blocked ? "btn-primary" : "btn-secondary"} btn-sm web-customer-unlock-btn" type="button" title="Quita el bloqueo de su número y de su conexión: entra al instante (24 h sin bloqueos por conexión)">🔓 Quitar bloqueo</button>`;
+    // Con bloqueo a la vista: «Quitar bloqueo» primero y resaltado. Sin
+    // bloqueo ya no aparece afuera (confundía: seguía ahí después de
+    // quitarlo); queda en «⋯» como «Dejar entrar ya» por si la conexión
+    // que comparte está bloqueada por otros y el panel no lo ve.
+    const isLocked = !!(c.lockedUntil || c.blocked);
+    const unlockBtn = isLocked
+      ? `<button class="btn-primary btn-sm web-customer-unlock-btn" type="button" title="Quita el bloqueo de su número y de su conexión: entra al instante (24 h sin bloqueos por conexión)">🔓 Quitar bloqueo</button>`
+      : "";
+    const letInBtn = isLocked
+      ? ""
+      : `<button class="btn-secondary btn-sm web-customer-unlock-btn" type="button" title="Limpia su número y su conexión: entra al instante (24 h sin bloqueos por conexión)">🔓 Dejar entrar ya</button>`;
 
     div.innerHTML = `
       <div class="web-customer-main">
@@ -126,6 +134,7 @@
         <button class="btn-secondary btn-sm web-customer-pinlink-btn" type="button">🔑 Link cambio de PIN</button>
         <button class="btn-secondary btn-sm web-customer-resetpin-btn" type="button">♻️ Resetear PIN y cerrar sesión</button>
         ${emailArea}
+        ${letInBtn}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
         <button class="btn-danger btn-sm web-customer-ban-btn" type="button">🚫 Banear</button>
         <button class="btn-danger btn-sm web-customer-fraud-btn" type="button" title="Borra su cuenta, bloquea el número y libera todas sus cuentas">🚨 Fraude</button>
