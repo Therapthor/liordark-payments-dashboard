@@ -737,7 +737,131 @@
   const MIN_CUSTOM_COMBO_ITEMS = 2;
   let comboBuilderCart = []; // platforms elegidas, sin repetir
 
+  // Propuestas de banner (vista previa con ?banner=1..5, sin tocar la
+  // tienda real). 0 = el banner de siempre. Para dejar una fija, cambiar
+  // COMBO_BANNER_DEFAULT; ?banner=0 siempre muestra el de siempre.
+  const COMBO_BANNER_DEFAULT = 0;
+  const COMBO_BANNER_VARIANT = (() => {
+    const q = new URLSearchParams(location.search).get("banner");
+    const n = q === null ? COMBO_BANNER_DEFAULT : Number(q);
+    return Number.isInteger(n) && n >= 1 && n <= 5 ? n : 0;
+  })();
+  if (COMBO_BANNER_VARIANT) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/css/combo-banner-variants.css";
+    document.head.appendChild(link);
+  }
+
+  // Manguito: el mango pixel con lentes del curso (js/curso-common.js).
+  function manguitoSvg(size) {
+    const rows = ["....GG....", "...GG.....", "..OOOOOO..", ".OOOOOOOO.", "OKKKOOKKKO", "OKKKKKKKKO", "OOOOOOOOOO", ".OOOOOOOY.", "..OOOOYY..", "...OOOO..."];
+    const col = { O: "#F5941E", G: "#3FA34D", K: "#241A10", Y: "#FFD373" };
+    let rects = "";
+    rows.forEach((row, y) => [...row].forEach((c, x) => {
+      if (col[c]) rects += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${col[c]}"/>`;
+    }));
+    return `<svg width="${size}" height="${size}" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+  }
+
+  // Plataformas del banner: las que hay en stock, y si faltan, las de siempre.
+  function comboBannerPlatforms(k) {
+    const names = (cachedProducts || []).filter(p => !isOutOfStock(p, "platform")).map(p => p.platform)
+      .concat(["Netflix", "Disney+", "HBO Max", "Prime Video", "Spotify", "Crunchyroll"]);
+    const seen = new Set();
+    const out = [];
+    for (const n of names) {
+      const { tone } = platformStyle(n);
+      if (!tone || seen.has(tone)) continue;
+      seen.add(tone);
+      out.push(n);
+      if (out.length >= k) break;
+    }
+    return out;
+  }
+
+  function comboBannerVariantHtml(v) {
+    const max = Math.round(comboDiscountRate(99) * 100);
+    const two = Math.round(comboDiscountRate(2) * 100);
+    const plats = comboBannerPlatforms(5);
+    const chips = (n, size, cls) => plats.slice(0, n).map((p, i) => `<span class="${cls}" style="--i:${i}">${platformChip(p, size)}</span>`).join("");
+    const arrow = `<svg class="cbv-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
+    const btn = (label, cls = "") => `<button class="cbv-btn ${cls}" id="build-combo-btn" type="button">${label}${arrow}</button>`;
+    const tiers = `<li><b>2</b> plataformas <em>−${two}%</em></li><li><b>3 o más</b> <em>−${max}%</em></li>`;
+
+    if (v === 1) return `
+      <section class="cbv cbv-1" aria-label="Arma tu combo">
+        <div class="cbv1-art" aria-hidden="true">
+          <div class="cbv1-fan">${chips(3, "", "cbv1-tile")}</div>
+          <div class="cbv1-badge"><small>hasta</small><b>−${max}%</b></div>
+        </div>
+        <div class="cbv1-body">
+          <p class="cbv-kicker">Arma tu combo</p>
+          <h2 class="cbv-title">Junta tus plataformas y paga menos</h2>
+          <ul class="cbv1-tiers">${tiers}</ul>
+        </div>
+        ${btn("Armar mi combo")}
+      </section>`;
+
+    if (v === 2) return `
+      <section class="cbv cbv-2" aria-label="Arma tu combo">
+        <div class="cbv2-orbit" aria-hidden="true">
+          <div class="cbv2-ring">${chips(5, "sm", "cbv2-sat")}</div>
+          <div class="cbv2-core"><small>hasta</small><b>${max}%</b><small>menos</small></div>
+        </div>
+        <div class="cbv2-body">
+          <p class="cbv-kicker">Combo a tu medida</p>
+          <h2 class="cbv-title">Tus plataformas favoritas, juntas y más baratas</h2>
+          <p class="cbv-desc">Elige 2 o más del catálogo y el descuento se aplica solo.</p>
+        </div>
+        ${btn("Armar mi combo", "cbv2-btn")}
+      </section>`;
+
+    if (v === 3) return `
+      <section class="cbv cbv-3" aria-label="Arma tu combo">
+        <div class="cbv3-ticket">
+          <div class="cbv3-main">
+            <p class="cbv-kicker">Cupón combo</p>
+            <h2 class="cbv-title">Arma tu combo y paga menos</h2>
+            <ul class="cbv3-tiers">${tiers}</ul>
+            <div class="cbv3-chips" aria-hidden="true">${chips(4, "xs", "cbv3-chip")}</div>
+          </div>
+          <div class="cbv3-stub">
+            <p class="cbv3-off"><small>Hasta</small><b>−${max}%</b><small>en tu combo</small></p>
+            ${btn("Armar combo", "cbv3-btn")}
+          </div>
+        </div>
+      </section>`;
+
+    if (v === 4) return `
+      <section class="cbv cbv-4" aria-label="Arma tu combo">
+        <div class="cbv4-pill">
+          <span class="cbv4-chips" aria-hidden="true">${chips(3, "xs", "cbv4-chip")}</span>
+          <p class="cbv4-text"><b>Arma tu combo</b><span>Elige 2 o más y paga hasta ${max}% menos</span></p>
+          <span class="cbv4-badge" aria-hidden="true">−${max}%</span>
+          ${btn("Armar", "cbv4-btn")}
+        </div>
+      </section>`;
+
+    return `
+      <section class="cbv cbv-5" aria-label="Arma tu combo">
+        <div class="cbv5-scene" aria-hidden="true">
+          <span class="cbv5-spark s1"></span><span class="cbv5-spark s2"></span><span class="cbv5-spark s3"></span>
+          <div class="cbv5-mango">${manguitoSvg(104)}</div>
+          <span class="cbv5-shadow"></span>
+          ${chips(3, "sm", "cbv5-pop")}
+        </div>
+        <div class="cbv5-body">
+          <p class="cbv-kicker">Arma tu combo</p>
+          <p class="cbv5-bubble">¡Psst! Junta <b>2 o más</b> plataformas y te hago hasta <b>${max}% de descuento</b>.</p>
+          <div class="cbv5-row">${btn("Armar mi combo")}<ul class="cbv5-tiers">${tiers}</ul></div>
+        </div>
+        <p class="cbv5-stamp" aria-hidden="true">hasta<b>−${max}%</b></p>
+      </section>`;
+  }
+
   function buildComboPromptHtml() {
+    if (COMBO_BANNER_VARIANT) return comboBannerVariantHtml(COMBO_BANNER_VARIANT);
     return `
       <div class="build-combo-prompt">
         <div class="build-combo-prompt-deco1"></div>
