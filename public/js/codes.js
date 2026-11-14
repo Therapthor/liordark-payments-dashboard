@@ -653,17 +653,29 @@
     if (!quick || !quick.target) return false;
     const cur = quick.target;
     return t.account
-      ? !!cur.account && cur.account.id === t.account.id
+      ? !!cur.account && cur.account.id === t.account.id && (cur.actionId || "") === (t.actionId || "")
       : !cur.account && cur.email.toLowerCase() === t.email.toLowerCase();
   }
 
+  // Pally con opciones: la misma cuenta da «código» o «enlace» de inicio de
+  // sesión. Antes la búsqueda de arriba siempre pedía el código; ahora pregunta.
+  function codeLinkChoice(a) {
+    const acts = (a && a.sourceActions) || [];
+    return acts.some(x => x.id === "codigo_login") && acts.some(x => x.id === "link_login");
+  }
+
   async function runQuick(t) {
-    const target = { account: t.account || null, email: String(t.account ? t.account.email : t.email || "").trim() };
+    const target = { account: t.account || null, email: String(t.account ? t.account.email : t.email || "").trim(), actionId: t.actionId || null };
     if (!target.email) return;
     if (quick && quick.state === "searching" && sameTarget(target)) return; // ya se está buscando
     const seq = ++quickSeq;
     stopQuickTimer();
     pushRecent(target.email);
+    if (target.account && !target.account.totp && codeLinkChoice(target.account) && !target.actionId) {
+      quick = { seq, target, state: "choose" };
+      renderQuick();
+      return;
+    }
     quick = { seq, target, state: "searching", startedAt: Date.now() };
     renderQuick();
 
@@ -672,7 +684,7 @@
     quickTimer = setInterval(paintElapsed, 1000);
     try {
       const res = target.account
-        ? await api("/codes/" + target.account.id + "/lookup-now", { method: "POST", body: "{}" })
+        ? await api("/codes/" + target.account.id + "/lookup-now", { method: "POST", body: JSON.stringify(target.actionId ? { actionId: target.actionId } : {}) })
         : await api("/codes/lookup", { method: "POST", body: JSON.stringify({ email: target.email }) });
       if (seq !== quickSeq) return;
       quick.result = res;
@@ -842,8 +854,22 @@
     const share = a && window.LiordarkCodeViewer ? `<button type="button" class="cx-ghost-btn" data-q-act="share">Compartir link</button>` : "";
     let pill = "", body = "", meta = "", actions = "";
 
-    if (q.state === "searching") {
-      body = statusHtml("spin", a ? "Buscando el código…" : "Buscando en todas las fuentes…",
+    const choice = a && codeLinkChoice(a);
+    const wantsLink = t.actionId === "link_login";
+    const switchBtn = choice
+      ? `<button type="button" class="cx-ghost-btn" data-q-act="${wantsLink ? "code" : "link"}">${wantsLink ? "Pedir código" : "Pedir enlace"}</button>`
+      : "";
+
+    if (q.state === "choose") {
+      body = `<div class="cx-q-choose">
+          <p>¿Qué pides para esta cuenta?</p>
+          <div class="cx-q-choose-btns">
+            <button type="button" class="cx-q-choose-btn" data-q-act="code">Código de inicio de sesión</button>
+            <button type="button" class="cx-q-choose-btn" data-q-act="link">Enlace de inicio de sesión</button>
+          </div>
+        </div>`;
+    } else if (q.state === "searching") {
+      body = statusHtml("spin", a ? (wantsLink ? "Buscando el enlace…" : "Buscando el código…") : "Buscando en todas las fuentes…",
         `<b data-q-elapsed aria-hidden="true">0 s</b> · la página del proveedor puede tardar hasta 1 minuto`);
     } else if (q.state === "totp") {
       const left = totpLeft();
@@ -865,15 +891,15 @@
       actions = retry +
         (link ? `<button type="button" class="cx-ghost-btn" data-q-copy="${escapeHtml(link)}">${res.approval ? "Copiar link de Aprobar" : "Copiar enlace"}</button>` : "") +
         (res.inboxId ? `<button type="button" class="cx-ghost-btn" data-mail="${escapeHtml(res.inboxId)}">Ver correo</button>` : "") +
-        share;
+        switchBtn + share;
     } else if (q.state === "notfound") {
       body = a
-        ? statusHtml("warn", "Todavía no hay código nuevo para esa cuenta.", "Pide el código en la app y toca Reintentar.")
+        ? statusHtml("warn", wantsLink ? "Todavía no hay enlace nuevo para esa cuenta." : "Todavía no hay código nuevo para esa cuenta.", wantsLink ? "Pide el enlace en la app y toca Reintentar." : "Pide el código en la app y toca Reintentar.")
         : statusHtml("warn", `No se encontró ningún código reciente para ${escapeHtml(t.email)}.`, "Se buscó en todas las fuentes. Pide el código en la app y toca Reintentar.");
-      actions = retry + share;
+      actions = retry + switchBtn + share;
     } else {
       body = statusHtml("bad", "No se pudo consultar.", escapeHtml(q.error || ""));
-      actions = retry + share;
+      actions = retry + switchBtn + share;
     }
 
     return `
@@ -886,12 +912,14 @@
         ${body}
         ${meta ? `<p class="cx-q-meta">${meta}</p>` : ""}
         ${actions ? `<div class="cx-q-actions">${actions}</div>` : ""}
-        ${q.state === "searching" ? "" : othersHtml(t)}
+        ${q.state === "searching" || q.state === "choose" ? "" : othersHtml(t)}
       </article>`;
   }
 
   function renderQuick() {
     const box = $("cx-quick-result");
+    const hero = $("cx-hero");
+    if (hero) hero.classList.toggle("cx-hero-off", !!quick);
     if (!quick) {
       // Sin búsqueda todavía: el gatito esperando (sin gatito, nada).
       box.hidden = !window.LiordarkCat;
@@ -1015,6 +1043,11 @@
     $("cx-quick-clear").addEventListener("click", () => {
       setQuickText("");
       closeSugs();
+      // Limpiar la búsqueda también quita el resultado (y vuelve «Último código»).
+      quickSeq++;
+      stopQuickTimer();
+      quick = null;
+      renderQuick();
       input.focus();
     });
 
@@ -1038,6 +1071,9 @@
       const act = e.target.closest("[data-q-act]");
       if (!act || act.disabled || !quick || !quick.target) return;
       if (act.dataset.qAct === "retry") runQuick(quick.target);
+      if (act.dataset.qAct === "code" || act.dataset.qAct === "link") {
+        runQuick({ ...quick.target, actionId: act.dataset.qAct === "link" ? "link_login" : "codigo_login" });
+      }
       if (act.dataset.qAct === "share" && quick.target.account && window.LiordarkCodeViewer) {
         const a = quick.target.account;
         window.LiordarkCodeViewer.share({ id: Number(a.id), platform: a.platform, email: a.email, totp: !!a.totp });
