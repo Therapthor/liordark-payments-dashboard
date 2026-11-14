@@ -4,10 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Manguitope</title>
+<meta name="theme-color" content="#FFC93C">
 <link rel="icon" href="/assets/logo.webp">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/outfit-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito-sans-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/mango-base.css">
+<link rel="stylesheet" href="/css/cat.css">
+<link rel="stylesheet" href="/css/mango-store.css">
 </head>
 <body>
 
@@ -71,44 +75,76 @@
 
   <!-- ═══════════ APP — catálogo siempre visible, con o sin sesión ═══════════ -->
   <div id="view-app">
-    <header class="topbar">
-      <div class="brand">
-        <img src="/assets/logo.webp" alt="" class="brand-logo-sm">
-        <span class="brand-name">MANGUITOPE</span>
-      </div>
-      <nav class="topnav">
-        <button class="nav-btn active" data-view="catalog">Catálogo</button>
-        <a class="nav-btn nav-course-link" href="/curso/" id="nav-course-link" hidden>Curso</a>
+    <!-- Banda mango (Mango Pro). En PC: marca + menú + campanita arriba.
+         En celular el menú (.topnav) baja como barra oscura flotante. -->
+    <header class="topbar store-band">
+      <div class="band-bg" aria-hidden="true"><span class="band-circle c1"></span><span class="band-circle c2"></span></div>
+      <div class="band-top">
+        <div class="brand">
+          <span class="brand-logo-wrap"><img src="/assets/logo.webp" alt="" class="brand-logo-sm"></span>
+          <span class="brand-text"><span class="brand-name">Manguitope</span><span class="brand-tag">Tienda de streaming</span></span>
+        </div>
+        <nav class="topnav" aria-label="Menú principal">
+          <button class="nav-btn active" data-view="catalog" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 11.1a1 1 0 0 1-1 .9H7.2a1 1 0 0 1-1-.9z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span class="nav-label">Tienda</span></button>
+          <a class="nav-btn nav-course-link" href="/curso/" id="nav-course-link" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9.5 12 4.5l10 5-10 5z"/><path d="M6 11.5V16c3.3 2.6 8.7 2.6 12 0v-4.5"/></svg><span class="nav-label">Curso</span></a>
 
-        <div class="topnav-group" id="nav-auth-actions" hidden>
-          <button class="nav-btn" id="nav-dashboard-btn" data-view="dashboard">Mis cuentas</button>
-          <a class="nav-support-btn" id="topbar-support-link" href="#" target="_blank" rel="noopener">
-            Soporte
-          </a>
-          <button class="nav-btn" data-view="codes" id="topbar-codes-btn" hidden>Códigos</button>
+          <div class="topnav-group" id="nav-auth-actions" hidden>
+            <button class="nav-btn" id="nav-dashboard-btn" data-view="dashboard" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12.5" rx="2.5"/><path d="M8.5 21h7"/><path d="m10.5 8.5 4 2.25-4 2.25z"/></svg><span class="nav-label">Mis cuentas</span></button>
+            <button class="nav-btn" data-view="codes" id="topbar-codes-btn" type="button" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg><span class="nav-label">Códigos</span></button>
+            <a class="nav-support-btn" id="topbar-support-link" href="#" target="_blank" rel="noopener"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8.5 8.5 0 0 1-12.4 7.6L3 21l1.4-5.4A8.5 8.5 0 1 1 21 12z"/></svg><span class="nav-label">Soporte</span></a>
+          </div>
+
+          <div class="topnav-group" id="nav-guest-actions">
+            <button class="btn-login-top" id="nav-login-btn" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="nav-label">Ingresar</span></button>
+            <a class="btn-gold-top" id="wholesale-entry-btn" href="https://mayorista.liordark.com"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8.5 7V5.5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2V7"/><path d="M3 12.5h18"/></svg><span class="nav-label">Mayorista</span></a>
+          </div>
+        </nav>
+
+        <!-- Campanita y Salir: solo con sesión (ver setNavMode en app.js). -->
+        <div class="band-actions" id="band-auth-actions" hidden>
           <div class="notif-wrap">
             <button class="nav-btn-bell" id="notif-bell-btn" type="button" title="Notificaciones" aria-label="Notificaciones">
-              <span class="nav-btn-bell-icon">🔔</span>
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
               <span class="notif-dot" id="notif-dot" hidden></span>
             </button>
             <div class="notif-panel" id="notif-panel" hidden>
               <div class="notif-panel-head">
                 <span>Notificaciones</span>
-                <button class="notif-clear-btn" id="notif-clear-btn" type="button" title="Borrar todas">🗑️</button>
+                <button class="notif-clear-btn" id="notif-clear-btn" type="button" title="Borrar todas" aria-label="Borrar todas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></svg></button>
               </div>
               <div class="notif-list" id="notif-list"></div>
             </div>
           </div>
           <button class="nav-btn-logout" id="logout-btn" type="button" title="Salir" aria-label="Salir">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
           </button>
         </div>
+      </div>
 
-        <div class="topnav-group" id="nav-guest-actions">
-          <button class="btn-login-top" id="nav-login-btn" type="button">🔑 Iniciar sesión</button>
-          <a class="btn-gold-top" id="wholesale-entry-btn" href="https://mayorista.liordark.com">✨ Acceso Mayorista</a>
+      <!-- Título de la banda según la sección (body[data-page], ver switchPage). -->
+      <div class="band-hero" data-hero="catalog">
+        <p class="band-kicker">Tienda oficial</p>
+        <h1 class="band-title">Tu streaming favorito, al toque</h1>
+        <p class="band-sub">Elige tu plataforma, paga con Yape y recibe tus accesos en «Mis cuentas».</p>
+        <ul class="band-perks">
+          <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19"/><path d="M6.5 15h3"/></svg>Pago con Yape</li>
+          <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Combos hasta −15%</li>
+          <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8.5 8.5 0 0 1-12.4 7.6L3 21l1.4-5.4A8.5 8.5 0 1 1 21 12z"/></svg>Soporte por WhatsApp</li>
+        </ul>
+      </div>
+      <div class="band-hero" data-hero="dashboard">
+        <p class="band-kicker">Tu cuenta</p>
+        <h1 class="band-title">Mis cuentas</h1>
+        <p class="band-sub">Tus accesos y cuándo vence cada uno.</p>
+      </div>
+      <div class="band-hero band-hero-cat" data-hero="codes">
+        <div>
+          <p class="band-kicker">Tu cuenta</p>
+          <h1 class="band-title">Códigos</h1>
+          <p class="band-sub">Elige tu cuenta y te mostramos su código para entrar.</p>
         </div>
-      </nav>
+        <span class="band-cat" data-cat="idle"></span>
+      </div>
     </header>
 
     <main class="content">
@@ -161,10 +197,10 @@
       </section>
 
       <section id="page-codes" class="page" hidden>
-        <h2>🔑 Códigos</h2>
-        <p class="muted small">Elige tu cuenta y te mostramos su código. Revisamos cada 30 segundos hasta que llegue. Tienes 3 consultas por cuenta al día.</p>
+        <h2>Códigos</h2>
         <div id="codes-list" class="renewal-accounts-list"></div>
         <p class="muted" id="codes-empty" hidden>Ninguna de tus cuentas activas tiene "Código" habilitado todavía.</p>
+        <p class="info-line"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>Revisamos cada 30 segundos hasta que llegue. Tienes 3 consultas por cuenta al día.</p>
       </section>
     </main>
   </div>
@@ -380,6 +416,7 @@
 
 </div>
 
+<script src="/js/cat.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

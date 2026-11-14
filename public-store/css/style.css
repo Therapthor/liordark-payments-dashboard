@@ -24,11 +24,11 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2 { font-family: 'Space Grotesk', sans-serif; margin: 0 0 4px; }
+h1, h2 { font-family: var(--font-display); margin: 0 0 4px; }
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
 
@@ -44,7 +44,7 @@ a { color: var(--btn); }
   cursor: pointer;
   border: 1px solid transparent;
   transition: filter .15s ease, background .15s ease, transform .1s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 .btn-primary { background: var(--btn); color: #fff; }
 .btn-primary:hover { filter: brightness(1.08); }
@@ -58,7 +58,7 @@ a { color: var(--btn); }
    esta clase acá, solo en el panel admin). */
 .btn-secondary {
   background: var(--card); color: var(--text); border-color: var(--border);
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-body);
 }
 .btn-secondary:hover { background: var(--chip-bg); }
 .btn-secondary:active { transform: scale(0.98); }
@@ -76,7 +76,7 @@ a { color: var(--btn); }
   padding: 12px 18px;
   font-weight: 700;
   font-size: 14px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin-top: 10px;
   color: #3a2a00;
   background: linear-gradient(120deg, #bf8f1f, #f4e08a, #d4af37, #f4e08a, #bf8f1f);
@@ -107,7 +107,7 @@ a { color: var(--btn); }
 
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-logo-sm { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
-.brand-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; letter-spacing: .3px; }
+.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .3px; }
 
 .auth-card form { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; }
 .auth-card label { font-size: 11.5px; color: var(--muted); margin: 10px 0 2px; }
@@ -145,7 +145,7 @@ a { color: var(--btn); }
 }
 .guest-creds-row { display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .guest-creds-label { font-size: 11px; color: rgba(255,255,255,.85); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
-.guest-creds-value { font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700; color: #fff; letter-spacing: .5px; }
+.guest-creds-value { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: #fff; letter-spacing: .5px; }
 
 /* ─── App (post-login) ───────────────────────────────────────── */
 
@@ -162,13 +162,13 @@ a { color: var(--btn); }
 /* ─── Barra sin sesión — "Iniciar sesión" / "Acceso Mayorista" ─── */
 .btn-login-top {
   border: 1.5px solid var(--border); background: var(--card); color: var(--text);
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  font-family: var(--font-display); font-weight: 700; font-size: 13.5px;
   padding: 8px 16px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
 }
 .btn-login-top:hover { background: var(--chip-bg); }
 .btn-gold-top {
   display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
-  color: #3a2a00; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  color: #3a2a00; font-family: var(--font-display); font-weight: 700; font-size: 13.5px;
   padding: 8px 16px; border-radius: 9px;
   background: linear-gradient(120deg, #bf8f1f, #f4e08a, #d4af37, #f4e08a, #bf8f1f);
   background-size: 300% 100%;
@@ -181,12 +181,12 @@ a { color: var(--btn); }
 .login-prompt-pill {
   display: inline-flex; align-items: center; gap: 5px; border: none; cursor: pointer;
   border: 1.5px dashed var(--accent); color: var(--btn); background: var(--chip-bg);
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 11.5px;
+  font-family: var(--font-display); font-weight: 700; font-size: 11.5px;
   padding: 6px 14px; border-radius: 999px;
 }
 .nav-btn {
   border: none; background: transparent; color: var(--muted);
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  font-family: var(--font-display); font-weight: 700; font-size: 13.5px;
   padding: 8px 14px; border-radius: 9px; cursor: pointer;
 }
 .nav-btn:hover { background: var(--chip-bg); color: var(--text); }
@@ -201,7 +201,7 @@ a { color: var(--btn); }
 .nav-support-btn {
   display: inline-flex; align-items: center;
   background: #25D366; color: #fff; text-decoration: none;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px;
+  font-family: var(--font-display); font-weight: 700; font-size: 13.5px;
   padding: 8px 14px; border-radius: 9px; margin-left: 2px;
 }
 .nav-support-btn:hover { filter: brightness(1.05); }
@@ -229,7 +229,7 @@ a { color: var(--btn); }
 }
 .notif-panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px;
+  font-family: var(--font-display); font-weight: 700; font-size: 14px;
   padding: 14px 16px; border-bottom: 1px solid var(--border);
 }
 .notif-clear-btn {
@@ -256,7 +256,7 @@ a { color: var(--btn); }
   display: inline-block;
   background: var(--chip-bg);
   color: var(--accent);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 12.5px;
   letter-spacing: .4px;
@@ -314,7 +314,7 @@ a { color: var(--btn); }
 .product-price-pill {
   display: inline-flex; align-items: baseline; gap: 2px;
   background: linear-gradient(135deg, #ffb020, #e35d00); color: #fff;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+  font-family: var(--font-display); font-weight: 700;
   padding: 4px 28px; border-radius: 999px;
   box-shadow: 0 8px 16px -9px rgba(227,93,0,.65);
 }
@@ -353,7 +353,7 @@ a { color: var(--btn); }
 
 .product-img-wrap { width: 100%; aspect-ratio: 16/10; background: var(--chip-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
 .product-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
-.product-img-fallback { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--accent); font-size: 22px; }
+.product-img-fallback { font-family: var(--font-display); font-weight: 700; color: var(--accent); font-size: 22px; }
 
 .product-body { padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .product-title { font-weight: 700; font-size: 14.5px; }
@@ -361,7 +361,7 @@ a { color: var(--btn); }
   background: var(--accent); color: #fff; font-size: 9.5px; font-weight: 700;
   padding: 3px 8px; border-radius: 999px; letter-spacing: .3px;
 }
-.product-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #fff; font-size: 17px; }
+.product-price { font-family: var(--font-display); font-weight: 700; color: #fff; font-size: 17px; }
 
 /* ─── Modal de detalle de producto ───────────────────────────── */
 
@@ -534,7 +534,7 @@ a { color: var(--btn); }
 .modal-close:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 .checkout-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; }
 .checkout-amount-row { display: flex; align-items: center; justify-content: center; margin: 6px 0; }
-.checkout-amount { font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700; color: var(--accent); }
+.checkout-amount { font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--accent); }
 .checkout-qr { width: 190px; height: 190px; object-fit: contain; border: 1px solid var(--border); border-radius: 14px; padding: 8px; margin: 4px 0; }
 .checkout-waiting { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 13px; }
 
@@ -556,10 +556,10 @@ a { color: var(--btn); }
   background: var(--chip-bg); border-radius: 10px; padding: 10px 12px;
   font-size: 12.5px; margin: 10px 0 14px;
 }
-#support-modal .mini-account b, #support-options-modal .mini-account b { font-family: 'Space Grotesk', sans-serif; }
+#support-modal .mini-account b, #support-options-modal .mini-account b { font-family: var(--font-display); }
 #support-modal .sup-input {
   width: 100%; border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px;
-  font-family: 'Manrope', sans-serif; font-size: 13.5px; resize: vertical; box-sizing: border-box;
+  font-family: var(--font-body); font-size: 13.5px; resize: vertical; box-sizing: border-box;
 }
 #support-modal .form-error { margin: 8px 0 0; }
 #support-modal .btn-row, #support-options-modal .btn-row { display: flex; gap: 8px; margin-top: 14px; }
@@ -706,7 +706,7 @@ a { color: var(--btn); }
 .success-support-btn.success-support-status:hover { background: rgba(255,255,255,.22); }
 .success-account-head.ok     { background: linear-gradient(120deg, var(--accent), var(--accent2)); }
 .success-account-head.urgent { background: linear-gradient(120deg, #e24b3d, #ff8a3d); }
-.success-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; }
+.success-account-platform { font-family: var(--font-display); font-weight: 700; font-size: 13.5px; }
 .success-account-expiry-pill {
   font-size: 10.5px; font-weight: 700; white-space: nowrap;
   background: rgba(255,255,255,.28); padding: 3px 8px; border-radius: 999px;
@@ -838,7 +838,7 @@ a { color: var(--btn); }
 .dashboard-notify-btn {
   display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box;
   padding: 11px 14px; margin-bottom: 14px; border-radius: 12px; border: 1.5px dashed var(--accent);
-  background: var(--chip-bg); color: var(--btn); font-family: 'Space Grotesk', sans-serif;
+  background: var(--chip-bg); color: var(--btn); font-family: var(--font-display);
   font-weight: 700; font-size: 13px; cursor: pointer;
 }
 .dashboard-notify-btn:hover { filter: brightness(0.98); }
@@ -870,7 +870,7 @@ a { color: var(--btn); }
   width: 28px; height: 28px; border-radius: 999px; background: var(--ok); color: #fff;
   display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0;
 }
-.email-toast-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: #fff; }
+.email-toast-title { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: #fff; }
 .email-toast-desc { font-size: 12px; color: #cbbfae; margin-top: 1px; }
 @keyframes emailToastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -884,13 +884,13 @@ a { color: var(--btn); }
 .email-banner-icon { font-size: 26px; line-height: 1; flex-shrink: 0; display: flex; }
 .email-banner-text { flex-grow: 1; min-width: 0; }
 .email-banner-title {
-  font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 13.5px;
+  font-family: var(--font-display); font-weight: 800; font-size: 13.5px;
   color: var(--text); display: block;
 }
 .email-banner-desc { font-size: 12px; color: var(--muted); }
 .email-banner-add {
   background: #fff; color: var(--btn); border: 1.5px solid #ffd9b3; border-radius: 99px;
-  padding: 8px 15px; font-family: 'Space Grotesk', sans-serif; font-weight: 800; font-size: 12.5px;
+  padding: 8px 15px; font-family: var(--font-display); font-weight: 800; font-size: 12.5px;
   white-space: nowrap; cursor: pointer; flex-shrink: 0;
 }
 .email-banner-close {
@@ -908,7 +908,7 @@ a { color: var(--btn); }
   padding: 40px 20px 60px; box-sizing: border-box;
   background: linear-gradient(180deg, #141413 0%, #241a10 34%, var(--bg) 34%);
 }
-.renew-brand { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; color: #FFB13D; letter-spacing: .4px; margin-bottom: 2px; }
+.renew-brand { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: #FFB13D; letter-spacing: .4px; margin-bottom: 2px; }
 .renew-subtitle { font-size: 12.5px; color: rgba(255,255,255,.55); margin-bottom: 26px; }
 .renew-card { width: 100%; max-width: 380px; background: var(--card); border-radius: 20px; overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,.25); }
 .renew-card .checkout-state { padding: 28px 24px; }
@@ -919,12 +919,12 @@ a { color: var(--btn); }
   padding: 12px 14px; background: var(--chip-bg); border-radius: 14px;
 }
 .renew-picker-info { display: flex; flex-direction: column; }
-.renew-picker-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; color: var(--text); }
+.renew-picker-name { font-family: var(--font-display); font-weight: 700; font-size: 13.5px; color: var(--text); }
 .renew-picker-days { font-size: 11.5px; color: var(--muted); }
 .renew-picker-btn {
   border: none; border-radius: 10px; padding: 8px 14px; cursor: pointer;
   background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12.5px; white-space: nowrap;
+  font-family: var(--font-display); font-weight: 700; font-size: 12.5px; white-space: nowrap;
 }
 .renew-form { display: flex; flex-direction: column; gap: 10px; padding: 24px; }
 .renew-form input {
@@ -957,12 +957,12 @@ a { color: var(--btn); }
 }
 .renewal-account-card-due { border: 1.5px solid var(--accent); }
 .renewal-account-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.renewal-account-platform { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; }
+.renewal-account-platform { font-family: var(--font-display); font-weight: 700; font-size: 14px; }
 .renewal-account-status { font-size: 12px; color: var(--muted); }
 .renewal-account-card-due .renewal-account-status { color: var(--btn); font-weight: 600; }
 .renewal-account-email { font-size: 13px; color: var(--text); word-break: break-all; }
 .renewal-account-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
-.renewal-account-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: var(--btn); }
+.renewal-account-price { font-family: var(--font-display); font-weight: 700; color: var(--btn); }
 
 .dashboard-subtitle { font-size: 15px; margin: 18px 0 8px; color: var(--muted); }
 .dashboard-subtitle:first-of-type { margin-top: 0; }
@@ -970,7 +970,7 @@ a { color: var(--btn); }
 /* ─── Códigos ─────────────────────────────────────────────────── */
 
 .codes-value {
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 22px;
+  font-family: var(--font-display); font-weight: 700; font-size: 22px;
   letter-spacing: 2px; color: var(--btn); background: rgba(0,0,0,.04);
   border-radius: 10px; padding: 6px 10px; text-align: center;
 }
@@ -987,7 +987,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .codes-acc-main { display: flex; gap: 12px; align-items: flex-start; }
 .codes-acc-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--acc, #ff7a1a); margin-top: 4px; flex-shrink: 0; box-shadow: 0 0 10px var(--acc, #ff7a1a); }
 .codes-acc-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.codes-acc-info b { font-family: 'Space Grotesk', sans-serif; font-size: 15px; }
+.codes-acc-info b { font-family: var(--font-display); font-size: 15px; }
 .codes-acc-info span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .codes-acc-exp { font-size: 12px !important; }
 .codes-acc-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
@@ -1021,7 +1021,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   background: var(--card); border-radius: 14px; padding: 16px 14px; margin: 2px 0 8px;
 }
 .codes-totp-row .codes-code {
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: 3px;
+  font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: 3px;
   color: var(--btn); cursor: pointer; padding: 4px 10px; border-radius: 9px; transition: background .15s;
 }
 .codes-totp-row .codes-code:hover { background: var(--chip-bg); }
@@ -1065,7 +1065,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   100% { transform: scale(1) rotate(0deg); }
 }
 
-.codes-status { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13.5px; margin-bottom: 2px; min-height: 18px; }
+.codes-status { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; margin-bottom: 2px; min-height: 18px; }
 .codes-status-sub { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; min-height: 15px; }
 .codes-dots { display: inline-flex; gap: 4px; vertical-align: middle; margin-left: 2px; }
 .codes-dots span { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .3; animation: codesBlink 1.2s infinite; }
@@ -1076,7 +1076,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .codes-otp span {
   width: 34px; height: 44px; border-radius: 9px; background: var(--chip-bg); border: 1.5px solid var(--accent);
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; color: var(--btn);
+  font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--btn);
   opacity: 0; transform: scale(.6); animation: codesPop .35s cubic-bezier(.34,1.56,.64,1) forwards;
 }
 @keyframes codesPop { to { opacity: 1; transform: scale(1); } }
@@ -1087,12 +1087,12 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 
 .codes-retry-btn {
   background: none; border: 1.5px solid var(--border); color: var(--text); border-radius: 10px;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12.5px; padding: 9px 12px;
+  font-family: var(--font-display); font-weight: 700; font-size: 12.5px; padding: 9px 12px;
   cursor: pointer; width: 100%; margin-top: 8px;
 }
 .codes-whatsapp-btn {
   background: #fff; color: #1fae57; border: 1.5px solid #bfe8cf; border-radius: 10px;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12.5px; padding: 9px 12px;
+  font-family: var(--font-display); font-weight: 700; font-size: 12.5px; padding: 9px 12px;
   cursor: pointer; width: 100%; margin-top: 8px;
   display: flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
 }
@@ -1122,7 +1122,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .build-combo-prompt-icons { position: relative; width: 112px; height: 56px; flex-shrink: 0; z-index: 1; }
 .build-combo-prompt-icon {
   position: absolute; top: 0; width: 52px; height: 52px; border-radius: 999px;
-  display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif;
+  display: flex; align-items: center; justify-content: center; font-family: var(--font-display);
   font-weight: 700; font-size: 15px; color: #fff; border: 3px solid #fff; box-shadow: 0 6px 14px rgba(0,0,0,.25);
 }
 .build-combo-prompt-icon--netflix { left: 0;  background: #e50914; }
@@ -1134,14 +1134,14 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   box-shadow: 0 8px 18px rgba(0,0,0,.3); z-index: 1;
 }
-.build-combo-prompt-badge-top { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: #ffb020; line-height: 1; }
-.build-combo-prompt-badge-bottom { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px; color: #ffb020; line-height: 1.3; }
+.build-combo-prompt-badge-top { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: #ffb020; line-height: 1; }
+.build-combo-prompt-badge-bottom { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: #ffb020; line-height: 1.3; }
 .build-combo-prompt-text-wrap { flex-grow: 1; min-width: 160px; z-index: 1; }
-.build-combo-prompt-title { margin: 0 0 2px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px; color: #241a10; }
+.build-combo-prompt-title { margin: 0 0 2px; font-family: var(--font-display); font-weight: 700; font-size: 17px; color: #241a10; }
 .build-combo-prompt-desc { margin: 0; font-size: 12.5px; color: #5c3d12; }
 .build-combo-prompt-btn {
   flex-shrink: 0; z-index: 1; border: none; border-radius: 12px; padding: 13px 22px;
-  background: #241a10; color: #ffb020; font-family: 'Space Grotesk', sans-serif;
+  background: #241a10; color: #ffb020; font-family: var(--font-display);
   font-weight: 700; font-size: 13.5px; cursor: pointer; white-space: nowrap;
 }
 
@@ -1176,7 +1176,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   right: -16px; top: -8px; transform: rotate(18deg); pointer-events: none;
 }
 .build-combo-head-title {
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 21px;
+  font-family: var(--font-display); font-weight: 700; font-size: 21px;
   color: #fff; margin: 0 0 4px;
 }
 .build-combo-head-sub { font-size: 12px; color: rgba(255,255,255,.92); margin: 0; font-weight: 600; }
@@ -1203,7 +1203,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .build-combo-item-badge {
   width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0; color: #fff;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px;
+  font-family: var(--font-display); font-weight: 700; font-size: 14px;
 }
 .build-combo-item-info { flex: 1; min-width: 0; }
 .build-combo-item-name { font-weight: 800; font-size: 13.5px; color: var(--text); display: block; }
@@ -1226,11 +1226,11 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 }
 .build-combo-summary { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; gap: 10px; }
 .build-combo-discount-label { font-size: 12.5px; color: var(--muted); }
-.build-combo-total { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; color: var(--btn); }
+.build-combo-total { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--btn); }
 .build-combo-cta {
   width: 100%; border: none; border-radius: 14px; padding: 15px;
   background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
-  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px;
+  font-family: var(--font-display); font-weight: 700; font-size: 15px;
   box-shadow: 0 10px 24px rgba(255,122,26,.35); cursor: pointer;
 }
 .build-combo-cta:disabled { background: var(--border); color: var(--muted); box-shadow: none; cursor: default; }
@@ -1250,7 +1250,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   width: 36px; height: 36px; border-radius: 999px; background: var(--chip-bg);
   display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;
 }
-.chat-header-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14.5px; color: var(--text); }
+.chat-header-title { font-family: var(--font-display); font-weight: 700; font-size: 14.5px; color: var(--text); }
 .chat-header-sub { font-size: 11.5px; color: var(--muted); }
 .chat-header .modal-close { position: static; box-shadow: none; background: var(--chip-bg); color: var(--muted); }
 
@@ -1349,7 +1349,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 /* ─── Chat: pedido de cuenta + tarjeta de respuesta ──────────── */
 .chat-quick-tag { display: block; font-size: 10.5px; font-weight: 700; opacity: .85; margin-bottom: 3px; }
 .chat-account-card { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 170px; }
-.chat-account-card-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; margin-bottom: 2px; }
+.chat-account-card-title { font-family: var(--font-display); font-weight: 700; margin-bottom: 2px; }
 
 .chat-account-picker { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .chat-picker-loading, .chat-picker-empty { font-size: 12px; opacity: .85; }
@@ -1360,7 +1360,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .from-admin .chat-picker-option { background: var(--chip-bg); }
 .chat-picker-send-btn {
   margin-top: 2px; border: none; border-radius: 999px; padding: 7px 10px;
-  background: var(--btn); color: #fff; font-family: 'Space Grotesk', sans-serif;
+  background: var(--btn); color: #fff; font-family: var(--font-display);
   font-weight: 700; font-size: 12px; cursor: pointer;
 }
 .chat-picker-send-btn:disabled { opacity: .6; cursor: default; }
@@ -1382,9 +1382,9 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 6px;
   background: var(--chip-bg); border-radius: 12px; padding: 10px 12px; min-width: 190px;
 }
-.chat-bot-code-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; overflow-wrap: anywhere; }
+.chat-bot-code-title { font-family: var(--font-display); font-weight: 700; font-size: 13px; overflow-wrap: anywhere; }
 .chat-bot-code {
-  font-family: 'Space Grotesk', ui-monospace, monospace; font-size: 26px; font-weight: 700; letter-spacing: 4px;
+  font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: 4px;
   color: var(--btn); background: #fff; border: 1.5px dashed var(--accent); border-radius: 10px;
   padding: 4px 12px; cursor: pointer;
 }
@@ -1423,9 +1423,9 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .renew-pack-total-row {
   align-self: stretch; display: flex; justify-content: space-between; align-items: center;
   padding: 10px 14px; margin-bottom: 10px; border-top: 1px dashed var(--border);
-  font-family: 'Space Grotesk', sans-serif; font-size: 15px; color: var(--text);
+  font-family: var(--font-display); font-size: 15px; color: var(--text);
 }
-.renew-pack-price { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; color: var(--text); white-space: nowrap; }
+.renew-pack-price { font-family: var(--font-display); font-weight: 700; font-size: 13.5px; color: var(--text); white-space: nowrap; }
 @keyframes packAmountFlash { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
 .checkout-amount.is-new { animation: packAmountFlash .5s ease-out; }
 #renew-pack-list .renew-picker-info { align-items: flex-start; text-align: left; }
@@ -1438,9 +1438,9 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .renew-pack-promo { align-self: stretch; font-size: 12px; text-align: center; color: var(--accent); font-weight: 700; margin: 2px 0 6px; }
 .renew-pack-sum { align-self: stretch; border-top: 1px dashed var(--border); padding: 8px 14px 10px; margin-bottom: 10px; }
 .renew-pack-sum-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--ok); }
-.renew-pack-sum-total { font-family: 'Space Grotesk', sans-serif; font-size: 15px; color: var(--text); margin-top: 4px; }
+.renew-pack-sum-total { font-family: var(--font-display); font-size: 15px; color: var(--text); margin-top: 4px; }
 .renew-pack-pay { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: 6px; background: var(--chip-bg); border-radius: 14px; padding: 12px; margin-bottom: 8px; }
-.renew-pack-pay-title { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 14px; color: var(--text); }
+.renew-pack-pay-title { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--text); }
 .renew-pack-qr { max-width: 200px; width: 100%; border-radius: 12px; background: #fff; }
 
 /* Registro rápido al tocar Comprar */

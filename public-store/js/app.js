@@ -117,6 +117,7 @@
   function setNavMode(authed) {
     document.getElementById("nav-auth-actions").hidden  = !authed;
     document.getElementById("nav-guest-actions").hidden = authed;
+    document.getElementById("band-auth-actions").hidden = !authed;
     refreshCourseVisibility();
   }
 
@@ -483,6 +484,8 @@
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
     document.getElementById("page-codes").hidden = view !== "codes";
     document.body.classList.toggle("theme-codes-dark", view === "codes");
+    // Título de la banda mango y barra inferior según la sección (mango-store.css).
+    document.body.dataset.page = view;
     if (view === "dashboard") { loadDashboardAccounts(); refreshEmailStatus(); }
     if (view === "codes") loadCodesAccounts();
   }
@@ -582,11 +585,34 @@
     document.getElementById("checkout-amount-copy").addEventListener("click", handleYapeCopyClick);
   }
 
+  // Ficha con las iniciales y el color de cada plataforma (NF rojo, D+
+  // azul…) — mismo juego de colores que el panel mayorista (.plat-*).
+  const PLATFORM_STYLES = [
+    [/netflix/i, "NF", "nf"], [/disney/i, "D+", "dp"], [/hbo|^max$/i, "HBO", "hbo"],
+    [/prime|amazon/i, "PV", "pv"], [/crunchy/i, "CR", "cr"], [/spotify/i, "SP", "sp"],
+    [/youtube/i, "YT", "yt"], [/canva/i, "CA", "ca"], [/gemini/i, "GE", "ge"],
+    [/chatgpt|openai|gpt/i, "AI", "ai"], [/paramount/i, "P+", "pp"], [/vix/i, "VX", "vx"],
+    [/apple/i, "TV", "tv"], [/star/i, "S+", "st"],
+  ];
+  function platformStyle(platform) {
+    const p = String(platform || "");
+    const hit = PLATFORM_STYLES.find(([re]) => re.test(p));
+    return {
+      mono: hit ? hit[1] : (p.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?"),
+      tone: hit ? "plat-" + hit[2] : "",
+    };
+  }
+  function platformChip(platform, size) {
+    const { mono, tone } = platformStyle(platform);
+    return `<span class="plat${tone ? " " + tone : ""}${size ? " plat-" + size : ""}" aria-hidden="true">${escapeHtml(mono)}</span>`;
+  }
+
   function productImgHtml(p, kind) {
-    const fallbackTag = (kind === "combo" ? "COMBO" : p.platform).slice(0, 3).toUpperCase();
+    const { mono, tone } = kind === "combo" ? { mono: "COMBO", tone: "" } : platformStyle(p.platform);
+    const fallback = `<span class="product-img-fallback ${tone}">${escapeHtml(mono)}</span>`;
     return p.imageUrl
-      ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'product-img-fallback\\'>${escapeHtml(fallbackTag)}</span>'">`
-      : `<span class="product-img-fallback">${escapeHtml(fallbackTag)}</span>`;
+      ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.insertAdjacentHTML('afterbegin', this.dataset.fallback); this.remove()" data-fallback="${escapeHtml(fallback)}">`
+      : fallback;
   }
 
   function isOutOfStock(p, kind) {
@@ -605,25 +631,29 @@
     const detailAttr = kind === "combo" ? `data-detail-combo="${p.id}"` : `data-detail-platform="${escapeHtml(p.platform)}"`;
     const cardClass  = [exclusive && "product-card-exclusive", outOfStock && "product-card-outofstock"].filter(Boolean).join(" ");
     const overlayBadge = exclusive
-      ? '<span class="product-badge-overlay badge-exclusive">★ EXCLUSIVO</span>'
-      : (annual ? '<span class="product-badge-overlay badge-annual">ANUAL</span>' : "");
+      ? `<span class="product-badge-overlay badge-exclusive">${annual ? "Anual" : "Exclusivo"}</span>`
+      : (annual ? '<span class="product-badge-overlay badge-annual">Anual</span>' : "");
 
     // El precio se ve siempre, con o sin sesión — el registro rápido
     // (celular + PIN) se pide recién al tocar Comprar (ver requireAuth).
-    const priceHtml = `${outOfStock ? '<span class="product-reserve-tag-sm">Reservar</span>' : ""}
-         <div class="product-price-pill${outOfStock ? " product-price-pill-reserve" : ""}">
-           <span class="product-price-pill-currency">S/</span><span class="product-price-pill-amount">${escapeHtml(p.price)}</span>
-         </div>`;
+    // El «botón» es solo la cara visible: la card entera abre el detalle.
+    const stockHtml = outOfStock
+      ? '<span class="product-stock product-stock-out"><i></i>Agotado · se reserva</span>'
+      : '<span class="product-stock"><i></i>Disponible</span>';
 
     return `
-      <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0">
+      <div class="product-card${cardClass ? " " + cardClass : ""}" ${detailAttr} role="button" tabindex="0" aria-label="${escapeHtml(title)} · S/ ${escapeHtml(p.price)}">
         <div class="product-img-wrap">
           ${productImgHtml(p, kind)}
           ${overlayBadge}
         </div>
-        <div class="product-body product-body-pill">
+        <div class="product-body">
           <span class="product-title">${escapeHtml(title)}</span>
-          ${priceHtml}
+          ${stockHtml}
+          <div class="product-buy-row">
+            <span class="product-price-big"><small>S/</small>${escapeHtml(p.price)}</span>
+            <span class="product-cta${outOfStock ? " product-cta-reserve" : ""}" aria-hidden="true">${outOfStock ? "Reservar" : "Comprar"}</span>
+          </div>
         </div>
       </div>`;
   }
@@ -654,7 +684,7 @@
       const exclusiveProducts = sortedProducts.filter(p => isExclusive(p, "platform"));
       const regularProducts   = sortedProducts.filter(p => !isExclusive(p, "platform"));
       if (exclusiveProducts.length > 0) {
-        html += `<div class="section-chip section-chip-exclusive">✨ Exclusivos ✨</div>`;
+        html += `<div class="section-chip section-chip-exclusive">Exclusivos</div>`;
         html += `<div class="product-grid product-grid-exclusive">${exclusiveProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
       }
       if (regularProducts.length > 0) {
@@ -743,21 +773,6 @@
     return { items, sum, rate, total };
   }
 
-  // Paleta fija para la "ficha" de cada plataforma en Arma tu combo — el
-  // color se elige por hash del nombre, así cada plataforma mantiene
-  // siempre el mismo color aunque cambie el orden del catálogo.
-  const COMBO_BADGE_COLORS = ["#8e3bd9", "#1577c6", "#5b21b6", "#0ea968", "#d1373d", "#b08550", "#0f9bb5"];
-  function comboBadgeColor(platform) {
-    let hash = 0;
-    for (let i = 0; i < platform.length; i++) hash = (hash * 31 + platform.charCodeAt(i)) >>> 0;
-    return COMBO_BADGE_COLORS[hash % COMBO_BADGE_COLORS.length];
-  }
-  function comboBadgeLetters(title) {
-    const words = title.trim().split(/\s+/).filter(Boolean);
-    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-    return title.trim().slice(0, 2).toUpperCase();
-  }
-
   function renderComboBuilderCatalog() {
     const container = document.getElementById("build-combo-catalog");
     const inStock = cachedProducts.filter(p => !isOutOfStock(p, "platform"));
@@ -765,7 +780,7 @@
       const added = comboBuilderCart.includes(p.platform);
       return `
         <div class="build-combo-item">
-          <div class="build-combo-item-badge" style="background:${comboBadgeColor(p.platform)}">${escapeHtml(comboBadgeLetters(p.title))}</div>
+          ${platformChip(p.platform, "sm")}
           <div class="build-combo-item-info">
             <span class="build-combo-item-name">${escapeHtml(p.title)}</span>
             <span class="build-combo-item-price">S/ ${escapeHtml(p.price)}</span>
@@ -1445,6 +1460,7 @@
     return `
       <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head ${headClass}">
+          ${platformChip(a.platform, "sm")}
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
           ${expiryLabel ? `<span class="success-account-expiry-pill">${escapeHtml(expiryLabel)}</span>` : ""}
           <div class="success-account-actions">
@@ -1588,7 +1604,7 @@
     return `
       <div class="codes-acc codes-acc-${codesTheme(a.platform)}" data-account-id="${a.accountId}">
         <div class="codes-acc-main">
-          <span class="codes-acc-dot"></span>
+          ${platformChip(a.platform, "sm")}
           <div class="codes-acc-info">
             <b>${escapeHtml(a.platform)}</b>
             <span>${escapeHtml(a.email)}${a.profileName ? " · " + escapeHtml(a.profileName) : ""}</span>
