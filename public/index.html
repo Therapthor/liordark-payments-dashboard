@@ -507,7 +507,7 @@
 
 
         <div id="customers-section-ventas" hidden>
-          <div class="panel">
+          <div class="panel" id="sl-form-panel">
             <div class="panel-header"><h2>🔗 Nuevo link de venta</h2></div>
             <p class="panel-hint">Para pedidos que llegan por WhatsApp: pon el celular y el producto. Se crea la cuenta del cliente (si no tiene) y el link lo deja dentro de su cuenta, listo para pagar con Yape. El pago se confirma solo y la cuenta queda en «Mis cuentas». No se mezcla con los pagos pendientes.</p>
             <div class="sl-form">
@@ -517,8 +517,9 @@
 
               <label class="sl-label">Producto <span class="panel-hint">(toca uno; varios = combo armado con descuento)</span></label>
               <div class="sl-chips" id="sl-products"></div>
-              <label class="sl-label">o un combo del catálogo</label>
-              <div class="sl-chips" id="sl-combos"></div>
+              <!-- Combos fijos del catálogo: ya no se usan (el dueño quitó la sección). -->
+              <label class="sl-label" hidden>o un combo del catálogo</label>
+              <div class="sl-chips" id="sl-combos" hidden></div>
               <div id="sl-plans" hidden></div>
 
               <div class="sl-preview" id="sl-preview" hidden><span id="sl-preview-title"></span><b id="sl-preview-price"></b></div>
@@ -1278,6 +1279,18 @@
         <button type="submit" class="btn-primary">Crear pedido y preparar mensaje</button>
       </div>
     </form>
+  </div>
+
+  <!-- ───────────── MODAL: 🔗 Generar link (desde Resumen, sin salir de ahí) ───────────── -->
+  <!-- El formulario es el mismo de Clientes › Links de venta: se muda acá al abrir y vuelve al cerrar. -->
+  <div id="sale-link-modal" class="modal-backdrop" hidden>
+    <div class="modal-card modal-card--wide sale-link-modal-card" style="overflow-y: auto;">
+      <div class="modal-head">
+        <h3>🔗 Generar link de venta</h3>
+        <button type="button" class="modal-x" data-close-modal="sale-link-modal">✕</button>
+      </div>
+      <div id="sale-link-modal-body"></div>
+    </div>
   </div>
 
   <!-- ───────────── MODAL: Renovados > enviar cuenta nueva ───────────── -->

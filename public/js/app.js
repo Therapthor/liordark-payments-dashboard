@@ -714,6 +714,13 @@
         loadPendingOrders(); // lo más probable es que un pendiente se acaba de resolver
       }
 
+      // Stock en vivo: la lista «Sin stock» y los contadores de Accesos se
+      // actualizan apenas cambia algo, sin recargar la página.
+      if (evt.type === "stock_changed") {
+        loadStockAlert();
+        document.dispatchEvent(new CustomEvent("liordark:stock-changed"));
+      }
+
       if (evt.type === "customer_registered") {
         playCustomerChime();
         if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
@@ -1688,13 +1695,27 @@
     document.getElementById("resumen-quick-assign-btn").addEventListener("click", () => {
       if (window.LiordarkAccess) window.LiordarkAccess.openComboOrderModal();
     });
-    // «Generar link»: Clientes › Links de venta, con el celular listo para escribir.
-    document.getElementById("resumen-sale-link-btn").addEventListener("click", () => {
-      switchView("web-customers");
-      const tab = document.querySelector('[data-customers-section="ventas"]');
-      if (tab) tab.click();
-      setTimeout(() => { const ph = document.getElementById("sl-phone"); if (ph) ph.focus(); }, 120);
-    });
+    // «Generar link»: se hace ahí mismo, en una ventana sobre Resumen. Usa el
+    // mismo formulario de Clientes › Links de venta (se muda a la ventana y
+    // vuelve a su lugar al cerrarla).
+    (() => {
+      const modal = document.getElementById("sale-link-modal");
+      const body = document.getElementById("sale-link-modal-body");
+      const panel = document.getElementById("sl-form-panel");
+      const home = panel.parentElement;
+      const homeNext = panel.nextElementSibling;
+      new MutationObserver(() => {
+        if (modal.hidden && panel.parentElement === body) home.insertBefore(panel, homeNext);
+      }).observe(modal, { attributes: true, attributeFilter: ["hidden"] });
+      modal.addEventListener("click", (e) => { if (e.target === modal) modal.hidden = true; });
+      document.getElementById("resumen-sale-link-btn").addEventListener("click", () => {
+        body.appendChild(panel);
+        document.getElementById("sl-result").hidden = true;
+        modal.hidden = false;
+        if (window.LiordarkSaleLinks) window.LiordarkSaleLinks.open();
+        setTimeout(() => { const ph = document.getElementById("sl-phone"); if (ph) ph.focus(); }, 80);
+      });
+    })();
     // «Subir cuentas»: el formulario «Agregar cuentas» de Accesos.
     document.getElementById("resumen-bulk-add-btn").addEventListener("click", () => {
       if (window.LiordarkAccess && typeof window.LiordarkAccess.openBulkAdd === "function") {

@@ -2003,5 +2003,17 @@
     return openBulkModal(opts);
   }
 
+  // Stock en vivo: con Accesos a la vista en la grilla de plataformas (sin
+  // detalle, búsqueda ni ventana abierta) los «N disponible(s)» se actualizan
+  // solos. Si estás trabajando dentro de una plataforma no se toca nada.
+  document.addEventListener("liordark:stock-changed", () => {
+    const app = document.getElementById("app");
+    if (!app || app.dataset.mpView !== "access" || document.hidden) return;
+    if (activePlatformDetail !== null || activeQuery) return;
+    if (!document.getElementById("access-client-summary").hidden) return;
+    if (document.querySelector(".modal-backdrop:not([hidden])")) return;
+    load().catch(() => {});
+  });
+
   window.LiordarkAccess = { init, load, loadProviderRenewals, loadPasswordChangePending, openComboOrderModal, openBulkAdd };
 })();

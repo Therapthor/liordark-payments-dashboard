@@ -1999,3 +1999,8 @@ button.mp-kpi:active { transform: scale(0.98); }
 .combo-qty { min-width: 64px; min-height: 36px; border-radius: 10px; font: inherit; font-weight: 700; }
 .combo-qty:disabled { opacity: 0.45; }
 .combo-order-platforms li > label { flex: 1 1 auto; }
+
+/* «Generar link» en ventana: el formulario sin su marco de tarjeta */
+.sale-link-modal-card { max-width: 560px; }
+#sale-link-modal-body > .panel { box-shadow: none; padding: 0; margin: 0; background: transparent; border: none; }
+#sale-link-modal-body > .panel > .panel-header { display: none; }
