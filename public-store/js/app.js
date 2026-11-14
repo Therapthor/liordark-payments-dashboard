@@ -855,6 +855,7 @@
           <p class="cbv5-bubble">¡Psst! Junta <b>2 o más</b> plataformas y te hago hasta <b>${max}% de descuento</b>.</p>
           <div class="cbv5-row">${btn("Armar mi combo")}<ul class="cbv5-tiers">${tiers}</ul></div>
         </div>
+        <p class="cbv5-stamp" aria-hidden="true">hasta<b>−${max}%</b></p>
       </section>`;
   }
 

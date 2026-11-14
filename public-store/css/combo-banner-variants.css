@@ -253,7 +253,7 @@
 
 /* ─── 5 · Manguito: el mango pixel del curso te invita a armarlo ─── */
 .cbv-5 {
-  display: grid; grid-template-columns: 230px minmax(0, 1fr); align-items: center; gap: 22px;
+  display: grid; grid-template-columns: 230px minmax(0, 1fr) auto; align-items: center; gap: 22px;
   padding: 14px 30px 14px 16px; border-radius: 24px; overflow: hidden; isolation: isolate;
   background:
     repeating-linear-gradient(0deg, rgba(43,27,14,.045) 0 1px, rgba(43,27,14,0) 1px 14px),
@@ -303,7 +303,16 @@
   content: ""; position: absolute; left: -9px; top: 24px; width: 16px; height: 16px; background: #fff;
   border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg);
 }
-.cbv5-bubble b { color: var(--leaf); font-weight: 800; }
+.cbv5-bubble b { color: var(--leaf); font-weight: 800; white-space: nowrap; }
+.cbv5-tiers li { background: #fff; border: 1.5px solid var(--ink); }
+.cbv5-stamp {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 128px; height: 128px; margin-right: 6px; border-radius: 22px; rotate: 6deg;
+  background: var(--mango); border: 2px solid var(--ink); box-shadow: 5px 5px 0 var(--ink);
+  font: 700 12px/1 var(--font-display); letter-spacing: .09em; text-transform: uppercase; color: var(--chip-ink);
+  animation: cbv-pop 620ms var(--cbv-ease) 520ms both;
+}
+.cbv5-stamp b { font: 800 40px/1 var(--font-display); letter-spacing: -0.05em; text-transform: none; color: var(--ink); margin-top: 4px; }
 .cbv-5 .cbv-kicker { margin-left: 4px; }
 .cbv5-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 2px; }
 @keyframes cbv5-bob { 50% { transform: translateY(-8px); } }
@@ -318,7 +327,7 @@
   .cbv5-body { justify-items: center; text-align: center; }
   .cbv5-bubble { font-size: 16px; transform-origin: 50% 0; }
   .cbv5-bubble::before { left: 50%; top: -9px; margin-left: -8px; transform: rotate(135deg); }
-  .cbv-5 .cbv-kicker, .cbv5-tiers { display: none; }
+  .cbv-5 .cbv-kicker, .cbv5-tiers, .cbv5-stamp { display: none; }
   .cbv5-row { width: 100%; }
   .cbv-5 .cbv-btn { width: 100%; }
 }
