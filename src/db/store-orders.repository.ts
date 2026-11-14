@@ -68,8 +68,8 @@ export function listRecentConfirmedPurchases(hours = 72, limit = 20): RecentPurc
   }
 
   const notRenewal = `
-    NOT EXISTS (SELECT 1 FROM renewals_log r WHERE r.order_name = X)
-    AND NOT EXISTS (SELECT 1 FROM pending_orders_log r2 WHERE r2.order_name = X AND r2.order_type <> 'Compra' AND r2.order_type <> 'Compra sin stock')`;
+    NOT EXISTS (SELECT 1 FROM renewals_log r WHERE r.order_name = {ORDER})
+    AND NOT EXISTS (SELECT 1 FROM pending_orders_log r2 WHERE r2.order_name = {ORDER} AND r2.order_type <> 'Compra' AND r2.order_type <> 'Compra sin stock')`;
 
   const sold = db.prepare(`
     SELECT DISTINCT p.order_name AS orderName, a.platform AS platform, p.created_at AS at
@@ -77,7 +77,7 @@ export function listRecentConfirmedPurchases(hours = 72, limit = 20): RecentPurc
     JOIN access_profiles ap ON ap.order_ref = p.order_name
     JOIN access_accounts a  ON a.id = ap.account_id
     WHERE p.status = 'matched' AND p.order_name <> '' AND p.created_at >= ?
-      AND ${notRenewal.replace(/X/g, "p.order_name")}
+      AND ${notRenewal.replace(/\{ORDER\}/g, "p.order_name")}
       AND NOT EXISTS (SELECT 1 FROM wholesalers w WHERE substr(w.phone, -9) = substr(ap.client_phone, -9))
   `).all(cutoffIso) as { orderName: string; platform: string; at: string }[];
 

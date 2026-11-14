@@ -607,6 +607,9 @@
     return `<span class="plat${tone ? " " + tone : ""}${size ? " plat-" + size : ""}" aria-hidden="true">${escapeHtml(mono)}</span>`;
   }
 
+  // Para js/compras-recientes.js (aviso «Alguien compró…»): misma ficha.
+  window.LiordarkStore = { platformChip };
+
   function productImgHtml(p, kind) {
     const { mono, tone } = kind === "combo" ? { mono: "COMBO", tone: "" } : platformStyle(p.platform);
     const fallback = `<span class="product-img-fallback ${tone}">${escapeHtml(mono)}</span>`;

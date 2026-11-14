@@ -399,6 +399,18 @@
     </div>
   </div>
 
+  <!-- «Movimiento»: aviso chico de compras reales y confirmadas
+       (js/compras-recientes.js). PC abajo a la izquierda; celular justo
+       encima de la barra. Se puede cerrar (queda cerrado en la sesión). -->
+  <div class="buy-toast" id="buy-toast" role="status" aria-live="polite" hidden>
+    <span class="buy-toast-chip" id="buy-toast-chip"></span>
+    <div class="buy-toast-text">
+      <b id="buy-toast-title"></b>
+      <small id="buy-toast-time"></small>
+    </div>
+    <button class="buy-toast-close" id="buy-toast-close" type="button" aria-label="Cerrar avisos de compras">✕</button>
+  </div>
+
   <!-- ═══════════ MODAL: soporte (asistente solo con botones, sin chat) ═══════════ -->
   <div id="chat-modal" class="modal-backdrop" hidden>
     <div class="modal-card chat-card">
@@ -423,5 +435,7 @@
 
 <script src="/js/cat.js"></script>
 <script src="/js/app.js"></script>
+<script src="/js/animaciones.js"></script>
+<script src="/js/compras-recientes.js"></script>
 </body>
 </html>
