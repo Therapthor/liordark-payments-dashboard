@@ -886,7 +886,11 @@ router.post("/checkout", async (req, res) => {
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     if (plan && platform && response.data?.orderName) savePlanOrder(String(response.data.orderName), platform, plan.months);
-    if (response.data?.orderName) saveStoreWebOrder(String(response.data.orderName), customerId);
+    // Si guardar el dueño del pedido falla, la compra sigue igual (solo no
+    // se podrá mostrar «¡Pago aprobado!» para esa reserva).
+    if (response.data?.orderName) {
+      try { saveStoreWebOrder(String(response.data.orderName), customerId); } catch (err) { console.error("store_web_orders:", err); }
+    }
     // Compra que vino de un link de venta: la orden queda ligada al link
     // (el panel lo marca «Pagado» cuando llega el Yape de esa orden).
     if (req.body?.saleLink && response.data?.orderName) {
