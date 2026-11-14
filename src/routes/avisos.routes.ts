@@ -218,6 +218,8 @@ router.put("/:target", (req, res) => {
     const endsOn = String(b.endsOn ?? "").trim();
     if (endsOn && !validDate(endsOn)) return fail("La fecha de fin no es válida.");
     const active = b.active === "1" || b.active === "true";
+    if (active && !req.file && !prev.imageUrl) return fail("Sube una imagen antes de activar el aviso.");
+    if (active && endsOn && endsOn < todayLima()) return fail("La fecha de fin ya pasó: elige otra o déjala vacía.");
 
     let image: { url: string; publicId: string; w: number; h: number } | null = null;
     if (req.file) {
@@ -239,8 +241,6 @@ router.put("/:target", (req, res) => {
       active, title, buttonType, productId, linkUrl, buttonText, frequency, endsOn,
       ...(image ? { imageUrl: image.url, imagePublicId: image.publicId, imageW: image.w, imageH: image.h } : {}),
     };
-    if (active && !next.imageUrl) return fail("Sube una imagen antes de activar el aviso.");
-    if (active && isEnded(next)) return fail("La fecha de fin ya pasó: elige otra o déjala vacía.");
 
     // Cambió lo que se ve → cuenta como aviso nuevo (se vuelve a mostrar a todos).
     const contentChanged = !prev.rev || next.imageUrl !== prev.imageUrl || next.title !== prev.title

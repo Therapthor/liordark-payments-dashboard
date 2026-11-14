@@ -66,7 +66,7 @@
         <div class="aviso-form-head">
           <div>
             <h3>${cfg.icon} ${cfg.name} <small>${cfg.host}</small></h3>
-            <p class="panel-hint">${cfg.who}</p>
+            <p class="aviso-help">${cfg.who}</p>
           </div>
           <span class="aviso-status aviso-status--${st.cls}" data-role="status">${esc(st.text)}</span>
         </div>
@@ -80,7 +80,7 @@
               <input type="file" accept="image/jpeg,image/png,image/webp" data-role="file">
               <span data-role="file-label">${a.imageUrl ? "Cambiar imagen" : "Subir imagen"}</span>
             </label>
-            <p class="panel-hint">JPG, PNG o WEBP · hasta ${INPUT_MAX_MB} MB. Se muestra completa, sin recortar; si es muy pesada la achicamos sola para que cargue rápido. Vertical o cuadrada se ve mejor en el celular.</p>
+            <p class="aviso-help">JPG, PNG o WEBP · hasta ${INPUT_MAX_MB} MB. Se muestra completa, sin recortar; si es muy pesada la achicamos sola para que cargue rápido. Vertical o cuadrada se ve mejor en el celular.</p>
           </div>
         </div>
 
@@ -90,7 +90,7 @@
           <span><b>Activo</b><small>Apagado no le aparece a nadie.</small></span>
         </label>
 
-        <label class="aviso-field">Texto debajo de la imagen <span class="aviso-opt">(opcional)</span>
+        <label class="aviso-field"><span>Texto debajo de la imagen <span class="aviso-opt">(opcional)</span></span>
           <input type="text" name="title" maxlength="140" value="${esc(a.title)}" placeholder="${esc(cfg.placeholder)}">
         </label>
 
@@ -122,7 +122,7 @@
         </fieldset>
 
         <div class="aviso-field">
-          <label for="aviso-${t}-ends">Mostrar hasta <span class="aviso-opt">(opcional)</span></label>
+          <label for="aviso-${t}-ends"><span>Mostrar hasta <span class="aviso-opt">(opcional)</span></span></label>
           <div class="aviso-date-row">
             <input type="date" id="aviso-${t}-ends" name="endsOn" value="${esc(a.endsOn)}" min="${esc(state.today)}">
             <button type="button" class="btn-secondary btn-sm" data-act="clear-date">Sin fecha</button>
