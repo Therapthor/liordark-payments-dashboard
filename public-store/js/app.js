@@ -1358,7 +1358,7 @@
       document.getElementById("checkout-waiting-text").textContent = "Esperando tu pago…";
 
       showCheckoutState("ready");
-      startPolling(beforeAccounts, targetNewAccounts, isReserve ? { platformLabel: platformLabel || id, amount: order.amount } : null);
+      startPolling(beforeAccounts, targetNewAccounts, isReserve ? { platformLabel: platformLabel || id, amount: order.amount, orderName: order.orderName } : null);
     } catch (err) {
       if (err.isBusinessError) {
         document.getElementById("checkout-error-text").textContent = err.message;
@@ -1382,17 +1382,21 @@
     return after.filter(a => !beforeKeys.has(accountKey(a)));
   }
 
-  let reservedScreenShown = false;
-
-  // reserveInfo.amount === null → la orden ni siquiera llegó a confirmarse
-  // (la respuesta del checkout se perdió/tardó), así que no hay monto que
-  // mostrar — mensaje distinto al de "sin stock, reservado".
-  function showCheckoutReserved(reserveInfo) {
-    document.getElementById("checkout-reserved-text").innerHTML = reserveInfo.amount === null
-      ? `Tu pedido de <b>${escapeHtml(reserveInfo.platformLabel)}</b> se está procesando — puede tardar unos segundos más de lo normal. ` +
-        `Si el pago ya se realizó, tu cuenta va a aparecer sola en "Mis cuentas" y te vamos a notificar. No necesitas hacer nada más 😊`
-      : `Estamos subiendo stock nuevo de <b>${escapeHtml(reserveInfo.platformLabel)}</b> — apenas esté listo, ` +
-        `tu cuenta va a aparecer sola en "Mis cuentas". No necesitas hacer nada más 😊`;
+  // Pantalla de reserva — dos casos, nunca «¡Reservado!» a ciegas:
+  //  · paid: el servidor confirmó el pago de ESTA orden (GET
+  //    /orders/:orderName/status) → «¡Pago aprobado!», con el look verde de
+  //    éxito. La cuenta llega sola apenas se suba stock.
+  //  · si no (reserveInfo.amount === null: la respuesta del checkout se
+  //    perdió/tardó) → mensaje neutro «Procesando tu pedido».
+  function showCheckoutReserved(reserveInfo, paid) {
+    const isPaid = !!paid && reserveInfo.amount !== null;
+    document.getElementById("checkout-reserved").classList.toggle("is-paid", isPaid);
+    document.getElementById("checkout-reserved-icon").textContent = isPaid ? "✓" : "⏳";
+    document.getElementById("checkout-reserved-title").textContent = isPaid ? "¡Pago aprobado!" : "Procesando tu pedido";
+    document.getElementById("checkout-reserved-text").innerHTML = isPaid
+      ? "Tu reserva está hecha. Estamos terminando de subir el stock: tu cuenta aparecerá sola en «Mis cuentas» y te avisaremos con la campanita."
+      : `Tu pedido de <b>${escapeHtml(reserveInfo.platformLabel)}</b> se está procesando — puede tardar unos segundos más de lo normal. ` +
+        `Si el pago ya se realizó, tu cuenta va a aparecer sola en "Mis cuentas" y te vamos a notificar. No necesitas hacer nada más 😊`;
     document.getElementById("checkout-reserved-order").hidden = reserveInfo.amount === null;
     if (reserveInfo.amount !== null) {
       document.getElementById("checkout-reserved-amount").textContent =
@@ -1401,18 +1405,21 @@
     showCheckoutState("reserved");
   }
 
-  // reserveInfo: si el pedido es una reserva (sin stock al momento de pagar),
-  // al vencer el timeout se muestra la pantalla "¡Reservado!" en vez del
-  // texto de espera — pero el polling sigue corriendo igual en segundo
-  // plano, así que apenas llegue la cuenta pasa solo a "¡Listo!".
+  // reserveInfo (pedido sin stock, con su orderName): mientras el pago no
+  // esté confirmado se queda en «Esperando tu pago…»; en cuanto el servidor
+  // confirma el pago de esa orden pasa a «¡Pago aprobado!». El polling de
+  // cuentas sigue en segundo plano: apenas llegue la cuenta, «¡Listo!».
+  let pollGeneration = 0;
   function startPolling(beforeAccounts, targetNewAccounts, reserveInfo) {
     stopPolling();
     pollExpiry = Date.now() + POLL_TIMEOUT_MS;
-    reservedScreenShown = false;
+    const generation = ++pollGeneration;
+    let paidShown = false;
 
     pollTimer = setInterval(async () => {
       try {
         const { accounts } = await api("/dashboard");
+        if (generation !== pollGeneration || !pollTimer) return;
         cachedDashboard = accounts || [];
         if (cachedDashboard.length >= beforeAccounts.length + targetNewAccounts) {
           stopPolling();
@@ -1421,15 +1428,18 @@
         }
       } catch { /* red momentánea — sigue intentando */ }
 
-      if (Date.now() > pollExpiry) {
-        if (reserveInfo) {
-          if (!reservedScreenShown) {
-            reservedScreenShown = true;
-            showCheckoutReserved(reserveInfo);
+      if (reserveInfo && reserveInfo.orderName && !paidShown) {
+        try {
+          const { paid } = await api("/orders/" + encodeURIComponent(reserveInfo.orderName) + "/status");
+          if (paid && generation === pollGeneration && pollTimer) {
+            paidShown = true;
+            showCheckoutReserved(reserveInfo, true);
           }
-        } else {
-          document.getElementById("checkout-waiting-text").textContent = "Seguimos esperando tu pago…";
-        }
+        } catch { /* sin respuesta: se vuelve a preguntar en el próximo turno */ }
+      }
+
+      if (Date.now() > pollExpiry && !paidShown) {
+        document.getElementById("checkout-waiting-text").textContent = "Seguimos esperando tu pago…";
       }
     }, POLL_MS);
   }

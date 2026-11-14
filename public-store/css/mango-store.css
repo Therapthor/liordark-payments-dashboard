@@ -41,7 +41,7 @@ a { color: var(--leaf); }
 
 /* Al tocar: se encoge apenas, como en iOS */
 :where(.btn-primary, .btn-ghost, .btn-secondary, .btn-guest, .product-card, .nav-btn, .nav-support-btn,
-       .btn-login-top, .btn-gold-top, .nav-btn-bell, .nav-btn-logout, .build-combo-prompt-btn,
+       .btn-login-top, .btn-gold-top, .nav-btn-bell, .nav-btn-logout,
        .build-combo-add-btn, .build-combo-cta, .chat-bot-option, .codes-open-btn, .dashboard-notify-btn,
        .yape-copy-btn, .detail-plan, .modal-close, .email-banner-add, .renew-picker-btn,
        .checkout-wa-btn):active:not(:disabled) {
@@ -246,40 +246,8 @@ body[data-page="codes"] .band-hero.band-hero-cat[data-hero="codes"] { display: f
   display: flex; align-items: center; justify-content: center; font-size: 13px; padding: 0;
 }
 
-/* «Arma tu combo»: tarjeta blanca que flota sobre la banda */
-.build-combo-prompt {
-  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "icons badge" "text text" "btn btn";
-  align-items: center; gap: 12px 14px;
-  margin: 0 0 6px; padding: 16px;
-  background: #fff; border-radius: 26px; box-shadow: var(--shadow-pop);
-  text-align: left;
-}
-.build-combo-prompt-deco1, .build-combo-prompt-deco2, .build-combo-prompt-arrow { display: none; }
-.build-combo-prompt-icons { grid-area: icons; width: 108px; height: 44px; }
-.build-combo-prompt-icon {
-  width: 44px; height: 44px; border-radius: 15px; border: 3px solid #fff; box-shadow: none;
-  font-family: var(--font-display); font-weight: 800; font-size: 13px;
-}
-.build-combo-prompt-icon--netflix { left: 0; background: #FFE1E1; color: #B42318; }
-.build-combo-prompt-icon--disney  { left: 32px; background: #E1E9FF; color: #2D4FB3; font-size: 12px; }
-.build-combo-prompt-icon--max     { left: 64px; background: #EDE4FF; color: #5B2DB3; }
-.build-combo-prompt-text-wrap { grid-area: text; min-width: 0; }
-.build-combo-prompt-title { font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--ink); line-height: 1.2; }
-.build-combo-prompt-desc { margin-top: 3px; font-size: 12.5px; color: var(--muted-2); }
-.build-combo-prompt-badge {
-  grid-area: badge; width: 56px; height: 56px; border-radius: 18px;
-  background: var(--mango); box-shadow: none;
-}
-.build-combo-prompt-badge-top { font-family: var(--font-body); font-weight: 800; font-size: 10.5px; color: var(--chip-ink); }
-.build-combo-prompt-badge-bottom { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--ink); line-height: 1.1; }
-.build-combo-prompt-btn {
-  grid-area: btn; width: 100%; min-height: 48px; padding: 0 18px;
-  border: none; border-radius: 16px; background: var(--leaf); color: #fff;
-  font-family: var(--font-display); font-weight: 700; font-size: 15px;
-  box-shadow: 0 10px 20px -14px rgba(31,107,68,.9);
-  transition: transform var(--dur-fast) var(--ease);
-}
-.build-combo-prompt-btn:hover { background: var(--leaf-hover); }
+/* «Arma tu combo» (banner del inicio): se queda EXACTAMENTE como en
+   producción (style.css) — a pedido del dueño. Este archivo no lo toca. */
 
 /* Títulos de sección */
 .section-chip {
@@ -527,6 +495,17 @@ body[data-page="codes"] .band-hero.band-hero-cat[data-hero="codes"] { display: f
 .checkout-reserved-body p { font-size: 14px; color: var(--muted-2); margin: 0 0 6px; }
 .checkout-reserved-order { background: var(--soft); border-radius: 16px; padding: 12px 14px; font-size: 13.5px; margin: 0 0 6px; }
 #checkout-reserved-goto-dashboard, #checkout-goto-dashboard { background: var(--leaf); min-height: 52px; }
+/* «¡Pago aprobado!» (reserva pagada y confirmada): look verde de éxito */
+#checkout-reserved.is-paid .checkout-reserved-header { background: var(--leaf-soft); }
+#checkout-reserved.is-paid .checkout-reserved-header::before { display: none; }
+#checkout-reserved.is-paid .checkout-reserved-icon {
+  background: var(--leaf); color: #fff; border-radius: 50%; font-size: 28px; font-weight: 800;
+  animation: mpPopIn 520ms var(--ease) both;
+}
+#checkout-reserved.is-paid .checkout-reserved-icon span { animation: none; }
+#checkout-reserved.is-paid .checkout-reserved-body p { color: var(--ink); font-weight: 600; }
+#checkout-reserved.is-paid .checkout-reserved-order { background: var(--leaf-soft); color: var(--leaf-ink); font-weight: 700; }
+@keyframes mpPopIn { 0% { opacity: 0; transform: scale(.6); } 60% { opacity: 1; transform: scale(1.06); } 100% { transform: none; } }
 /* «Ver códigos» (al terminar la compra): botón secundario beige, sin emoji */
 .checkout-codes-btn, #checkout-goto-codes { min-height: 52px; margin-bottom: 0; background: var(--soft); color: var(--ink); }
 
@@ -812,8 +791,6 @@ body.theme-codes-dark { background: var(--bg); }
 
 @media (max-width: 359px) {
   .product-grid { grid-template-columns: minmax(0, 1fr); }
-  .build-combo-prompt-badge { display: none; }
-  .build-combo-prompt { grid-template-areas: "icons icons" "text text" "btn btn"; }
 }
 
 /* ─── PC (≥760px): menú arriba, en la banda ───────────────── */
@@ -869,19 +846,6 @@ body.theme-codes-dark { background: var(--bg); }
 
   .content { --pad: 32px; padding-bottom: 64px; }
   .email-toast { bottom: 24px; }
-
-  .build-combo-prompt {
-    grid-template-columns: auto 1fr auto auto; grid-template-areas: "icons text badge btn";
-    gap: 22px; padding: 20px 22px;
-  }
-  .build-combo-prompt-icons { width: 128px; height: 52px; }
-  .build-combo-prompt-icon { width: 52px; height: 52px; border-radius: 18px; font-size: 15px; }
-  .build-combo-prompt-icon--disney { left: 38px; }
-  .build-combo-prompt-icon--max { left: 76px; }
-  .build-combo-prompt-title { font-size: 19px; }
-  .build-combo-prompt-desc { font-size: 14px; }
-  .build-combo-prompt-badge { width: 68px; height: 68px; border-radius: 22px; }
-  .build-combo-prompt-btn { width: auto; min-height: 52px; padding: 0 26px; }
 
   .section-chip { font-size: 21px; margin-top: 34px; }
   .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

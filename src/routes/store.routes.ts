@@ -39,6 +39,7 @@ import { suspiciousReason, autoBlockCustomer, clientIp } from "../services/secur
 import { CUSTOMER_SESSION_COOKIE } from "../services/customer-auth.service";
 import { saleLinkStatus, saleLinkForCustomer } from "./sale-links.routes";
 import { findSaleLink, saleLinkState, isSaleLinkUsable, addSaleLinkOrder } from "../db/sale-links.repository";
+import { saveStoreWebOrder, storeOrderPaymentStatus, listRecentConfirmedPurchases, type RecentPurchase } from "../db/store-orders.repository";
 
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -530,12 +531,43 @@ router.get("/payment-methods", (_req, res) => {
   res.json({ methods: listPaymentMethods().filter(m => m.active) });
 });
 
+// GET /api/store/recent-purchases — «movimiento» de la tienda: compras
+// CONFIRMADAS de las últimas 72 h (máx. 20, la más nueva primero). PÚBLICO:
+// solo { platformLabel, minutesAgo } — sin nombres, celulares, correos ni
+// montos. Se guarda 60 s en memoria para no consultar la base en cada visita.
+const RECENT_PURCHASES_TTL_MS = 60_000;
+let recentPurchasesCache: { at: number; data: RecentPurchase[] } | null = null;
+router.get("/recent-purchases", (_req, res) => {
+  if (!recentPurchasesCache || Date.now() - recentPurchasesCache.at > RECENT_PURCHASES_TTL_MS) {
+    let data: RecentPurchase[] = [];
+    try { data = listRecentConfirmedPurchases(72, 20); } catch (err) { console.error("recent-purchases:", err); }
+    recentPurchasesCache = { at: Date.now(), data };
+  }
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.json({ purchases: recentPurchasesCache.data });
+});
+
 // Link de venta: estado público (vencido/pagado/anulado), sin datos del pedido.
 router.get("/sale-link-status/:code", (req, res) => {
   res.json(saleLinkStatus(String(req.params.code)));
 });
 
 router.use(requireCustomerSession);
+
+// GET /api/store/orders/:orderName/status — ¿ya se confirmó el pago de MI
+// pedido? Solo responde por pedidos hechos por este mismo cliente desde la
+// tienda (ver store_web_orders); para cualquier otro, 404. Lo usa el
+// checkout de una reserva sin stock para mostrar «¡Pago aprobado!» recién
+// cuando el pago de esa orden está confirmado, nunca antes.
+router.get("/orders/:orderName/status", (req, res) => {
+  const customerId = (req as unknown as RequestWithCustomer).customerId;
+  const orderName = String(req.params.orderName || "");
+  if (!orderName || orderName.length > 80) return res.status(400).json({ message: "Pedido inválido." });
+  const status = storeOrderPaymentStatus(orderName, customerId);
+  if (!status.found) return res.status(404).json({ message: "Ese pedido no es de tu cuenta." });
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ paid: status.paid });
+});
 
 // Link de venta: el pedido armado por el admin (solo si es de este cliente).
 router.get("/sale-link/:code", (req, res) => {
@@ -854,6 +886,7 @@ router.post("/checkout", async (req, res) => {
       { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
     );
     if (plan && platform && response.data?.orderName) savePlanOrder(String(response.data.orderName), platform, plan.months);
+    if (response.data?.orderName) saveStoreWebOrder(String(response.data.orderName), customerId);
     // Compra que vino de un link de venta: la orden queda ligada al link
     // (el panel lo marca «Pagado» cuando llega el Yape de esa orden).
     if (req.body?.saleLink && response.data?.orderName) {

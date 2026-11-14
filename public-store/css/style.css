@@ -1106,6 +1106,9 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 /* ─── Arma tu combo (carrito interactivo) ────────────────────── */
 
 .build-combo-prompt {
+  /* Igual que en producción: lo que antes heredaba del body viejo
+     (Manrope 16px, interlineado normal, texto #241a10). */
+  font-family: 'Manrope', sans-serif; font-size: 16px; line-height: normal; color: #241a10;
   position: relative; overflow: hidden; display: flex; align-items: center; gap: 20px;
   margin: 20px 0 8px; padding: 22px 28px;
   background: linear-gradient(120deg, #ff7a1a 0%, #ffb020 55%, #ffd36b 100%);
@@ -1122,7 +1125,7 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
 .build-combo-prompt-icons { position: relative; width: 112px; height: 56px; flex-shrink: 0; z-index: 1; }
 .build-combo-prompt-icon {
   position: absolute; top: 0; width: 52px; height: 52px; border-radius: 999px;
-  display: flex; align-items: center; justify-content: center; font-family: var(--font-display);
+  display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif;
   font-weight: 700; font-size: 15px; color: #fff; border: 3px solid #fff; box-shadow: 0 6px 14px rgba(0,0,0,.25);
 }
 .build-combo-prompt-icon--netflix { left: 0;  background: #e50914; }
@@ -1134,14 +1137,14 @@ body.theme-codes-dark { background: #1c140c; min-height: 100vh; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   box-shadow: 0 8px 18px rgba(0,0,0,.3); z-index: 1;
 }
-.build-combo-prompt-badge-top { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: #ffb020; line-height: 1; }
-.build-combo-prompt-badge-bottom { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: #ffb020; line-height: 1.3; }
+.build-combo-prompt-badge-top { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; color: #ffb020; line-height: 1; }
+.build-combo-prompt-badge-bottom { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px; color: #ffb020; line-height: 1.3; }
 .build-combo-prompt-text-wrap { flex-grow: 1; min-width: 160px; z-index: 1; }
-.build-combo-prompt-title { margin: 0 0 2px; font-family: var(--font-display); font-weight: 700; font-size: 17px; color: #241a10; }
+.build-combo-prompt-title { margin: 0 0 2px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 17px; color: #241a10; }
 .build-combo-prompt-desc { margin: 0; font-size: 12.5px; color: #5c3d12; }
 .build-combo-prompt-btn {
   flex-shrink: 0; z-index: 1; border: none; border-radius: 12px; padding: 13px 22px;
-  background: #241a10; color: #ffb020; font-family: var(--font-display);
+  background: #241a10; color: #ffb020; font-family: 'Space Grotesk', sans-serif;
   font-weight: 700; font-size: 13.5px; cursor: pointer; white-space: nowrap;
 }
 
