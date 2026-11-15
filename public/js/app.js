@@ -658,7 +658,7 @@
     const ok   = document.getElementById("stock-alert-ok");
     try {
       const { platforms } = await api("/access/platforms");
-      const withoutStock = platforms.filter(p => p.sellableCount === 0 && !isManualActivationPlatform(p.platform));
+      const withoutStock = platforms.filter(p => p.sellableCount === 0 && p.active !== false && !isManualActivationPlatform(p.platform));
 
       if (withoutStock.length === 0) {
         list.innerHTML = "";

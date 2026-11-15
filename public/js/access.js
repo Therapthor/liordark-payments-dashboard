@@ -196,7 +196,8 @@
   }
 
   // Tiras de números arriba (Mango Pro): cuentas, perfiles libres,
-  // clientes y plataformas sin stock (sin contar las de activación a mano).
+  // clientes y plataformas sin stock (sin contar las de activación a mano
+  // ni los productos apagados en el Catálogo).
   function renderAccessKpis(platforms) {
     const box = document.getElementById("access-kpis");
     if (!box) return;
@@ -204,7 +205,7 @@
     const accounts = sum("accountCount");
     const free = sum("sellableCount");
     const clients = sum("occupiedCount");
-    const noStock = platforms.filter(p => !p.sellableCount && !/canva|gemini|youtube/i.test(p.platform || "")).length;
+    const noStock = platforms.filter(p => !p.sellableCount && p.active !== false && !/canva|gemini|youtube/i.test(p.platform || "")).length;
     box.innerHTML = `
       <div class="mp-kpi"><b>${accounts}</b><span>Cuentas</span></div>
       <div class="mp-kpi is-green"><b>${free}</b><span>Perfiles libres</span></div>

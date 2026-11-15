@@ -17,6 +17,7 @@ import {
   type ComboItem,
 } from "../db/combo.repository";
 import { generateCatalogPdf } from "../services/catalog-pdf.service";
+import { emitDashboardEvent } from "../utils/live-events.util";
 
 const router = Router();
 
@@ -74,6 +75,8 @@ router.put("/products/:id", (req, res) => {
 router.patch("/products/:id/active", (req, res) => {
   const product = setCatalogProductActive(Number(req.params.id), !!req.body?.active);
   if (!product) { res.status(404).json({ message: "Producto no encontrado." }); return; }
+  // Prender/apagar cambia la lista «Sin stock» del panel: que se refresque ya.
+  emitDashboardEvent({ type: "stock_changed" });
   res.json({ product });
 });
 

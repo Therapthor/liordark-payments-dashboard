@@ -127,8 +127,11 @@ router.get("/history", (req, res) => {
 
 // ── PLATAFORMAS (agrupación de cuentas ya cargadas en Accesos) ──
 
+// active=false si el producto está apagado en el Catálogo: el panel no lo
+// cuenta como «Sin stock» (no se vende, así que no es una alerta).
 router.get("/platforms", (_req, res) => {
-  res.json({ platforms: listPlatforms() });
+  const off = new Set(listCatalogProducts().filter(p => !p.active).map(p => p.platform.trim().toUpperCase()));
+  res.json({ platforms: listPlatforms().map(p => ({ ...p, active: !off.has(String(p.platform).trim().toUpperCase()) })) });
 });
 
 router.get("/platforms/:platform/accounts", (req, res) => {
