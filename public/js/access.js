@@ -438,6 +438,7 @@
       actions = `
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
         <button class="row-action" data-act="renew-manual" data-ctx="${ctx}" title="Reno-manual — armar mensaje de renovación por WhatsApp">💬</button>
+        <button class="row-action" data-act="replace" data-ctx="${ctx}" title="Cambiar a otra cuenta (nueva o en uso)">🔄</button>
         <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Cambiar teléfono">✏️</button>
         <button class="row-action" data-act="release" data-ctx="${ctx}" title="Liberar perfil">🗑</button>
       `;
@@ -617,6 +618,21 @@
     if (act === "renew-manual") return sendRenewalManual(ctx);
     if (act === "edit")         return openProfileModal(ctx);
     if (act === "release")      return releaseProfile(ctx.id, ctx.accountId);
+    if (act === "replace")      return openReplaceAccount(ctx.id, ctx.platform, ctx.email, ctx.clientPhone);
+  }
+
+  // 🔄 Cambiar cuenta: si se cae una cuenta, el cliente pasa a otra nueva
+  // (perfil libre) o a una en uso (temporal). Le llega el aviso a su
+  // campanita y queda el mensaje listo para WhatsApp.
+  function openReplaceAccount(profileId, platform, email, clientPhone) {
+    if (!window.LiordarkReplace) { alert("No se pudo abrir el cambio de cuenta. Recarga la página."); return; }
+    window.LiordarkReplace.open({
+      info: `${platform} · ${email} · cliente ${String(clientPhone || "").replace(/\D/g, "").slice(-9)}`,
+      phone: clientPhone,
+      optionsUrl: `/api/access/profiles/${profileId}/replace-options`,
+      replaceUrl: `/api/access/profiles/${profileId}/replace`,
+      after: () => { refresh(); },
+    });
   }
 
   // Botón 💬 Reno-manual — abre el modal del LINK DE PAGO: junta todas
@@ -1309,6 +1325,7 @@
           <div class="access-client-item-actions">
             <button class="btn-secondary btn-sm client-view-account" data-idx="${idx}">👁 Ver cuenta</button>
             <button class="btn-secondary btn-sm client-send-account" data-idx="${idx}">📧 Enviar cuenta</button>
+            <button class="btn-secondary btn-sm client-replace-account" data-idx="${idx}">🔄 Cambiar cuenta</button>
             <button class="btn-secondary btn-sm client-renew-manual" data-idx="${idx}">💬 Reno-manual</button>
             ${renderRenewalButton(p)}
             <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
@@ -1347,6 +1364,12 @@
       const renewBtn   = e.target.closest(".client-renew-manual");
       const renewalBtn = e.target.closest(".row-renewal");
       const releaseBtn = e.target.closest(".client-release-profile");
+      const replaceBtn = e.target.closest(".client-replace-account");
+      if (replaceBtn) {
+        const p = lastClientProfiles[Number(replaceBtn.dataset.idx)];
+        if (p) openReplaceAccount(p.id, p.platform, p.email, p.clientPhone);
+        return;
+      }
 
       if (viewBtn) {
         const p = lastClientProfiles[Number(viewBtn.dataset.idx)];

@@ -208,9 +208,31 @@
     renderReplaceOptions();
   }
 
-  async function openReplace(t) {
-    current = t;
-    $("soporte-replace-info").textContent = `${t.platformTag} · ${t.accountEmail} · cliente ${localPhone(t.clientPhone)}`;
+  // Origen del reemplazo: un reporte (Soportes) o un cliente de Accesos.
+  let replaceCtx = null;
+  async function apiAbs(url, options) {
+    const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...options });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
+    if (!res.ok) throw new Error(data?.message || "Error de red");
+    return data;
+  }
+
+  function openReplace(t) {
+    return openReplaceFor({
+      info: `${t.platformTag} · ${t.accountEmail} · cliente ${localPhone(t.clientPhone)}`,
+      phone: t.clientPhone,
+      optionsUrl: `/api/support/tickets/${t.id}/replace-options`,
+      replaceUrl: `/api/support/tickets/${t.id}/replace`,
+      after: load,
+      ticket: t,
+    });
+  }
+
+  async function openReplaceFor(ctx) {
+    replaceCtx = ctx;
+    current = ctx.ticket || { clientPhone: ctx.phone };
+    $("soporte-replace-info").textContent = ctx.info;
     $("soporte-replace-error").hidden = true;
     $("soporte-replace-result").hidden = true;
     $("soporte-replace-result").innerHTML = "";
@@ -222,7 +244,7 @@
     $("soporte-replace-hint").hidden = false;
     $("soporte-replace-modal").hidden = false;
     try {
-      replaceData = await api(`/tickets/${t.id}/replace-options`);
+      replaceData = await apiAbs(ctx.optionsUrl);
     } catch (err) {
       replaceData = { fresh: [], shared: [] };
       $("soporte-replace-error").textContent = err.message;
@@ -234,20 +256,21 @@
   function closeReplace() {
     $("soporte-replace-modal").hidden = true;
     current = null;
+    replaceCtx = null;
   }
 
   async function confirmReplace() {
-    if (!current || !pickedAccountId) return;
+    if (!replaceCtx || !pickedAccountId) return;
     const btn = $("soporte-replace-confirm");
     btn.disabled = true;
     btn.textContent = "Reemplazando…";
     $("soporte-replace-error").hidden = true;
     try {
-      const data = await api(`/tickets/${current.id}/replace`, {
+      const data = await apiAbs(replaceCtx.replaceUrl, {
         method: "POST",
         body: JSON.stringify({ mode: replaceMode, targetAccountId: pickedAccountId, profileName: $("soporte-replace-profile").value }),
       });
-      const url = waUrl(current.clientPhone, data.message);
+      const url = waUrl(replaceCtx.phone, data.message);
       $("soporte-replace-options").innerHTML = "";
       $("soporte-replace-profile-wrap").hidden = true;
       document.querySelector("#soporte-replace-modal .config-subnav").hidden = true;
@@ -259,7 +282,7 @@
       $("soporte-replace-result").hidden = false;
       btn.hidden = true;
       $("soporte-replace-cancel").textContent = "Cerrar";
-      load();
+      if (typeof replaceCtx.after === "function") replaceCtx.after();
     } catch (err) {
       $("soporte-replace-error").textContent = err.message;
       $("soporte-replace-error").hidden = false;
@@ -302,4 +325,6 @@
   }
 
   window.LiordarkSoportes = { init, load };
+  // «Cambiar cuenta» desde Accesos usa esta misma ventana.
+  window.LiordarkReplace = { open: openReplaceFor };
 })();

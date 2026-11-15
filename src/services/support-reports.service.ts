@@ -258,7 +258,15 @@ export type ReplaceOption = {
 /** Destinos para el reemplazo: cuentas vigentes de la misma plataforma.
  *  fresh = con perfil libre (el cliente ocupa ese perfil); shared = todas
  *  (uso temporal: se le pasan los datos sin ocupar perfil). */
+/** A quién se le cambia la cuenta: lo mismo sirve para un reporte de
+ *  Soportes que para «Cambiar cuenta» desde Accesos. */
+export type ReplaceSubject = { clientPhone: string; platform: string; accountEmail: string; wholesalerId: number | null };
+
 export function replaceOptions(ticket: SupportTicket): { fresh: ReplaceOption[]; shared: ReplaceOption[] } {
+  return replaceOptionsFor(ticket);
+}
+
+export function replaceOptionsFor(ticket: ReplaceSubject): { fresh: ReplaceOption[]; shared: ReplaceOption[] } {
   const today = limaTodayISO();
   const rows = db.prepare(`
     SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt,
@@ -284,14 +292,26 @@ export function replaceTicketAccount(
   const ticket = getSupportTicketById(id);
   if (!ticket) return { ok: false, message: "Reporte no encontrado." };
   if (ticket.status === "attended") return { ok: false, message: "Este reporte ya está resuelto." };
+  const done = replaceClientTo(ticket, mode, targetAccountId, profileName);
+  if (!done.ok) return done;
+  const resolved = markSupportTicketResolved(id, "replaced", done.message);
+  return { ok: true, ticket: resolved ?? ticket, message: done.message };
+}
+
+/** Cambia la cuenta del cliente: «fresh» = pasa a un perfil libre de la
+ *  cuenta elegida; «shared» = uso temporal con los datos de una cuenta que
+ *  ya usan otros (no ocupa perfil). Conserva su fecha y le avisa por la
+ *  campanita (cliente o mayorista). Devuelve el mensaje para enviarle. */
+export function replaceClientTo(
+  ticket: ReplaceSubject, mode: "fresh" | "shared", targetAccountId: number, profileName: string
+): { ok: true; message: string; email: string } | { ok: false; message: string } {
   const target = getAccountById(targetAccountId);
   if (!target || target.platform.toUpperCase() !== ticket.platform.toUpperCase()) {
     return { ok: false, message: "Elige una cuenta de la misma plataforma." };
   }
   if (target.email.toLowerCase() === ticket.accountEmail.toLowerCase()) {
-    return { ok: false, message: "Elige una cuenta distinta a la reportada." };
+    return { ok: false, message: "Elige una cuenta distinta a la actual." };
   }
-
   let newProfile = "";
   let expiresAt: string | null = null;
   try {
@@ -329,7 +349,6 @@ export function replaceTicketAccount(
     platform: ticket.platform, email: target.email, password: target.password,
     profileName: newProfile, expiresAt, temporary: mode === "shared",
   });
-  const resolved = markSupportTicketResolved(id, "replaced", message);
   if (ticket.wholesalerId) {
     const detail = [
       `Cliente: ${String(ticket.clientPhone).replace(/\D/g, "").slice(-9)}`,
@@ -347,5 +366,5 @@ export function replaceTicketAccount(
     ].join("\n");
     createCustomerNotification(ticket.clientPhone, "account_replaced", ticket.platform, target.email, detail);
   }
-  return { ok: true, ticket: resolved ?? ticket, message };
+  return { ok: true, message, email: target.email };
 }

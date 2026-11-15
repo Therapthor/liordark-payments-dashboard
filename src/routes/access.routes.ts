@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { db } from "../db/db";
+import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
 import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles } from "../db/access.repository";
 import {
   createAccountsBulk,
@@ -413,6 +415,35 @@ router.post("/cycle-renewals/:id/send-new", (req, res) => {
     else createCustomerNotification(p.clientPhone, "account_replaced", pending.platform, email, detail);
   }
   res.json({ ok: true, moved: pending.renewing.length, email, expiresAt });
+});
+
+// ── CAMBIAR CUENTA (Accesos) — sin reporte de por medio: cuando se cae una
+// cuenta, el cliente pasa a otra nueva (perfil libre) o a una en uso
+// (temporal, sin ocupar perfil). Misma lógica que «Reemplazar» de Soportes. ──
+function profileReplaceSubject(profileId: number): ReplaceSubject | null {
+  const row = db.prepare(`
+    SELECT p.client_phone AS clientPhone, p.wholesaler_id AS wholesalerId, a.platform AS platform, a.email AS email
+    FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id WHERE p.id = ?
+  `).get(profileId) as { clientPhone: string; wholesalerId: number | null; platform: string; email: string } | undefined;
+  if (!row || !row.clientPhone) return null;
+  return { clientPhone: row.clientPhone, platform: row.platform, accountEmail: row.email, wholesalerId: row.wholesalerId ?? null };
+}
+
+router.get("/profiles/:id/replace-options", (req, res) => {
+  const subject = profileReplaceSubject(Number(req.params.id));
+  if (!subject) return res.status(404).json({ message: "Ese perfil ya no tiene cliente." });
+  res.json(replaceOptionsFor(subject));
+});
+
+router.post("/profiles/:id/replace", (req, res) => {
+  const subject = profileReplaceSubject(Number(req.params.id));
+  if (!subject) return res.status(404).json({ message: "Ese perfil ya no tiene cliente." });
+  const mode = req.body?.mode === "shared" ? "shared" : "fresh";
+  const targetAccountId = Number(req.body?.targetAccountId);
+  if (!targetAccountId) return res.status(400).json({ message: "Elige la cuenta nueva." });
+  const result = replaceClientTo(subject, mode, targetAccountId, String(req.body?.profileName ?? ""));
+  if (!result.ok) return res.status(400).json({ message: result.message });
+  res.json(result);
 });
 
 // ── CÓDIGOS — marcar cuenta, ver últimos códigos, resetear pedidos ──
