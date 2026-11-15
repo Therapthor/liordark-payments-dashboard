@@ -171,7 +171,7 @@ function findDivByClass(html: string, cls: string): { start: number; end: number
   return { start: open.index, end: html.length };
 }
 
-export function parsePallyResultPage(html: string, preferCode: boolean | "disney" = false): CodeLookupResult | null {
+export function parsePallyResultPage(html: string, preferCode: boolean | "disney" | "spotify" = false): CodeLookupResult | null {
   // El recuadro del correo (la clase también aparece antes en el <style>
   // de la página: por eso se busca el <div> con esa clase, no el texto).
   const box = findDivByClass(html, "email-body-wrapper");
@@ -213,15 +213,21 @@ export function parsePallyResultPage(html: string, preferCode: boolean | "disney
     const six = codes.find(d => d.length === 6);
     return six ? { found: true, kind: "code", value: six, ...extra } : { found: false, kind: null, value: null, ...extra };
   }
-  const code = preferCode
+  // Spotify: su código de ingreso (6 dígitos por lo general) va antes que
+  // cualquier enlace del correo (ayuda, logo…).
+  if (preferCode === "spotify") {
+    const sp = near ?? codes.find(d => d.length === 6) ?? codes[0];
+    if (sp) return { found: true, kind: "code", value: sp, ...extra };
+  }
+  const code = preferCode === true
     ? (near && near.length === 4 ? near : (codes.find(d => d.length === 4) ?? near ?? codes[0]))
     : (near ?? codes[0]);
-  if (preferCode && code) return { found: true, kind: "code", value: code, ...extra };
+  if (preferCode === true && code) return { found: true, kind: "code", value: code, ...extra };
 
   // 1) Enlace: el primer <a href> del cuerpo que no sea del propio sitio.
   for (const m of wrapper.matchAll(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1/gi)) {
     const href = decodeHtmlEntities(m[2] ?? "").trim();
-    if (/^https?:\/\//i.test(href) && !/pally\.digital/i.test(href)) {
+    if (/^https?:\/\//i.test(href) && !/pally\.(digital|store)/i.test(href)) {
       return { found: true, kind: "link", value: href, ...extra };
     }
   }
@@ -300,6 +306,58 @@ async function lookupDisneySinOpciones(email: string): Promise<CodeLookupResult>
     const result = await fetchFromPallyDigital("disney", email, PALLY_ACCESS_CODE);
     if (result.found || Date.now() + PALLY_DISNEY_EVERY_MS >= until) return result;
     await new Promise(resolve => setTimeout(resolve, PALLY_DISNEY_EVERY_MS));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Spotify por Pally — otro sitio (streaming.pally.store/ventas/codigos),
+// misma plantilla y mismo código de acceso. Solo «Consultar código» (el
+// código de ingreso); «Consultar contraseña» nunca. Con espera=1 la página
+// contesta {"esperar":true} mientras el código no llegó (eso no gasta
+// intentos: Pally cobra uno solo cuando entrega el código), así que se
+// pregunta cada 5 s hasta ~45 s y apenas llega se entrega.
+// ─────────────────────────────────────────────────────────────
+const PALLY_STREAMING_URL = "https://streaming.pally.store/ventas/codigos";
+const PALLY_NOT_NEW_RE = /No se encontr[oó] un c[oó]digo nuevo/i;
+const PALLY_SPOTIFY_WAIT_MS = 45_000;
+const PALLY_SPOTIFY_EVERY_MS = 5_000;
+
+async function fetchFromPallyStreaming(tipo: string, email: string, accessCode: string): Promise<CodeLookupResult | "wait"> {
+  const url = `${PALLY_STREAMING_URL}?tipo=${encodeURIComponent(tipo)}`;
+  const body = new URLSearchParams({ plataforma: tipo, email, codigo: accessCode, accion_codigo: "codigo", espera: "1" });
+  const res = await axios.post(url, body.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": JB_UA },
+    timeout: 25_000, responseType: "text", transformResponse: r => r,
+  });
+  const raw = String(res.data ?? "");
+  if (/^\s*[{[]/.test(raw)) {
+    let json: any = null;
+    try { json = JSON.parse(raw); } catch { /* no era JSON */ }
+    if (json && json.esperar) return "wait";
+    const msg = json && (json.mensaje || json.message || json.error);
+    if (msg && PALLY_PROBLEM_RE.test(String(msg))) throw new ProviderError("provider", "Pally: " + String(msg));
+    if (msg) return { found: false, kind: null, value: null, providerMessage: String(msg) };
+  }
+  if (raw.includes(NOT_FOUND_MARKER) || PALLY_NOT_NEW_RE.test(raw)) {
+    return { found: false, kind: null, value: null, providerMessage: "Pally: todavía no llegó un código nuevo (últimos 15 min)." };
+  }
+  const parsed = parsePallyResultPage(raw, "spotify");
+  if (parsed) return parsed;
+  const strong = raw.match(/<strong[^>]*>([\s\S]*?)<\/strong>/i)?.[1]?.replace(/<[^>]+>/g, "").trim() ?? "";
+  const digits = strong.replace(/\D/g, "");
+  if (/^\d{4,8}$/.test(digits)) return { found: true, kind: "code", value: digits };
+  return pallyUnknownPage(raw);
+}
+
+async function lookupSpotifySinOpciones(email: string): Promise<CodeLookupResult> {
+  const until = Date.now() + PALLY_SPOTIFY_WAIT_MS;
+  for (;;) {
+    const result = await fetchFromPallyStreaming("spotify", email, PALLY_ACCESS_CODE);
+    if (result !== "wait") return result;
+    if (Date.now() + PALLY_SPOTIFY_EVERY_MS >= until) {
+      return { found: false, kind: null, value: null, providerMessage: "Pally: todavía no llegó el código de Spotify." };
+    }
+    await new Promise(resolve => setTimeout(resolve, PALLY_SPOTIFY_EVERY_MS));
   }
 }
 
@@ -420,11 +478,9 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
  *  sub-acciones sensibles de "con opciones". Lo ve solo el admin. */
 export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
   if (!result.found) return false;
-  // Netflix por Pally: al cliente SOLO se le entrega automático el código
-  // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
-  // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
-  // Juanpa: los enlaces de «Hogar» SÍ se le entregan al cliente (pedido del
-  // dueño, nov-2026).
+  // Netflix (Pally, José, Juanpa): al cliente se le entrega el código de
+  // inicio de sesión de 4 dígitos, el link de inicio de sesión y el de
+  // «Hogar». Los códigos de 6 dígitos y los cambios de datos, nunca.
   if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result) && !loginLinkOf(result) && !(deliversHousehold(sourceId) && householdLinkOf(result));
   // Vegamig (Prime Video / Crunchyroll): su página es para clientes, todo
   // lo que llega se le entrega (decisión del negocio, nov-2026).
@@ -446,9 +502,9 @@ export function deliversEverything(sourceId: string | null): boolean {
   return sourceId === "vegamig_web";
 }
 
-// Fuentes cuyos enlaces de «Hogar» (actualizar hogar / estoy de viaje del
-// hogar) se le entregan al cliente. Las demás los sigue entregando un asesor.
-const HOUSEHOLD_DELIVER_SOURCES = ["juanpa_bandeja"];
+// Fuentes de Netflix cuyos enlaces de «Hogar» (actualizar hogar / estoy de
+// viaje del hogar) se le entregan al cliente (pedido del dueño, nov-2026).
+const HOUSEHOLD_DELIVER_SOURCES = ["juanpa_bandeja", "netflix_sin_opciones", "netflix_con_opciones", "joseb_netflix"];
 export function deliversHousehold(sourceId: string | null): boolean {
   return !!sourceId && HOUSEHOLD_DELIVER_SOURCES.includes(sourceId);
 }
@@ -1452,6 +1508,7 @@ const SOURCES: Record<string, Source> = {
   netflix_sin_opciones: { label: "PallyStore sin opciones (Netflix)", lookup: lookupNetflixSinOpciones },
   netflix_con_opciones: { label: "PallyStore con opciones (Netflix)", lookup: lookupNetflixConOpciones },
   disney_sin_opciones:  { label: "PallyStore sin opciones (Disney+)", lookup: lookupDisneySinOpciones },
+  spotify_sin_opciones: { label: "PallyStore sin opciones (Spotify)", lookup: lookupSpotifySinOpciones },
   streaming_market_web: { label: "Streaming Market — página de códigos", lookup: lookupStreamingMarket },
   vegamig_web:          { label: "Vegamig — Prime Video / Crunchyroll", lookup: lookupVegamig },
   joseb_netflix:        { label: "José Streaming — Netflix", lookup: lookupJosebNetflix },
@@ -1488,7 +1545,7 @@ export async function lookupCode(sourceId: string, email: string): Promise<CodeL
   if (!source) return { found: false, kind: null, value: null };
   // Disney por Pally ya busca su código de 6 dígitos: el lector genérico
   // podía tomar un número del pie (dirección, código postal).
-  if (sourceId === "disney_sin_opciones") return observed(sourceId, email, () => source.lookup(email));
+  if (sourceId === "disney_sin_opciones" || sourceId === "spotify_sin_opciones") return observed(sourceId, email, () => source.lookup(email));
   return observed(sourceId, email, async () => withFallbackExtraction(await source.lookup(email)));
 }
 
@@ -1543,7 +1600,7 @@ export type SeenCode = { value: string; providerReceivedAt?: string };
 
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
   return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix" || sourceId === "joseb_disney"
-    || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones"
+    || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones" || sourceId === "spotify_sin_opciones"
     || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney";
 }
 

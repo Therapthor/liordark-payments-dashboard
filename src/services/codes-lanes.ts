@@ -28,7 +28,7 @@ const LANES: Record<string, LaneConfig> = {
 };
 
 export function laneIdOf(sourceId: string): string {
-  if (/^(netflix_sin_opciones|netflix_con_opciones|disney_sin_opciones)$/.test(sourceId)) return "pally";
+  if (/^(netflix_sin_opciones|netflix_con_opciones|disney_sin_opciones|spotify_sin_opciones)$/.test(sourceId)) return "pally";
   if (sourceId.startsWith("joseb_")) return "joseb";
   if (sourceId === "streaming_market_web") return "streaming_market";
   if (sourceId === "vegamig_web") return "vegamig";
