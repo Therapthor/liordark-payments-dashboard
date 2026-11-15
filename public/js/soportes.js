@@ -270,15 +270,14 @@
         method: "POST",
         body: JSON.stringify({ mode: replaceMode, targetAccountId: pickedAccountId, profileName: $("soporte-replace-profile").value }),
       });
-      const url = waUrl(replaceCtx.phone, data.message);
       $("soporte-replace-options").innerHTML = "";
       $("soporte-replace-profile-wrap").hidden = true;
       document.querySelector("#soporte-replace-modal .config-subnav").hidden = true;
       $("soporte-replace-hint").hidden = true;
+      // Sin WhatsApp: el aviso con los datos nuevos le llega por la web
+      // (campanita del cliente o del mayorista).
       $("soporte-replace-result").innerHTML = `
-        <p>✅ Listo. Ahora mándale sus datos nuevos:</p>
-        <pre class="soporte-replace-msg">${escapeHtml(data.message)}</pre>
-        <a class="btn-primary" href="${escapeHtml(url)}" target="_blank" rel="noopener">📲 Enviar por WhatsApp</a>`;
+        <p>✅ Listo. El cliente ya tiene su cuenta nueva y le llegó el aviso con sus datos a su campanita en la web.</p>`;
       $("soporte-replace-result").hidden = false;
       btn.hidden = true;
       $("soporte-replace-cancel").textContent = "Cerrar";
