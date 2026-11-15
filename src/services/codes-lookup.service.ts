@@ -1247,6 +1247,9 @@ function juanpaWallClock(raw: string): number | null {
   return Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0));
 }
 
+const JUANPA_HOUSEHOLD_RE = /hogar|household/i;
+const JUANPA_LOGINISH_RE = /solicitud de inicio de sesi[oó]n|inici(?:a|ar) sesi[oó]n|acceso temporal|de viaje|sign-?in request|temporary access/i;
+
 const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /** Tarjetas del formato nuevo → «correos» (para que el resto del flujo —
@@ -1282,11 +1285,17 @@ export function parseJuanpaCards(page: string): JuanpaMail[] | null {
     if (t !== null && t - now > 5 * 60_000) t = c.ago ? now - c.ago.ms : now;
     const receivedAt = t !== null ? new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z") : undefined;
     // «Correo» armado con lo que muestra la tarjeta: el código va en una
-    // celda espaciada (como en los correos de Netflix) y los enlaces tal cual.
+    // celda espaciada (como en los correos de Netflix). Los enlaces vienen
+    // como «Abrir enlace» hacia el proveedor (mibalu.fun/codigos/enlace/…),
+    // sin pistas en la URL: el tipo se saca del asunto. «Nueva solicitud de
+    // inicio de sesión» → «Iniciar sesión» (se entrega como «Aprobar»);
+    // hogar → «Actualizar hogar» (nunca como inicio de sesión); otro → «Continuar».
+    const linkLabel = JUANPA_HOUSEHOLD_RE.test(c.subject) ? "Actualizar hogar"
+      : JUANPA_LOGINISH_RE.test(c.subject) ? "Iniciar sesión" : "Continuar";
     const body = `<html><head><title>${escHtml(c.subject)}</title></head><body>` +
-      `<p>${escHtml(c.label)}</p><p>${escHtml(c.subject)}</p>` +
+      `<p>${escHtml(c.subject)}</p>` +
       (c.code ? `<p style="letter-spacing: 4px;">${escHtml(c.code)}</p>` : "") +
-      c.links.map(l => `<p><a href="${escHtml(l.href)}">${escHtml(l.label || "Abrir enlace")}</a></p>`).join("") +
+      c.links.map(l => `<p><a href="${escHtml(l.href)}">${linkLabel}</a></p>`).join("") +
       `</body></html>`;
     const ref = (receivedAt ?? "sin-fecha") + "#" + simpleHash(c.label + "|" + c.subject + "|" + c.code + "|" + c.rawTime + "|" + c.links.map(l => l.href).join(",")) + (receivedAt ? "" : "#" + i);
     return { item: { ref, subject: c.subject, ...(receivedAt ? { receivedAt } : {}) }, body };
