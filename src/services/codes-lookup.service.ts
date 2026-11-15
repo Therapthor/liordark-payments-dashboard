@@ -1196,10 +1196,12 @@ function juanpaSubject(subject: string, body: string): string {
 }
 
 /** Página de la bandeja → correos (más nuevo primero), o null si la página
- *  no es una bandeja (link vencido, error…). Exportado para pruebas. */
+ *  no es una bandeja (link vencido, error…). Exportado para pruebas.
+ *  Lee los dos formatos: el viejo (`let mail = [...]`, con el correo
+ *  completo) y el nuevo de nov-2026 (tarjetas con el código ya listo). */
 export function parseJuanpaInbox(page: string): JuanpaMail[] | null {
   const at = String(page || "").search(/let\s+mail\s*=\s*\[/);
-  if (at < 0) return null;
+  if (at < 0) return parseJuanpaCards(String(page || ""));
   const raw = jsonArrayAt(page, page.indexOf("[", at));
   if (!raw) return null;
   let list: any[];
@@ -1214,6 +1216,81 @@ export function parseJuanpaInbox(page: string): JuanpaMail[] | null {
       const ref = (date ?? "sin-fecha") + "#" + simpleHash(String(m.subject ?? "") + "|" + String(m.date ?? "") + "|" + body.length) + (date ? "" : "#" + i);
       return { item: { ref, subject, ...(date ? { receivedAt: date } : {}) }, body };
     });
+  return mails
+    .map((m, i) => ({ m, i, t: m.item.receivedAt ? Date.parse(m.item.receivedAt) : null }))
+    .sort((a, b) => (a.t !== null && b.t !== null ? b.t - a.t : a.i - b.i))
+    .map(x => x.m);
+}
+
+// ── Formato nuevo (nov-2026) ──
+// La página ya no trae los correos: muestra «Códigos de tu cuenta» con una
+// tarjeta <li> por código de las últimas 24 h. Cada tarjeta trae el tipo
+// («Código de inicio de sesión»…), la hora en title="dd/mm/aaaa hh:mm" (hora
+// del proveedor: UTC−4 al revisarlo) más «hace N minutos», el código ya
+// extraído (o un enlace) y una línea con el asunto del correo.
+
+/** «hace 1 minuto», «hace 19 horas», «hace unos segundos» → ms (o null). */
+function juanpaAgoMs(raw: string): { ms: number; fine: boolean } | null {
+  const t = decodeHtmlEntities(String(raw ?? "")).toLowerCase().replace(/\s+/g, " ").trim();
+  if (/hace\s+(unos|pocos)?\s*segundos?|justo ahora|ahora mismo/.test(t)) return { ms: 0, fine: true };
+  const m = t.match(/hace\s+(un|una|\d+)\s+(segundo|minuto|hora|d[ií]a)s?/);
+  if (!m) return null;
+  const n = m[1] === "un" || m[1] === "una" ? 1 : Number(m[1]);
+  const unit = m[2]!.startsWith("seg") ? 1_000 : m[2]!.startsWith("min") ? 60_000 : m[2]!.startsWith("hor") ? 3_600_000 : 86_400_000;
+  return { ms: n * unit, fine: unit <= 60_000 };
+}
+
+/** «15/11/2026 11:34» leído como si fuera UTC (luego se corrige la zona). */
+function juanpaWallClock(raw: string): number | null {
+  const m = String(raw ?? "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  return Date.UTC(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0));
+}
+
+const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** Tarjetas del formato nuevo → «correos» (para que el resto del flujo —
+ *  código vs. cambio de datos, bandeja del panel— siga igual), o null si la
+ *  página no es una bandeja. Exportado para pruebas. */
+export function parseJuanpaCards(page: string): JuanpaMail[] | null {
+  if (!/C(?:ó|o|&oacute;)digos de tu cuenta/i.test(page)) return null;
+  const cards = [...page.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1] ?? "");
+  const now = Date.now();
+  const parsed = cards.map(li => {
+    const label = emailHtmlToText(li.match(/<span[^>]*font-semibold[^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? "").trim();
+    const timeTag = li.match(/<span[^>]*title="([^"]+)"[^>]*>([\s\S]*?)<\/span>/i);
+    const wall = juanpaWallClock(timeTag?.[1] ?? "");
+    const ago = juanpaAgoMs(timeTag?.[2] ?? "");
+    const code = emailHtmlToText(
+      li.match(/<[a-z]+[^>]*\bid="codigo-[^"]*"[^>]*>([\s\S]*?)<\/[a-z]+>/i)?.[1]
+      ?? li.match(/<span[^>]*font-mono[^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? ""
+    ).replace(/\s+/g, "");
+    const links = [...li.matchAll(/<a\b[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
+      .map(m => ({ href: decodeHtmlEntities(m[1] ?? ""), label: emailHtmlToText(m[2] ?? "").trim() }));
+    const line = emailHtmlToText(li.match(/<p[^>]*>([\s\S]*?)<\/p>/i)?.[1] ?? "").trim();
+    const subject = (line.replace(/\s*·\s*\d{1,2}\/\d{1,2}\/\d{4}.*$/, "").trim()) || label;
+    return { label, wall, ago, code, links, subject, rawTime: timeTag?.[1] ?? "" };
+  }).filter(c => c.code || c.links.length);
+
+  // Zona horaria del proveedor: la que hace calzar la hora de la tarjeta con
+  // «hace N minutos». Si ninguna lo dice con precisión, UTC−4 (lo visto).
+  const ref = parsed.find(c => c.wall !== null && c.ago && c.ago.fine);
+  const shiftH = ref ? Math.round((now - ref.ago!.ms - ref.wall!) / 3_600_000) : 4;
+
+  const mails = parsed.map((c, i): JuanpaMail => {
+    let t = c.wall !== null ? c.wall + shiftH * 3_600_000 : (c.ago ? now - c.ago.ms : null);
+    if (t !== null && t - now > 5 * 60_000) t = c.ago ? now - c.ago.ms : now;
+    const receivedAt = t !== null ? new Date(t).toISOString().replace(/\.\d{3}Z$/, "Z") : undefined;
+    // «Correo» armado con lo que muestra la tarjeta: el código va en una
+    // celda espaciada (como en los correos de Netflix) y los enlaces tal cual.
+    const body = `<html><head><title>${escHtml(c.subject)}</title></head><body>` +
+      `<p>${escHtml(c.label)}</p><p>${escHtml(c.subject)}</p>` +
+      (c.code ? `<p style="letter-spacing: 4px;">${escHtml(c.code)}</p>` : "") +
+      c.links.map(l => `<p><a href="${escHtml(l.href)}">${escHtml(l.label || "Abrir enlace")}</a></p>`).join("") +
+      `</body></html>`;
+    const ref = (receivedAt ?? "sin-fecha") + "#" + simpleHash(c.label + "|" + c.subject + "|" + c.code + "|" + c.rawTime + "|" + c.links.map(l => l.href).join(",")) + (receivedAt ? "" : "#" + i);
+    return { item: { ref, subject: c.subject, ...(receivedAt ? { receivedAt } : {}) }, body };
+  });
   return mails
     .map((m, i) => ({ m, i, t: m.item.receivedAt ? Date.parse(m.item.receivedAt) : null }))
     .sort((a, b) => (a.t !== null && b.t !== null ? b.t - a.t : a.i - b.i))
