@@ -6,7 +6,7 @@ import {
   lookupCodeAction, withLookupContext, describeLookupError, parseProviderDate,
   isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult, deliversEverything,
   sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID, codeSourceLabel, loginApprovalOf,
-  type CodeLookupResult, type LoginApproval,
+  type CodeLookupResult, type LoginApproval, deliversHousehold, householdLinkOf,
 } from "./codes-lookup.service";
 import { laneIdOf } from "./codes-lanes";
 import { alertClientWaiting, logCodeEvent } from "./codes-brain.service";
@@ -210,7 +210,7 @@ function evaluate(req: CodeRequestRow, result: CodeLookupResult, problem: { mess
   if (!deliversEverything(req.sourceId) && isAccountChangeResult(result)) {
     return { state: "not_login", note: NOT_LOGIN_NOTE, message: "Llegó un correo de cambio de datos de la cuenta (no se entrega)." };
   }
-  if (isLoginCodeOnlySource(req.sourceId) && !isLoginCode(result) && !loginLinkOf(result)) {
+  if (isLoginCodeOnlySource(req.sourceId) && !isLoginCode(result) && !loginLinkOf(result) && !(deliversHousehold(req.sourceId) && householdLinkOf(result))) {
     return { state: "not_login", note: NOT_LOGIN_NOTE, message: "Llegó un correo que no es de inicio de sesión (no se entrega)." };
   }
   if (isAdminOnlyResult(req.sourceId, result)) {

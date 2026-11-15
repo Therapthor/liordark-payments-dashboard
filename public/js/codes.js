@@ -803,7 +803,7 @@
         <span class="cx-approval-device">Solicitud de inicio de sesión${a.device ? " · " + escapeHtml(a.device) : ""}</span>
         <span class="cx-approval-btns">
           <a class="cx-linkbtn big" href="${escapeHtml(safeUrl(a.approveUrl))}" target="_blank" rel="noopener noreferrer">Aprobar</a>
-          ${deny ? `<a class="cx-linkbtn deny big" href="${escapeHtml(deny)}" target="_blank" rel="noopener noreferrer">Rechazar</a>` : ""}
+
         </span>
       </div>`;
   }

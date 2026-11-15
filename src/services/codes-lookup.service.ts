@@ -423,7 +423,9 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
   // Netflix por Pally: al cliente SOLO se le entrega automático el código
   // de inicio de sesión de 4 dígitos. Enlaces, códigos de 6 dígitos y lo
   // de Hogar los entrega un asesor (decisión del negocio, nov-2026).
-  if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result) && !loginLinkOf(result);
+  // Juanpa: los enlaces de «Hogar» SÍ se le entregan al cliente (pedido del
+  // dueño, nov-2026).
+  if (isLoginCodeOnlySource(sourceId)) return !isLoginCode(result) && !loginLinkOf(result) && !(deliversHousehold(sourceId) && householdLinkOf(result));
   // Vegamig (Prime Video / Crunchyroll): su página es para clientes, todo
   // lo que llega se le entrega (decisión del negocio, nov-2026).
   if (deliversEverything(sourceId)) return false;
@@ -442,6 +444,28 @@ const LOGIN_CODE_ONLY_SOURCES = ["netflix_sin_opciones", "netflix_con_opciones",
  *  (también lo que parece cambio de datos). Hoy solo Vegamig. */
 export function deliversEverything(sourceId: string | null): boolean {
   return sourceId === "vegamig_web";
+}
+
+// Fuentes cuyos enlaces de «Hogar» (actualizar hogar / estoy de viaje del
+// hogar) se le entregan al cliente. Las demás los sigue entregando un asesor.
+const HOUSEHOLD_DELIVER_SOURCES = ["juanpa_bandeja"];
+export function deliversHousehold(sourceId: string | null): boolean {
+  return !!sourceId && HOUSEHOLD_DELIVER_SOURCES.includes(sourceId);
+}
+
+const HOUSEHOLD_RE = /hogar|household|update-primary-location/i;
+/** El enlace de «Hogar» del resultado (por el asunto, el botón o la
+ *  dirección), o null. Nunca uno de cambio de datos. */
+export function householdLinkOf(result: CodeLookupResult): string | null {
+  if (!result.found || result.kind !== "link" || !result.value) return null;
+  if (CHANGE_LINK_RE.test(result.value)) return null;
+  if (HOUSEHOLD_RE.test(String(result.subject || "")) || HOUSEHOLD_RE.test(result.value)) return result.value;
+  for (const m of String(result.emailHtml || "").matchAll(/<a\b[^>]*href\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const href = decodeHtmlEntities(m[2] ?? "").trim();
+    const text = decodeHtmlEntities((m[3] ?? "").replace(/<[^>]+>/g, " "));
+    if (href === result.value && HOUSEHOLD_RE.test(text)) return href;
+  }
+  return null;
 }
 
 export function isLoginCodeOnlySource(sourceId: string | null): boolean {
@@ -1398,7 +1422,7 @@ export function juanpaResult(mails: JuanpaMail[]): CodeLookupResult {
   const results = mails.map(m => listedEmailResult(m.item, m.body, items));
   // El más nuevo que sea de inicio de sesión (código de 4 dígitos o link);
   // si no hay ninguno, el más nuevo (para que el panel lo vea).
-  const login = results.find(r => !isAccountChangeResult(r) && (isLoginCode(r) || !!loginLinkOf(r)));
+  const login = results.find(r => !isAccountChangeResult(r) && (isLoginCode(r) || !!loginLinkOf(r) || !!householdLinkOf(r)));
   return login ?? results[0]!;
 }
 

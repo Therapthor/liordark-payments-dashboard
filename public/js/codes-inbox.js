@@ -64,7 +64,7 @@
           <span class="cx-approval-device">Solicitud de inicio de sesión${a.device ? " · " + esc(a.device) : ""}</span>
           <span class="cx-approval-btns">
             <a class="cx-linkbtn${big ? " big" : ""}" href="${esc(a.approveUrl)}" target="_blank" rel="noopener noreferrer">Aprobar</a>
-            ${a.denyUrl ? `<a class="cx-linkbtn deny${big ? " big" : ""}" href="${esc(a.denyUrl)}" target="_blank" rel="noopener noreferrer">Rechazar</a>` : ""}
+
           </span>
         </div>`;
     }

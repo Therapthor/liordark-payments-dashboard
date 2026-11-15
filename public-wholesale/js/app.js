@@ -1024,8 +1024,7 @@
           document.getElementById("codes-approval-device").textContent = ap.device || "Nuevo dispositivo";
           document.getElementById("codes-approve").href = ap.approveUrl;
           const deny = document.getElementById("codes-deny");
-          deny.hidden = !ap.denyUrl;
-          if (ap.denyUrl) deny.href = ap.denyUrl;
+          deny.hidden = true; // solo «Aprobar» (pedido del dueño)
           document.getElementById("codes-copy").textContent = "Copiar link de Aprobar";
         }
         const frame = document.getElementById("codes-mail");
