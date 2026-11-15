@@ -677,6 +677,7 @@
 
       const sortedProducts = [...(products || [])].sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
       cachedProducts = sortedProducts;
+      try { paintBandArt(); } catch { /* solo decorativo */ }
 
       let html = "";
       // Los combos fijos del catálogo ya no se muestran en la web — el
@@ -740,13 +741,13 @@
   // Propuestas de banner (vista previa con ?banner=1..5, sin tocar la
   // tienda real). 0 = el banner de siempre. Para dejar una fija, cambiar
   // COMBO_BANNER_DEFAULT; ?banner=0 siempre muestra el de siempre.
-  const COMBO_BANNER_DEFAULT = 0;
+  const COMBO_BANNER_DEFAULT = 1; // elegido por el dueño: «Abanico mango»
   const COMBO_BANNER_VARIANT = (() => {
     const q = new URLSearchParams(location.search).get("banner");
     const n = q === null ? COMBO_BANNER_DEFAULT : Number(q);
     return Number.isInteger(n) && n >= 1 && n <= 5 ? n : 0;
   })();
-  if (COMBO_BANNER_VARIANT) {
+  if (COMBO_BANNER_VARIANT && !document.querySelector('link[href$="combo-banner-variants.css"]')) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = "/css/combo-banner-variants.css";
@@ -780,6 +781,43 @@
     return out;
   }
 
+  // Ficha con la imagen del producto del catálogo (así el banner y la portada
+  // muestran lo mismo que se vende). Sin imagen o si falla al cargar: la
+  // ficha de color con iniciales de siempre.
+  function productTileHtml(p, size) {
+    const chip = platformChip(p.platform, size);
+    if (!p.imageUrl) return chip;
+    return `<span class="plat plat-img${size ? " plat-" + size : ""}" aria-hidden="true"><img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.outerHTML = this.dataset.fallback" data-fallback="${escapeHtml(chip)}"></span>`;
+  }
+  // Productos para las fichas: primero los que tienen imagen y stock, luego
+  // los que tienen imagen, y si faltan, fichas de plataforma.
+  function productTiles(k, size) {
+    const prods = (cachedProducts || []).filter(p => p && p.platform);
+    const withImg = prods.filter(p => p.imageUrl);
+    const ordered = withImg.filter(p => !isOutOfStock(p, "platform")).concat(withImg.filter(p => isOutOfStock(p, "platform")));
+    const seen = new Set();
+    const out = [];
+    for (const p of ordered) {
+      const key = String(p.platform).toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(productTileHtml(p, size));
+      if (out.length >= k) return out;
+    }
+    for (const name of comboBannerPlatforms(k + seen.size)) {
+      if (seen.has(String(name).toUpperCase())) continue;
+      out.push(platformChip(name, size));
+      if (out.length >= k) break;
+    }
+    return out;
+  }
+  // Portada (PC): las 6 fichas de la derecha también con las imágenes reales.
+  function paintBandArt() {
+    const art = document.querySelector(".band-art");
+    if (!art || !(cachedProducts || []).some(p => p && p.imageUrl)) return;
+    art.innerHTML = productTiles(6, "").join("");
+  }
+
   function comboBannerVariantHtml(v) {
     const max = Math.round(comboDiscountRate(99) * 100);
     const two = Math.round(comboDiscountRate(2) * 100);
@@ -792,7 +830,7 @@
     if (v === 1) return `
       <section class="cbv cbv-1" aria-label="Arma tu combo">
         <div class="cbv1-art" aria-hidden="true">
-          <div class="cbv1-fan">${chips(3, "", "cbv1-tile")}</div>
+          <div class="cbv1-fan">${productTiles(3, "").map((t, i) => `<span class="cbv1-tile" style="--i:${i}">${t}</span>`).join("")}</div>
           <div class="cbv1-badge"><small>hasta</small><b>−${max}%</b></div>
         </div>
         <div class="cbv1-body">
