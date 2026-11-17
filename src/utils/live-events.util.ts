@@ -19,6 +19,7 @@ export type DashboardLiveEvent =
   | { type: "code_request"; request: unknown }
   // Cambió el stock vendible de alguna plataforma (ver stock-watch.service.ts).
   | { type: "stock_changed" }
+  | { type: "review_pending" }
   // Un cliente lleva varios minutos esperando su código sin que llegue.;
 
 export function onDashboardEvent(listener: (evt: DashboardLiveEvent) => void): () => void {

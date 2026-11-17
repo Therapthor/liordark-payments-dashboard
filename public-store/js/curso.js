@@ -24,10 +24,10 @@
     showLaunch();
 
     document.getElementById("eps").innerHTML = info.episodes.map(e => `
-      <div class="l-ep ${e.n === 1 ? "first" : ""}">
-        <span class="l-ep-n">${e.n}</span>
-        <span class="l-ep-t">${esc(e.title)}</span>
-        ${e.n === 1 ? `<span class="l-ep-free">Gratis</span>` : ""}
+      <div class="cm-ep ${e.n === 1 ? "first" : ""}">
+        <span class="cm-ep-n">${e.n}</span>
+        <span class="cm-ep-t">${esc(e.title)}</span>
+        ${e.n === 1 ? `<span class="cm-ep-free">Gratis</span>` : `<svg class="ic cm-ep-lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`}
       </div>`).join("");
 
     if (!info.previewAvailable) {
@@ -88,13 +88,15 @@
   // Curso en borrador: para el público todavía no existe.
   function showSoon() {
     document.getElementById("sticky-buy").hidden = true;
+    const hero = document.querySelector(".cm-hero");
+    if (hero) hero.hidden = true;
     document.querySelector(".sale").innerHTML = `
-      <section class="l-box l-soon">
+      <section class="cm-box cm-soon">
         ${mango(64)}
         <h1>Muy pronto</h1>
         <p>Estamos preparando el curso <b>Tus Primeros S/ 1,000</b>. Vuelve pronto.</p>
-        ${info && info.loggedIn ? "" : `<button class="l-btn ghost" id="soon-login">¿Tienes acceso? Entrar</button>`}
-        <a class="l-btn primary" href="/">Ir a la tienda</a>
+        ${info && info.loggedIn ? "" : `<button class="cm-btn ghost" id="soon-login">¿Tienes acceso? Entrar</button>`}
+        <a class="cm-btn primary" href="/">Ir a la tienda</a>
       </section>`;
     const btn = document.getElementById("soon-login");
     if (btn) btn.addEventListener("click", () => {

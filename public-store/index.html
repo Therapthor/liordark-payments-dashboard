@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="/css/mango-store.css">
 <link rel="stylesheet" href="/css/combo-banner-variants.css">
 <link rel="stylesheet" href="/css/avisos.css">
+<link rel="stylesheet" href="/css/resenas.css">
 </head>
 <body>
 
@@ -174,6 +175,38 @@
         </a>
         <div id="catalog-sections"></div>
         <p id="catalog-empty" class="muted" hidden>Todavía no hay productos cargados.</p>
+
+        <!-- Reseñas (solo reales: las publica el dueño desde el panel) -->
+        <section class="rs-section" id="reviews-section" hidden aria-labelledby="reviews-title">
+          <div class="rs-head">
+            <div class="rs-head-txt">
+              <h2 class="section-chip" id="reviews-title">Lo que dicen nuestros clientes</h2>
+              <p class="rs-summary" id="reviews-summary"></p>
+            </div>
+            <div class="rs-arrows">
+              <button class="rs-arrow" id="reviews-prev" type="button" aria-label="Anterior"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+              <button class="rs-arrow" id="reviews-next" type="button" aria-label="Siguiente"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+            </div>
+          </div>
+          <div class="rs-track" id="reviews-track" tabindex="0" aria-label="Reseñas de clientes"></div>
+          <div class="rs-foot">
+            <div class="rs-dots" id="reviews-dots" aria-hidden="true"></div>
+            <button class="rs-cta" id="reviews-cta" type="button" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>Deja tu reseña</button>
+          </div>
+        </section>
+
+        <!-- Preguntas frecuentes -->
+        <section class="faq-section" aria-labelledby="faq-title">
+          <h2 class="section-chip" id="faq-title">Preguntas frecuentes</h2>
+          <div class="faq-list">
+            <div class="faq-item"><button type="button" aria-expanded="false"><span>¿El servicio es seguro?</span><i aria-hidden="true"></i></button><div class="faq-a"><div><p>Sí. Pagas con Yape y el pago se confirma solo: nunca te pedimos datos de tarjeta. Tus cuentas quedan guardadas en «Mis cuentas», protegidas con tu celular y tu PIN, y si algo falla te atendemos por soporte.</p></div></div></div>
+            <div class="faq-item"><button type="button" aria-expanded="false"><span>¿Qué métodos de pago aceptan?</span><i aria-hidden="true"></i></button><div class="faq-a"><div><p id="faq-payments">Yape. Te damos un monto exacto y el pago se confirma solo, en segundos.</p></div></div></div>
+            <div class="faq-item"><button type="button" aria-expanded="false"><span>¿Qué es el panel mayorista?</span><i aria-hidden="true"></i></button><div class="faq-a"><div><p>Es el panel para revendedores (mayorista.liordark.com). Compras cuentas y perfiles a precio mayorista con tu saldo, se las entregas al instante a tus clientes y ves sus vencimientos y códigos de acceso las 24 horas.</p></div></div></div>
+            <div class="faq-item"><button type="button" aria-expanded="false"><span>¿Cómo ser mayorista?</span><i aria-hidden="true"></i></button><div class="faq-a"><div><p>Escríbenos por WhatsApp y te creamos tu acceso al panel mayorista.<span class="faq-course-only"> También viene incluido con el curso «Tus Primeros S/&nbsp;1,000», con S/&nbsp;10 de saldo de regalo.</span></p><a class="faq-link" id="faq-wholesale-link" href="#" target="_blank" rel="noopener">Quiero ser mayorista →</a></div></div></div>
+            <div class="faq-item faq-course-only"><button type="button" aria-expanded="false"><span>¿Para qué es el curso?</span><i aria-hidden="true"></i></button><div class="faq-a"><div><p>«Tus Primeros S/&nbsp;1,000» te enseña desde cero a vender cuentas y perfiles de streaming: cómo funcionan, cuánto ganas, dónde conseguirlas y cómo hacer que tus clientes te vuelvan a comprar. Son 5 episodios en video y lo ves de por vida.</p><a class="faq-link" href="/curso/">Ver el curso →</a></div></div></div>
+            <div class="faq-item"><button type="button" aria-expanded="false"><span>¿Qué garantía ofrecen?</span><i aria-hidden="true"></i></button><div class="faq-a"><div><p><b>Garantía total de tu suscripción.</b> Si tu cuenta deja de funcionar, te la reemplazamos sin costo durante todo el tiempo que pagaste. Y si la reposición demora, te sumamos días extra para compensar.</p></div></div></div>
+          </div>
+        </section>
       </section>
 
       <section id="page-dashboard" class="page" hidden>
@@ -185,6 +218,11 @@
         <div class="dashboard-notify-active" id="dashboard-notify-active" hidden>
           <span class="dashboard-notify-check">✓ Recordatorios activados</span>
           <button class="dashboard-notify-change-link" id="dashboard-notify-change-btn" type="button">Cambiar correo</button>
+        </div>
+
+        <div class="rs-ask" id="review-ask" hidden>
+          <div class="rs-ask-txt"><b id="review-ask-title">¿Qué tal tu experiencia?</b><span id="review-ask-sub">Cuéntanos en una reseña, nos ayuda muchísimo.</span></div>
+          <button class="btn-primary btn-sm" id="review-ask-btn" type="button">Dejar reseña</button>
         </div>
 
         <div id="dashboard-active-section">
@@ -209,6 +247,24 @@
         <p class="info-line"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5h.01"/></svg>Revisamos cada 30 segundos hasta que llegue. Tienes 3 consultas por cuenta al día.</p>
       </section>
     </main>
+  </div>
+
+  <!-- ═══════════ MODAL: DEJAR RESEÑA ═══════════ -->
+  <div id="review-modal" class="modal-backdrop" hidden>
+    <div class="modal-card review-card" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+      <button class="modal-close" id="review-close" type="button" aria-label="Cerrar">✕</button>
+      <h2 id="review-modal-title">Tu reseña</h2>
+      <p class="muted review-hint">La publicamos en la tienda después de revisarla.</p>
+      <div class="rs-stars-input" id="review-stars" role="radiogroup" aria-label="Estrellas">
+        <button type="button" role="radio" data-v="1" aria-label="1 estrella">★</button><button type="button" role="radio" data-v="2" aria-label="2 estrellas">★</button><button type="button" role="radio" data-v="3" aria-label="3 estrellas">★</button><button type="button" role="radio" data-v="4" aria-label="4 estrellas">★</button><button type="button" role="radio" data-v="5" aria-label="5 estrellas">★</button>
+      </div>
+      <label for="review-author">Tu nombre</label>
+      <input id="review-author" maxlength="30" autocomplete="given-name" placeholder="ej. Carla">
+      <label for="review-body">Tu experiencia</label>
+      <textarea id="review-body" maxlength="400" rows="4" placeholder="¿Qué te pareció el servicio?"></textarea>
+      <p class="form-error" id="review-error" hidden></p>
+      <button class="btn-primary btn-block" id="review-send" type="button">Enviar reseña</button>
+    </div>
   </div>
 
   <!-- ═══════════ MODAL DE DETALLE DE PRODUCTO ═══════════ -->
@@ -440,5 +496,6 @@
 <script src="/js/animaciones.js"></script>
 <script src="/js/compras-recientes.js"></script>
 <script src="/js/avisos.js"></script>
+<script src="/js/resenas.js"></script>
 </body>
 </html>

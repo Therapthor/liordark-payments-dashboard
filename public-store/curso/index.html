@@ -2,7 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFC93C">
 <title>Tus Primeros S/ 1,000 — Curso Manguitope</title>
 <meta name="description" content="Aprende a vender cuentas y perfiles de streaming desde cero. 5 episodios en video, acceso de por vida.">
 <link rel="icon" href="/assets/logo.webp">
@@ -13,88 +14,101 @@
 <meta property="og:image:height" content="1080">
 <meta property="og:url" content="https://liordark.com/curso/">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/outfit-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito-sans-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/curso-portada-1280.jpg" as="image">
 <link rel="stylesheet" href="/css/curso.css">
+<link rel="stylesheet" href="/css/mango-base.css">
+<link rel="stylesheet" href="/css/curso-mango.css">
 </head>
-<body class="landing">
+<body class="cm">
 
-<header class="l-header">
-  <a class="l-brand" href="/">Manguitope</a>
-  <div class="l-header-right">
-    <span class="l-user" id="user-label"></span>
-    <a class="l-pill" href="/">Volver a la tienda</a>
+<!-- Banda mango (Mango Pro): marca + hero. El video «flota» sobre su borde. -->
+<header class="cm-band">
+  <div class="cm-band-bg" aria-hidden="true"><span class="cm-circle c1"></span><span class="cm-circle c2"></span></div>
+  <div class="cm-top">
+    <a class="cm-brand" href="/">
+      <span class="cm-logo"><img src="/assets/logo.webp" alt=""></span>
+      <span class="cm-brand-text"><b>Manguitope</b><small>Curso</small></span>
+    </a>
+    <div class="cm-top-right">
+      <span class="cm-user" id="user-label"></span>
+      <a class="cm-pill" href="/"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Volver a la tienda</a>
+    </div>
   </div>
+
+  <section class="cm-hero">
+    <span class="cm-chip cm-in" style="--i:0">Curso · 5 episodios</span>
+    <h1 class="cm-in" style="--i:1">Tus Primeros <span class="cm-hl">S/&nbsp;1,000</span></h1>
+    <p class="cm-in" style="--i:2">Cuentas streaming: aprende a vender cuentas y perfiles desde cero.</p>
+    <div class="cm-actions cm-in" style="--i:3">
+      <button class="cm-btn primary" id="buy-btn">Comprar curso · S/ <span id="price">39.90</span></button>
+      <button class="cm-btn ghost" id="watch-btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Ver episodio 1 gratis</button>
+    </div>
+    <span class="cm-launch cm-in" style="--i:4" id="launch-note" hidden></span>
+    <span class="cm-note cm-in" style="--i:4">Pago único con Yape · confirmación automática</span>
+  </section>
 </header>
 
-<main class="sale l-main">
+<main class="sale cm-main">
 
-  <section class="l-hero">
-    <span class="l-chip">Curso · 5 episodios</span>
-    <h1>Tus Primeros S/&nbsp;1,000</h1>
-    <p>Cuentas streaming: aprende a vender cuentas y perfiles desde cero.</p>
-    <div class="l-hero-actions">
-      <button class="l-btn primary" id="buy-btn">Comprar curso · S/ <span id="price">39.90</span></button>
-      <button class="l-btn ghost" id="watch-btn">Ver episodio 1 gratis</button>
-    </div>
-    <span class="l-launch" id="launch-note" hidden></span>
-    <span class="l-note">Pago único con Yape · confirmación automática</span>
-  </section>
-
-  <section class="l-video-card" id="preview-section">
-    <div class="l-video" id="preview">
+  <section class="cm-video-card" id="preview-section">
+    <div class="cm-video" id="preview">
       <video id="preview-video" controls playsinline preload="none" poster="/assets/curso-portada-1280.jpg" controlslist="nodownload" disablepictureinpicture hidden></video>
-      <button class="l-cover" id="preview-empty" aria-label="Ver episodio 1">
-        <img src="/assets/curso-portada-1280.jpg" alt="Tus Primeros S/ 1,000 — portada del curso">
-        <span class="l-play" id="play-icon"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#241A10"/></svg></span>
+      <button class="cm-cover" id="preview-empty" aria-label="Ver episodio 1">
+        <img src="/assets/curso-portada-1280.jpg" alt="Tus Primeros S/ 1,000 — portada del curso" fetchpriority="high">
+        <span class="cm-play" id="play-icon"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#2B1B0E"/></svg></span>
       </button>
     </div>
-    <p class="l-video-note" id="preview-note">Episodio 1 gratis</p>
+    <p class="cm-video-note" id="preview-note">Episodio 1 gratis</p>
   </section>
 
-  <section class="l-features">
-    <div class="l-feature">
-      <span class="l-ico green"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E6B36" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+  <section class="cm-features">
+    <div class="cm-feature cm-rv">
+      <span class="cm-ico leaf"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
       <b>Plantilla Excel</b><span>Gestor de cuentas y clientes.</span>
     </div>
-    <div class="l-feature">
-      <span class="l-ico orange"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A3480A" stroke-width="2"><path d="M3 9l1.5-5h15L21 9M4 9h16v11H4z"/><path d="M9 20v-6h6v6"/></svg></span>
+    <div class="cm-feature cm-rv">
+      <span class="cm-ico coral"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M4 9h16v11H4z"/><path d="M9 20v-6h6v6"/></svg></span>
       <b>Panel Mayorista</b><span>Con S/ 10 de saldo de regalo.</span>
     </div>
-    <div class="l-feature">
-      <span class="l-ico yellow"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6200" stroke-width="2"><path d="M4 7h16v4a2 2 0 000 4v4H4v-4a2 2 0 000-4z"/></svg></span>
+    <div class="cm-feature cm-rv">
+      <span class="cm-ico mango"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v4a2 2 0 000 4v4H4v-4a2 2 0 000-4z"/></svg></span>
       <b>Cupón −30%</b><span>Para el curso avanzado.</span>
     </div>
-    <div class="l-feature">
-      <span class="l-ico brown"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D2F22" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+    <div class="cm-feature cm-rv">
+      <span class="cm-ico blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
       <b>De por vida</b><span>Repite cuando quieras.</span>
     </div>
   </section>
 
-  <section class="l-two">
-    <div class="l-box">
+  <section class="cm-two">
+    <div class="cm-box cm-rv">
       <h2>Episodios</h2>
-      <div id="eps" class="l-eps"></div>
+      <div id="eps" class="cm-eps"></div>
     </div>
-    <div class="l-box">
+    <div class="cm-box cm-rv">
       <h2>Preguntas</h2>
-      <div class="l-faq"><b>¿Cómo pago?</b><p>Con Yape. Te damos un monto exacto y el pago se confirma solo.</p></div>
-      <div class="l-faq"><b>¿Hasta cuándo puedo verlo?</b><p>Para siempre, con tu celular y tu PIN.</p></div>
-      <div class="l-faq"><b>¿Necesito experiencia?</b><p>No. Empezamos desde cero.</p></div>
-      <div class="l-faq"><b>¿Puedo descargar los videos?</b><p>No se descargan, pero los ves todas las veces que quieras.</p></div>
+      <div class="cm-faq">
+        <div class="cm-q"><button type="button" aria-expanded="false">¿Cómo pago?<i aria-hidden="true"></i></button><div class="cm-a"><div><p>Con Yape. Te damos un monto exacto y el pago se confirma solo.</p></div></div></div>
+        <div class="cm-q"><button type="button" aria-expanded="false">¿Hasta cuándo puedo verlo?<i aria-hidden="true"></i></button><div class="cm-a"><div><p>Para siempre, con tu celular y tu PIN.</p></div></div></div>
+        <div class="cm-q"><button type="button" aria-expanded="false">¿Necesito experiencia?<i aria-hidden="true"></i></button><div class="cm-a"><div><p>No. Empezamos desde cero.</p></div></div></div>
+        <div class="cm-q"><button type="button" aria-expanded="false">¿Puedo descargar los videos?<i aria-hidden="true"></i></button><div class="cm-a"><div><p>No se descargan, pero los ves todas las veces que quieras.</p></div></div></div>
+      </div>
     </div>
   </section>
 
-  <section class="l-cta">
-    <div><b>Empieza hoy</b><span>S/ <span id="price3">39.90</span> <s class="l-old" data-regular hidden></s> · pago único · acceso de por vida</span></div>
-    <button class="l-btn primary" id="buy-btn3">Comprar curso</button>
+  <section class="cm-cta cm-rv">
+    <div class="cm-band-bg" aria-hidden="true"><span class="cm-circle c3"></span></div>
+    <div class="cm-cta-txt"><b>Empieza hoy</b><span>S/ <span id="price3">39.90</span> <s class="cm-old" data-regular hidden></s> · pago único · acceso de por vida</span></div>
+    <button class="cm-btn mango" id="buy-btn3">Comprar curso</button>
   </section>
 
 </main>
 
-<div class="l-sticky" id="sticky-buy">
-  <div class="l-sticky-price"><b>S/ <span id="price2">39.90</span> <s class="l-old" data-regular hidden></s></b><span id="sticky-sub">Pago único · Yape</span></div>
-  <button class="l-btn primary" id="buy-btn2">Comprar curso</button>
+<div class="cm-sticky" id="sticky-buy">
+  <div class="cm-sticky-price"><b>S/ <span id="price2">39.90</span> <s class="cm-old" data-regular hidden></s></b><span id="sticky-sub">Pago único · Yape</span></div>
+  <button class="cm-btn mango" id="buy-btn2">Comprar curso</button>
 </div>
 
 <div class="modal-back" id="buy-modal" hidden>
@@ -106,5 +120,6 @@
 
 <script src="/js/curso-common.js"></script>
 <script src="/js/curso.js"></script>
+<script src="/js/curso-mango.js"></script>
 </body>
 </html>

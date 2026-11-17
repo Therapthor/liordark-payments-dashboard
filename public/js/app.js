@@ -395,7 +395,7 @@
   // "Configuración" tiene su propio sub-menú (Catálogo / Métodos de pago /
   // Proveedores) — se maneja aparte del menú principal de arriba.
   const ADMIN_CONFIG_SECTION_KEY = "ldp_admin_config_section";
-  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers", "security", "avisos"];
+  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers", "security", "avisos", "reviews"];
 
   function switchConfigSection(section) {
     try { localStorage.setItem(ADMIN_CONFIG_SECTION_KEY, section); } catch { /* localStorage bloqueado */ }
@@ -405,6 +405,7 @@
     document.getElementById("config-section-providers").hidden       = section !== "providers";
     document.getElementById("config-section-security").hidden        = section !== "security";
     document.getElementById("config-section-avisos").hidden          = section !== "avisos";
+    document.getElementById("config-section-reviews").hidden         = section !== "reviews";
     document.querySelectorAll(".config-subnav-item[data-config-section]").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.configSection === section);
     });
@@ -414,6 +415,7 @@
     if (section === "providers" && window.LiordarkSettings) window.LiordarkSettings.loadProviders();
     if (section === "security" && window.LiordarkSecurity) window.LiordarkSecurity.load();
     if (section === "avisos" && window.LiordarkAvisos) window.LiordarkAvisos.load();
+    if (section === "reviews" && window.LiordarkReviews) window.LiordarkReviews.load();
   }
 
   function initConfigSubnav() {
@@ -722,6 +724,9 @@
         loadStockAlert();
         document.dispatchEvent(new CustomEvent("liordark:stock-changed"));
       }
+
+      // Un cliente dejó (o cambió) su reseña: sube el contador de pendientes.
+      if (evt.type === "review_pending" && window.LiordarkReviews) window.LiordarkReviews.refresh();
 
       if (evt.type === "customer_registered") {
         playCustomerChime();

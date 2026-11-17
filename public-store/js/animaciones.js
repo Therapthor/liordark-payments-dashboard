@@ -20,7 +20,7 @@
   const REVEAL_SEL = [
     ".product-card", ".section-chip", "#dashboard-active-list .success-account-card",
     ".renewal-account-card", ".codes-acc", ".course-banner", ".info-line",
-    ".dashboard-notify-btn", ".dashboard-subtitle",
+    ".dashboard-notify-btn", ".dashboard-subtitle", ".rs-card", ".faq-item", ".rs-ask",
   ].join(",");
 
   const settle = (el) => {

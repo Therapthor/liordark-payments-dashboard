@@ -40,6 +40,7 @@ import { CUSTOMER_SESSION_COOKIE } from "../services/customer-auth.service";
 import { saleLinkStatus, saleLinkForCustomer } from "./sale-links.routes";
 import { findSaleLink, saleLinkState, isSaleLinkUsable, addSaleLinkOrder } from "../db/sale-links.repository";
 import { saveStoreWebOrder, storeOrderPaymentStatus, listRecentConfirmedPurchases, type RecentPurchase } from "../db/store-orders.repository";
+import { listPublishedReviews, publishedReviewsSummary, getCustomerReview, saveCustomerReview, cleanReviewInput } from "../db/reviews.repository";
 
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -552,7 +553,58 @@ router.get("/sale-link-status/:code", (req, res) => {
   res.json(saleLinkStatus(String(req.params.code)));
 });
 
+// GET /api/store/reviews — reseñas PUBLICADAS (las aprueba el dueño en el
+// panel). PÚBLICO: nombre, estrellas, texto y si es compra verificada; nunca
+// el celular. 60 s en memoria (se limpia al publicar/ocultar en el panel).
+const REVIEWS_TTL_MS = 60_000;
+let reviewsCache: { at: number; data: unknown } | null = null;
+export function invalidateStoreReviewsCache(): void { reviewsCache = null; }
+router.get("/reviews", (_req, res) => {
+  if (!reviewsCache || Date.now() - reviewsCache.at > REVIEWS_TTL_MS) {
+    let data: unknown = { reviews: [], summary: { count: 0, avg: 0 } };
+    try {
+      data = {
+        reviews: listPublishedReviews(20).map(r => ({
+          id: r.id, author: r.author, stars: r.stars, body: r.body,
+          verified: r.source === "cliente", date: r.createdAt.slice(0, 10),
+        })),
+        summary: publishedReviewsSummary(),
+      };
+    } catch (err) { console.error("reviews:", err); }
+    reviewsCache = { at: Date.now(), data };
+  }
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.json(reviewsCache.data);
+});
+
 router.use(requireCustomerSession);
+
+// Reseña del cliente (una por cliente; solo con alguna compra). Queda
+// pendiente hasta que el dueño la publica en Configuración › Reseñas.
+function hasPurchased(phone: string): boolean {
+  try { return listAccountsByClientPhone(phone).length > 0 || listArchivedAccountsByPhone(phone).length > 0; }
+  catch { return false; }
+}
+router.get("/my-review", (req, res) => {
+  const customer = findCustomerById((req as unknown as RequestWithCustomer).customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+  const r = getCustomerReview(customer.id);
+  res.json({
+    canReview: hasPurchased(customer.phone),
+    review: r ? { author: r.author, stars: r.stars, body: r.body, status: r.status } : null,
+  });
+});
+const reviewLimit = loginRateLimit("store-review", 5, 60 * 60 * 1000);
+router.post("/my-review", reviewLimit, (req, res) => {
+  const customer = findCustomerById((req as unknown as RequestWithCustomer).customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+  if (!hasPurchased(customer.phone)) return res.status(403).json({ message: "Podrás dejar tu reseña después de tu primera compra." });
+  const input = cleanReviewInput(req.body);
+  if ("error" in input) return res.status(400).json({ message: input.error });
+  const r = saveCustomerReview(customer.id, input.author, input.stars, input.body);
+  emitDashboardEvent({ type: "review_pending" });
+  res.json({ review: { author: r.author, stars: r.stars, body: r.body, status: r.status } });
+});
 
 // GET /api/store/orders/:orderName/status — ¿ya se confirmó el pago de MI
 // pedido? Solo responde por pedidos hechos por este mismo cliente desde la

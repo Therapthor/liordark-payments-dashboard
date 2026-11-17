@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="css/cat.css" />
 <link rel="stylesheet" href="css/rest.css" />
 <link rel="stylesheet" href="css/avisos-admin.css" />
+<link rel="stylesheet" href="css/reviews-admin.css" />
 </head>
 <body>
 
@@ -769,6 +770,7 @@
           <button class="config-subnav-item" data-config-section="payment-methods">Métodos de pago</button>
           <button class="config-subnav-item" data-config-section="providers">Proveedores</button>
           <button class="config-subnav-item" data-config-section="avisos">📣 Avisos</button>
+          <button class="config-subnav-item" data-config-section="reviews">⭐ Reseñas <span class="rvw-badge" id="reviews-pending-badge" hidden></span></button>
           <button class="config-subnav-item" data-config-section="security">🔒 Seguridad</button>
         </div>
 
@@ -876,6 +878,31 @@
           <p class="panel-hint">Una ventana con tu imagen (un combo, un producto, descuentos, stock nuevo…) que aparece apenas entran. Si cambias la imagen, el texto o el botón, cuenta como <b>aviso nuevo</b>: lo vuelven a ver todos, aunque ya hayan visto el anterior.</p>
 
           <div id="avisos-grid" class="avisos-grid"><p class="panel-hint">Cargando…</p></div>
+
+        </div>
+
+        <div id="config-section-reviews" class="config-section" hidden>
+
+          <div class="panel-header standalone">
+            <h2>Reseñas</h2>
+          </div>
+
+          <p class="panel-hint">Se muestran en la tienda (liordark.com), casi al final, en un carrusel. Solo reseñas <b>reales</b>: las que dejan tus clientes después de comprar (llegan aquí como <b>pendientes</b> y tú decides si se publican) o las que un cliente te mandó por WhatsApp y copias tal cual.</p>
+
+          <form class="rvw-form" id="rvw-form" autocomplete="off">
+            <b class="rvw-form-title">Copiar una reseña que te mandó un cliente</b>
+            <div class="rvw-form-row">
+              <input id="rvw-author" maxlength="30" placeholder="Nombre del cliente (ej. Carla)" required>
+              <select id="rvw-stars" aria-label="Estrellas">
+                <option value="5">★★★★★ 5</option><option value="4">★★★★ 4</option><option value="3">★★★ 3</option><option value="2">★★ 2</option><option value="1">★ 1</option>
+              </select>
+            </div>
+            <textarea id="rvw-body" maxlength="400" rows="3" placeholder="Lo que escribió el cliente, tal cual" required></textarea>
+            <p class="form-error" id="rvw-error" hidden></p>
+            <button class="btn-primary" type="submit" id="rvw-add">Publicar reseña</button>
+          </form>
+
+          <div id="rvw-list" class="rvw-list"><p class="panel-hint">Cargando…</p></div>
 
         </div>
 
@@ -1848,6 +1875,7 @@
   <script src="js/catalog.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/avisos-admin.js"></script>
+  <script src="js/reviews-admin.js"></script>
   <script src="js/web-customers.js"></script>
   <script src="js/sale-links.js"></script>
   <script src="js/game-over.js"></script>

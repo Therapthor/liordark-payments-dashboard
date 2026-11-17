@@ -24,6 +24,7 @@ import stockRoutes from "./routes/stock.routes";
 import renewalsRoutes from "./routes/renewals.routes";
 import botFlowRoutes from "./routes/bot-flow.routes";
 import avisosRoutes, { storeAvisoHandler, wholesaleAvisoHandler, avisoImageHandler } from "./routes/avisos.routes";
+import reviewsRoutes from "./routes/reviews.routes";
 import customerAuthRoutes from "./routes/customer-auth.routes";
 import storeRoutes, { generateExpiryNotificationsForAllCustomers } from "./routes/store.routes";
 import customersRoutes from "./routes/customers.routes";
@@ -106,6 +107,7 @@ apiRouter.use("/wholesaler/auth/login", loginRateLimit("mayorista", 30, 10 * 60_
 apiRouter.use("/auth", authRoutes);
 // Avisos (ventana con imagen): la arma el admin; la leen la tienda y el mayorista.
 apiRouter.use("/avisos", requireAuth, avisosRoutes);
+apiRouter.use("/reviews", requireAuth, reviewsRoutes);
 apiRouter.get("/store/aviso", storeAvisoHandler);
 apiRouter.get("/wholesaler/aviso", requireWholesalerSession, wholesaleAvisoHandler);
 apiRouter.get("/aviso-img/:file", avisoImageHandler);

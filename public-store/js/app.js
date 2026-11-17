@@ -121,18 +121,22 @@
     refreshCourseVisibility();
   }
 
-  // Curso: el botón y el banner solo aparecen si el curso está publicado
-  // (o, en borrador, para el celular de prueba / quien ya lo tiene).
+  // Curso: solo si está publicado (o, en borrador, para el celular de
+  // prueba / quien ya lo tiene). La pestaña «Curso» del menú aparece recién
+  // cuando el cliente lo compró; antes, solo el banner para comprarlo.
   async function refreshCourseVisibility() {
-    let visible = false;
+    let visible = false, owned = false;
     try {
       const res = await fetch("/api/course/info", { credentials: "include" });
-      visible = !!(await res.json()).visible;
+      const info = await res.json();
+      visible = !!info.visible;
+      owned = visible && !!info.owned;
     } catch { /* sin red: se queda oculto */ }
     const link = document.getElementById("nav-course-link");
     const banner = document.getElementById("course-banner");
-    if (link) link.hidden = !visible;
-    if (banner) banner.hidden = !visible;
+    if (link) link.hidden = !owned;
+    if (banner) banner.hidden = !visible || owned;
+    document.body.classList.toggle("course-visible", visible);
   }
 
   function initAuthToggle() {

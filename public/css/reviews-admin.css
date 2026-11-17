@@ -1,0 +1,46 @@
+/* Configuración › Reseñas */
+.rvw-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px;
+  border-radius: 999px; background: #E2552B; color: #fff; font-size: 11px; font-weight: 800; line-height: 1; vertical-align: 1px;
+}
+.rvw-badge[hidden] { display: none; }
+
+.rvw-form {
+  display: flex; flex-direction: column; gap: 10px; margin: 6px 0 18px; padding: 16px;
+  background: #fff; border-radius: 20px; box-shadow: 0 10px 24px -20px rgba(43,27,14,.6);
+}
+.rvw-form-title { font-size: 14px; }
+.rvw-form-row { display: flex; gap: 10px; }
+.rvw-form-row input { flex: 1; min-width: 0; }
+.rvw-form input, .rvw-form select, .rvw-form textarea {
+  box-sizing: border-box; border-radius: 12px; border: 2px solid #F3E2C4; background: #fff;
+  font: inherit; font-size: 15px; padding: 10px 12px; color: inherit;
+}
+.rvw-form textarea { resize: vertical; min-height: 76px; }
+.rvw-form input:focus, .rvw-form select:focus, .rvw-form textarea:focus { outline: none; border-color: #FFB21A; box-shadow: 0 0 0 4px rgba(255,201,60,.28); }
+.rvw-form .btn-primary { align-self: flex-start; }
+
+.rvw-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.rvw-item {
+  display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 20px; background: #fff;
+  box-shadow: 0 10px 24px -20px rgba(43,27,14,.6); border: 2px solid transparent;
+}
+.rvw-item.rvw-pend { border-color: #FFD866; }
+.rvw-item.rvw-off { opacity: .6; }
+.rvw-item-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rvw-stars { color: #FFB21A; font-size: 17px; letter-spacing: 1px; }
+.rvw-stars span { color: #EADFCB; }
+.rvw-chip { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; }
+.rvw-chip-pend { background: #FFF1D0; color: #6B4A10; }
+.rvw-chip-on { background: #E3F3E9; color: #1F6B44; }
+.rvw-chip-off { background: #F1ECE4; color: #6E5638; }
+.rvw-body { margin: 0; font-size: 14.5px; line-height: 1.5; white-space: pre-line; word-break: break-word; }
+.rvw-meta { font-size: 12.5px; color: #8A6E4B; }
+.rvw-acts { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+.rvw-del { margin-left: auto; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #F6EFE4; cursor: pointer; font-size: 15px; }
+.rvw-del:active { transform: scale(.94); }
+
+@media (max-width: 640px) {
+  .rvw-form-row { flex-direction: column; }
+  .rvw-list { grid-template-columns: 1fr; }
+}
