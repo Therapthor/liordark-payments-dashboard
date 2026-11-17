@@ -2066,3 +2066,51 @@ button.mp-kpi:active { transform: scale(0.98); }
 }
 .cx-q-choose-btn + .cx-q-choose-btn { background: #fff; }
 .cx-q-choose-btn:active { transform: scale(0.97); }
+
+/* ─── Códigos: vista limpia ───
+   Arriba solo «pedir código». Las fuentes se ven al tocar «Fuentes»,
+   los recientes van en una sola fila deslizable y «Enviar link al
+   cliente» es el botón destacado del resultado. */
+.cx-quick-recent { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.cx-quick-recent::-webkit-scrollbar { display: none; }
+.cx-q-recent-label { flex: none; }
+.cx-q-chip { flex: none; max-width: 240px; }
+
+.cx-live { padding: 6px 6px 6px 16px; gap: 10px; }
+.cx-src-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 10px 0 12px;
+  border: none; border-radius: 999px; cursor: pointer; background: var(--mp-soft); color: var(--mp-ink);
+  font-family: var(--mp-font); font-weight: 800; font-size: 13px;
+  transition: background-color var(--mp-dur) var(--mp-ease), transform var(--mp-dur) var(--mp-ease);
+}
+.cx-src-toggle:hover { background: var(--mp-soft-2); }
+.cx-src-toggle:active { transform: scale(0.96); }
+.cx-src-badge { background: var(--mp-peach-bg); color: var(--mp-peach-ink); border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 800; }
+.cx-src-badge[hidden] { display: none; }
+.cx-src-chev { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--mp-dur) var(--mp-ease); }
+.cx-src-toggle[aria-expanded="true"] .cx-src-chev { transform: rotate(180deg); }
+#cx-health:not([hidden]) { animation: cxDrop 260ms var(--mp-ease) both; }
+@keyframes cxDrop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.cx-tabs { margin-top: 4px; }
+.cx-tab-minor:not(.active) { color: var(--mp-muted); }
+
+.cx-q-send {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 42px; padding: 0 16px; border: none; border-radius: 999px; cursor: pointer;
+  background: var(--mp-mango); color: var(--mp-ink);
+  font-family: var(--mp-font); font-weight: 800; font-size: 13.5px;
+  transition: transform var(--mp-dur) var(--mp-ease), background-color var(--mp-dur) var(--mp-ease);
+}
+.cx-q-send:hover { background: var(--mp-mango-deep); }
+.cx-q-send:active { transform: scale(0.96); }
+.cx-q-send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.cx-q-card.is-hint .cx-q-send, .cx-q-card.is-searching .cx-q-send { background: var(--mp-mango); }
+@media (max-width: 899px) {
+  .cx-live { padding: 8px 8px 8px 14px; justify-content: flex-start; }
+  #cx-watch-text { flex: 1 1 auto; text-align: left; }
+  .cx-q-actions .cx-q-send { flex: 1 1 100%; order: -1; }
+  /* Las 4 pestañas entran en el ancho del celular */
+  #view-codes .cx-tabs { justify-content: space-between; gap: 2px; padding: 5px; }
+  #view-codes .cx-tab { padding: 0 9px; font-size: 13.5px; gap: 5px; }
+}

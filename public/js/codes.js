@@ -519,7 +519,7 @@
   function renderRecent() {
     const box = $("cx-quick-recent");
     if (!box) return;
-    const list = readRecent();
+    const list = readRecent().slice(0, 5);
     box.hidden = list.length === 0;
     box.innerHTML = list.length
       ? `<span class="cx-q-recent-label">Recientes</span>` + list.map(e =>
@@ -851,7 +851,7 @@
     const p = platformOf(a ? a.platform : res.sourceLabel);
     const title = a ? a.platform : (p.name || (q.state === "found" ? "Código" : "Todas las fuentes"));
     const retry = `<button type="button" class="cx-ghost-btn" data-q-act="retry">Reintentar</button>`;
-    const share = a && window.LiordarkCodeViewer ? `<button type="button" class="cx-ghost-btn" data-q-act="share">Compartir link</button>` : "";
+    const share = a && window.LiordarkCodeViewer ? `<button type="button" class="cx-q-send" data-q-act="share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4z"/></svg>Enviar link al cliente</button>` : "";
     let pill = "", body = "", meta = "", actions = "";
 
     const choice = a && codeLinkChoice(a);
@@ -921,11 +921,9 @@
     const hero = $("cx-hero");
     if (hero) hero.classList.toggle("cx-hero-off", !!quick);
     if (!quick) {
-      // Sin búsqueda todavía: el gatito esperando (sin gatito, nada).
-      box.hidden = !window.LiordarkCat;
-      box.innerHTML = window.LiordarkCat
-        ? `<div class="cx-q-idle">${catHtml("idle", "cx-q-cat")}<p><strong>Pega el correo y presiona Enter.</strong><span>El código sale aquí mismo.</span></p></div>`
-        : "";
+      // Sin búsqueda todavía: nada (vista limpia; el buscador ya lo dice).
+      box.hidden = true;
+      box.innerHTML = "";
       return;
     }
     box.hidden = false;

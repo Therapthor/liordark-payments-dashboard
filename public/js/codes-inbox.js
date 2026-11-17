@@ -111,31 +111,6 @@
       </article>`;
   }
 
-  function heroHtml(it) {
-    const p = platformOf(it.platform || it.sourceLabel);
-    const st = itemState(it);
-    const d = itemDate(it);
-    return `
-      <div class="cx-hero-stripe p-${p.cls}"></div>
-      <div class="cx-hero-body">
-        <p class="cx-eyebrow">Último código <span class="cx-pill ${st.cls}">${esc(st.text)}</span></p>
-        <div class="cx-hero-main">
-          <div class="cx-hero-value">${valueHtml(it, true)}</div>
-          <div class="cx-hero-info">
-            <p class="cx-hero-platform"><span class="cx-mark p-${p.cls}">${esc(p.mark)}</span>${esc(it.platform || "—")}</p>
-            <p class="cx-hero-email">${esc(it.email)}</p>
-            <p class="cx-hero-meta">${esc(it.subject || "")}</p>
-            <p class="cx-hero-meta">${esc(ago(d))}${d ? " · llegó a las " + esc(clock(d)) : ""} · ${esc(it.sourceLabel)}</p>
-          </div>
-        </div>
-        <div class="cx-hero-actions">
-          ${it.value && it.kind !== "link" ? `<button type="button" class="cx-btn" data-copy="${esc(it.value)}">Copiar código</button>` : ""}
-          ${it.value && it.kind === "link" ? `<button type="button" class="cx-btn" data-copy="${esc(it.value)}">${it.approval ? "Copiar link de Aprobar" : "Copiar enlace"}</button>` : ""}
-          ${it.hasHtml ? `<button type="button" class="cx-ghost-btn" data-mail="${it.id}">Ver correo</button>` : ""}
-        </div>
-      </div>`;
-  }
-
   function renderInbox() {
     const list = $("cx-inbox-list");
     const vis = visibleItems();
@@ -144,13 +119,9 @@
     const withCode = items.filter(i => i.value);
     $("cx-inbox-count").textContent = withCode.length ? String(withCode.length) : "";
 
-    const hero = $("cx-hero");
-    const top = withCode[0];
-    hero.hidden = !top;
-    if (top) {
-      hero.className = "cx-hero" + (recentlyArrived.has(top.id) ? " arrived" : "");
-      hero.innerHTML = heroHtml(top);
-    }
+    // Vista limpia: el «Último código» grande ya no se muestra (el código
+    // sale en la búsqueda y en Pedidos; todo lo que llegó, en Bandeja).
+    $("cx-hero").hidden = true;
   }
 
   async function loadInbox() {
@@ -173,6 +144,12 @@
     const relevant = sources
       .filter(s => s.accounts > 0 || s.state !== "idle" || s.last24h.found || s.last24h.problems)
       .sort((a, b) => ORDER[a.state] - ORDER[b.state]);
+    // Botón «Fuentes»: cuántas fallan (la lista completa, al tocarlo).
+    const failing = sources.filter(s => s.state === "down" || s.state === "warn").length;
+    const badge = $("cx-src-badge");
+    badge.textContent = failing ? `${failing} con fallas` : "";
+    badge.hidden = !failing;
+    $("cx-src-toggle").classList.toggle("has-problems", !!failing);
     $("cx-health").innerHTML = relevant.map(s => {
       const detail = s.state === "down" || s.state === "warn"
         ? (s.lastError ? s.lastError.message : "")
@@ -286,7 +263,8 @@
         : l.queued ? `${l.queued} en fila` : "Libre";
       return `<span class="cx-lane ${cls}" title="${esc(l.lastError || "")}"><b>${esc(l.label)}</b> ${esc(text)}</span>`;
     }).join("");
-    box.hidden = !lanes.length;
+    // Solo cuando hay algo que ver (consultando, en fila o en pausa).
+    box.hidden = !lanes.some(l => l.busy || l.queued || (l.cooldownUntil && new Date(l.cooldownUntil) > Date.now()));
   }
 
   function renderRequests() {
@@ -397,6 +375,12 @@
     $("cx-inbox-source").addEventListener("change", e => { filters.source = e.target.value; renderInbox(); });
     $("cx-only-codes").addEventListener("change", e => { filters.onlyCodes = e.target.checked; renderInbox(); });
     $("cx-only-problems").addEventListener("change", loadActivity);
+    $("cx-src-toggle").addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      const open = btn.getAttribute("aria-expanded") !== "true";
+      btn.setAttribute("aria-expanded", String(open));
+      $("cx-health").hidden = !open;
+    });
     $("cx-watch-now").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
