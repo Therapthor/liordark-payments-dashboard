@@ -10,7 +10,8 @@
     plantilla: { icon: "📊", lockText: "Gestor de cuentas (Excel)", hint: "↓ Tu plantilla ya está disponible" },
     cupon:     { icon: "🎟️", lockText: "Cupón −30% curso avanzado", hint: "↓ Tu cupón −30% ya está disponible" },
   };
-  const RES_ORDER = ["mayorista", "plantilla", "cupon"];
+  // El Panel Mayorista ya no viene con el curso: no se muestra en los recursos.
+  const RES_ORDER = ["plantilla", "cupon"];
 
   let me = null;
   let current = 1;

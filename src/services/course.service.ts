@@ -53,7 +53,7 @@ export const EPISODES: Episode[] = [
 const DEFAULT_CUES: Record<number, Cue[]> = {
   1: [],
   2: [],
-  3: [{ id: "mayorista", start: 120, end: 180, type: "mayorista" }],
+  3: [], // el Panel Mayorista ya no viene con el curso (es aparte)
   4: [{ id: "plantilla", start: 90, end: 150, type: "plantilla" }],
   5: [{ id: "cupon", start: 150, end: 210, type: "cupon" }],
 };
@@ -183,13 +183,15 @@ export function isPreviewPhone(phone: string | null | undefined): boolean {
 
 export function getCues(): Record<number, Cue[]> {
   const raw = getSetting("cues");
-  if (!raw) return DEFAULT_CUES;
-  try {
-    const parsed = JSON.parse(raw);
-    return sanitizeCues(parsed) ?? DEFAULT_CUES;
-  } catch {
-    return DEFAULT_CUES;
+  let cues: Record<number, Cue[]> = DEFAULT_CUES;
+  if (raw) {
+    try { cues = sanitizeCues(JSON.parse(raw)) ?? DEFAULT_CUES; } catch { cues = DEFAULT_CUES; }
   }
+  // El acceso al Panel Mayorista no viene con el curso: nunca se ofrece,
+  // aunque haya quedado guardado en los tiempos de un episodio.
+  const out: Record<number, Cue[]> = {};
+  for (const [ep, list] of Object.entries(cues)) out[Number(ep)] = (list || []).filter(c => c.type !== "mayorista");
+  return out;
 }
 
 /** Valida el JSON de cues que manda el panel. null = inválido. */

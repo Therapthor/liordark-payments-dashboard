@@ -232,11 +232,12 @@ router.post("/coupon", requireOwner, (req, res) => {
 });
 
 // POST /api/course/wholesale — { phone, panelName } — 1 vez por compra.
-router.post("/wholesale", requireOwner, async (req, res) => {
+router.post("/wholesale", requireOwner, (req, res) => {
   const customerId = (req as RequestWithCustomer).customerId;
   const purchase = findPaidPurchase(customerId);
   if (!purchase) return res.status(403).json({ message: "Todavía no tienes este curso." });
 
+  // Quien ya lo había creado (cuando venía con el curso) lo sigue viendo.
   const existingClaim = findClaimForPurchase(purchase.id);
   if (existingClaim) {
     return res.status(409).json({
@@ -244,90 +245,8 @@ router.post("/wholesale", requireOwner, async (req, res) => {
       maskedPhone: maskPhone(existingClaim.phone),
     });
   }
-  if (!hasUnlockedType(customerId, "mayorista")) {
-    return res.status(403).json({ message: "Este acceso se desbloquea en el episodio 3." });
-  }
-
-  let digits = String(req.body?.phone ?? "").replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("51")) digits = digits.slice(2);
-  if (!/^9\d{8}$/.test(digits)) {
-    return res.status(400).json({ message: "El celular debe tener 9 dígitos y empezar con 9." });
-  }
-  const panelName = String(req.body?.panelName ?? "").trim().replace(/\s+/g, " ");
-  if (panelName.length < 3 || panelName.length > 30) {
-    return res.status(400).json({ message: "El nombre de tu panel debe tener entre 3 y 30 caracteres." });
-  }
-  const phone = "51" + digits;
-
-  const password = generatePassword();
-  const passwordHash = await hashPassword(password);
-
-  type ClaimResult = { createdNew: boolean; disabled: boolean; wholesalerId: number; balanceCents: number };
-  const run = db.transaction((): ClaimResult => {
-    // Re-chequeo dentro de la transacción (doble clic / dos pestañas).
-    if (findClaimForPurchase(purchase.id)) throw Object.assign(new Error("claimed"), { code: "CLAIMED" });
-
-    const existing = findWholesalerByPhone(phone);
-    let wholesalerId: number;
-    let createdNew: boolean;
-    let disabled = false;
-    if (existing) {
-      // Ya era mayorista → NUNCA se crea otro panel: solo se le suman los
-      // S/ 10 a su saldo. Si está deshabilitado (1 mes sin actividad) no se
-      // reactiva acá: el saldo queda guardado y lo reactiva soporte.
-      wholesalerId = existing.id;
-      createdNew = false;
-      disabled = existing.status !== "active";
-    } else {
-      wholesalerId = createWholesaler(phone, passwordHash, password, panelName).id;
-      createdNew = true;
-    }
-    const credit = applyWholesalerCreditChange(
-      wholesalerId, COURSE_GIFT_CENTS, "gift_course", "curso:" + purchase.id, "system"
-    );
-    if (!credit.ok) throw new Error(credit.error);
-    if (!disabled) touchWholesalerActivity(wholesalerId);
-    insertClaim({
-      purchaseId: purchase.id, customerId, phone, panelName, wholesalerId, createdNew, giftCents: COURSE_GIFT_CENTS,
-    });
-    return { createdNew, disabled, wholesalerId, balanceCents: credit.newBalanceCents };
-  });
-
-  let result: ClaimResult;
-  try {
-    result = run();
-  } catch (err: any) {
-    if (err?.code === "CLAIMED") {
-      const c = findClaimForPurchase(purchase.id);
-      return res.status(409).json({
-        message: "Ya creaste tu acceso mayorista con el celular " + maskPhone(c?.phone ?? phone) + ".",
-        maskedPhone: maskPhone(c?.phone ?? phone),
-      });
-    }
-    console.error("❌ curso → acceso mayorista:", err?.message);
-    return res.status(500).json({
-      message: "No pudimos crear tu acceso. Escríbenos al WhatsApp " + SUPPORT_PHONE + " y lo resolvemos al toque.",
-    });
-  }
-
-  try {
-    emitDashboardEvent({
-      type: "order_approved",
-      message: "Curso → acceso mayorista " + (result.createdNew ? "creado" : result.disabled ? "(ya existía, deshabilitado, +S/10 guardados)" : "(ya existía, +S/10)") + " · " + panelName + " · " + digits,
-      createdAt: new Date().toISOString(),
-    });
-  } catch { /* no crítico */ }
-
-  res.json({
-    ok: true,
-    createdNew: result.createdNew,
-    disabled: result.disabled,
-    user: digits,
-    password: result.createdNew ? password : null,
-    giftCents: COURSE_GIFT_CENTS,
-    balanceCents: result.balanceCents,
-    panelUrl: "https://mayorista.liordark.com",
-  });
+  // El Panel Mayorista ya no viene con el curso (se pide aparte por WhatsApp).
+  return res.status(410).json({ message: "El acceso al Panel Mayorista no viene con el curso. Escríbenos por WhatsApp para pedirlo." });
 });
 
 export default router;
