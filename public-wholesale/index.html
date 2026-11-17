@@ -209,7 +209,7 @@
           <input type="search" id="codigos-search" placeholder="Buscar por correo, celular o plataforma" autocomplete="off">
         </label>
         <div id="codigos-list" class="codigos-list"></div>
-        <p id="codigos-empty" class="empty-state" hidden>Ninguna de tus cuentas activas tiene códigos todavía.</p>
+        <div id="codigos-empty" class="empty-state codigos-empty" hidden><span class="codes-cat" data-cat="idle"></span><p>Ninguna de tus cuentas activas tiene códigos todavía.</p></div>
       </section>
 
       <!-- ─── COMPRAR ─── -->
@@ -462,7 +462,7 @@
       </div>
 
       <div id="codes-s-loading" class="codes-state">
-        <span class="codes-cat" data-cat="idle"></span>
+        <span class="codes-cat" data-cat="searching"></span>
         <p class="muted small">Abriendo la consulta…</p>
       </div>
 

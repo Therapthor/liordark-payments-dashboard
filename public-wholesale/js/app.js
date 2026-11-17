@@ -859,12 +859,16 @@
   }
 
   function codigoRowHtml(c) {
-    const left = c.codes.open ? "Consulta abierta" : `${c.codes.remaining} de ${c.codes.limit} hoy`;
+    const left = c.codes.open ? "Buscando tu código…" : `${c.codes.remaining} de ${c.codes.limit} hoy`;
     const sub = [c.clientPhone, c.profileName].filter(Boolean).map(escapeHtml).join(" · ");
     const none = !c.codes.open && c.codes.remaining <= 0;
+    // Consulta abierta: el gatito con la lupa, buscando.
+    const lead = c.codes.open && window.LiordarkCat
+      ? `<span class="codigo-cat" title="Buscando el código">${window.LiordarkCat.html("searching")}</span>`
+      : platformChip(c.platform);
     return `
-      <article class="codigo-row" data-profile-id="${c.id}">
-        ${platformChip(c.platform)}
+      <article class="codigo-row${c.codes.open ? " is-open" : ""}" data-profile-id="${c.id}">
+        ${lead}
         <div class="codigo-id">
           <div class="codigo-email">${escapeHtml(c.email || platformName(c.platform))}</div>
           <div class="codigo-sub">${escapeHtml(platformName(c.platform))}${sub ? " · " + sub : ""}</div>
@@ -946,7 +950,7 @@
   // CÓDIGOS — el mayorista ve el código que llega al correo de su cuenta.
   // Se abre una consulta (el servidor busca solo, por turnos con el
   // proveedor) y acá se lee su estado cada 5 s, igual que la página de
-  // códigos del cliente. Límite diario: cuenta completa 10, perfil 3; una
+  // códigos del cliente. Límite diario: 10 por venta (perfil o cuenta completa); una
   // consulta abierta se reutiliza sin gastar otra.
   // ─────────────────────────────────────────────────────────────
 

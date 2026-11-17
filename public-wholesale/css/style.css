@@ -1127,3 +1127,11 @@ select.input {
   .codigo-email { white-space: normal; word-break: break-all; }
   .codigo-act { width: 100%; flex-direction: row-reverse; justify-content: space-between; align-items: center; }
 }
+
+/* Gatito en «Códigos» */
+.codigo-cat { --ld-cat-size: 46px; width: 46px; height: 46px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.codigo-row.is-open { box-shadow: 0 0 0 2px var(--mango), var(--shadow-card); }
+.codigo-row.is-open .codigo-left { color: var(--chip-ink); }
+.codigos-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.codigos-empty[hidden] { display: none; }
+.codigos-empty p { margin: 0; }

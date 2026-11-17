@@ -410,10 +410,10 @@ function renewInfo(r: RenewQuoteResult) {
 // servidor revisa al proveedor por turnos, igual que para el cliente en
 // liordark.com/codigo) y el panel la lee. Mismos filtros que al cliente
 // (nunca códigos de cambio de datos). Límite por día (Lima) y por venta:
-// cuenta completa 10, perfil 3. Una consulta abierta se reutiliza sin
+// 10 por venta (perfil o cuenta completa). Una consulta abierta se reutiliza sin
 // gastar otra.
 const CODES_PER_DAY_FULL = 10;
-const CODES_PER_DAY_PROFILE = 3;
+const CODES_PER_DAY_PROFILE = 10;
 
 function codesInfoFor(profileId: number, account: { id: number; hasProfiles: boolean; expiresAt: string | null }) {
   const cfg = getAccountCodesConfig(account.id);
