@@ -557,6 +557,7 @@
         <li id="cx-q-sug-${i}" class="cx-q-sug${i === sugs.active ? " active" : ""}" role="option" aria-selected="${i === sugs.active}" data-q-sug="${i}">
           <span class="cx-mark p-${p.cls}" aria-hidden="true">${escapeHtml(p.mark)}</span>
           <span class="cx-q-sug-text"><strong>${escapeHtml(a.email)}</strong><span>${escapeHtml(sub)}</span></span>
+          ${window.LiordarkCodeViewer ? `<button type="button" class="cx-q-sug-link" data-q-sug-link="${i}" title="Generar link para el cliente" tabindex="-1">Link</button>` : ""}
         </li>`;
     }).join("");
     if (sugs.active >= 0) {
@@ -577,6 +578,7 @@
 
   function closeSugs() {
     sugsWanted = false;
+    linkPick = false;
     if (!sugs.items.length && sugs.active < 0) return;
     sugs = { items: [], active: -1 };
     renderSugs();
@@ -602,9 +604,48 @@
   function chooseSug(i) {
     const a = sugs.items[i];
     if (!a) return;
+    if (linkPick) { shareAccount(a); return; }
     setQuickText(a.email);
     closeSugs();
     runQuick({ account: a, email: a.email });
+  }
+
+  // ── Generar link rápido (botón «Link» del buscador o de cada sugerencia) ──
+  // Abre la ventana de «Enviar link» de esa cuenta sin buscar el código.
+  let linkPick = false; // eligiendo en la lista la cuenta para el link
+
+  function shareAccount(a) {
+    linkPick = false;
+    setQuickText(a.email);
+    closeSugs();
+    pushRecent(a.email);
+    // El aviso «¿De qué cuenta…?» ya no hace falta.
+    if (quick && quick.state === "hint") { quickSeq++; quick = null; renderQuick(); }
+    if (window.LiordarkCodeViewer) {
+      window.LiordarkCodeViewer.share({ id: Number(a.id), platform: a.platform, email: a.email, totp: !!a.totp });
+    }
+  }
+
+  async function quickLink() {
+    const input = $("cx-quick-input");
+    const text = input.value.trim();
+    if (!text) { input.focus(); return; }
+    await ensureAccounts();
+    const exact = accountsByEmail(text);
+    if (exact.length === 1) { shareAccount(exact[0]); return; }
+    const options = exact.length ? exact : suggestionsFor(text);
+    if (options.length === 1) { shareAccount(options[0]); return; }
+    quickSeq++;
+    stopQuickTimer();
+    quick = { state: "hint", text, many: options.length > 1, link: true, target: null };
+    renderQuick();
+    if (options.length) {
+      linkPick = true;
+      sugs = { items: options.slice(0, SUGS_MAX), active: -1 };
+      sugsWanted = true;
+      renderSugs();
+      input.focus();
+    }
   }
 
   function setQuickText(text) {
@@ -629,6 +670,7 @@
   async function submitQuick() {
     const input = $("cx-quick-input");
     const text = input.value.trim();
+    linkPick = false;
     closeSugs();
     if (!text) { input.focus(); return; }
     await ensureAccounts();
@@ -842,6 +884,11 @@
   function quickCardHtml() {
     const q = quick;
     if (q.state === "hint") {
+      if (q.link) {
+        return `<article class="cx-q-card is-hint">${q.many
+          ? statusHtml("warn", "¿De qué cuenta generas el link?", "Elige una de la lista (o toca «Link» en la cuenta).", "idle")
+          : statusHtml("warn", `Ninguna cuenta guardada tiene «${escapeHtml(q.text)}»`, "El link solo se genera para cuentas guardadas en Accesos.")}</article>`;
+      }
       return `<article class="cx-q-card is-hint">${q.many
         ? statusHtml("warn", `Hay varias cuentas con «${escapeHtml(q.text)}»`, "Elige una de la lista con ↑/↓ y Enter.", "idle")
         : statusHtml("warn", `Ninguna cuenta guardada tiene «${escapeHtml(q.text)}»`, "Escribe el correo completo para buscarlo en todas las fuentes.")}</article>`;
@@ -1014,6 +1061,26 @@
     focusQuick();
   }
 
+  // ── Compactar: solo el buscador (se recuerda en este navegador) ──
+  const COMPACT_KEY = "liordark.codes.compact";
+  function setCompact(on) {
+    const view = $("view-codes");
+    if (view) view.classList.toggle("cx-is-compact", on);
+    const btn = $("cx-compact");
+    if (btn) {
+      btn.setAttribute("aria-pressed", String(on));
+      btn.title = on ? "Ver todo (pestañas, pedidos y actividad)" : "Mostrar solo el buscador";
+      btn.querySelector("span").textContent = on ? "Ver todo" : "Compactar";
+    }
+    try { localStorage.setItem(COMPACT_KEY, on ? "1" : "0"); } catch { /* bloqueado */ }
+  }
+  function initCompact() {
+    let on = false;
+    try { on = localStorage.getItem(COMPACT_KEY) === "1"; } catch { /* bloqueado */ }
+    setCompact(on);
+    $("cx-compact").addEventListener("click", () => setCompact(!$("view-codes").classList.contains("cx-is-compact")));
+  }
+
   function initQuick() {
     const form = $("cx-quick-form");
     const input = $("cx-quick-input");
@@ -1021,12 +1088,16 @@
     if (!form || !input) return;
 
     input.addEventListener("input", () => { sugsWanted = true; syncClear(); updateSugs(); });
+    $("cx-quick-link").addEventListener("click", quickLink);
+    if (window.matchMedia && window.matchMedia("(max-width: 899px)").matches) input.placeholder = "Pega el correo";
+    initCompact();
     input.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== input) closeSugs(); }, 150));
     input.addEventListener("keydown", (e) => {
       if (e.isComposing) return;
       if (e.key === "ArrowDown") { e.preventDefault(); moveSug(1); }
       else if (e.key === "ArrowUp") { e.preventDefault(); moveSug(-1); }
       else if (e.key === "Escape") { if (sugs.items.length) { e.preventDefault(); closeSugs(); } }
+      else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); if (sugs.active >= 0 && sugs.items[sugs.active]) shareAccount(sugs.items[sugs.active]); else quickLink(); }
       else if (e.key === "Enter" && sugs.active >= 0 && sugs.items[sugs.active]) { e.preventDefault(); chooseSug(sugs.active); }
     });
     form.addEventListener("submit", (e) => { e.preventDefault(); submitQuick(); });
@@ -1034,14 +1105,17 @@
     // Clic en una sugerencia sin que el campo pierda el foco.
     sugsBox.addEventListener("mousedown", (e) => e.preventDefault());
     sugsBox.addEventListener("click", (e) => {
+      const lk = e.target.closest("[data-q-sug-link]");
+      if (lk) { const a = sugs.items[Number(lk.dataset.qSugLink)]; if (a) shareAccount(a); return; }
       const li = e.target.closest("[data-q-sug]");
       if (li) chooseSug(Number(li.dataset.qSug));
     });
 
     $("cx-quick-clear").addEventListener("click", () => {
+      linkPick = false;
       setQuickText("");
       closeSugs();
-      // Limpiar la búsqueda también quita el resultado (y vuelve «Último código»).
+      // Limpiar la búsqueda también quita el resultado.
       quickSeq++;
       stopQuickTimer();
       quick = null;

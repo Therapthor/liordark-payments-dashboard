@@ -334,7 +334,7 @@
   }
 
   // ── Pestañas ──
-  let tab = "requests";
+  let tab = "accounts"; // «Enviar link» es la primera pestaña
   function showTab(name) {
     tab = name;
     document.querySelectorAll(".cx-tab").forEach(b => b.classList.toggle("active", b.dataset.cxTab === name));
