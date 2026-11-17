@@ -25,6 +25,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_store_reviews_status ON store_reviews(status, updated_at);
 `);
 
+// Interruptores del panel: si la tienda muestra las reseñas y las
+// preguntas frecuentes. Apagados por defecto (el dueño los prende).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS store_sections (
+    key   TEXT PRIMARY KEY,   -- 'reviews' | 'faq'
+    value TEXT NOT NULL
+  );
+`);
+
+export type StoreSections = { reviewsEnabled: boolean; faqEnabled: boolean };
+
+export function getStoreSections(): StoreSections {
+  const rows = db.prepare(`SELECT key, value FROM store_sections`).all() as { key: string; value: string }[];
+  const on = (k: string) => rows.some(r => r.key === k && r.value === "1");
+  return { reviewsEnabled: on("reviews"), faqEnabled: on("faq") };
+}
+
+export function setStoreSection(key: "reviews" | "faq", enabled: boolean): void {
+  db.prepare(`
+    INSERT INTO store_sections (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(key, enabled ? "1" : "0");
+}
+
 export type ReviewStatus = "pendiente" | "publicada" | "oculta";
 export type ReviewSource = "cliente" | "panel";
 

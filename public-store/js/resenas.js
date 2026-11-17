@@ -52,6 +52,7 @@
   const dots = $("reviews-dots");
   let reviews = [];
   let mine = null; // { canReview, review }
+  let sections = { reviewsEnabled: false, faqEnabled: false }; // interruptores del panel
 
   function starsHtml(n) {
     let h = "";
@@ -71,6 +72,7 @@
   }
 
   function renderReviews(summary) {
+    if (!sections.reviewsEnabled) { section.hidden = true; return; }
     if (!reviews.length) {
       // Sin reseñas publicadas: solo se muestra para quien puede dejar la primera.
       section.hidden = !(mine && mine.canReview && !mine.review);
@@ -92,6 +94,8 @@
   async function loadReviews() {
     try {
       const data = await getJson("/api/store/reviews");
+      sections = data.sections || sections;
+      $("faq-section").hidden = !sections.faqEnabled;
       reviews = Array.isArray(data.reviews) ? data.reviews : [];
       renderReviews(data.summary || { count: reviews.length, avg: 0 });
     } catch { section.hidden = true; }

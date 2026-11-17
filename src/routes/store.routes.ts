@@ -40,7 +40,7 @@ import { CUSTOMER_SESSION_COOKIE } from "../services/customer-auth.service";
 import { saleLinkStatus, saleLinkForCustomer } from "./sale-links.routes";
 import { findSaleLink, saleLinkState, isSaleLinkUsable, addSaleLinkOrder } from "../db/sale-links.repository";
 import { saveStoreWebOrder, storeOrderPaymentStatus, listRecentConfirmedPurchases, type RecentPurchase } from "../db/store-orders.repository";
-import { listPublishedReviews, publishedReviewsSummary, getCustomerReview, saveCustomerReview, cleanReviewInput } from "../db/reviews.repository";
+import { listPublishedReviews, publishedReviewsSummary, getCustomerReview, saveCustomerReview, cleanReviewInput, getStoreSections } from "../db/reviews.repository";
 
 
 // Mismo criterio de disponibilidad que ya usa el bot de WhatsApp
@@ -561,14 +561,17 @@ let reviewsCache: { at: number; data: unknown } | null = null;
 export function invalidateStoreReviewsCache(): void { reviewsCache = null; }
 router.get("/reviews", (_req, res) => {
   if (!reviewsCache || Date.now() - reviewsCache.at > REVIEWS_TTL_MS) {
-    let data: unknown = { reviews: [], summary: { count: 0, avg: 0 } };
+    let data: unknown = { reviews: [], summary: { count: 0, avg: 0 }, sections: { reviewsEnabled: false, faqEnabled: false } };
     try {
+      // Apagadas en el panel: ni reseñas ni contador (solo los interruptores).
+      const sections = getStoreSections();
       data = {
-        reviews: listPublishedReviews(20).map(r => ({
+        reviews: sections.reviewsEnabled ? listPublishedReviews(20).map(r => ({
           id: r.id, author: r.author, stars: r.stars, body: r.body,
           verified: r.source === "cliente", date: r.createdAt.slice(0, 10),
-        })),
-        summary: publishedReviewsSummary(),
+        })) : [],
+        summary: sections.reviewsEnabled ? publishedReviewsSummary() : { count: 0, avg: 0 },
+        sections,
       };
     } catch (err) { console.error("reviews:", err); }
     reviewsCache = { at: Date.now(), data };
@@ -590,7 +593,7 @@ router.get("/my-review", (req, res) => {
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
   const r = getCustomerReview(customer.id);
   res.json({
-    canReview: hasPurchased(customer.phone),
+    canReview: getStoreSections().reviewsEnabled && hasPurchased(customer.phone),
     review: r ? { author: r.author, stars: r.stars, body: r.body, status: r.status } : null,
   });
 });
@@ -598,6 +601,7 @@ const reviewLimit = loginRateLimit("store-review", 5, 60 * 60 * 1000);
 router.post("/my-review", reviewLimit, (req, res) => {
   const customer = findCustomerById((req as unknown as RequestWithCustomer).customerId);
   if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+  if (!getStoreSections().reviewsEnabled) return res.status(403).json({ message: "Las reseñas no están disponibles por ahora." });
   if (!hasPurchased(customer.phone)) return res.status(403).json({ message: "Podrás dejar tu reseña después de tu primera compra." });
   const input = cleanReviewInput(req.body);
   if ("error" in input) return res.status(400).json({ message: input.error });

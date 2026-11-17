@@ -5,6 +5,18 @@
 }
 .rvw-badge[hidden] { display: none; }
 
+.rvw-switches {
+  display: flex; flex-direction: column; margin: 6px 0 14px; padding: 4px 16px;
+  background: #fff; border-radius: 20px; box-shadow: 0 10px 24px -20px rgba(43,27,14,.6);
+}
+.rvw-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; }
+.rvw-switch-row + .rvw-switch-row { border-top: 1px solid #F3E8D5; }
+.rvw-switch-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rvw-switch-txt b { font-size: 14.5px; }
+.rvw-switch-txt small { font-size: 12.5px; color: #8A6E4B; }
+.rvw-switches .mp-switch { flex-shrink: 0; }
+.rvw-switches .mp-switch:disabled { opacity: .6; }
+
 .rvw-form {
   display: flex; flex-direction: column; gap: 10px; margin: 6px 0 18px; padding: 16px;
   background: #fff; border-radius: 20px; box-shadow: 0 10px 24px -20px rgba(43,27,14,.6);

@@ -58,9 +58,38 @@
     b.hidden = !n;
   }
 
+  // Interruptores: qué muestra la tienda (apagados por defecto).
+  function paintSwitches(sec) {
+    [["rvw-sw-reviews", sec && sec.reviewsEnabled], ["rvw-sw-faq", sec && sec.faqEnabled]].forEach(([id, on]) => {
+      const el = $(id);
+      if (!el) return;
+      el.setAttribute("aria-checked", String(!!on));
+      el.disabled = false;
+    });
+  }
+  [["rvw-sw-reviews", "reviewsEnabled"], ["rvw-sw-faq", "faqEnabled"]].forEach(([id, key]) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("click", async () => {
+      const next = el.getAttribute("aria-checked") !== "true";
+      el.setAttribute("aria-checked", String(next));
+      el.disabled = true;
+      try {
+        const r = await api("/sections", { method: "PUT", body: JSON.stringify({ [key]: next }) });
+        if (data) data.sections = r.sections;
+        paintSwitches(r.sections);
+      } catch (err) {
+        el.setAttribute("aria-checked", String(!next));
+        el.disabled = false;
+        alert(err.message);
+      }
+    });
+  });
+
   let data = null;
   function render() {
     setBadge(data.pending);
+    paintSwitches(data.sections);
     const list = $("rvw-list");
     if (!data.reviews.length) {
       list.innerHTML = `<p class="panel-hint">Todavía no hay reseñas. Cuando un cliente deje la suya desde «Mis cuentas», aparece aquí para que la publiques.</p>`;
