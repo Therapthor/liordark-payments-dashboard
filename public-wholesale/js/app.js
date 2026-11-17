@@ -439,6 +439,7 @@
   const SIDEBAR_PAGES = [
     { id: "inicio",        label: "Inicio",        icon: "home" },
     { id: "clientes",      label: "Clientes",      icon: "users" },
+    { id: "codigos",       label: "Códigos",       icon: "key" },
     { id: "comprar",       label: "Comprar",       icon: "cart" },
     { id: "cuentas",       label: "Cuentas",       icon: "box", badge: true },
     { id: "creditos",      label: "Créditos",      icon: "card" },
@@ -451,6 +452,7 @@
   const TAB_PAGES = [
     { id: "inicio",   label: "Inicio",   icon: "home" },
     { id: "clientes", label: "Clientes", icon: "users" },
+    { id: "codigos",  label: "Códigos",  icon: "key" },
     { id: "comprar",  label: "Comprar",  icon: "cart" },
     { id: "cuentas",  label: "Cuentas",  icon: "box", badge: true },
     { id: "mas",      label: "Más",      icon: "more" },
@@ -537,6 +539,7 @@
 
     if (view === "inicio")             loadInicio();
     else if (view === "clientes")      loadClients();
+    else if (view === "codigos")       loadCodigos();
     else if (view === "comprar")       loadComprar();
     else if (view === "cuentas")       loadCuentas();
     else if (view === "creditos")      loadCreditos();
@@ -835,6 +838,76 @@
     } catch (err) {
       alert(err.message);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // CÓDIGOS — todas las cuentas con código en una sola lista (las mismas
+  // de «Clientes», solo las que tienen código y están vigentes). «Ver
+  // código» abre la misma consulta que el botón 🔑 de cada cliente.
+  // ─────────────────────────────────────────────────────────────
+  let codigosQuery = "";
+
+  async function loadCodigos() {
+    const listEl = document.getElementById("codigos-list");
+    if (!cachedClients.length) listEl.innerHTML = `<p class="muted small">Cargando…</p>`;
+    try {
+      await fetchClients();
+      renderCodigos();
+    } catch (err) {
+      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function codigoRowHtml(c) {
+    const left = c.codes.open ? "Consulta abierta" : `${c.codes.remaining} de ${c.codes.limit} hoy`;
+    const sub = [c.clientPhone, c.profileName].filter(Boolean).map(escapeHtml).join(" · ");
+    const none = !c.codes.open && c.codes.remaining <= 0;
+    return `
+      <article class="codigo-row" data-profile-id="${c.id}">
+        ${platformChip(c.platform)}
+        <div class="codigo-id">
+          <div class="codigo-email">${escapeHtml(c.email || platformName(c.platform))}</div>
+          <div class="codigo-sub">${escapeHtml(platformName(c.platform))}${sub ? " · " + sub : ""}</div>
+        </div>
+        <div class="codigo-act">
+          <button class="btn-primary btn-sm" data-act="codes" data-profile-id="${c.id}" type="button">${icon("key")}${c.codes.open ? "Ver" : "Ver código"}</button>
+          <span class="codigo-left${none ? " is-out" : ""}">${escapeHtml(left)}</span>
+        </div>
+      </article>`;
+  }
+
+  function renderCodigos() {
+    const listEl = document.getElementById("codigos-list");
+    const emptyEl = document.getElementById("codigos-empty");
+    const withCodes = cachedClients.filter(c => !c.isOverride && c.codes && c.codes.enabled);
+    const countEl = document.getElementById("codigos-count");
+    countEl.textContent = String(withCodes.length);
+    countEl.hidden = withCodes.length === 0;
+    if (!withCodes.length) { listEl.innerHTML = ""; emptyEl.hidden = false; return; }
+    emptyEl.hidden = true;
+    const visible = withCodes.filter(c => {
+      if (!codigosQuery) return true;
+      const hay = [c.clientPhone, c.email, c.platform, platformName(c.platform), c.profileName].join(" ").toLowerCase();
+      return codigosQuery.split(/\s+/).every(w => hay.includes(w));
+    });
+    listEl.innerHTML = visible.length
+      ? visible.map(codigoRowHtml).join("")
+      : `<p class="empty-state">Ninguna cuenta coincide con la búsqueda.</p>`;
+  }
+
+  function initCodigosPage() {
+    document.getElementById("codigos-list").addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-act=codes]");
+      if (!btn) return;
+      const client = cachedClients.find(c => c.id === Number(btn.dataset.profileId));
+      if (!client) return;
+      await openCodes(client, btn);
+      renderCodigos();
+    });
+    document.getElementById("codigos-search").addEventListener("input", (e) => {
+      codigosQuery = e.target.value.trim().toLowerCase();
+      renderCodigos();
+    });
   }
 
   function initClientsPage() {
@@ -2205,6 +2278,7 @@
     initLoginForm();
     initInicioPage();
     initClientsPage();
+    initCodigosPage();
     initCodesModal();
     initCuentasPage();
     initCreditosPage();

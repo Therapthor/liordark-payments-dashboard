@@ -359,7 +359,7 @@ select.input {
   position: fixed; z-index: 40;
   left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   max-width: 560px; margin: 0 auto;
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px;
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px;
   padding: 8px; border-radius: 24px;
   background: var(--nav-bg);
   box-shadow: 0 18px 36px -16px rgba(43,27,14,.65);
@@ -1097,4 +1097,33 @@ select.input {
 @media (min-width: 1280px) {
   .app-main { padding-left: 48px; padding-right: 48px; }
   .app-header { padding-left: 48px; padding-right: 48px; }
+}
+
+
+/* ─── Códigos (página propia; «Códigos» va al medio de la barra) ─── */
+.codigos-sub { margin: 0 0 12px; font-size: 13.5px; color: var(--muted); }
+#page-codigos .search-field { margin-bottom: 12px; }
+.codigos-list { display: flex; flex-direction: column; gap: 10px; }
+.codigo-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--card); border-radius: 22px; padding: 12px 12px 12px 14px;
+  box-shadow: var(--shadow-card);
+}
+.codigo-id { flex: 1; min-width: 0; }
+.codigo-email { font-family: var(--font-display); font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.codigo-sub { font-size: 12.5px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.codigo-act { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.codigo-act .btn-sm .ic { width: 16px; height: 16px; }
+.codigo-left { font-size: 11.5px; font-weight: 800; color: var(--muted); }
+.codigo-left.is-out { color: var(--coral-deep); }
+@media (max-width: 400px) {
+  .tab-btn { font-size: 10.5px; }
+  .tab-btn .ic { width: 20px; height: 20px; }
+}
+@media (max-width: 640px) {
+  /* En celular el correo se ve completo; el botón va abajo */
+  .codigo-row { flex-wrap: wrap; row-gap: 10px; }
+  .codigo-id { flex: 1 1 calc(100% - 70px); }
+  .codigo-email { white-space: normal; word-break: break-all; }
+  .codigo-act { width: 100%; flex-direction: row-reverse; justify-content: space-between; align-items: center; }
 }
