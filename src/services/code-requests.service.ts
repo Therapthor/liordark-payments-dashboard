@@ -6,7 +6,7 @@ import {
   lookupCodeAction, withLookupContext, describeLookupError, parseProviderDate,
   isLoginCodeOnlySource, isLoginCode, loginLinkOf, isAdminOnlyResult, isAccountChangeResult, deliversEverything,
   sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID, codeSourceLabel, loginApprovalOf,
-  type CodeLookupResult, type LoginApproval, deliversHousehold, householdLinkOf,
+  type CodeLookupResult, type LoginApproval, deliversHousehold, householdLinkOf, sameCodeValue,
 } from "./codes-lookup.service";
 import { laneIdOf } from "./codes-lanes";
 import { alertClientWaiting, logCodeEvent } from "./codes-brain.service";
@@ -204,7 +204,7 @@ function evaluate(req: CodeRequestRow, result: CodeLookupResult, problem: { mess
     return { state: "old", note: `El último ${what} de inicio de sesión ya venció. Pide uno nuevo en la app y espera aquí.`, message: `El último ${what} es anterior al pedido o ya venció.` };
   }
   const value = result.kind === "link" ? (loginLinkOf(result) ?? result.value) : result.value;
-  if (req.baselineValue && value === req.baselineValue && (!req.baselineReceivedAt || !result.providerReceivedAt || req.baselineReceivedAt === result.providerReceivedAt)) {
+  if (req.baselineValue && sameCodeValue(value, req.baselineValue) && (!req.baselineReceivedAt || !result.providerReceivedAt || req.baselineReceivedAt === result.providerReceivedAt)) {
     return { state: "not_found", note: "", message: "Sigue el mismo de antes; esperando uno nuevo." };
   }
   if (!deliversEverything(req.sourceId) && isAccountChangeResult(result)) {

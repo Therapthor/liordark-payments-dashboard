@@ -1279,9 +1279,9 @@ function juanpaSubject(subject: string, body: string): string {
  *  no es una bandeja (link vencido, error…). Exportado para pruebas.
  *  Lee los dos formatos: el viejo (`let mail = [...]`, con el correo
  *  completo) y el nuevo de nov-2026 (tarjetas con el código ya listo). */
-export function parseJuanpaInbox(page: string): JuanpaMail[] | null {
+export function parseJuanpaInbox(page: string, baseUrl?: string): JuanpaMail[] | null {
   const at = String(page || "").search(/let\s+mail\s*=\s*\[/);
-  if (at < 0) return parseJuanpaCards(String(page || ""));
+  if (at < 0) return parseJuanpaCards(String(page || ""), baseUrl);
   const raw = jsonArrayAt(page, page.indexOf("[", at));
   if (!raw) return null;
   let list: any[];
@@ -1335,7 +1335,7 @@ const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").re
 /** Tarjetas del formato nuevo → «correos» (para que el resto del flujo —
  *  código vs. cambio de datos, bandeja del panel— siga igual), o null si la
  *  página no es una bandeja. Exportado para pruebas. */
-export function parseJuanpaCards(page: string): JuanpaMail[] | null {
+export function parseJuanpaCards(page: string, baseUrl?: string): JuanpaMail[] | null {
   if (!/C(?:ó|o|&oacute;)digos de tu cuenta/i.test(page)) return null;
   const cards = [...page.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1] ?? "");
   const now = Date.now();
@@ -1348,8 +1348,12 @@ export function parseJuanpaCards(page: string): JuanpaMail[] | null {
       li.match(/<[a-z]+[^>]*\bid="codigo-[^"]*"[^>]*>([\s\S]*?)<\/[a-z]+>/i)?.[1]
       ?? li.match(/<span[^>]*font-mono[^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? ""
     ).replace(/\s+/g, "");
-    const links = [...li.matchAll(/<a\b[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
-      .map(m => ({ href: decodeHtmlEntities(m[1] ?? ""), label: emailHtmlToText(m[2] ?? "").trim() }));
+    // Desde nov-2026 los enlaces vienen relativos y firmados
+    // (/codigos/enlace/<id>?expires=…&signature=…): se completan con el
+    // dominio de la bandeja para que el cliente reciba un link que abra.
+    const links = [...li.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)]
+      .map(m => ({ href: juanpaAbsUrl(decodeHtmlEntities(m[1] ?? "").trim(), baseUrl), label: emailHtmlToText(m[2] ?? "").trim() }))
+      .filter((l): l is { href: string; label: string } => !!l.href);
     const line = emailHtmlToText(li.match(/<p[^>]*>([\s\S]*?)<\/p>/i)?.[1] ?? "").trim();
     const subject = (line.replace(/\s*·\s*\d{1,2}\/\d{1,2}\/\d{4}.*$/, "").trim()) || label;
     return { label, wall, ago, code, links, subject, rawTime: timeTag?.[1] ?? "" };
@@ -1377,13 +1381,24 @@ export function parseJuanpaCards(page: string): JuanpaMail[] | null {
       (c.code ? `<p style="letter-spacing: 4px;">${escHtml(c.code)}</p>` : "") +
       c.links.map(l => `<p><a href="${escHtml(l.href)}">${linkLabel}</a></p>`).join("") +
       `</body></html>`;
-    const ref = (receivedAt ?? "sin-fecha") + "#" + simpleHash(c.label + "|" + c.subject + "|" + c.code + "|" + c.rawTime + "|" + c.links.map(l => l.href).join(",")) + (receivedAt ? "" : "#" + i);
+    // Sin la firma del link (cambia en cada consulta): el mismo correo
+    // conserva su identidad y no parece nuevo cada vez que se mira.
+    const ref = (receivedAt ?? "sin-fecha") + "#" + simpleHash(c.label + "|" + c.subject + "|" + c.code + "|" + c.rawTime + "|" + c.links.map(l => codeValueKey(l.href)).join(",")) + (receivedAt ? "" : "#" + i);
     return { item: { ref, subject: c.subject, ...(receivedAt ? { receivedAt } : {}) }, body };
   });
   return mails
     .map((m, i) => ({ m, i, t: m.item.receivedAt ? Date.parse(m.item.receivedAt) : null }))
     .sort((a, b) => (a.t !== null && b.t !== null ? b.t - a.t : a.i - b.i))
     .map(x => x.m);
+}
+
+/** href de una tarjeta → URL https absoluta (relativa: con el dominio de la
+ *  bandeja), o null si no es un link web. */
+function juanpaAbsUrl(href: string, baseUrl?: string): string | null {
+  if (!href || href.startsWith("#")) return null;
+  let u: URL;
+  try { u = baseUrl ? new URL(href, baseUrl) : new URL(href); } catch { return null; }
+  return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
 }
 
 function simpleHash(s: string): string {
@@ -1430,7 +1445,7 @@ async function juanpaFetch(email: string, sourceId = "juanpa_bandeja"): Promise<
     throw err;
   }
   const page = String(res.data ?? "");
-  const mails = parseJuanpaInbox(page);
+  const mails = parseJuanpaInbox(page, url);
   if (!mails) throw new ProviderError("provider", "Juanpa: la página de la bandeja cambió o el link ya no sirve" + (pageText(page, 80) ? ` («${pageText(page, 80)}»)` : "") + ".");
   // Ya vienen los correos completos: quedan en memoria para la bandeja.
   for (const m of mails) {
@@ -1604,8 +1619,26 @@ export function skipsRepeatedCodes(sourceId: string | null): boolean {
     || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney";
 }
 
+/** Clave para comparar códigos/links entre consultas. Los links firmados
+ *  (…?expires=…&signature=…, como los de Juanpa desde nov-2026) cambian la
+ *  firma en cada consulta aunque sean el mismo correo: se comparan sin ella. */
+export function codeValueKey(value: string | null | undefined): string {
+  const v = String(value ?? "").trim();
+  if (!/^https?:\/\//i.test(v) || !/[?&](signature|expires)=/i.test(v)) return v;
+  try {
+    const u = new URL(v);
+    u.searchParams.delete("signature");
+    u.searchParams.delete("expires");
+    return u.toString();
+  } catch { return v; }
+}
+
+export function sameCodeValue(a: string | null | undefined, b: string | null | undefined): boolean {
+  return codeValueKey(a) === codeValueKey(b);
+}
+
 function isSameCode(result: CodeLookupResult, seen: SeenCode | null): boolean {
-  if (!seen || !result.found || result.value !== seen.value) return false;
+  if (!seen || !result.found || !sameCodeValue(result.value, seen.value)) return false;
   return !result.providerReceivedAt || !seen.providerReceivedAt || result.providerReceivedAt === seen.providerReceivedAt;
 }
 
