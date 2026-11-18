@@ -101,53 +101,58 @@
     </div>
   </section>
 
-  <!-- ═══════════ MEMBRESÍA — sin membresía vigente solo se puede pagarla ═══════════ -->
-  <section id="view-membership" class="view-auth view-membership" hidden>
-    <div class="auth-hero">
-      <span class="auth-circle c1" aria-hidden="true"></span>
-      <span class="auth-circle c2" aria-hidden="true"></span>
-      <div class="auth-hero-inner">
-        <span class="auth-logo"><img src="/assets/logo.webp" alt="Manguitope"></span>
-        <div class="auth-brand">Manguitope</div>
-        <span class="auth-tag">Membresía mayorista</span>
+  <!-- ═══════════ MEMBRESÍA — «Club mayorista» (Black Manguito). Sin membresía vigente solo se puede pagarla ═══════════ -->
+  <section id="view-membership" class="view-membership club" hidden>
+    <div class="club-wrap">
+      <div class="club-top">
+        <span class="club-kick">CLUB MAYORISTA</span>
+        <h1 id="member-title">Entra al <span class="club-gold">club</span></h1>
+        <p id="member-lead">Precios de mayorista, solo para socios.</p>
       </div>
-    </div>
-    <div class="auth-main">
-      <div class="auth-card member-card">
-        <h1 id="member-title">Activa tu membresía</h1>
-        <p class="auth-lead" id="member-lead">Con tu membresía usas tu panel: compras al precio mayorista, recargas saldo y renuevas a tus clientes.</p>
-        <div class="member-paused" id="member-paused" hidden></div>
 
-        <div id="member-choose">
-          <div class="member-plans" id="member-plans" role="radiogroup" aria-label="Elige tu plan"></div>
-          <p class="form-error" id="member-error" hidden></p>
-          <button type="button" class="btn-primary btn-block btn-lg" id="member-pay-btn">Pagar con Yape</button>
-          <p class="member-note">La membresía se activa sola apenas detectemos tu Yape. Recarga mínima de saldo: S/ 20.</p>
+      <div class="club-card" id="member-card">
+        <div class="club-card-row"><span class="club-card-kick">MANGUITOPE · BLACK</span><span class="club-card-logo"><img src="/assets/logo.webp" alt=""></span></div>
+        <span class="club-chip" aria-hidden="true"></span>
+        <div class="club-card-name" id="member-card-name">SOCIO</div>
+        <div class="club-card-foot">
+          <span><small id="member-card-label">VÁLIDA HASTA</small><b id="member-card-date">—</b></span>
+          <span class="club-card-state" id="member-card-state">PENDIENTE</span>
         </div>
-
-        <div id="member-paying" class="member-paying" hidden>
-          <p class="muted">Envía exactamente este monto por Yape <b>en los próximos 5 minutos</b>:</p>
-          <div class="checkout-amount-row">
-            <span class="checkout-amount" id="member-amount">S/ 0.00</span>
-            <button class="yape-copy-btn" id="member-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
-          </div>
-          <img id="member-qr" class="checkout-qr" alt="QR de Yape" hidden>
-          <p class="yape-info" id="member-instructions" hidden></p>
-          <div class="checkout-waiting"><span class="spinner spinner-sm" aria-hidden="true"></span><span id="member-wait-text">Esperando tu pago… tu membresía se activa sola.</span></div>
-          <button type="button" class="btn-ghost btn-block" id="member-change-plan" style="margin-top:14px;">Cambiar de plan</button>
-        </div>
-
-        <div id="member-done" class="member-done" hidden>
-          <div class="member-done-ic" aria-hidden="true">✅</div>
-          <p id="member-done-text">¡Tu membresía está activa!</p>
-          <button type="button" class="btn-primary btn-block btn-lg" id="member-enter-btn">Entrar a mi panel</button>
-        </div>
-
-        <p class="auth-foot">
-          <a href="#" id="member-back" hidden>Volver a mi panel</a><span id="member-back-sep" hidden> · </span>
-          <a id="member-support" href="#" target="_blank" rel="noopener">Soporte</a> · <a href="#" id="member-logout">Cerrar sesión</a>
-        </p>
       </div>
+
+      <div class="member-paused" id="member-paused" hidden></div>
+
+      <div id="member-choose">
+        <div class="member-plans" id="member-plans" role="radiogroup" aria-label="Elige tu plan"></div>
+        <p class="form-error" id="member-error" hidden></p>
+        <button type="button" class="club-btn" id="member-pay-btn">Unirme</button>
+        <p class="club-note">Se activa solo apenas llega tu Yape · recarga mínima de saldo S/ 20</p>
+      </div>
+
+      <div id="member-paying" class="member-paying" hidden>
+        <p class="club-pay-lead">Envía exactamente este monto por Yape <b>en los próximos 5 minutos</b>:</p>
+        <div class="checkout-amount-row">
+          <span class="checkout-amount" id="member-amount">S/ 0.00</span>
+          <button class="yape-copy-btn" id="member-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
+        </div>
+        <img id="member-qr" class="checkout-qr" alt="QR de Yape" hidden>
+        <p class="club-info" id="member-instructions" hidden></p>
+        <div class="club-wait"><span class="club-spin" aria-hidden="true"></span><span id="member-wait-text">Esperando tu pago… tu membresía se activa sola.</span></div>
+        <button type="button" class="club-btn-ghost" id="member-change-plan">Cambiar de plan</button>
+      </div>
+
+      <div id="member-done" class="member-done" hidden>
+        <div class="club-ring" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <h2>¡Ya eres parte del <span class="club-gold">club</span>!</h2>
+        <p id="member-done-text">Membresía activa · pago recibido</p>
+        <div class="club-perks" id="member-perks"></div>
+        <button type="button" class="club-btn" id="member-enter-btn">Entrar al panel →</button>
+      </div>
+
+      <p class="club-foot">
+        <a href="#" id="member-back" hidden>Volver a mi panel</a><span id="member-back-sep" hidden> · </span>
+        <a id="member-support" href="#" target="_blank" rel="noopener">Soporte</a> · <a href="#" id="member-logout">Cerrar sesión</a>
+      </p>
     </div>
   </section>
 

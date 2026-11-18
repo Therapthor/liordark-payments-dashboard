@@ -315,6 +315,16 @@
     return monthly.price * plan.months - plan.price;
   }
 
+  function selectedPlan() {
+    return ((memberState && memberState.plans) || []).find(p => p.id === memberPlanId) || null;
+  }
+
+  function paintPayButton() {
+    const plan = selectedPlan();
+    const verb = memberRenewing || (memberState && memberState.until) ? "Renovar" : "Unirme";
+    document.getElementById("member-pay-btn").textContent = plan ? `${verb} por S/ ${plan.price}` : verb;
+  }
+
   function renderMemberPlans() {
     const plans = (memberState && memberState.plans) || [];
     if (!plans.some(p => p.id === memberPlanId) && plans.length) memberPlanId = plans[0].id;
@@ -328,30 +338,51 @@
         <span class="member-plan-price">S/ ${p.price}</span>
       </button>`;
     }).join("");
+    paintPayButton();
   }
 
   function setMemberStep(step) {
     document.getElementById("member-choose").hidden = step !== "choose";
     document.getElementById("member-paying").hidden = step !== "paying";
     document.getElementById("member-done").hidden = step !== "done";
+    // Al recibir el pago: solo el anillo dorado y los beneficios (como la propuesta 5).
+    const done = step === "done";
+    document.querySelector("#view-membership .club-top").hidden = done;
+    document.getElementById("member-card").hidden = done;
+    if (done) document.getElementById("member-paused").hidden = true;
+  }
+
+  // Tarjeta de socio: nombre, vencimiento y estado (pendiente / vencida / activa).
+  function paintMemberCard(m) {
+    const card = document.getElementById("member-card");
+    const state = document.getElementById("member-card-state");
+    document.getElementById("member-card-name").textContent = (m.displayName || "Socio").trim() || "Socio";
+    const expired = !m.active && m.until;
+    document.getElementById("member-card-label").textContent = expired ? "VENCIÓ EL" : "VÁLIDA HASTA";
+    document.getElementById("member-card-date").textContent = m.until ? memberDate(m.until).toUpperCase() : "—";
+    state.textContent = m.active ? "ACTIVA" : expired ? "VENCIDA" : "PENDIENTE";
+    state.className = "club-card-state" + (m.active ? " ok" : expired ? " off" : "");
+    card.classList.toggle("is-on", !!m.active && memberRenewing);
   }
 
   function paintMembershipHeader() {
     const m = memberState || {};
     const balance = Number(m.balanceCents) || 0;
     const expired = !m.active && m.until;
-    document.getElementById("member-title").textContent = memberRenewing ? "Renueva tu membresía"
-      : expired ? "Tu membresía venció" : "Activa tu membresía";
+    document.getElementById("member-title").innerHTML = memberRenewing
+      ? `Renueva tu <span class="club-gold">membresía</span>`
+      : expired ? `Vuelve al <span class="club-gold">club</span>` : `Entra al <span class="club-gold">club</span>`;
     document.getElementById("member-lead").textContent = memberRenewing
-      ? `Tu membresía vence el ${memberDate(m.until)}. Lo que pagues se suma a partir de esa fecha.`
+      ? `Tu membresía vence el ${memberDate(m.until)}. Lo que pagues se suma desde esa fecha.`
       : expired
-      ? `Venció el ${memberDate(m.until)}. Renuévala para volver a usar tu panel.`
-      : "Con tu membresía usas tu panel: compras al precio mayorista, recargas saldo y renuevas a tus clientes.";
+      ? `Tu membresía venció el ${memberDate(m.until)}. Renuévala para volver a vender.`
+      : "Precios de mayorista, solo para socios.";
     const paused = document.getElementById("member-paused");
     paused.hidden = memberRenewing || balance <= 0;
     paused.innerHTML = `⏸ Tu saldo de <b>${escapeHtml(money(balance))}</b> está guardado. Vuelve a usarlo apenas actives tu membresía.`;
     document.getElementById("member-back").hidden = !memberRenewing;
     document.getElementById("member-back-sep").hidden = !memberRenewing;
+    paintMemberCard(m);
   }
 
   async function showMembership(opts) {
@@ -409,13 +440,18 @@
         if (renewed) {
           memberState = m;
           const balance = Number(m.balanceCents) || 0;
-          document.getElementById("member-title").textContent = memberRenewing ? "¡Membresía renovada!" : "¡Pago recibido!";
-          document.getElementById("member-lead").textContent = balance > 0
-            ? `Tu saldo de ${money(balance)} ya está disponible. Ya puedes comprar, recargar y renovar a tus clientes.`
-            : "Ya puedes recargar saldo, comprar al precio mayorista y renovar a tus clientes.";
-          document.getElementById("member-paused").hidden = true;
-          document.getElementById("member-done-text").textContent = `Tu membresía está activa hasta el ${memberDate(m.until)}.`;
+          document.getElementById("member-done-text").textContent =
+            `${memberRenewing ? "Renovada" : "Activa"} hasta el ${memberDate(m.until)} · pago recibido`;
+          document.getElementById("member-perks").innerHTML = [
+            balance > 0
+              ? `<div><span class="ok">✓</span>Saldo disponible <b>${escapeHtml(money(balance))}</b></div>`
+              : `<div><span class="ok">✓</span>Recarga tu saldo desde <b>S/ 20</b></div>`,
+            `<div><span class="ok">✓</span>Precios mayoristas desbloqueados</div>`,
+            `<div><span class="ok">✓</span>Recargas, renovaciones y códigos 24/7</div>`,
+            `<div><span class="ok">✓</span>Te avisamos 3 días antes de que venza</div>`,
+          ].join("");
           setMemberStep("done");
+          try { if (navigator.vibrate) navigator.vibrate([30, 60, 30]); } catch { /* sin vibración */ }
           return;
         }
       } catch { /* se reintenta */ }
@@ -433,7 +469,7 @@
     } catch (err) {
       setFormError("member-error", err.message);
     }
-    btn.disabled = false; btn.textContent = "Pagar con Yape";
+    btn.disabled = false; paintPayButton();
   }
 
   function paintMemberStrip(m) {

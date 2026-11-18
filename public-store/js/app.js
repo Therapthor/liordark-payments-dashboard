@@ -294,6 +294,9 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
       loadNotifications();
+      // Si el admin le asignó una cuenta con código mientras tenía la
+      // página abierta, el botón «Códigos» aparece sin recargar.
+      if (isAuthenticated) refreshCodesAvailability();
     });
   }
 
@@ -490,7 +493,7 @@
     document.body.classList.toggle("theme-codes-dark", view === "codes");
     // Título de la banda mango y barra inferior según la sección (mango-store.css).
     document.body.dataset.page = view;
-    if (view === "dashboard") { loadDashboardAccounts(); refreshEmailStatus(); }
+    if (view === "dashboard") { loadDashboardAccounts(); refreshEmailStatus(); if (isAuthenticated) refreshCodesAvailability(); }
     if (view === "codes") loadCodesAccounts();
   }
 

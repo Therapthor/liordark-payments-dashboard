@@ -118,6 +118,7 @@ function membershipView(wholesalerId: number) {
   const pending = latestPendingMembershipOrder(wholesalerId);
   return {
     ...getMembershipStatus(wholesalerId),
+    displayName: w?.displayName ?? "",
     balanceCents: w?.balanceCents ?? 0,
     plans: MEMBERSHIP_PLANS,
     pending: pending ? { orderName: pending.orderName, plan: pending.plan, amount: pending.amount } : null,

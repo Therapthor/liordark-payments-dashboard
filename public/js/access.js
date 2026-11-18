@@ -1233,9 +1233,11 @@
       const errorEl = document.getElementById("profile-error");
       errorEl.hidden = true;
       try {
-        await api("/profiles/" + currentProfileForModal.id, { method: "PUT", body: JSON.stringify(body) });
+        const saved = await api("/profiles/" + currentProfileForModal.id, { method: "PUT", body: JSON.stringify(body) });
         document.getElementById("profile-modal").hidden = true;
         refreshAccountInPlace(currentProfileForModal.accountId);
+        // Por qué el cliente no vería «Códigos» en liordark.com (si aplica).
+        if (saved && saved.codesWarning) setTimeout(() => alert("✅ Cliente asignado.\n\n⚠️ " + saved.codesWarning), 50);
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;

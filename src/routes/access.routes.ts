@@ -687,13 +687,29 @@ router.post("/accounts/:id/renewal-pending/cancel", (req, res) => {
 
 // ── PERFILES (solo el teléfono del cliente — el resto vive en la cuenta) ──
 
+// Por qué el cliente NO vería «Códigos» en liordark.com con esta cuenta (o
+// null si sí los ve). Sin «🔑 Código» solo se avisa si esa plataforma suele
+// tenerlo (otra cuenta de la misma plataforma lo tiene), para no molestar
+// con plataformas que no usan códigos.
+function clientCodesWarning(accountId: number): string | null {
+  const a = getAccountById(accountId);
+  if (!a) return null;
+  if (!a.codesEnabled || !a.codeSource) {
+    const usual = db.prepare(`SELECT 1 FROM access_accounts WHERE upper(platform) = upper(?) AND codes_enabled = 1 AND code_source IS NOT NULL AND id <> ? LIMIT 1`).get(a.platform, a.id);
+    return usual ? "Esta cuenta no tiene «🔑 Código» activado: el cliente no verá Códigos en liordark.com hasta que lo actives (⋯ › Editar cuenta)." : null;
+  }
+  if (!a.expiresAt) return "Esta cuenta no tiene fecha de vencimiento: el cliente no verá Códigos hasta que la pongas (⋯ › Editar cuenta › Vencimiento).";
+  if (a.expiresAt < limaTodayISO()) return "Esta cuenta está vencida: el cliente no verá Códigos hasta que la renueves.";
+  return null;
+}
+
 router.put("/profiles/:id", (req, res) => {
   const { clientPhone } = req.body ?? {};
   if (!clientPhone?.trim()) { res.status(400).json({ message: "El teléfono es obligatorio." }); return; }
 
   const profile = assignProfileClient(Number(req.params.id), clientPhone);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
-  res.json({ profile });
+  res.json({ profile, codesWarning: clientCodesWarning(profile.accountId) });
 });
 
 router.post("/profiles/:id/release", (req, res) => {
