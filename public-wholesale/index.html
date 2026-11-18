@@ -33,12 +33,19 @@
       <div class="auth-hero-inner">
         <span class="auth-logo"><img src="/assets/logo.webp" alt="Manguitope"></span>
         <div class="auth-brand">Manguitope</div>
-        <span class="auth-tag">Panel Mayorista</span>
+        <span class="auth-tag" id="auth-tag">Panel Mayorista</span>
         <ul class="auth-perks">
           <li><span class="perk-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>Compra perfiles y cuentas al toque con tu saldo</li>
           <li><span class="perk-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg></span>Renueva y avisa a tus clientes en un clic</li>
           <li><span class="perk-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg></span>Mira los códigos de tus cuentas sin esperar</li>
         </ul>
+        <!-- Registro (modo Club): la tarjeta de socio con el nombre que va escribiendo (solo PC) -->
+        <div class="club-card join-card" aria-hidden="true">
+          <div class="club-card-row"><span class="club-card-kick">MANGUITOPE · BLACK</span><span class="club-card-logo"><img src="/assets/logo.webp" alt=""></span></div>
+          <span class="club-chip"></span>
+          <div class="club-card-name" id="join-card-name">TU NOMBRE</div>
+          <div class="club-card-foot"><span><small>VÁLIDA HASTA</small><b>—</b></span><span class="club-card-state">PENDIENTE</span></div>
+        </div>
       </div>
     </div>
 
@@ -70,13 +77,8 @@
       </div>
 
       <div class="auth-card" id="register-card" hidden>
-        <h1>Únete como mayorista</h1>
+        <h1>Únete al <span class="club-gold">club</span></h1>
         <p class="auth-lead">Crea tu cuenta en un minuto. Después activas tu membresía y empiezas a vender.</p>
-        <div class="join-prices" aria-label="Membresía mayorista">
-          <span><b>S/ 10</b>1 mes</span>
-          <span><b>S/ 20</b>3 meses</span>
-          <span><b>S/ 60</b>1 año</span>
-        </div>
         <form id="register-form">
           <label for="reg-name">Tu nombre</label>
           <div class="field">

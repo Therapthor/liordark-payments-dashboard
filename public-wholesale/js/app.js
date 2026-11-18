@@ -275,12 +275,15 @@
     window.scrollTo(0, 0);
   }
 
-  function showAuth() { stopMembershipPolling(); showView("view-auth"); }
+  function showAuth() { stopMembershipPolling(); showAuthCard("login"); showView("view-auth"); }
   function showApp()  { stopMembershipPolling(); showView("view-app"); }
 
   function showAuthCard(which) {
     document.getElementById("login-card").hidden = which !== "login";
     document.getElementById("register-card").hidden = which !== "register";
+    // «Quiero ser mayorista» se ve en modo Club (negro y dorado), igual que la membresía.
+    document.getElementById("view-auth").classList.toggle("club-mode", which === "register");
+    document.getElementById("auth-tag").textContent = which === "register" ? "Club mayorista" : "Panel Mayorista";
     setFormError("login-error", "");
     setFormError("register-error", "");
     const first = document.getElementById(which === "register" ? "reg-name" : "login-phone");
@@ -536,6 +539,10 @@
 
     // «Quiero ser mayorista»: cuenta nueva (nombre, celular y contraseña).
     document.getElementById("auth-show-register").addEventListener("click", () => showAuthCard("register"));
+    // La tarjeta de socio (PC) muestra el nombre mientras lo escribe.
+    document.getElementById("reg-name").addEventListener("input", (e) => {
+      document.getElementById("join-card-name").textContent = e.target.value.trim() || "TU NOMBRE";
+    });
     document.getElementById("auth-show-login").addEventListener("click", (e) => { e.preventDefault(); showAuthCard("login"); });
     document.getElementById("register-form").addEventListener("submit", async (e) => {
       e.preventDefault();

@@ -256,9 +256,6 @@ select.input {
 #register-form { display: flex; flex-direction: column; }
 #register-form > label { font-size: 13px; font-weight: 800; margin: 16px 0 6px; }
 #register-form button[type="submit"] { margin-top: 22px; }
-.join-prices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 2px; }
-.join-prices span { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 16px; background: var(--chip-bg); color: var(--chip-ink); font-size: 12.5px; font-weight: 700; }
-.join-prices b { font-family: var(--font-display); font-size: 19px; color: var(--text); }
 
 /* Membresía — «Club mayorista» (Black Manguito): negro y dorado, siempre oscuro */
 .view-membership.club {
@@ -362,6 +359,33 @@ select.input {
 @media (prefers-reduced-motion: reduce) {
   .club-card::before, .club-card.is-on, .club-ring, .club-ring svg, .club-perks div { animation: none !important; }
   .club-ring svg { stroke-dashoffset: 0; }
+}
+
+/* Registro «Quiero ser mayorista» en modo Club (Black Manguito) */
+.join-card { display: none; }
+.view-auth.club-mode { background: radial-gradient(120% 70% at 50% 0%, #2A1C0E 0%, #140D07 60%) #140D07; color: #F6E7CC; }
+.view-auth.club-mode .auth-hero { background: linear-gradient(160deg, #2E1F10 0%, #1A110A 70%); color: #F6E7CC; box-shadow: inset 0 -1px 0 rgba(255,201,60,.18); }
+.view-auth.club-mode .auth-circle.c1 { background: rgba(255,201,60,.10); }
+.view-auth.club-mode .auth-circle.c2 { background: rgba(255,178,26,.07); }
+.view-auth.club-mode .auth-brand { color: #fff; }
+.view-auth.club-mode .auth-tag { background: linear-gradient(90deg, #FFE7A0, var(--mango)); color: #1A1209; }
+.view-auth.club-mode .auth-perks li { color: #EBD9B8; }
+.view-auth.club-mode .perk-ic { background: rgba(255,201,60,.12); color: var(--mango); }
+.view-auth.club-mode .auth-card h1 { color: #fff; }
+.view-auth.club-mode .auth-lead { color: #BFA987; }
+.view-auth.club-mode #register-form > label { color: #E8D6BC; }
+.view-auth.club-mode .field { background: #1F150C; border-color: #3A2A18; }
+.view-auth.club-mode .field:focus-within { border-color: var(--mango); box-shadow: 0 0 0 4px rgba(255,201,60,.18); }
+.view-auth.club-mode .field > .ic { color: var(--mango); }
+.view-auth.club-mode .field input { color: #fff; }
+.view-auth.club-mode .field input::placeholder { color: #8E7856; }
+.view-auth.club-mode .field input:-webkit-autofill { -webkit-text-fill-color: #fff; -webkit-box-shadow: 0 0 0 40px #1F150C inset; caret-color: #fff; }
+.view-auth.club-mode #register-form button[type="submit"] { background: linear-gradient(135deg, var(--mango-light), var(--mango-deep)); color: #1A1209; box-shadow: 0 14px 30px -14px rgba(255,178,26,.9); }
+.view-auth.club-mode .auth-foot { color: #8E7856; }
+.view-auth.club-mode .auth-foot a { color: #E8D6BC; }
+.view-auth.club-mode .form-error { color: #FFB4A0; }
+@media (min-width: 900px) {
+  .view-auth.club-mode .join-card { display: block; width: 100%; max-width: 380px; margin: 30px 0 0; }
 }
 
 /* Inicio: estado de la membresía */
