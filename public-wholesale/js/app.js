@@ -539,10 +539,6 @@
 
     // «Quiero ser mayorista»: cuenta nueva (nombre, celular y contraseña).
     document.getElementById("auth-show-register").addEventListener("click", () => showAuthCard("register"));
-    // La tarjeta de socio (PC) muestra el nombre mientras lo escribe.
-    document.getElementById("reg-name").addEventListener("input", (e) => {
-      document.getElementById("join-card-name").textContent = e.target.value.trim() || "TU NOMBRE";
-    });
     document.getElementById("auth-show-login").addEventListener("click", (e) => { e.preventDefault(); showAuthCard("login"); });
     document.getElementById("register-form").addEventListener("submit", async (e) => {
       e.preventDefault();

@@ -361,31 +361,53 @@ select.input {
   .club-ring svg { stroke-dashoffset: 0; }
 }
 
-/* Registro «Quiero ser mayorista» en modo Club (Black Manguito) */
-.join-card { display: none; }
-.view-auth.club-mode { background: radial-gradient(120% 70% at 50% 0%, #2A1C0E 0%, #140D07 60%) #140D07; color: #F6E7CC; }
-.view-auth.club-mode .auth-hero { background: linear-gradient(160deg, #2E1F10 0%, #1A110A 70%); color: #F6E7CC; box-shadow: inset 0 -1px 0 rgba(255,201,60,.18); }
-.view-auth.club-mode .auth-circle.c1 { background: rgba(255,201,60,.10); }
-.view-auth.club-mode .auth-circle.c2 { background: rgba(255,178,26,.07); }
+/* Registro «Quiero ser mayorista» en modo Club (Black Manguito).
+   El cambio de colores es una transición suave (tipo Apple): los fondos
+   oscuros entran como capas que se funden encima del mango, y textos,
+   campos y botones cambian de color con la misma curva. Al volver al login,
+   se deshace igual de suave. */
+:root { --club-ease: cubic-bezier(.22, 1, .36, 1); --club-dur: .9s; }
+.view-auth { position: relative; isolation: isolate; }
+.view-auth::before, .auth-hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  transition: opacity var(--club-dur) var(--club-ease);
+}
+.view-auth::before { z-index: -1; background: radial-gradient(120% 70% at 50% 0%, #2A1C0E 0%, #140D07 60%) #140D07; }
+.auth-hero::before { z-index: 0; background: linear-gradient(160deg, #2E1F10 0%, #1A110A 70%); }
+.auth-circle { z-index: 1; }
+.auth-hero-inner { z-index: 2; }
+.view-auth.club-mode::before, .view-auth.club-mode .auth-hero::before { opacity: 1; }
+
+.auth-hero, .auth-circle, .auth-brand, .auth-tag, .auth-perks li, .perk-ic, .auth-card h1, .auth-lead,
+#register-form > label, .field, .field > .ic, .field input, #register-form button[type="submit"], .auth-foot, .auth-foot a {
+  transition: color var(--club-dur) var(--club-ease), background-color var(--club-dur) var(--club-ease),
+    border-color var(--club-dur) var(--club-ease), box-shadow var(--club-dur) var(--club-ease);
+}
+.view-auth.club-mode .auth-hero { color: #F6E7CC; box-shadow: inset 0 -1px 0 rgba(255,201,60,.18); }
+.view-auth.club-mode .auth-circle.c1 { background-color: rgba(255,201,60,.10); }
+.view-auth.club-mode .auth-circle.c2 { background-color: rgba(255,178,26,.07); }
 .view-auth.club-mode .auth-brand { color: #fff; }
-.view-auth.club-mode .auth-tag { background: linear-gradient(90deg, #FFE7A0, var(--mango)); color: #1A1209; }
+.view-auth.club-mode .auth-tag { background-color: var(--mango-light); color: #1A1209; }
 .view-auth.club-mode .auth-perks li { color: #EBD9B8; }
-.view-auth.club-mode .perk-ic { background: rgba(255,201,60,.12); color: var(--mango); }
+.view-auth.club-mode .perk-ic { background-color: rgba(255,201,60,.12); color: var(--mango); }
 .view-auth.club-mode .auth-card h1 { color: #fff; }
 .view-auth.club-mode .auth-lead { color: #BFA987; }
 .view-auth.club-mode #register-form > label { color: #E8D6BC; }
-.view-auth.club-mode .field { background: #1F150C; border-color: #3A2A18; }
+.view-auth.club-mode .field { background-color: #1F150C; border-color: #3A2A18; }
 .view-auth.club-mode .field:focus-within { border-color: var(--mango); box-shadow: 0 0 0 4px rgba(255,201,60,.18); }
 .view-auth.club-mode .field > .ic { color: var(--mango); }
 .view-auth.club-mode .field input { color: #fff; }
 .view-auth.club-mode .field input::placeholder { color: #8E7856; }
 .view-auth.club-mode .field input:-webkit-autofill { -webkit-text-fill-color: #fff; -webkit-box-shadow: 0 0 0 40px #1F150C inset; caret-color: #fff; }
-.view-auth.club-mode #register-form button[type="submit"] { background: linear-gradient(135deg, var(--mango-light), var(--mango-deep)); color: #1A1209; box-shadow: 0 14px 30px -14px rgba(255,178,26,.9); }
+.view-auth.club-mode #register-form button[type="submit"] { background-color: var(--mango); color: #1A1209; box-shadow: 0 14px 30px -14px rgba(255,178,26,.9); }
 .view-auth.club-mode .auth-foot { color: #8E7856; }
 .view-auth.club-mode .auth-foot a { color: #E8D6BC; }
 .view-auth.club-mode .form-error { color: #FFB4A0; }
-@media (min-width: 900px) {
-  .view-auth.club-mode .join-card { display: block; width: 100%; max-width: 380px; margin: 30px 0 0; }
+/* La tarjeta que entra también se desliza suave, con la misma curva. */
+.view-auth.club-mode #register-card { animation: clubCardIn .8s var(--club-ease) both; }
+@keyframes clubCardIn { from { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .view-auth::before, .auth-hero::before, .view-auth *, .view-auth.club-mode #register-card { transition: none !important; animation: none !important; }
 }
 
 /* Inicio: estado de la membresía */
