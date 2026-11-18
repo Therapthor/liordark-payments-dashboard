@@ -2166,3 +2166,7 @@ button.mp-kpi:active { transform: scale(0.98); }
   .cx-quick-link { min-height: 46px; padding: 0 12px; }
   .cx-quick-link span { display: none; } /* en celular: solo el ícono */
 }
+
+/* Claude: botón propio para el link de inicio de sesión */
+.cx-linkbtn.cx-claude-btn, .codes-open-btn.codes-open-claude { background: #D97757 !important; color: #fff !important; border-color: transparent !important; }
+.cx-linkbtn.cx-claude-btn:hover, .codes-open-btn.codes-open-claude:hover { background: #C4643F !important; }

@@ -252,7 +252,7 @@ function remember(ref: string, html: string): void {
 const ADDR_RE = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
 
 // Solo correos que parecen de código / inicio de sesión: nunca se leen los demás.
-const CODEISH_RE = /c[oó]digo|\bcode\b|verific|inicio de sesi[oó]n|iniciar sesi[oó]n|sign[- ]?in|log[- ]?in|acceso|access|one[- ]time|\botp\b|contrase[ñn]a|password|hogar|household|seguridad|security|aprobar|approve|confirm/i;
+const CODEISH_RE = /c[oó]digo|\bcode\b|verific|inicio de sesi[oó]n|iniciar sesi[oó]n|sign[- ]?in|log[- ]?in|acceso|access|one[- ]time|\botp\b|contrase[ñn]a|password|hogar|household|seguridad|security|aprobar|approve|confirm|enlace seguro|secure link|magic[- ]?link|anthropic|claude/i;
 const isCodeish = (m: { subject: string; from: string }) => CODEISH_RE.test(m.subject) || CODEISH_RE.test(m.from);
 
 const WINDOW_MS = 3 * 60 * 60 * 1000; // últimas 3 horas

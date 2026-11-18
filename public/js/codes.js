@@ -126,9 +126,17 @@
   }
 
   // Un resultado (código o enlace) listo para mostrar, con su acción.
+  // Claude (Anthropic) manda un link de inicio de sesión, no un código:
+  // botón propio para abrirlo (sirve una sola vez y vence en 10 min).
+  function isClaudeLink(url) {
+    return /^https:\/\/([a-z0-9-]+\.)*(claude\.ai|anthropic\.com)\//i.test(String(url || ""));
+  }
+
   function resultHtml(kind, value) {
     if (kind === "link") {
-      return `<button type="button" class="codes-open-btn" data-link="${escapeHtml(value)}">🔗 Abrir enlace</button>`;
+      return isClaudeLink(value)
+        ? `<button type="button" class="codes-open-btn codes-open-claude" data-link="${escapeHtml(value)}">✳️ Iniciar sesión en Claude</button>`
+        : `<button type="button" class="codes-open-btn" data-link="${escapeHtml(value)}">🔗 Abrir enlace</button>`;
     }
     return `<span class="codes-code" data-code="${escapeHtml(value)}" title="Clic para copiar">${escapeHtml(value)}</span>`;
   }
@@ -854,6 +862,10 @@
     if (res.approval && safeUrl(res.approval.approveUrl)) return approvalHtml(res.approval);
     if (res.kind === "link") {
       const url = safeUrl(res.value);
+      if (url && isClaudeLink(url)) {
+        return `<a class="cx-linkbtn big cx-claude-btn" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">✳️ Iniciar sesión en Claude</a>
+          <span class="cx-q-copyhint">Sirve una sola vez y vence en 10 min. Si lo abres tú, ya no le sirve al cliente.</span>`;
+      }
       return url
         ? `<a class="cx-linkbtn big" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir enlace</a>`
         : `<p class="cx-novalue">${escapeHtml(res.value)}</p>`;
