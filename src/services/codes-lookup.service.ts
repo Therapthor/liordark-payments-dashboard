@@ -2,6 +2,7 @@ import axios from "axios";
 import { AsyncLocalStorage } from "async_hooks";
 import { env } from "../config/env";
 import { laneFor } from "./codes-lanes";
+import { recentCodeMailFor, connectedMailBody } from "./mail-connections.service";
 import { db } from "../db/db";
 
 // ─────────────────────────────────────────────────────────────
@@ -1497,6 +1498,23 @@ export function juanpaResult(mails: JuanpaMail[]): CodeLookupResult {
   return login ?? results[0]!;
 }
 
+// Correo conectado (Configuración › Correos): buzones propios de Outlook /
+// Gmail. El más nuevo de código o inicio de sesión de las últimas horas.
+async function lookupConnectedMail(email: string): Promise<CodeLookupResult> {
+  const { mails, connected, errors } = await recentCodeMailFor(email);
+  if (!connected) {
+    return { found: false, kind: null, value: null, items: [], providerMessage: "No hay ningún correo conectado (Configuración › Correos)." };
+  }
+  if (!mails.length) {
+    if (errors.length) throw new ProviderError("provider", "Correo conectado: " + errors[0]);
+    return { found: false, kind: null, value: null, items: [], providerMessage: `Todavía no llegó ningún correo de código a ${email} (últimas 3 horas).` };
+  }
+  const items: ListedEmail[] = mails.map(m => ({ ref: m.ref, subject: m.subject, receivedAt: m.receivedAt }));
+  const newest = items[0]!;
+  const body = await cachedBody("mail|" + newest.ref, () => connectedMailBody(newest.ref));
+  return listedEmailResult(newest, body, items);
+}
+
 /** Cuerpo de UN correo de la lista (para la bandeja: los demás correos
  *  recientes de la misma dirección, no solo el más nuevo). */
 export async function fetchListedEmail(sourceId: string, email: string, item: ListedEmail): Promise<CodeLookupResult | null> {
@@ -1532,6 +1550,7 @@ const SOURCES: Record<string, Source> = {
   latinocol_yurama:     { label: "Gralexander Yurama — Netflix", lookup: lookupLatinocolYurama },
   juanpa_bandeja:       { label: "Juanpa — bandeja (Netflix)", lookup: lookupJuanpaBandeja },
   juanpa_disney:        { label: "Juanpa — bandeja (Disney+)", lookup: lookupJuanpaDisney },
+  correo_conectado:     { label: "Correo conectado (Outlook / Gmail)", lookup: lookupConnectedMail },
 };
 
 // 2FA por TOTP — no consulta ninguna página: el código sale de la clave
@@ -1616,7 +1635,8 @@ export type SeenCode = { value: string; providerReceivedAt?: string };
 export function skipsRepeatedCodes(sourceId: string | null): boolean {
   return sourceId === "streaming_market_web" || sourceId === "vegamig_web" || sourceId === "joseb_netflix" || sourceId === "joseb_disney"
     || sourceId === "netflix_con_opciones" || sourceId === "netflix_sin_opciones" || sourceId === "disney_sin_opciones" || sourceId === "spotify_sin_opciones"
-    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney";
+    || sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama" || sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney"
+    || sourceId === "correo_conectado";
 }
 
 /** Clave para comparar códigos/links entre consultas. Los links firmados

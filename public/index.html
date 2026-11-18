@@ -20,6 +20,7 @@
 <link rel="stylesheet" href="css/rest.css" />
 <link rel="stylesheet" href="css/avisos-admin.css" />
 <link rel="stylesheet" href="css/reviews-admin.css" />
+<link rel="stylesheet" href="css/mail-admin.css" />
 </head>
 <body>
 
@@ -774,6 +775,7 @@
           <button class="config-subnav-item" data-config-section="providers">Proveedores</button>
           <button class="config-subnav-item" data-config-section="avisos">📣 Avisos</button>
           <button class="config-subnav-item" data-config-section="reviews">⭐ Reseñas <span class="rvw-badge" id="reviews-pending-badge" hidden></span></button>
+          <button class="config-subnav-item" data-config-section="mail">📧 Correos</button>
           <button class="config-subnav-item" data-config-section="security">🔒 Seguridad</button>
         </div>
 
@@ -881,6 +883,46 @@
           <p class="panel-hint">Una ventana con tu imagen (un combo, un producto, descuentos, stock nuevo…) que aparece apenas entran. Si cambias la imagen, el texto o el botón, cuenta como <b>aviso nuevo</b>: lo vuelven a ver todos, aunque ya hayan visto el anterior.</p>
 
           <div id="avisos-grid" class="avisos-grid"><p class="panel-hint">Cargando…</p></div>
+
+        </div>
+
+        <div id="config-section-mail" class="config-section" hidden>
+
+          <div class="panel-header standalone">
+            <h2>Correos</h2>
+          </div>
+
+          <p class="panel-hint">Conecta tus propios correos (Outlook/Hotmail y Gmail) para que el panel lea los códigos de inicio de sesión que llegan ahí (Adobe, Netflix, ChatGPT…). Solo se leen los correos de código de las últimas 3 horas; nunca se borra ni se envía nada. Luego, en Accesos, a la cuenta le eliges «Correo conectado (Outlook / Gmail)» como origen del código.</p>
+
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo ms" aria-hidden="true">O</span><div><b>Outlook / Hotmail</b><small>Inicio de sesión oficial de Microsoft · solo lectura</small></div></div>
+            <form id="mlc-ms-form" class="mlc-row" autocomplete="off">
+              <input id="mlc-ms-id" placeholder="ID de la aplicación (cliente) de Microsoft" spellcheck="false" />
+              <button class="btn-secondary" type="submit">Guardar</button>
+            </form>
+            <p class="mlc-note" id="mlc-ms-note"></p>
+            <button class="btn-primary" type="button" id="mlc-ms-connect" disabled>+ Conectar Outlook</button>
+            <div class="mlc-device" id="mlc-device" hidden>
+              <p>1. Abre <a id="mlc-device-link" href="https://microsoft.com/devicelogin" target="_blank" rel="noopener">microsoft.com/devicelogin</a></p>
+              <p>2. Escribe este código:</p>
+              <button class="mlc-code" type="button" id="mlc-device-code" title="Copiar">—</button>
+              <p>3. Entra con el correo de Outlook que quieres conectar y acepta el permiso.</p>
+              <p class="mlc-wait" id="mlc-device-state"><span class="mlc-spin" aria-hidden="true"></span>Esperando que inicies sesión…</p>
+            </div>
+          </div>
+
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo g" aria-hidden="true">G</span><div><b>Gmail</b><small>Con «contraseña de aplicación» de Google</small></div></div>
+            <form id="mlc-g-form" class="mlc-grid" autocomplete="off">
+              <input id="mlc-g-email" type="email" placeholder="correo@gmail.com" />
+              <input id="mlc-g-pass" placeholder="Contraseña de aplicación (16 letras)" spellcheck="false" autocomplete="off" />
+              <button class="btn-primary" type="submit" id="mlc-g-btn">+ Conectar Gmail</button>
+            </form>
+            <p class="form-error" id="mlc-g-error" hidden></p>
+          </div>
+
+          <h3 class="mlc-title">Correos conectados</h3>
+          <div id="mlc-list" class="mlc-list"><p class="panel-hint">Cargando…</p></div>
 
         </div>
 
@@ -1890,6 +1932,7 @@
   <script src="js/settings.js"></script>
   <script src="js/avisos-admin.js"></script>
   <script src="js/reviews-admin.js"></script>
+  <script src="js/mail-admin.js"></script>
   <script src="js/web-customers.js"></script>
   <script src="js/sale-links.js"></script>
   <script src="js/game-over.js"></script>

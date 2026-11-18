@@ -24,6 +24,7 @@ const LANES: Record<string, LaneConfig> = {
   latinocol_outlook:{ label: "Gralexander Outlook", gapMs: 1500 },
   latinocol_yurama: { label: "Gralexander Yurama",  gapMs: 1500 },
   juanpa:           { label: "Juanpa",              gapMs: 1500 },
+  correo:           { label: "Correos conectados",  gapMs: 800 },
   otro:             { label: "Otro",              gapMs: 1500 },
 };
 
@@ -34,6 +35,7 @@ export function laneIdOf(sourceId: string): string {
   if (sourceId === "vegamig_web") return "vegamig";
   if (sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama") return sourceId;
   if (sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney") return "juanpa";
+  if (sourceId === "correo_conectado") return "correo";
   return "otro";
 }
 

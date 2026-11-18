@@ -25,6 +25,7 @@ import renewalsRoutes from "./routes/renewals.routes";
 import botFlowRoutes from "./routes/bot-flow.routes";
 import avisosRoutes, { storeAvisoHandler, wholesaleAvisoHandler, avisoImageHandler } from "./routes/avisos.routes";
 import reviewsRoutes from "./routes/reviews.routes";
+import mailConnectionsRoutes from "./routes/mail-connections.routes";
 import customerAuthRoutes from "./routes/customer-auth.routes";
 import storeRoutes, { generateExpiryNotificationsForAllCustomers } from "./routes/store.routes";
 import customersRoutes from "./routes/customers.routes";
@@ -108,6 +109,7 @@ apiRouter.use("/auth", authRoutes);
 // Avisos (ventana con imagen): la arma el admin; la leen la tienda y el mayorista.
 apiRouter.use("/avisos", requireAuth, avisosRoutes);
 apiRouter.use("/reviews", requireAuth, reviewsRoutes);
+apiRouter.use("/mail", requireAuth, mailConnectionsRoutes);
 apiRouter.get("/store/aviso", storeAvisoHandler);
 apiRouter.get("/wholesaler/aviso", requireWholesalerSession, wholesaleAvisoHandler);
 apiRouter.get("/aviso-img/:file", avisoImageHandler);
