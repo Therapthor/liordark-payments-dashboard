@@ -236,7 +236,20 @@ async function outlookToken(row: any): Promise<string> {
 // Correos recientes de código (los dos tipos de buzón)
 // ─────────────────────────────────────────────────────────────
 
-export type ConnectedMail = { ref: string; subject: string; from: string; to: string[]; receivedAt: string; mailbox: string };
+export type ConnectedMail = {
+  ref: string; subject: string; from: string; to: string[]; receivedAt: string; mailbox: string;
+  /** Texto del correo en minúsculas (solo los de código de Gmail): para reconocer
+   *  a qué dirección iba un correo REENVIADO (la original va citada en el cuerpo). */
+  text?: string;
+};
+
+// Cuerpos ya bajados (un correo que llegó no cambia).
+const bodyCache = new Map<string, string>();
+function remember(ref: string, html: string): void {
+  bodyCache.set(ref, html);
+  if (bodyCache.size > 300) bodyCache.delete(bodyCache.keys().next().value!);
+}
+const ADDR_RE = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
 
 // Solo correos que parecen de código / inicio de sesión: nunca se leen los demás.
 const CODEISH_RE = /c[oó]digo|\bcode\b|verific|inicio de sesi[oó]n|iniciar sesi[oó]n|sign[- ]?in|log[- ]?in|acceso|access|one[- ]time|\botp\b|contrase[ñn]a|password|hogar|household|seguridad|security|aprobar|approve|confirm/i;
@@ -303,19 +316,46 @@ async function gmailRecent(row: any): Promise<ConnectedMail[]> {
         const uids = (await client.search({ since: new Date(Date.now() - WINDOW_MS) }, { uid: true })) || [];
         const last = uids.slice(-30);
         if (!last.length) continue;
-        for await (const msg of client.fetch(last, { envelope: true, internalDate: true, uid: true }, { uid: true })) {
+        const found: ConnectedMail[] = [];
+        const uidOf = new Map<string, number>();
+        for await (const msg of client.fetch(last, {
+          envelope: true, internalDate: true, uid: true,
+          headers: ["delivered-to", "x-original-to", "x-forwarded-to", "x-forwarded-for"],
+        }, { uid: true })) {
           const env2 = msg.envelope;
           const date = msg.internalDate ? new Date(msg.internalDate as any) : env2?.date ? new Date(env2.date) : null;
           if (!date || Date.now() - date.getTime() > WINDOW_MS) continue;
-          out.push({
+          // Redirigido: la dirección original queda en «Para» o en estos encabezados.
+          const extra = (String(msg.headers ?? "").match(ADDR_RE) || []).map(x => x.toLowerCase());
+          const m: ConnectedMail = {
             ref: `${row.id}:${folder}|${msg.uid}`,
             subject: String(env2?.subject ?? ""),
             from: (env2?.from || []).map((a: any) => [a.name, a.address].filter(Boolean).join(" ")).join(", "),
-            to: (env2?.to || []).map((a: any) => String(a.address ?? "").toLowerCase()).filter(Boolean),
+            to: [...new Set([...(env2?.to || []).map((a: any) => String(a.address ?? "").toLowerCase()).filter(Boolean), ...extra])],
             receivedAt: date.toISOString(),
             mailbox: row.email,
-          });
+          };
+          found.push(m);
+          uidOf.set(m.ref, Number(msg.uid));
         }
+        // Reenviado («RV:»/«FW:»): la dirección original va citada en el cuerpo.
+        // Solo se bajan los de código (los más nuevos), nunca los demás.
+        const codeish = found.filter(isCodeish).slice(-8);
+        const need = codeish.filter(m => !bodyCache.has(m.ref)).map(m => uidOf.get(m.ref)!).filter(Boolean);
+        if (need.length) {
+          for await (const msg of client.fetch(need, { source: true, uid: true }, { uid: true })) {
+            if (!msg.source) continue;
+            try {
+              const parsed = await simpleParser(msg.source as Buffer);
+              remember(`${row.id}:${folder}|${msg.uid}`, String(parsed.html || parsed.textAsHtml || ""));
+            } catch { /* correo raro: se lee después, al pedir su cuerpo */ }
+          }
+        }
+        for (const m of codeish) {
+          const html = bodyCache.get(m.ref);
+          if (html) m.text = html.replace(/<[^>]+>/g, " ").toLowerCase();
+        }
+        out.push(...found);
       } finally { lock.release(); }
     }
   } catch (err: any) {
@@ -384,7 +424,7 @@ export async function recentCodeMailFor(address: string): Promise<{ mails: Conne
       markOk(row.id);
       for (const m of list) {
         if (!isCodeish(m)) continue;
-        if (!own.length && !m.to.includes(a)) continue;
+        if (!own.length && !m.to.includes(a) && !(m.text && m.text.includes(a))) continue;
         mails.push(m);
       }
     } catch (err: any) {
@@ -399,6 +439,8 @@ export async function recentCodeMailFor(address: string): Promise<{ mails: Conne
 
 /** Cuerpo HTML de un correo (ref = "<idConexión>:<id del correo>"). */
 export async function connectedMailBody(ref: string): Promise<string> {
+  const cached = bodyCache.get(ref);
+  if (cached !== undefined) return cached;
   const i = ref.indexOf(":");
   const row = getRow(Number(ref.slice(0, i)));
   if (!row) return "";
