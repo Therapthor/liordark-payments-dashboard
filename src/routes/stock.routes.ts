@@ -33,6 +33,8 @@ import { getBotFlowConfig } from "../db/bot-flow.repository";
 import { listCombos } from "../db/combo.repository";
 import { findWholesalerById, touchWholesalerActivity } from "../db/wholesaler.repository";
 import { applyWholesalerCreditChange, creditWasAlreadyApplied } from "../db/wholesaler-credit.repository";
+import { applyMembershipPayment, isMembershipReference, membershipDateLabel } from "../db/wholesaler-membership.repository";
+import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 import { markCoursePurchasePaid, createPendingPurchase } from "../services/course.service";
 import { findCustomerByPhone } from "../db/customer.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
@@ -359,6 +361,24 @@ router.post("/wholesale-credit", (req, res) => {
     res.status(404).json({ message: "Mayorista no encontrado." });
     return;
   }
+
+  // Pago de la membresía: activa (o alarga) la membresía, no suma saldo.
+  if (req.body?.purpose === "membership" || isMembershipReference(reference)) {
+    const paid = applyMembershipPayment(wholesalerId, reference, creditAmount);
+    if (!paid.ok) {
+      res.status(422).json({ message: paid.error });
+      return;
+    }
+    if (!paid.alreadyApplied) {
+      touchWholesalerActivity(wholesalerId);
+      createWholesalerNotification(wholesalerId, "membership", "", "",
+        `✅ ¡Tu membresía mayorista está activa! Vence el ${membershipDateLabel(paid.until)}.`);
+      emitDashboardEvent({ type: "wholesaler_membership", wholesalerId });
+    }
+    res.json({ ok: true, membership: true, alreadyApplied: paid.alreadyApplied });
+    return;
+  }
+
   if (creditWasAlreadyApplied("topup_yape", reference)) {
     res.json({ ok: true, alreadyApplied: true });
     return;

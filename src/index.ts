@@ -30,7 +30,7 @@ import customerAuthRoutes from "./routes/customer-auth.routes";
 import storeRoutes, { generateExpiryNotificationsForAllCustomers } from "./routes/store.routes";
 import customersRoutes from "./routes/customers.routes";
 import wholesalerAuthRoutes from "./routes/wholesaler-auth.routes";
-import wholesalerRoutes, { generateExpiryNotificationsForAllWholesalers } from "./routes/wholesaler.routes";
+import wholesalerRoutes, { generateExpiryNotificationsForAllWholesalers, remindMembershipsEndingSoon } from "./routes/wholesaler.routes";
 import wholesalersAdminRoutes from "./routes/wholesalers-admin.routes";
 import supportReportsRoutes from "./routes/support-reports.routes";
 import courseRoutes from "./routes/course.routes";
@@ -58,7 +58,6 @@ import { seedBotFlowConfigIfEmpty } from "./db/bot-flow.repository";
 import { getPlatformCatalog } from "./services/catalog.service";
 import { archiveExpiredAccounts } from "./db/access-history.repository";
 import { limaTodayISO, runRenewalCutover } from "./services/access.service";
-import { disableInactiveWholesalers } from "./db/wholesaler.repository";
 import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
 import { runExpireChatMedia } from "./jobs/expiry-chat-media.job";
 import { runSupportBotSweep } from "./services/support-bot.service";
@@ -105,6 +104,8 @@ apiRouter.use("/auth/passkey/login", loginRateLimit("admin-llave", 60, 10 * 60_0
 // Con pase del admin («Quitar bloqueo») el número entra aunque su conexión llegue al límite.
 apiRouter.use("/store/auth", loginRateLimit("tienda", 60, 10 * 60_000, req => hasLoginPass("cliente", String(req.body?.phone ?? ""))));
 apiRouter.use("/wholesaler/auth/login", loginRateLimit("mayorista", 30, 10 * 60_000, req => hasLoginPass("mayorista", String(req.body?.phone ?? ""))));
+// Cuentas nuevas de mayorista: pocas por conexión (evita que llenen la lista).
+apiRouter.use("/wholesaler/auth/register", loginRateLimit("mayorista-registro", 5, 60 * 60_000));
 apiRouter.use("/auth", authRoutes);
 // Avisos (ventana con imagen): la arma el admin; la leen la tienda y el mayorista.
 apiRouter.use("/avisos", requireAuth, avisosRoutes);
@@ -341,8 +342,8 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   cleanCourse();
   setInterval(cleanCourse, ARCHIVE_INTERVAL_MS);
 
-  runDisableInactiveWholesalers();
-  setInterval(runDisableInactiveWholesalers, ARCHIVE_INTERVAL_MS);
+  // (Ya no se deshabilita a los mayoristas por 1 mes sin comprar: ahora el
+  // acceso lo da la membresía, y con ella vencida igual deben poder entrar a pagarla.)
 
   runGenerateExpiryNotifications();
   setInterval(runGenerateExpiryNotifications, EXPIRY_NOTIFY_INTERVAL_MS);
@@ -373,16 +374,6 @@ function runArchiveExpiredAccounts(): void {
   }
 }
 
-// Mayoristas sin comprar/recargar en 1 mes — deshabilitados (el saldo se guarda)
-// borrado (a pedido explícito). Mismo cadencia que el archivado de arriba.
-function runDisableInactiveWholesalers(): void {
-  try {
-    const disabled = disableInactiveWholesalers();
-    if (disabled > 0) console.log(`🗄️  ${disabled} mayorista(s) deshabilitados por inactividad`);
-  } catch (err: any) {
-    console.error("⚠️ Error deshabilitando mayoristas inactivos:", err?.message);
-  }
-}
 
 // Campanita de "cuenta por vencer" (clientes y mayoristas) — antes solo se
 // generaba de forma perezosa cuando cada uno entraba a pedir sus propias
@@ -394,6 +385,7 @@ function runGenerateExpiryNotifications(): void {
   try {
     generateExpiryNotificationsForAllCustomers();
     generateExpiryNotificationsForAllWholesalers();
+    remindMembershipsEndingSoon();
   } catch (err: any) {
     console.error("⚠️ Error generando notificaciones de vencimiento:", err?.message);
   }

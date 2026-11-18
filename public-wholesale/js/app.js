@@ -24,6 +24,8 @@
       const err = new Error(data.message || "Ocurrió un error. Intenta de nuevo.");
       err.status = res.status;
       err.data = data;
+      // La membresía venció con la sesión abierta: se muestra la pantalla para pagarla.
+      if (res.status === 402 && data.code === "membership_required" && typeof onMembershipRequired === "function") onMembershipRequired();
       throw err;
     }
     return data;
@@ -263,17 +265,199 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // GATE — login (sin registro: el admin crea las cuentas)
+  // GATE — login, «Quiero ser mayorista» (registro) y membresía
   // ─────────────────────────────────────────────────────────────
 
-  function showAuth() {
-    document.getElementById("view-auth").hidden = false;
-    document.getElementById("view-app").hidden = true;
+  function showView(id) {
+    ["view-auth", "view-membership", "view-app"].forEach(v => {
+      document.getElementById(v).hidden = v !== id;
+    });
+    window.scrollTo(0, 0);
   }
 
-  function showApp() {
-    document.getElementById("view-auth").hidden = true;
-    document.getElementById("view-app").hidden = false;
+  function showAuth() { stopMembershipPolling(); showView("view-auth"); }
+  function showApp()  { stopMembershipPolling(); showView("view-app"); }
+
+  function showAuthCard(which) {
+    document.getElementById("login-card").hidden = which !== "login";
+    document.getElementById("register-card").hidden = which !== "register";
+    setFormError("login-error", "");
+    setFormError("register-error", "");
+    const first = document.getElementById(which === "register" ? "reg-name" : "login-phone");
+    if (first && window.matchMedia("(min-width: 900px)").matches) first.focus();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MEMBRESÍA — sin membresía vigente solo se puede pagarla (el saldo
+  // queda guardado). Se paga por Yape: el panel reserva el monto único y
+  // la membresía se activa sola cuando el bot detecta el pago.
+  // ─────────────────────────────────────────────────────────────
+
+  let memberState = null;      // respuesta de GET /membership
+  let memberPlanId = "3m";
+  let memberRenewing = false;  // ya tiene membresía y la está renovando
+  let memberUntilBefore = null;
+  let memberPollTimer = null;
+
+  function stopMembershipPolling() {
+    clearTimeout(memberPollTimer);
+    memberPollTimer = null;
+  }
+
+  function memberDate(iso) {
+    if (!iso) return "";
+    return new Date(iso).toLocaleDateString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "short", year: "numeric" }).replace(".", "");
+  }
+
+  function memberSavings(plan) {
+    const monthly = (memberState && memberState.plans || []).find(p => p.months === 1);
+    if (!monthly || plan.months === 1) return 0;
+    return monthly.price * plan.months - plan.price;
+  }
+
+  function renderMemberPlans() {
+    const plans = (memberState && memberState.plans) || [];
+    if (!plans.some(p => p.id === memberPlanId) && plans.length) memberPlanId = plans[0].id;
+    document.getElementById("member-plans").innerHTML = plans.map(p => {
+      const save = memberSavings(p);
+      const per = p.months > 1 ? `S/ ${(p.price / p.months).toFixed(2).replace(/\.00$/, "")} al mes` : "Pago mensual";
+      return `<button type="button" class="member-plan${p.id === memberPlanId ? " is-on" : ""}" role="radio" aria-checked="${p.id === memberPlanId}" data-plan="${escapeHtml(p.id)}">
+        <span class="member-plan-dot" aria-hidden="true"></span>
+        <span class="member-plan-txt"><b>${escapeHtml(p.label)}</b><small>${escapeHtml(per)}</small></span>
+        ${save > 0 ? `<span class="member-plan-save">Ahorras S/ ${save}</span>` : ""}
+        <span class="member-plan-price">S/ ${p.price}</span>
+      </button>`;
+    }).join("");
+  }
+
+  function setMemberStep(step) {
+    document.getElementById("member-choose").hidden = step !== "choose";
+    document.getElementById("member-paying").hidden = step !== "paying";
+    document.getElementById("member-done").hidden = step !== "done";
+  }
+
+  function paintMembershipHeader() {
+    const m = memberState || {};
+    const balance = Number(m.balanceCents) || 0;
+    const expired = !m.active && m.until;
+    document.getElementById("member-title").textContent = memberRenewing ? "Renueva tu membresía"
+      : expired ? "Tu membresía venció" : "Activa tu membresía";
+    document.getElementById("member-lead").textContent = memberRenewing
+      ? `Tu membresía vence el ${memberDate(m.until)}. Lo que pagues se suma a partir de esa fecha.`
+      : expired
+      ? `Venció el ${memberDate(m.until)}. Renuévala para volver a usar tu panel.`
+      : "Con tu membresía usas tu panel: compras al precio mayorista, recargas saldo y renuevas a tus clientes.";
+    const paused = document.getElementById("member-paused");
+    paused.hidden = memberRenewing || balance <= 0;
+    paused.innerHTML = `⏸ Tu saldo de <b>${escapeHtml(money(balance))}</b> está guardado. Vuelve a usarlo apenas actives tu membresía.`;
+    document.getElementById("member-back").hidden = !memberRenewing;
+    document.getElementById("member-back-sep").hidden = !memberRenewing;
+  }
+
+  async function showMembership(opts) {
+    opts = opts || {};
+    memberRenewing = !!opts.renewing;
+    try {
+      memberState = opts.state || await api("/membership");
+    } catch (err) {
+      memberState = memberState || { plans: [] };
+    }
+    memberUntilBefore = memberState.until || null;
+    paintMembershipHeader();
+    renderMemberPlans();
+    setFormError("member-error", "");
+    showView("view-membership");
+    if (memberState.pending && memberState.pending.amount) {
+      memberPlanId = memberState.pending.plan || memberPlanId;
+      renderMemberPlans();
+      await showMemberPaying(memberState.pending.amount);
+    } else {
+      setMemberStep("choose");
+    }
+  }
+
+  let membershipPromptOpen = false;
+  function onMembershipRequired() {
+    if (membershipPromptOpen || !document.getElementById("view-membership").hidden) return;
+    membershipPromptOpen = true;
+    stopNotifPolling();
+    showMembership().finally(() => { membershipPromptOpen = false; });
+  }
+
+  async function showMemberPaying(amount) {
+    await ensureYapeInfo();
+    document.getElementById("member-amount").textContent = "S/ " + amount;
+    document.getElementById("member-amount-copy").dataset.copy = amount;
+    const qr = document.getElementById("member-qr");
+    if (cachedYapeQr) { qr.src = cachedYapeQr; qr.hidden = false; } else { qr.hidden = true; }
+    const info = document.getElementById("member-instructions");
+    info.textContent = cachedYapeText || "";
+    info.hidden = !cachedYapeText;
+    document.getElementById("member-support").href = "https://wa.me/" + SUPPORT_PHONE
+      + "?text=" + encodeURIComponent(`Hola, soy mayorista y tengo dudas con el pago de mi membresía de S/ ${amount} por Yape.`);
+    setMemberStep("paying");
+    pollMembership();
+  }
+
+  function pollMembership() {
+    stopMembershipPolling();
+    memberPollTimer = setTimeout(async () => {
+      if (document.getElementById("view-membership").hidden) return;
+      try {
+        const m = await api("/membership");
+        const renewed = m.active && (!memberUntilBefore || m.until !== memberUntilBefore);
+        if (renewed) {
+          memberState = m;
+          document.getElementById("member-done-text").textContent = `¡Tu membresía está activa hasta el ${memberDate(m.until)}!`;
+          setMemberStep("done");
+          return;
+        }
+      } catch { /* se reintenta */ }
+      pollMembership();
+    }, 4000);
+  }
+
+  async function payMembership() {
+    const btn = document.getElementById("member-pay-btn");
+    setFormError("member-error", "");
+    btn.disabled = true; btn.textContent = "Preparando tu pago…";
+    try {
+      const order = await api("/membership/pay", { method: "POST", body: { plan: memberPlanId } });
+      await showMemberPaying(order.amount);
+    } catch (err) {
+      setFormError("member-error", err.message);
+    }
+    btn.disabled = false; btn.textContent = "Pagar con Yape";
+  }
+
+  function paintMemberStrip(m) {
+    const strip = document.getElementById("member-strip");
+    if (!m || !m.active) { strip.hidden = true; return; }
+    const days = Number(m.daysLeft);
+    const soon = days <= 5;
+    strip.hidden = false;
+    strip.classList.toggle("is-soon", soon);
+    document.getElementById("member-strip-text").textContent = soon
+      ? `Tu membresía vence ${days <= 0 ? "hoy" : days === 1 ? "mañana" : `en ${days} días`} (${memberDate(m.until)}). Renuévala para no pausar tu saldo.`
+      : `Membresía activa · vence el ${memberDate(m.until)}`;
+  }
+
+  function initMembership() {
+    document.getElementById("member-plans").addEventListener("click", (e) => {
+      const b = e.target.closest(".member-plan");
+      if (!b) return;
+      memberPlanId = b.dataset.plan;
+      renderMemberPlans();
+    });
+    document.getElementById("member-pay-btn").addEventListener("click", payMembership);
+    document.getElementById("member-change-plan").addEventListener("click", () => { stopMembershipPolling(); setMemberStep("choose"); });
+    document.getElementById("member-amount-copy").addEventListener("click", handleYapeCopyClick);
+    document.getElementById("member-enter-btn").addEventListener("click", () => onAuthenticated());
+    document.getElementById("member-back").addEventListener("click", (e) => { e.preventDefault(); onAuthenticated(); });
+    document.getElementById("member-logout").addEventListener("click", (e) => { e.preventDefault(); logout(); });
+    document.getElementById("member-strip-btn").addEventListener("click", () => showMembership({ renewing: true }));
+    document.getElementById("member-support").href = "https://wa.me/" + SUPPORT_PHONE
+      + "?text=" + encodeURIComponent("Hola, soy mayorista y tengo una duda con mi membresía.");
   }
 
   function initLoginForm() {
@@ -307,6 +491,28 @@
 
     document.getElementById("auth-support-link").href = "https://wa.me/" + SUPPORT_PHONE
       + "?text=" + encodeURIComponent("Hola! Quiero ser mayorista de Manguitope.");
+
+    // «Quiero ser mayorista»: cuenta nueva (nombre, celular y contraseña).
+    document.getElementById("auth-show-register").addEventListener("click", () => showAuthCard("register"));
+    document.getElementById("auth-show-login").addEventListener("click", (e) => { e.preventDefault(); showAuthCard("login"); });
+    document.getElementById("register-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setFormError("register-error", "");
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      try {
+        await api("/auth/register", { method: "POST", body: {
+          name: document.getElementById("reg-name").value.trim(),
+          phone: document.getElementById("reg-phone").value.trim(),
+          password: document.getElementById("reg-password").value,
+        } });
+        e.target.reset();
+        await onAuthenticated();
+      } catch (err) {
+        setFormError("register-error", err.message);
+      }
+      btn.disabled = false;
+    });
   }
 
   async function logout() {
@@ -319,7 +525,12 @@
   }
 
   async function onAuthenticated() {
+    // Sin membresía vigente: solo la pantalla para pagarla.
+    let m = null;
+    try { m = await api("/membership"); } catch { /* sigue: el servidor igual corta con 402 */ }
+    if (m && !m.active) { await showMembership({ state: m }); return; }
     showApp();
+    paintMemberStrip(m);
     await Promise.all([refreshBalance(), refreshUnseenBadge()]);
     startNotifPolling();
     switchPage("inicio");
@@ -2280,6 +2491,7 @@
     renderNav();
     initThemeToggle();
     initLoginForm();
+    initMembership();
     initInicioPage();
     initClientsPage();
     initCodigosPage();

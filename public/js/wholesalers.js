@@ -81,7 +81,7 @@
       `🔑 Contraseña: *${password}*\n\n` +
       `Entra a *mayorista.liordark.com* para comprar perfiles y cuentas completas con tu saldo.\n\n` +
       `¿Necesitas soporte? Escríbenos indicando la plataforma, qué cuenta es, y una captura del problema — así te ayudamos más rápido. 📸\n\n` +
-      `⚠️ Importante: si pasa 1 mes sin ninguna compra o recarga, la cuenta se deshabilita. Tu saldo queda guardado: para reactivarla escríbenos por aquí. 😉`;
+      `⚠️ Importante: para usar tu panel necesitas tu membresía activa (S/ 10 al mes, S/ 20 por 3 meses o S/ 60 al año). La pagas ahí mismo con Yape y se activa sola. 😉`;
   }
 
   function deliverMessage(order) {
@@ -99,6 +99,21 @@
   // LISTA DE MAYORISTAS
   // ─────────────────────────────────────────────────────────────
 
+  // Membresía: vigente (hasta cuándo), vencida (saldo en pausa) o nunca pagó.
+  function membershipCell(w) {
+    const until = w.membershipUntil ? new Date(String(w.membershipUntil).replace(" ", "T") + "Z") : null;
+    if (!until || Number.isNaN(until.getTime())) return `<span class="badge access-badge-expired" title="Nunca pagó la membresía">Sin membresía</span>`;
+    const label = until.toLocaleDateString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "short", year: "numeric" }).replace(".", "");
+    return until.getTime() > Date.now()
+      ? `<span class="badge access-badge-matched" title="Membresía vigente">✅ hasta ${escapeHtml(label)}</span>`
+      : `<span class="badge access-badge-expired" title="Saldo en pausa hasta que pague">⏸ venció ${escapeHtml(label)}</span>`;
+  }
+
+  function hasMembership(w) {
+    const until = w.membershipUntil ? new Date(String(w.membershipUntil).replace(" ", "T") + "Z").getTime() : 0;
+    return until > Date.now();
+  }
+
   function renderWholesalerRow(w) {
     const tr = document.createElement("tr");
     tr.dataset.id = w.id;
@@ -106,6 +121,7 @@
       <td>${escapeHtml(w.phone)}</td>
       <td>${escapeHtml(w.displayName)}</td>
       <td class="wholesaler-balance">${fmtMoney(w.balanceCents)}</td>
+      <td>${membershipCell(w)}</td>
       <td><span class="badge access-badge-${STATUS_CLASS[w.status]}">${STATUS_LABEL[w.status]}</span></td>
       <td>${fmtDateTime(w.lastActivityAt)}</td>
       <td>
@@ -113,6 +129,7 @@
           <button class="btn-secondary btn-sm ws-toggle-status-btn">${w.status === "active" ? "✏️ Deshabilitar" : "✏️ Habilitar"}</button>
           <button class="btn-secondary btn-sm ws-reset-password-btn">🔄 Resetear contraseña</button>
           <button class="btn-secondary btn-sm ws-adjust-btn">💰 Ajustar saldo</button>
+          <button class="btn-secondary btn-sm ws-membership-btn">🎟️ Dar membresía</button>
           <button class="btn-secondary btn-sm ws-assign-btn">🎁 Asignar cuenta</button>
           <button class="btn-secondary btn-sm ws-clients-btn">👥 Ver cuentas</button>
           <button class="btn-secondary btn-sm ws-ledger-btn">📋 Ver historial</button>
@@ -137,10 +154,12 @@
     if (!box) return;
     const queued = cachedQueue.filter(o => o.status === "queued").length;
     const active = cachedWholesalers.filter(w => w.status === "active").length;
+    const members = cachedWholesalers.filter(hasMembership).length;
     const balance = cachedWholesalers.reduce((n, w) => n + (Number(w.balanceCents) || 0), 0);
     box.innerHTML = `
       <div class="mp-kpi ${queued ? "is-peach" : "is-soft"}"><b>${queued}</b><span>En cola</span></div>
       <div class="mp-kpi is-blue"><b>${active}</b><span>Activos</span></div>
+      <div class="mp-kpi is-soft"><b>${members}</b><span>Con membresía</span></div>
       <div class="mp-kpi is-green"><b>${escapeHtml(fmtMoney(balance))}</b><span>Saldo total</span></div>`;
   }
 
@@ -178,6 +197,17 @@
         return;
       }
 
+      if (e.target.closest(".ws-membership-btn")) {
+        const answer = prompt(`¿Cuántos meses de membresía le das a "${w.displayName || w.phone}"? (1, 3 o 12)\nSe suman a lo que ya tenga.`, "1");
+        if (answer === null) return;
+        const months = Number(String(answer).trim());
+        if (![1, 3, 12].includes(months)) { alert("Escribe 1, 3 o 12."); return; }
+        try {
+          await api("/" + w.id + "/membership", { method: "POST", body: JSON.stringify({ months }) });
+          await loadAll();
+        } catch (err) { alert(err.message || "No se pudo dar la membresía."); }
+        return;
+      }
       if (e.target.closest(".ws-adjust-btn")) { openAdjustModal(w); return; }
       if (e.target.closest(".ws-assign-btn")) { openAssignModal(w); return; }
       if (e.target.closest(".ws-clients-btn")) { openClientsModal(w); return; }

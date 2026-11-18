@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { checkLockout, nextLockoutState, type LockoutCheck } from "../services/login-lockout.service";
+import "./wholesaler-membership.repository"; // agrega membership_until (y el mes de regalo) antes de usar la tabla
 
 // ─────────────────────────────────────────────────────────────
-// MAYORISTAS — ver tables.sql (wholesalers). Cuenta siempre creada por
-// el admin (nunca self-registro) — ver wholesaler-auth.routes.ts, que
-// solo expone login/logout/me, nunca /register.
+// MAYORISTAS — ver tables.sql (wholesalers). La cuenta la crea el admin o
+// el mismo mayorista desde mayorista.liordark.com (/register); sin
+// membresía vigente solo puede pagarla (ver wholesaler-membership.repository.ts).
 // ─────────────────────────────────────────────────────────────
 
 export type Wholesaler = {
@@ -19,6 +20,7 @@ export type Wholesaler = {
   lastActivityAt:    string;
   failedLoginCount:  number;
   lockedUntil:       string | null;
+  membershipUntil:   string | null; // UTC «YYYY-MM-DD HH:MM:SS»; null = nunca pagó
   createdAt:         string;
   updatedAt:         string;
 };
@@ -35,6 +37,7 @@ function toWholesaler(row: any): Wholesaler {
     lastActivityAt:    row.last_activity_at,
     failedLoginCount:  row.failed_login_count,
     lockedUntil:       row.locked_until,
+    membershipUntil:   row.membership_until ?? null,
     createdAt:         row.created_at,
     updatedAt:         row.updated_at,
   };
@@ -145,17 +148,3 @@ export function listLockedWholesalers(): LockedWholesaler[] {
     }));
 }
 
-/**
- * 1 mes sin comprar/recargar → deshabilitada. El saldo NO se borra: queda
- * guardado y, cuando el mayorista vuelve, soporte lo reactiva (Mayoristas →
- * Habilitar) con el mismo saldo que tenía.
- */
-export function disableInactiveWholesalers(): number {
-  const inactive = db.prepare(`
-    SELECT id FROM wholesalers
-    WHERE status = 'active' AND last_activity_at < datetime('now', '-1 month')
-  `).all() as { id: number }[];
-
-  for (const w of inactive) setWholesalerStatus(w.id, "disabled");
-  return inactive.length;
-}

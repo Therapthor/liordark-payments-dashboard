@@ -15,7 +15,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // "client_expiring": aviso viejo, uno por perfil (ya no se crea; las filas
 // que quedan se siguen mostrando). "expiry_digest": resumen diario de cuentas
 // por vencer (ver services/wholesaler-expiry-digest.service.ts).
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active" | "support_update" | "expiry_digest";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active" | "support_update" | "expiry_digest" | "membership";
 
 export type WholesalerNotification = {
   id:           number;
@@ -58,9 +58,10 @@ export function createWholesalerNotification(
   wholesalerId: number, type: WholesalerNotificationType, platform: string, accountEmail = "", customMessage = "", replaced = false
 ): void {
   // El resumen de vencimientos junta varias plataformas: va sin plataforma.
-  if (!wholesalerId || (!platform && type !== "expiry_digest")) return;
+  if (!wholesalerId || (!platform && type !== "expiry_digest" && type !== "membership")) return;
   // "support_update": respuesta a un reporte de Soporte del panel mayorista (texto completo).
-  const message = type === "support_update" || type === "expiry_digest"
+  // "membership": aviso de la membresía (pagada / por vencer), texto completo.
+  const message = type === "support_update" || type === "expiry_digest" || type === "membership"
     ? customMessage.trim()
     : type === "support_resolved"
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))

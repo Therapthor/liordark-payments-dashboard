@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { env } from "../config/env";
 import {
+  createWholesaler,
   findWholesalerByPhone,
   findWholesalerById,
   wholesalerLockoutStatus,
@@ -9,14 +10,17 @@ import {
 } from "../db/wholesaler.repository";
 import {
   checkWholesalerPassword,
+  hashWholesalerPassword,
   createWholesalerSessionToken,
   WHOLESALER_SESSION_COOKIE,
   verifyWholesalerSessionToken,
 } from "../services/wholesaler-auth.service";
 import { oneAtATime, phoneKey } from "../utils/one-at-a-time.util";
+import { getMembershipStatus } from "../db/wholesaler-membership.repository";
+import { emitDashboardEvent } from "../utils/live-events.util";
 
-// Sin /register acá — la cuenta la crea siempre el admin desde el panel
-// (ver src/routes/wholesalers-admin.routes.ts), nunca self-registro.
+// La cuenta la crea el admin (Mayoristas) o el mismo mayorista con /register.
+// Recién creada no tiene membresía: solo puede pagarla (ver wholesaler.routes.ts).
 const router = Router();
 const passwordLock = oneAtATime(phoneKey);
 
@@ -53,7 +57,34 @@ router.post("/login", passwordLock(async (req, res) => {
 
   recordWholesalerLoginSuccess(wholesaler.id);
   setSessionCookie(res, wholesaler.id);
-  res.json({ ok: true, phone: wholesaler.phone, displayName: wholesaler.displayName });
+  res.json({ ok: true, phone: wholesaler.phone, displayName: wholesaler.displayName, membership: getMembershipStatus(wholesaler.id) });
+}));
+
+// POST /register — { name, phone, password } — cuenta nueva de mayorista.
+// La contraseña la elige él (no se guarda en texto: si la olvida, el admin
+// le da una nueva desde Mayoristas).
+router.post("/register", passwordLock(async (req, res) => {
+  const name     = String(req.body?.name ?? "").trim().replace(/\s+/g, " ");
+  const digits   = String(req.body?.phone ?? "").replace(/\D/g, "").replace(/^51(?=9\d{8}$)/, "");
+  const password = String(req.body?.password ?? "");
+
+  if (name.length < 2 || name.length > 40) {
+    return res.status(400).json({ message: "Escribe tu nombre (2 a 40 letras)." });
+  }
+  if (!/^9\d{8}$/.test(digits)) {
+    return res.status(400).json({ message: "Escribe tu celular de 9 dígitos (empieza con 9)." });
+  }
+  if (password.length < 6 || password.length > 72) {
+    return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres." });
+  }
+  if (findWholesalerByPhone(digits)) {
+    return res.status(409).json({ message: "Ese celular ya tiene cuenta de mayorista. Inicia sesión." });
+  }
+
+  const wholesaler = createWholesaler(digits, await hashWholesalerPassword(password), "", name);
+  setSessionCookie(res, wholesaler.id);
+  emitDashboardEvent({ type: "wholesaler_registered", phone: wholesaler.phone, name: wholesaler.displayName });
+  res.status(201).json({ ok: true, phone: wholesaler.phone, displayName: wholesaler.displayName, membership: getMembershipStatus(wholesaler.id) });
 }));
 
 router.post("/logout", (_req, res) => {
@@ -68,7 +99,7 @@ router.get("/me", (req, res) => {
   if (!wholesaler) {
     return res.json({ authenticated: false });
   }
-  res.json({ authenticated: true, phone: wholesaler.phone, displayName: wholesaler.displayName });
+  res.json({ authenticated: true, phone: wholesaler.phone, displayName: wholesaler.displayName, membership: getMembershipStatus(wholesaler.id) });
 });
 
 export default router;

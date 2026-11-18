@@ -25,7 +25,7 @@
 
 <div id="app">
 
-  <!-- ═══════════ LOGIN — lo crea solo el admin, sin registro ═══════════ -->
+  <!-- ═══════════ LOGIN + «Quiero ser mayorista» (registro) ═══════════ -->
   <section id="view-auth" class="view-auth">
     <div class="auth-hero">
       <span class="auth-circle c1" aria-hidden="true"></span>
@@ -45,7 +45,7 @@
     <div class="auth-main">
       <div class="auth-card" id="login-card">
         <h1>¡Hola de nuevo!</h1>
-        <p class="auth-lead">Ingresa con el celular y la contraseña que te dimos.</p>
+        <p class="auth-lead">Ingresa con tu celular y tu contraseña.</p>
         <form id="login-form">
           <label for="login-phone">Celular</label>
           <div class="field">
@@ -63,7 +63,90 @@
           <p class="form-error" id="login-error" hidden></p>
           <button type="submit" class="btn-primary btn-block btn-lg">Ingresar</button>
         </form>
-        <p class="auth-foot">¿Aún no eres mayorista? <a id="auth-support-link" href="#" target="_blank" rel="noopener">Escríbenos por soporte</a></p>
+        <div class="auth-join">
+          <span>¿Aún no eres mayorista?</span>
+          <button type="button" class="btn-mango btn-block btn-lg" id="auth-show-register">Quiero ser mayorista</button>
+        </div>
+      </div>
+
+      <div class="auth-card" id="register-card" hidden>
+        <h1>Únete como mayorista</h1>
+        <p class="auth-lead">Crea tu cuenta en un minuto. Después activas tu membresía y empiezas a vender.</p>
+        <div class="join-prices" aria-label="Membresía mayorista">
+          <span><b>S/ 10</b>1 mes</span>
+          <span><b>S/ 20</b>3 meses</span>
+          <span><b>S/ 60</b>1 año</span>
+        </div>
+        <form id="register-form">
+          <label for="reg-name">Tu nombre</label>
+          <div class="field">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <input type="text" id="reg-name" required maxlength="40" placeholder="Ej. Ana Torres" autocomplete="name">
+          </div>
+          <label for="reg-phone">Celular</label>
+          <div class="field">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+            <input type="tel" id="reg-phone" required placeholder="987 654 321" autocomplete="tel" inputmode="tel">
+          </div>
+          <label for="reg-password">Crea una contraseña</label>
+          <div class="field">
+            <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            <input type="password" id="reg-password" required minlength="6" maxlength="72" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+          </div>
+          <p class="form-error" id="register-error" hidden></p>
+          <button type="submit" class="btn-primary btn-block btn-lg">Crear mi cuenta</button>
+        </form>
+        <p class="auth-foot">¿Ya tienes cuenta? <a href="#" id="auth-show-login">Inicia sesión</a> · <a id="auth-support-link" href="#" target="_blank" rel="noopener">Soporte</a></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ MEMBRESÍA — sin membresía vigente solo se puede pagarla ═══════════ -->
+  <section id="view-membership" class="view-auth view-membership" hidden>
+    <div class="auth-hero">
+      <span class="auth-circle c1" aria-hidden="true"></span>
+      <span class="auth-circle c2" aria-hidden="true"></span>
+      <div class="auth-hero-inner">
+        <span class="auth-logo"><img src="/assets/logo.webp" alt="Manguitope"></span>
+        <div class="auth-brand">Manguitope</div>
+        <span class="auth-tag">Membresía mayorista</span>
+      </div>
+    </div>
+    <div class="auth-main">
+      <div class="auth-card member-card">
+        <h1 id="member-title">Activa tu membresía</h1>
+        <p class="auth-lead" id="member-lead">Con tu membresía usas tu panel: compras al precio mayorista, recargas saldo y renuevas a tus clientes.</p>
+        <div class="member-paused" id="member-paused" hidden></div>
+
+        <div id="member-choose">
+          <div class="member-plans" id="member-plans" role="radiogroup" aria-label="Elige tu plan"></div>
+          <p class="form-error" id="member-error" hidden></p>
+          <button type="button" class="btn-primary btn-block btn-lg" id="member-pay-btn">Pagar con Yape</button>
+          <p class="member-note">La membresía se activa sola apenas detectemos tu Yape. Recarga mínima de saldo: S/ 20.</p>
+        </div>
+
+        <div id="member-paying" class="member-paying" hidden>
+          <p class="muted">Envía exactamente este monto por Yape <b>en los próximos 5 minutos</b>:</p>
+          <div class="checkout-amount-row">
+            <span class="checkout-amount" id="member-amount">S/ 0.00</span>
+            <button class="yape-copy-btn" id="member-amount-copy" type="button" aria-label="Copiar monto" title="Copiar monto"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></button>
+          </div>
+          <img id="member-qr" class="checkout-qr" alt="QR de Yape" hidden>
+          <p class="yape-info" id="member-instructions" hidden></p>
+          <div class="checkout-waiting"><span class="spinner spinner-sm" aria-hidden="true"></span><span id="member-wait-text">Esperando tu pago… tu membresía se activa sola.</span></div>
+          <button type="button" class="btn-ghost btn-block" id="member-change-plan" style="margin-top:14px;">Cambiar de plan</button>
+        </div>
+
+        <div id="member-done" class="member-done" hidden>
+          <div class="member-done-ic" aria-hidden="true">✅</div>
+          <p id="member-done-text">¡Tu membresía está activa!</p>
+          <button type="button" class="btn-primary btn-block btn-lg" id="member-enter-btn">Entrar a mi panel</button>
+        </div>
+
+        <p class="auth-foot">
+          <a href="#" id="member-back" hidden>Volver a mi panel</a><span id="member-back-sep" hidden> · </span>
+          <a id="member-support" href="#" target="_blank" rel="noopener">Soporte</a> · <a href="#" id="member-logout">Cerrar sesión</a>
+        </p>
       </div>
     </div>
   </section>
@@ -141,6 +224,11 @@
             <div class="stat-card warn"><div class="stat-card-value" id="home-stat-expiring">—</div><div class="stat-card-label">Por vencer</div></div>
             <div class="stat-card"><div class="stat-card-value" id="home-stat-total">—</div><div class="stat-card-label">Clientes</div></div>
           </div>
+        </div>
+        <div class="member-strip" id="member-strip" hidden>
+          <span class="member-strip-ic" aria-hidden="true">🎟️</span>
+          <span class="member-strip-txt" id="member-strip-text">Membresía activa</span>
+          <button type="button" class="btn-mango" id="member-strip-btn">Renovar</button>
         </div>
         <div class="home-bottom-grid">
           <div class="home-panel">

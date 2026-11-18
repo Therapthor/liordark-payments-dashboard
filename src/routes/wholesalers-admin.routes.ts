@@ -23,6 +23,8 @@ import {
 } from "../db/wholesale-full-account.repository";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { touchWholesalerActivity } from "../db/wholesaler.repository";
+import { grantMembership, membershipDateLabel } from "../db/wholesaler-membership.repository";
+import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 import { unlockWholesalerLogin } from "../services/login-unlock.service";
 import { renewAccount } from "../services/access.service";
 import type { Wholesaler } from "../db/wholesaler.repository";
@@ -87,6 +89,18 @@ router.patch("/:id/status", (req, res) => {
   const wholesaler = findWholesalerById(Number(req.params.id));
   if (!wholesaler) return res.status(404).json({ message: "Mayorista no encontrado." });
   res.json({ wholesaler: toPublic(wholesaler) });
+});
+
+// Membresía a mano (pago en efectivo, regalo…): suma 1, 3 o 12 meses.
+router.post("/:id/membership", (req, res) => {
+  const id = Number(req.params.id);
+  const months = Number(req.body?.months);
+  if (![1, 3, 12].includes(months)) return res.status(400).json({ message: "Elige 1, 3 o 12 meses." });
+  if (!findWholesalerById(id)) return res.status(404).json({ message: "Mayorista no encontrado." });
+  const status = grantMembership(id, months, "admin");
+  const w = findWholesalerById(id)!;
+  createWholesalerNotification(id, "membership", "", "", `✅ Tu membresía mayorista está activa. Vence el ${membershipDateLabel(w.membershipUntil)}.`);
+  res.json({ wholesaler: toPublic(w), membership: status });
 });
 
 /** Resetea la contraseña (olvidada, o revocar acceso de inmediato) — devuelve la nueva en texto plano para reenviar. */

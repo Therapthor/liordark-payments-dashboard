@@ -66,6 +66,22 @@ import { reportWholesalerProblem, WHOLESALE_REPORT_REASONS } from "../services/s
 import { createCodeLink, countWholesalerLinksToday, findOpenWholesalerLink } from "../db/code-links.repository";
 import { codeWaitMinutes } from "../services/code-requests.service";
 import { TOTP_SOURCE_ID } from "../services/codes-lookup.service";
+import {
+  MEMBERSHIP_PLANS, membershipPlan, getMembershipStatus, saveMembershipOrder, latestPendingMembershipOrder,
+  listMembershipsEndingSoon, markMembershipReminded, membershipDateLabel,
+} from "../db/wholesaler-membership.repository";
+
+/** Campanita «tu membresía vence pronto» (3 días antes), una vez por vencimiento. */
+export function remindMembershipsEndingSoon(): number {
+  let sent = 0;
+  for (const m of listMembershipsEndingSoon(72)) {
+    if (!markMembershipReminded(m.id, m.until)) continue;
+    createWholesalerNotification(m.id, "membership", "", "",
+      `⏳ Tu membresía mayorista vence el ${membershipDateLabel(m.until)}. Renuévala desde Inicio (botón «Renovar») para que tu saldo no quede en pausa.`);
+    sent++;
+  }
+  return sent;
+}
 
 // ─────────────────────────────────────────────────────────────
 // PANEL MAYORISTA (mayorista.liordark.com) — todo detrás de sesión de
@@ -80,12 +96,70 @@ function wid(req: any): number {
   return (req as RequestWithWholesaler).wholesalerId;
 }
 
+// ── MEMBRESÍA ──
+// Sin membresía vigente el mayorista solo puede ver su estado y pagarla
+// (su saldo queda guardado, en pausa). Todo lo demás responde 402.
+const OPEN_WITHOUT_MEMBERSHIP = new Set([
+  "GET /membership", "POST /membership/pay", "GET /payment-methods",
+  "GET /notifications", "POST /notifications/read",
+]);
+
+router.use((req, res, next) => {
+  if (OPEN_WITHOUT_MEMBERSHIP.has(req.method + " " + req.path)) return next();
+  if (getMembershipStatus(wid(req)).active) return next();
+  res.status(402).json({
+    code: "membership_required",
+    message: "Tu membresía mayorista no está activa. Actívala para usar tu panel: tu saldo sigue guardado.",
+  });
+});
+
+function membershipView(wholesalerId: number) {
+  const w = findWholesalerById(wholesalerId);
+  const pending = latestPendingMembershipOrder(wholesalerId);
+  return {
+    ...getMembershipStatus(wholesalerId),
+    balanceCents: w?.balanceCents ?? 0,
+    plans: MEMBERSHIP_PLANS,
+    pending: pending ? { orderName: pending.orderName, plan: pending.plan, amount: pending.amount } : null,
+  };
+}
+
+router.get("/membership", (req, res) => {
+  res.json(membershipView(wid(req)));
+});
+
+// POST /membership/pay — { plan } — reserva el Yape en el bot (mismo camino
+// que la recarga, purpose "membership"); la membresía se activa sola cuando
+// el bot detecta el pago (POST /api/stock/wholesale-credit).
+router.post("/membership/pay", async (req, res) => {
+  const plan = membershipPlan(String(req.body?.plan ?? ""));
+  if (!plan) return res.status(400).json({ message: "Elige un plan de membresía." });
+  const wholesaler = findWholesalerById(wid(req));
+  if (!wholesaler) return res.status(404).json({ message: "Mayorista no encontrado." });
+
+  try {
+    const response = await axios.post(
+      env.BOT_BASE_URL + "/api/wholesale/topup",
+      { wholesalerId: wholesaler.id, phone: wholesaler.phone, amount: plan.price, purpose: "membership" },
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 }
+    );
+    const orderName = String(response.data?.orderName ?? "");
+    const amount = String(response.data?.amount ?? "");
+    if (!orderName || !amount) throw new Error("El bot no devolvió el monto a pagar.");
+    saveMembershipOrder({ orderName, wholesalerId: wholesaler.id, plan, amount });
+    res.json({ orderName, amount, plan: plan.id });
+  } catch (err: any) {
+    console.error("❌ No se pudo crear el pago de membresía en el bot:", err?.response?.data?.message ?? err?.message);
+    res.status(502).json({ message: err?.response?.data?.message ?? "No se pudo preparar el pago. Intenta de nuevo en un momento." });
+  }
+});
+
 // ── SALDO / CRÉDITOS ──
 
 router.get("/balance", (req, res) => {
   const wholesaler = findWholesalerById(wid(req));
   if (!wholesaler) return res.status(404).json({ message: "Mayorista no encontrado." });
-  res.json({ balanceCents: wholesaler.balanceCents, displayName: wholesaler.displayName, phone: wholesaler.phone });
+  res.json({ balanceCents: wholesaler.balanceCents, displayName: wholesaler.displayName, phone: wholesaler.phone, membership: getMembershipStatus(wholesaler.id) });
 });
 
 router.get("/ledger", (req, res) => {

@@ -35,8 +35,6 @@
       btn.setAttribute("aria-expanded", String(open));
     });
   });
-  const wl = $("faq-wholesale-link");
-  if (wl) wl.href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent("Hola! Quiero ser mayorista de Manguitope.");
 
   // Métodos de pago reales (los que están activos en el panel).
   getJson("/api/store/payment-methods").then(({ methods }) => {
