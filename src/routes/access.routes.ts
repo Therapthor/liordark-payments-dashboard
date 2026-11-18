@@ -98,12 +98,15 @@ function profileWithStatus(p: ProfileWithAccount) {
 // Viene del catálogo propio del panel (Configuración > Catálogo), no del
 // bot — se edita ahí. Ver src/db/catalog.repository.ts.
 
-router.get("/platforms-catalog", (_req, res) => {
+router.get("/platforms-catalog", (req, res) => {
   // plans: CANVA/GEMINI se venden por meses (Mayoristas › Asignar cuenta los ofrece).
-  const platforms = listCatalogProducts(true).map(p => {
+  // ?all=1 (Accesos): también los apagados en el Catálogo, marcados — así una
+  // cuenta de un producto apagado (ej. CLAUDE) nunca cae en otra plataforma.
+  const all = req.query.all === "1";
+  const platforms = listCatalogProducts(!all).map(p => {
     const plans = plansFor(p.platform);
     return {
-      platform: p.platform, hasProfiles: p.hasProfiles,
+      platform: p.platform, hasProfiles: p.hasProfiles, active: p.active,
       ...(plans ? { plans: plans.map(pl => ({ months: pl.months, days: pl.days, label: pl.label })) } : {}),
     };
   });

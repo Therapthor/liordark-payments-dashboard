@@ -107,6 +107,7 @@
   let currentProfileForModal   = null;
   let editingAccountId         = null;
   let editingAccountPlatform   = null;
+  let editPlatformTouched = false; // el admin cambió la plataforma a propósito
   // Correo/contraseña al abrir "Editar cuenta" — si cambian, se ofrece
   // avisar a los clientes con suscripción vigente.
   let editingOriginalCredentials = null;
@@ -116,7 +117,7 @@
   async function loadCatalog() {
     if (platformCatalog.length) return platformCatalog;
     try {
-      const { platforms } = await api("/platforms-catalog");
+      const { platforms } = await api("/platforms-catalog?all=1");
       platformCatalog = platforms;
     } catch {
       platformCatalog = [];
@@ -150,11 +151,19 @@
     return found?.whatsapp || "";
   }
 
+  // Las plataformas prendidas en el Catálogo + la que ya tiene la cuenta
+  // (aunque esté apagada o no exista en el Catálogo): así nunca queda
+  // elegida otra por descuido (antes una cuenta de CLAUDE, apagado, se
+  // guardaba como ADOBE, la primera de la lista).
   function populatePlatformSelect(select, selected) {
-    select.innerHTML = platformCatalog.length
-      ? platformCatalog.map(p =>
-          `<option value="${escapeHtml(p.platform)}" ${p.platform === selected ? "selected" : ""}>${escapeHtml(p.platform)}</option>`
-        ).join("")
+    const want = String(selected || "").trim().toUpperCase();
+    const list = platformCatalog.filter(p => p.active !== false || String(p.platform).toUpperCase() === want);
+    if (want && !list.some(p => String(p.platform).toUpperCase() === want)) list.unshift({ platform: want, active: false });
+    select.innerHTML = list.length
+      ? list.map(p => {
+          const up = String(p.platform).toUpperCase();
+          return `<option value="${escapeHtml(up)}" ${up === want ? "selected" : ""}>${escapeHtml(up)}${p.active === false ? " (apagado en el Catálogo)" : ""}</option>`;
+        }).join("")
       : `<option value="">No se pudo cargar el catálogo del bot</option>`;
   }
 
@@ -944,8 +953,8 @@
     await Promise.all([loadCatalog(), loadProviderCatalog(), loadCodeSources()]);
     document.getElementById("bulk-form").reset();
     document.getElementById("bulk-error").hidden = true;
-    populatePlatformSelect(document.getElementById("bulk-platform"));
     const wanted = opts && typeof opts.platform === "string" ? opts.platform.trim().toUpperCase() : "";
+    populatePlatformSelect(document.getElementById("bulk-platform"), wanted);
     const platformSelect = document.getElementById("bulk-platform");
     if (wanted && [...platformSelect.options].some(o => o.value === wanted)) platformSelect.value = wanted;
     populateProviderSelect(document.getElementById("bulk-provider"));
@@ -1020,6 +1029,7 @@
 
     const { account, activeClientCount } = await api("/accounts/" + accountId);
     editingAccountPlatform = account.platform;
+    editPlatformTouched = false;
     editingOriginalCredentials = { email: account.email, password: account.password };
     populatePlatformSelect(document.getElementById("account-edit-platform"), account.platform);
     document.getElementById("account-edit-email").value = account.email;
@@ -1123,12 +1133,14 @@
     });
 
     document.getElementById("account-edit-code-source").addEventListener("change", syncTotpField);
+    document.getElementById("account-edit-platform").addEventListener("change", () => { editPlatformTouched = true; });
 
     document.getElementById("account-edit-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const renewalEnabled = document.getElementById("account-edit-renewal-enabled").checked;
       const body = {
-        platform:  document.getElementById("account-edit-platform").value,
+        // La plataforma solo se manda si el admin la cambió a propósito.
+        platform:  editPlatformTouched ? document.getElementById("account-edit-platform").value : undefined,
         email:     document.getElementById("account-edit-email").value,
         password:  document.getElementById("account-edit-password").value,
         provider:  document.getElementById("account-edit-provider").value,
@@ -1178,7 +1190,7 @@
         document.getElementById("account-edit-modal").hidden = true;
         // Si cambió de plataforma, la tarjeta se mueve de acordeón — ahí sí
         // hace falta recargar todo. Si no, se actualiza sin cerrar nada.
-        if (body.platform === editingAccountPlatform) {
+        if (body.platform === undefined || String(body.platform).toUpperCase() === String(editingAccountPlatform).toUpperCase()) {
           await refreshAccountInPlace(editingAccountId, editingAccountPlatform);
         } else {
           await refresh();
