@@ -408,7 +408,13 @@
         const renewed = m.active && (!memberUntilBefore || m.until !== memberUntilBefore);
         if (renewed) {
           memberState = m;
-          document.getElementById("member-done-text").textContent = `¡Tu membresía está activa hasta el ${memberDate(m.until)}!`;
+          const balance = Number(m.balanceCents) || 0;
+          document.getElementById("member-title").textContent = memberRenewing ? "¡Membresía renovada!" : "¡Pago recibido!";
+          document.getElementById("member-lead").textContent = balance > 0
+            ? `Tu saldo de ${money(balance)} ya está disponible. Ya puedes comprar, recargar y renovar a tus clientes.`
+            : "Ya puedes recargar saldo, comprar al precio mayorista y renovar a tus clientes.";
+          document.getElementById("member-paused").hidden = true;
+          document.getElementById("member-done-text").textContent = `Tu membresía está activa hasta el ${memberDate(m.until)}.`;
           setMemberStep("done");
           return;
         }
