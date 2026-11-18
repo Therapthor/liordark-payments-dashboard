@@ -45,6 +45,7 @@ import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-histo
 import { listRenewalHistory } from "../db/renewal-history.repository";
 import {
   setAccountCodesEnabled,
+  setAccountCodesUnfiltered,
   setAccountCodeSource,
   setAccountTotpSecret,
   setAccountCodeInboxUrl,
@@ -462,6 +463,14 @@ router.post("/accounts/:id/codes-enabled", (req, res) => {
   const enabled   = req.body?.enabled === true;
   if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   setAccountCodesEnabled(accountId, enabled);
+  res.json({ account: withStatus(getAccountById(accountId)!) });
+});
+
+// «Mayorista ve todos los códigos» de esta cuenta (sin filtros).
+router.post("/accounts/:id/codes-unfiltered", (req, res) => {
+  const accountId = Number(req.params.id);
+  if (!getAccountById(accountId)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  setAccountCodesUnfiltered(accountId, req.body?.unfiltered === true);
   res.json({ account: withStatus(getAccountById(accountId)!) });
 });
 

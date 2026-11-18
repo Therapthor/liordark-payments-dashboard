@@ -1052,6 +1052,7 @@
     await loadCodeSources();
     document.getElementById("account-edit-codes-enabled").checked = !!account.codesEnabled;
     document.getElementById("account-edit-codes-fields").hidden = !account.codesEnabled;
+    document.getElementById("account-edit-codes-unfiltered").checked = !!account.codesUnfiltered;
     document.getElementById("account-edit-code-source").value = account.totpSecret ? TOTP_SOURCE_ID : (account.codeSource || "");
     document.getElementById("account-edit-totp-secret").value = account.totpSecret || "";
     document.getElementById("account-edit-inbox-url").value = account.codeInboxUrl || "";
@@ -1156,6 +1157,7 @@
       const passwordChanged = !!editingOriginalCredentials && body.password !== editingOriginalCredentials.password;
       body.notifyClients = credentialsChanged && document.getElementById("account-edit-notify").checked;
       const codesEnabled = document.getElementById("account-edit-codes-enabled").checked;
+      const codesUnfiltered = codesEnabled && document.getElementById("account-edit-codes-unfiltered").checked;
       const codeSource   = document.getElementById("account-edit-code-source").value || null;
       const totpSecret   = codeSource === TOTP_SOURCE_ID
         ? (document.getElementById("account-edit-totp-secret").value.trim() || null)
@@ -1187,6 +1189,7 @@
         await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
         await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
         await api("/accounts/" + editingAccountId + "/totp-secret", { method: "POST", body: JSON.stringify({ totpSecret: codesEnabled ? totpSecret : null }) });
+        await api("/accounts/" + editingAccountId + "/codes-unfiltered", { method: "POST", body: JSON.stringify({ unfiltered: codesUnfiltered }) });
         document.getElementById("account-edit-modal").hidden = true;
         // Si cambió de plataforma, la tarjeta se mueve de acordeón — ahí sí
         // hace falta recargar todo. Si no, se actualiza sin cerrar nada.

@@ -1,6 +1,6 @@
 import { db, ensureColumn } from "../db/db";
 import { getAccountById } from "../db/access.repository";
-import { saveIncomingCode } from "../db/codes.repository";
+import { saveIncomingCode, isAccountCodesUnfiltered } from "../db/codes.repository";
 import { findCodeLink, codeLinkState, sqliteDate, type CodeLink } from "../db/code-links.repository";
 import {
   lookupCodeAction, withLookupContext, describeLookupError, parseProviderDate,
@@ -206,6 +206,11 @@ function evaluate(req: CodeRequestRow, result: CodeLookupResult, problem: { mess
   const value = result.kind === "link" ? (loginLinkOf(result) ?? result.value) : result.value;
   if (req.baselineValue && sameCodeValue(value, req.baselineValue) && (!req.baselineReceivedAt || !result.providerReceivedAt || req.baselineReceivedAt === result.providerReceivedAt)) {
     return { state: "not_found", note: "", message: "Sigue el mismo de antes; esperando uno nuevo." };
+  }
+  // «Mayorista ve todos los códigos» (por cuenta, decisión del dueño): al
+  // panel mayorista se le entrega lo que llegue, sin los filtros de abajo.
+  if (req.createdBy === "wholesaler" && isAccountCodesUnfiltered(req.accountId)) {
+    return { state: "found", result, value };
   }
   if (!deliversEverything(req.sourceId) && isAccountChangeResult(result)) {
     return { state: "not_login", note: NOT_LOGIN_NOTE, message: "Llegó un correo de cambio de datos de la cuenta (no se entrega)." };

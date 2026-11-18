@@ -13,6 +13,16 @@ export function setAccountCodesEnabled(accountId: number, enabled: boolean): voi
   db.prepare(`UPDATE access_accounts SET codes_enabled = ? WHERE id = ?`).run(enabled ? 1 : 0, accountId);
 }
 
+/** «Mayorista ve todos los códigos» (sin filtros de inicio de sesión). */
+export function setAccountCodesUnfiltered(accountId: number, unfiltered: boolean): void {
+  db.prepare(`UPDATE access_accounts SET codes_unfiltered = ? WHERE id = ?`).run(unfiltered ? 1 : 0, accountId);
+}
+
+export function isAccountCodesUnfiltered(accountId: number): boolean {
+  const row = db.prepare(`SELECT codes_unfiltered FROM access_accounts WHERE id = ?`).get(accountId) as { codes_unfiltered: number } | undefined;
+  return row?.codes_unfiltered === 1;
+}
+
 /** Cuál página externa consultar para esta cuenta — null = sin configurar
  *  (ver services/codes-lookup.service.ts para los ids válidos). */
 export function setAccountCodeSource(accountId: number, sourceId: string | null): void {

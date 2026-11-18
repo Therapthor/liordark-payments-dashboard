@@ -48,6 +48,7 @@ export type AccessAccount = {
   // "🔑 Código" — si esta cuenta puede recibir código (Netflix, ChatGPT,
   // etc.) para que el cliente lo pida desde liordark.com. Ver codes.repository.ts.
   codesEnabled: boolean;
+  codesUnfiltered: boolean;     // el mayorista ve todos los códigos (sin filtros)
   codeSource:   string | null;
   totpSecret:   string | null;
   codeInboxUrl: string;         // link privado de la bandeja del proveedor (solo admin)
@@ -1513,6 +1514,7 @@ function toAccount(row: any): AccessAccount {
     providerRenewalNextDate: row.provider_renewal_next_date ?? null,
     renewalPendingAt: row.renewal_pending_at ?? null,
     codesEnabled: row.codes_enabled === 1,
+    codesUnfiltered: row.codes_unfiltered === 1,
     codeSource:   row.code_source ?? null,
     totpSecret:   row.totp_secret ?? null,
     codeInboxUrl: row.code_inbox_url ?? "",

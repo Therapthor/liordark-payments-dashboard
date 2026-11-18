@@ -1080,7 +1080,7 @@
         codesShowTotp(data);
       } else if (data.status === "found") {
         const isLink = data.kind === "link";
-        document.getElementById("codes-found-label").textContent = isLink ? "LLEGÓ EL LINK DE INICIO DE SESIÓN" : "LLEGÓ EL CÓDIGO";
+        document.getElementById("codes-found-label").textContent = isLink ? "LLEGÓ EL LINK" : "LLEGÓ EL CÓDIGO";
         document.getElementById("codes-found-meta").textContent = data.receivedAtLima ? "Llegó a las " + data.receivedAtLima : "";
         document.getElementById("codes-value").textContent = isLink ? "" : data.value;
         document.getElementById("codes-box").classList.toggle("long", !isLink && String(data.value).length > 6);

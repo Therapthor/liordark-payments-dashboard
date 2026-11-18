@@ -168,6 +168,9 @@ ensureColumn("customers", "password_plain", "password_plain TEXT NOT NULL DEFAUL
 // En prueba: solo habilitado para el celular de test (ver codes.service.ts).
 // ─────────────────────────────────────────────────────────────
 ensureColumn("access_accounts", "codes_enabled", "codes_enabled INTEGER NOT NULL DEFAULT 0");
+// «Mayorista ve todos los códigos» de esta cuenta: sin los filtros de
+// inicio de sesión (decisión del dueño, por cuenta). Solo el panel mayorista.
+ensureColumn("access_accounts", "codes_unfiltered", "codes_unfiltered INTEGER NOT NULL DEFAULT 0");
 
 // Qué página externa consultar para sacarle el código a esta cuenta en
 // particular — cada correo/proveedor puede tener su propio mecanismo (ver
