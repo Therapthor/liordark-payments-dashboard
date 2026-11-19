@@ -427,6 +427,11 @@ export function sourcesHealth(): SourceHealth[] {
 
 const WATCH_INTERVAL_MS = 2 * 60 * 1000;
 const WATCH_GAP_MS = 1500;
+// Juanpa: cada bandeja se revisa sola cada 10 min (antes, todas cada 2 min:
+// decenas de pedidos seguidos a su página, que terminó sin responder). Lo que
+// pide un cliente o el panel sigue yendo al momento.
+const JUANPA_WATCH_EVERY_MS = 10 * 60 * 1000;
+const lastWatchedAt = new Map<string, number>();
 let watching = false;
 let lastWatch: { at: string; checked: number; ms: number } | null = null;
 
@@ -446,6 +451,8 @@ export async function runCodeWatch(): Promise<{ checked: number }> {
       const key = a.codeSource + "|" + a.email.trim().toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
+      if (a.codeSource.startsWith("juanpa_") && Date.now() - (lastWatchedAt.get(key) ?? 0) < JUANPA_WATCH_EVERY_MS) continue;
+      lastWatchedAt.set(key, Date.now());
       await withLookupContext({ origin: "vigilante", accountId: a.id }, () => lookupCode(a.codeSource!, a.email)).catch(() => {});
       checked++;
       await new Promise(r => setTimeout(r, WATCH_GAP_MS));

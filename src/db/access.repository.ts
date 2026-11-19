@@ -327,6 +327,23 @@ export function assignProfileClient(id: number, clientPhone: string): AccessProf
   return getProfileById(id);
 }
 
+/** Cuentas de un solo lugar cuyo cliente tiene su fecha guardada aparte
+ *  (reemplazos de antes): la fecha pasa a la cuenta. Idempotente. */
+export function syncSingleSlotExpiry(): number {
+  const rows = db.prepare(`
+    SELECT a.id AS accountId, p.id AS profileId, p.expires_override AS date
+    FROM access_accounts a JOIN access_profiles p ON p.account_id = a.id
+    WHERE a.has_profiles = 0 AND p.client_phone != '' AND p.expires_override IS NOT NULL
+  `).all() as { accountId: number; profileId: number; date: string }[];
+  db.transaction(() => {
+    for (const r of rows) {
+      db.prepare(`UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?`).run(r.date, r.accountId);
+      db.prepare(`UPDATE access_profiles SET expires_override = NULL WHERE id = ?`).run(r.profileId);
+    }
+  })();
+  return rows.length;
+}
+
 export function releaseProfile(id: number): AccessProfile | null {
   // expires_override también se limpia: si no, un cliente nuevo que caiga
   // en este mismo slot heredaría la fecha congelada del cliente anterior.
@@ -766,7 +783,9 @@ export function listWholesalerClients(wholesalerId: number): WholesalerClientPro
            p.updated_at AS updatedAt, a.platform AS platform,
            -- Cuenta ya renovada con el proveedor: quien no pagó se corta en la
            -- fecha original (renewal_cleanup_due_at), no en la nueva.
-           CASE WHEN a.renewal_cleanup_due_at IS NOT NULL AND COALESCE(p.renewal_status, '') != 'yes'
+           -- Un reemplazo conserva la fecha del cliente en expires_override.
+           CASE WHEN p.expires_override IS NOT NULL THEN p.expires_override
+                WHEN a.renewal_cleanup_due_at IS NOT NULL AND COALESCE(p.renewal_status, '') != 'yes'
                 THEN a.renewal_cleanup_due_at ELSE a.expires_at END AS expiresAt,
            a.email AS email, a.password AS password, a.has_profiles AS accountHasProfiles
     FROM access_profiles p
@@ -1122,6 +1141,15 @@ export const replaceClientAccount = db.transaction((params: {
     SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?, order_ref = ?
     WHERE id = ?
   `).run(params.expiresAt ?? source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, sourceRef, freeProfileId);
+  // Cuenta de un solo lugar (cuenta completa, o plataforma sin perfiles): es
+  // toda del cliente, así que su vencimiento ES el del cliente — se guarda en
+  // la cuenta (lo ven Accesos, Códigos, renovaciones y avisos), no aparte.
+  const keepDate = params.expiresAt ?? source.preservedExpiresAt;
+  const single = db.prepare(`SELECT has_profiles AS hasProfiles FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { hasProfiles: number } | undefined;
+  if (keepDate && single && !single.hasProfiles) {
+    db.prepare(`UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?`).run(keepDate, params.targetAccountId);
+    db.prepare(`UPDATE access_profiles SET expires_override = NULL WHERE id = ?`).run(freeProfileId);
+  }
 
   const account = db.prepare(`SELECT email FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { email: string };
   return { accountId: params.targetAccountId, email: account.email };

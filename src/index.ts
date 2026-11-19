@@ -50,6 +50,7 @@ import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.serv
 import { applyPendingPasswordRotation } from "./services/auth.service";
 import { scanPastChatMessages, runPendingFraudCleanups } from "./services/security.service";
 import { removeFakePayments } from "./db/payments.repository";
+import { syncSingleSlotExpiry } from "./db/access.repository";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -298,6 +299,10 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
     if (r.payments || r.orders) console.log(`🧹 Pagos falsos quitados de la contabilidad: ${r.payments} pago(s), ${r.orders} pedido(s) aprobado(s)`);
   } catch (err: any) { console.error("⚠️ limpieza de pagos falsos:", err?.message); }
   try { runPendingFraudCleanups(); } catch (err: any) { console.error("⚠️ limpieza de fraude:", err?.message); }
+  try {
+    const n = syncSingleSlotExpiry();
+    if (n) console.log(`📅 Vencimientos de reemplazos pasados a su cuenta: ${n}`);
+  } catch (err: any) { console.error("⚠️ vencimientos de reemplazos:", err?.message); }
   try {
     const bad = findSuspiciousApprovedOrders();
     console.log(bad.length

@@ -1437,7 +1437,9 @@ async function juanpaFetch(email: string, sourceId = "juanpa_bandeja"): Promise<
   if (!url) throw new ProviderError("provider", "Juanpa: falta pegar el link de la bandeja de esta cuenta (Accesos › Editar cuenta).");
   const res = await axios.get(url, {
     headers: { "User-Agent": JP_UA, Accept: "text/html,application/xhtml+xml" },
-    timeout: 25_000, responseType: "text", transformResponse: r => r, validateStatus: () => true,
+    // La página carga en segundos: si tarda más, no va a responder (y
+    // esperar 25 s dejaba la fila de Juanpa trabada para todos).
+    timeout: 15_000, responseType: "text", transformResponse: r => r, validateStatus: () => true,
   });
   if (res.status === 404) throw new ProviderError("provider", "Juanpa: el link de la bandeja ya no existe (404). Pídele el nuevo al proveedor.");
   if (res.status >= 400) {

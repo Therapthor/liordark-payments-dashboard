@@ -45,10 +45,17 @@ const COOLDOWN_MAX_MS = 120_000;
 /** El proveedor BLOQUEÓ (no solo tardó): la fila espera antes de seguir.
  *  Tardar no es bloquear — Pally a propósito se queda esperando el correo
  *  10–40 s; si eso pausara la fila, el código llegaría todavía más tarde. */
-function isThrottle(err: any): boolean {
+// Páginas que responden al toque (no esperan el correo como Pally): si
+// no responden o cortan la conexión, es que nos están frenando por pedir
+// demasiado — la fila espera (20 s, 40 s… 2 min) en vez de insistir.
+const QUICK_PAGE_LANES = new Set(["juanpa"]);
+
+function isThrottle(err: any, laneId = ""): boolean {
   const status = err?.response?.status;
   if (status === 429 || status === 403 || status === 503) return true;
-  if (/timeout|ECONNABORTED|ETIMEDOUT/i.test(String(err?.code ?? "") + " " + String(err?.message ?? ""))) return false;
+  const net = String(err?.code ?? "") + " " + String(err?.message ?? "");
+  if (QUICK_PAGE_LANES.has(laneId) && /timeout|ECONNABORTED|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|no respondi[oó]|no se pudo conectar/i.test(net)) return true;
+  if (/timeout|ECONNABORTED|ETIMEDOUT/i.test(net)) return false;
   return /l[ií]mite|demasiad|too many|bloquead|intenta (m[aá]s )?tarde/i.test(String(err?.message ?? ""));
 }
 
@@ -104,7 +111,7 @@ class Lane {
       this.lastOkAt = Date.now();
       job.resolve(result);
     } catch (err: any) {
-      if (isThrottle(err)) {
+      if (isThrottle(err, this.id)) {
         this.cooldownMs = Math.min(COOLDOWN_MAX_MS, this.cooldownMs ? this.cooldownMs * 2 : COOLDOWN_FIRST_MS);
         this.cooldownUntil = Date.now() + this.cooldownMs;
       }
