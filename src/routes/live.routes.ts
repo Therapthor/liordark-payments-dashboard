@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { getRecentPayments, searchByCode } from "../db/payments.repository";
+import { getRecentPayments, searchByCode, hidePayment } from "../db/payments.repository";
 import { getSummary } from "../services/stats.service";
-import { onDashboardEvent } from "../utils/live-events.util";
+import { onDashboardEvent, emitDashboardEvent } from "../utils/live-events.util";
 import { getConnectionStatus } from "../services/sync.service";
 import { checkCloudinaryStatus } from "../services/cloudinary.service";
 
@@ -35,6 +35,26 @@ router.get("/search", (req, res) => {
   // Mismo padding que usa el bot (yape.service.ts normalizeCode): 3 dígitos.
   const code = raw.padStart(3, "0").slice(0, 3);
   res.json({ code, payments: searchByCode(code) });
+});
+
+// Quitar un pago de la contabilidad y del historial (Yape de un familiar,
+// error…). No toca al bot ni al cliente: solo deja de contarse en el panel.
+router.delete("/payments/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ message: "Pago inválido" });
+    return;
+  }
+  const removed = hidePayment(id);
+  if (!removed) {
+    res.status(404).json({ message: "Ese pago ya no está en la lista." });
+    return;
+  }
+  console.log(`🗑️ Pago quitado de la contabilidad: #${id} · S/ ${removed.amount}`);
+  const stats = getSummary();
+  emitDashboardEvent({ type: "payment_removed", id });
+  emitDashboardEvent({ type: "stats", stats });
+  res.json({ ok: true, stats });
 });
 
 // SSE hacia el navegador — reenvía lo que llega del bot en vivo.

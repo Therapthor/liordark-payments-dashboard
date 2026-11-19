@@ -489,6 +489,7 @@
     const li = document.createElement("li");
     li.className = "feed-item" + (isNew ? " is-new" : "");
     li.dataset.id = p.id;
+    knownPayments.set(String(p.id), p);
     const phone = phoneFromOrderName(p.orderName);
     li.innerHTML = `
       <span class="feed-badge ${statusClass(p.status)}"></span>
@@ -537,6 +538,99 @@
     if (payments.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
     for (const p of payments) list.appendChild(renderFeedItem(p, false));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // QUITAR UN PAGO — 3 toques seguidos sobre el pago (en vivo, búsqueda o
+  // detalle del día) abren la confirmación. Para Yapes de un familiar o
+  // errores: deja de contar en la contabilidad y en el historial.
+  // ─────────────────────────────────────────────────────────────
+
+  const knownPayments = new Map(); // id → pago, de lo que hay pintado en pantalla
+  let paymentToRemove = null;
+  let openDayDate = null;
+
+  function onTripleTap(container, selector, handler) {
+    let lastEl = null, count = 0, timer = null;
+    container.addEventListener("click", (e) => {
+      const el = e.target.closest(selector);
+      if (!el || !container.contains(el)) return;
+      if (el !== lastEl) { lastEl = el; count = 0; }
+      count++;
+      clearTimeout(timer);
+      timer = setTimeout(() => { count = 0; lastEl = null; }, 600);
+      if (count < 3) return;
+      count = 0; lastEl = null; clearTimeout(timer);
+      try { window.getSelection()?.removeAllRanges(); } catch { /* sin selección */ }
+      handler(el);
+    });
+  }
+
+  function limaDateOf(iso) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" }).format(new Date(iso));
+  }
+
+  function openRemovePayment(id) {
+    const p = knownPayments.get(String(id));
+    if (!p) return;
+    paymentToRemove = p;
+    document.getElementById("pay-remove-name").textContent   = p.senderName;
+    document.getElementById("pay-remove-meta").textContent   =
+      fmtDateLong(limaDateOf(p.createdAt)) + " · " + fmtTime(p.createdAt) + " · " + statusLabel(p.status);
+    document.getElementById("pay-remove-amount").innerHTML  = moneyValueHtml(fmtMoney(p.amount));
+    document.getElementById("pay-remove-warn").hidden  = p.status !== "matched";
+    document.getElementById("pay-remove-error").hidden = true;
+    const btn = document.getElementById("pay-remove-confirm");
+    btn.disabled = false;
+    btn.textContent = "Quitar pago";
+    document.getElementById("pay-remove-modal").hidden = false;
+  }
+
+  /** Saca el pago de lo que está en pantalla (esta pestaña u otra que lo quitó). */
+  function dropPaymentFromScreen(id) {
+    const key = String(id);
+    knownPayments.delete(key);
+    cachedLivePayments = cachedLivePayments.filter(p => String(p.id) !== key);
+    document.querySelectorAll(`.feed-item[data-id="${key}"], .day-detail-row[data-pay-id="${key}"]`).forEach(el => {
+      el.classList.add("is-removing");
+      setTimeout(() => {
+        el.remove();
+        const list = document.getElementById("feed-list");
+        if (list && list.children.length === 0) document.getElementById("feed-empty").hidden = false;
+      }, 380);
+    });
+  }
+
+  async function confirmRemovePayment() {
+    if (!paymentToRemove) return;
+    const p = paymentToRemove;
+    const btn = document.getElementById("pay-remove-confirm");
+    const errorEl = document.getElementById("pay-remove-error");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span>';
+    try {
+      const { stats } = await api("/live/payments/" + encodeURIComponent(p.id), { method: "DELETE" });
+      document.getElementById("pay-remove-modal").hidden = true;
+      paymentToRemove = null;
+      dropPaymentFromScreen(p.id);
+      if (stats) renderStats(stats);
+      loadHistory().catch(() => {});
+      loadChart();
+      if (openDayDate && !document.getElementById("day-modal").hidden) {
+        openDayDetail(openDayDate).catch(() => {});
+      }
+    } catch (err) {
+      errorEl.textContent = err.message || "No se pudo quitar el pago.";
+      errorEl.hidden = false;
+      btn.disabled = false;
+      btn.textContent = "Quitar pago";
+    }
+  }
+
+  function initRemovePayment() {
+    onTripleTap(document.getElementById("feed-list"), ".feed-item[data-id]", (li) => openRemovePayment(li.dataset.id));
+    onTripleTap(document.getElementById("day-modal-body"), ".day-detail-row[data-pay-id]", (row) => openRemovePayment(row.dataset.payId));
+    document.getElementById("pay-remove-confirm").addEventListener("click", confirmRemovePayment);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -709,6 +803,9 @@
       if (evt.type === "status_update") {
         updateFeedItemStatus(evt.id, evt.status);
       }
+
+      // Un pago se quitó de la contabilidad (desde esta u otra pestaña).
+      if (evt.type === "payment_removed") dropPaymentFromScreen(evt.id);
 
       if (evt.type === "stats") {
         renderStats(evt.stats);
@@ -1585,6 +1682,7 @@
   }
 
   async function openDayDetail(date) {
+    openDayDate = date;
     const info = await api("/history/" + date);
     document.getElementById("day-modal-title").textContent = fmtDateLong(date);
     const body = document.getElementById("day-modal-body");
@@ -1597,8 +1695,9 @@
         ${info.note ? `<div class="day-detail-row"><span>Nota</span><span>${escapeHtml(info.note)}</span></div>` : ""}
       `;
     } else {
+      info.payments.forEach(p => knownPayments.set(String(p.id), p));
       const rows = info.payments.map(p => `
-        <div class="day-detail-row">
+        <div class="day-detail-row" data-pay-id="${escapeHtml(String(p.id))}">
           <span>${fmtTime(p.createdAt)} · ${escapeHtml(p.senderName)}<br><small>${fmtCode(p)}</small></span>
           <b>${moneyValueHtml(fmtMoney(p.amount))}</b>
         </div>
@@ -1679,6 +1778,7 @@
     initSoundToggle();
     initMoneyToggle();
     initCodeSearch();
+    initRemovePayment();
     if (window.LiordarkAccess) window.LiordarkAccess.init();
     if (window.LiordarkCodes) window.LiordarkCodes.init();
     if (window.LiordarkCatalog) window.LiordarkCatalog.init();

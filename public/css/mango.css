@@ -2170,3 +2170,29 @@ button.mp-kpi:active { transform: scale(0.98); }
 /* Claude: botón propio para el link de inicio de sesión */
 .cx-linkbtn.cx-claude-btn, .codes-open-btn.codes-open-claude { background: #D97757 !important; color: #fff !important; border-color: transparent !important; }
 .cx-linkbtn.cx-claude-btn:hover, .codes-open-btn.codes-open-claude:hover { background: #C4643F !important; }
+
+/* ─── Quitar un pago (3 toques) ─── */
+#feed-list .feed-item[data-id], .day-detail-row[data-pay-id] { touch-action: manipulation; cursor: pointer; }
+.feed-item.is-removing, .day-detail-row.is-removing {
+  animation: mp-pay-out .38s var(--mp-ease, cubic-bezier(.22, 1, .36, 1)) forwards;
+  pointer-events: none;
+}
+@keyframes mp-pay-out {
+  to { opacity: 0; transform: translateX(28px) scale(.96); }
+}
+.pay-remove { max-width: 420px; }
+.pay-remove-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--mp-soft, #FFF6E5); border-radius: 14px; padding: 14px 16px; margin: 4px 0 12px;
+}
+.pay-remove-name { font-weight: 800; }
+.pay-remove-meta { font-size: 13px; color: var(--mp-muted, #7A6A55); margin-top: 2px; }
+.pay-remove-amount { font-weight: 800; font-size: 18px; white-space: nowrap; }
+.pay-remove-text { margin: 0 0 10px; font-size: 14px; }
+.pay-remove-warn {
+  margin: 0 0 10px; font-size: 13px; padding: 10px 12px; border-radius: 10px;
+  background: #FFF4F0; border: 1px solid var(--mp-danger-line, #F3C2B5); color: #9F2A12;
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed-item.is-removing, .day-detail-row.is-removing { animation-duration: .01s; }
+}

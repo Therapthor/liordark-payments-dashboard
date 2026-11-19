@@ -76,7 +76,7 @@ export function listRecentConfirmedPurchases(hours = 72, limit = 20): RecentPurc
     FROM payments p
     JOIN access_profiles ap ON ap.order_ref = p.order_name
     JOIN access_accounts a  ON a.id = ap.account_id
-    WHERE p.status = 'matched' AND p.order_name <> '' AND p.created_at >= ?
+    WHERE p.status = 'matched' AND p.order_name <> '' AND p.created_at >= ? AND p.hidden_at IS NULL
       AND ${notRenewal.replace(/\{ORDER\}/g, "p.order_name")}
       AND NOT EXISTS (SELECT 1 FROM wholesalers w WHERE substr(w.phone, -9) = substr(ap.client_phone, -9))
   `).all(cutoffIso) as { orderName: string; platform: string; at: string }[];

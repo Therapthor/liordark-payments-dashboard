@@ -10,6 +10,7 @@ export type DashboardLiveEvent =
   | { type: "stats"; stats: unknown }
   | { type: "connection"; status: "connected" | "reconnecting" }
   | { type: "status_update"; id: number; status: string }
+  | { type: "payment_removed"; id: number }
   | { type: "order_approved"; message: string; createdAt: string }
   | { type: "customer_registered"; phone: string; isGuest: boolean }
   | { type: "order_needs_review"; orderName: string; platform: string }

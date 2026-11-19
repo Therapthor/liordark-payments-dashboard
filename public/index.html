@@ -1489,6 +1489,30 @@
     </div>
   </div>
 
+  <!-- ───────────── MODAL: quitar un pago (3 toques) ───────────── -->
+  <div id="pay-remove-modal" class="modal-backdrop" hidden>
+    <div class="modal-card pay-remove">
+      <div class="modal-head">
+        <h3>¿Quitar este pago?</h3>
+        <button type="button" class="modal-x" data-close-modal="pay-remove-modal">✕</button>
+      </div>
+      <div class="pay-remove-card">
+        <div>
+          <div class="pay-remove-name" id="pay-remove-name"></div>
+          <div class="pay-remove-meta" id="pay-remove-meta"></div>
+        </div>
+        <div class="pay-remove-amount" id="pay-remove-amount"></div>
+      </div>
+      <p class="pay-remove-text">Se quita de la contabilidad y del historial (por ejemplo, un Yape de un familiar o un error). No se le avisa a nadie.</p>
+      <p class="pay-remove-warn" id="pay-remove-warn" hidden>Este pago está <b>confirmado</b> con un pedido: el pedido no cambia, solo deja de sumar en tus ingresos.</p>
+      <p class="form-error" id="pay-remove-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal="pay-remove-modal">Cancelar</button>
+        <button type="button" class="btn-danger" id="pay-remove-confirm">Quitar pago</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ───────────── MODAL: histórico por mes ───────────── -->
   <div id="months-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">

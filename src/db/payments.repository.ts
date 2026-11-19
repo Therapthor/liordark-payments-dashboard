@@ -3,6 +3,14 @@ import { db } from "./db";
 // Lima es UTC-5 fijo, sin horario de verano — igual que en el bot principal.
 const LIMA_OFFSET = "-5 hours";
 
+// Pagos que el admin quitó a mano (tocando 3 veces el pago): un Yape de un
+// familiar, una devolución, un error… No cuentan en la contabilidad ni salen
+// en las listas, pero la fila queda (con la fecha en hidden_at) para que la
+// sincronización con el bot no lo vuelva a traer y los pedidos que dependen de
+// ese pago (tienda, links de venta) sigan igual.
+try { db.exec(`ALTER TABLE payments ADD COLUMN hidden_at TEXT`); } catch { /* ya existe */ }
+const VISIBLE = "hidden_at IS NULL";
+
 export type PaymentRow = {
   id:           number;
   senderName:   string;
@@ -66,27 +74,35 @@ export function removeFakePayments(): { payments: number; orders: number } {
   return { payments, orders };
 }
 
+/** Quita un pago de la contabilidad y de las listas. Devuelve el pago quitado, o null si no existe / ya estaba quitado. */
+export function hidePayment(id: number): PaymentRow | null {
+  const row = db.prepare(`SELECT * FROM payments WHERE id = ? AND ${VISIBLE}`).get(id);
+  if (!row) return null;
+  db.prepare(`UPDATE payments SET hidden_at = datetime('now') WHERE id = ?`).run(id);
+  return toPaymentRow(row);
+}
+
 export function updatePaymentStatus(id: number, status: string): void {
   db.prepare(`UPDATE payments SET status = ? WHERE id = ?`).run(status, id);
 }
 
 export function getRecentPayments(limit: number): PaymentRow[] {
   return (db.prepare(`
-    SELECT * FROM payments ORDER BY created_at DESC LIMIT ?
+    SELECT * FROM payments WHERE ${VISIBLE} ORDER BY created_at DESC LIMIT ?
   `).all(limit) as any[]).map(toPaymentRow);
 }
 
 /** Busca pagos por código de seguridad de 3 dígitos (coincidencia exacta). */
 export function searchByCode(code: string): PaymentRow[] {
   return (db.prepare(`
-    SELECT * FROM payments WHERE security_code = ? ORDER BY created_at DESC LIMIT 50
+    SELECT * FROM payments WHERE security_code = ? AND ${VISIBLE} ORDER BY created_at DESC LIMIT 50
   `).all(code) as any[]).map(toPaymentRow);
 }
 
 export function getDayPayments(date: string): PaymentRow[] {
   return (db.prepare(`
     SELECT * FROM payments
-    WHERE date(created_at, ?) = ?
+    WHERE date(created_at, ?) = ? AND ${VISIBLE}
     ORDER BY created_at DESC
   `).all(LIMA_OFFSET, date) as any[]).map(toPaymentRow);
 }
@@ -99,7 +115,7 @@ export function getDailyTotals(sinceDaysAgo: number): DayTotal[] {
            SUM(CAST(amount AS REAL)) AS total,
            COUNT(*) AS count
     FROM payments
-    WHERE created_at >= datetime('now', '-' || ? || ' days')
+    WHERE created_at >= datetime('now', '-' || ? || ' days') AND ${VISIBLE}
     GROUP BY date
     ORDER BY date DESC
   `).all(LIMA_OFFSET, sinceDaysAgo) as DayTotal[];
@@ -111,7 +127,7 @@ export function getTotalForDate(date: string): DayTotal | null {
            SUM(CAST(amount AS REAL)) AS total,
            COUNT(*) AS count
     FROM payments
-    WHERE date(created_at, ?) = ?
+    WHERE date(created_at, ?) = ? AND ${VISIBLE}
     GROUP BY date
   `).get(LIMA_OFFSET, LIMA_OFFSET, date) as DayTotal | undefined;
   return row ?? null;
@@ -121,7 +137,7 @@ export function getTotalForMonth(yearMonth: string): DayTotal {
   const row = db.prepare(`
     SELECT SUM(CAST(amount AS REAL)) AS total, COUNT(*) AS count
     FROM payments
-    WHERE strftime('%Y-%m', datetime(created_at, ?)) = ?
+    WHERE strftime('%Y-%m', datetime(created_at, ?)) = ? AND ${VISIBLE}
   `).get(LIMA_OFFSET, yearMonth) as { total: number | null; count: number };
   return { date: yearMonth, total: row.total ?? 0, count: row.count ?? 0 };
 }
@@ -133,6 +149,7 @@ export function getAllMonthTotals(): { month: string; total: number; count: numb
            SUM(CAST(amount AS REAL)) AS total,
            COUNT(*) AS count
     FROM payments
+    WHERE ${VISIBLE}
     GROUP BY month
     ORDER BY month DESC
   `).all(LIMA_OFFSET) as { month: string; total: number; count: number }[];
@@ -140,7 +157,7 @@ export function getAllMonthTotals(): { month: string; total: number; count: numb
 
 export function getAllTimeTotal(): DayTotal {
   const row = db.prepare(`
-    SELECT SUM(CAST(amount AS REAL)) AS total, COUNT(*) AS count FROM payments
+    SELECT SUM(CAST(amount AS REAL)) AS total, COUNT(*) AS count FROM payments WHERE ${VISIBLE}
   `).get() as { total: number | null; count: number };
   return { date: "all", total: row.total ?? 0, count: row.count ?? 0 };
 }
