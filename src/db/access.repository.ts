@@ -952,7 +952,9 @@ export function getActiveAccountForWholesalerClient(
 // reportar un problema dos veces seguidas y la segunda vez su "cuenta
 // anterior" ya es ella misma una garantía manual, no una cuenta de pool.
 type ReplaceSource =
-  | { kind: "profile";  profileId: number;  preservedExpiresAt: string | null }
+  // fullAccount: la cuenta de origen es una cuenta completa (sin perfiles) —
+  // su reemplazo «nuevo» tiene que ser otra cuenta entera, no un perfil.
+  | { kind: "profile";  profileId: number;  preservedExpiresAt: string | null; fullAccount?: boolean }
   | { kind: "override"; overrideId: number; preservedExpiresAt: string | null };
 
 /** wholesalerId: null busca la cuenta/garantía de un cliente retail; un id
@@ -971,9 +973,9 @@ function findReplaceSource(clientPhone: string, platform: string, email: string,
   // EXACTO del reporte: si después se editó la cuenta (correo nuevo), o el
   // correo venía con otras mayúsculas, salía «No se encontró la cuenta
   // actual del cliente» y no dejaba reemplazar.
-  type Row = { profileId: number; preservedExpiresAt: string | null };
+  type Row = { profileId: number; preservedExpiresAt: string | null; hasProfiles: number };
   const profileBase = `
-    SELECT p.id AS profileId, COALESCE(p.expires_override, a.expires_at) AS preservedExpiresAt
+    SELECT p.id AS profileId, COALESCE(p.expires_override, a.expires_at) AS preservedExpiresAt, a.has_profiles AS hasProfiles
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) = ? AND upper(trim(a.platform)) = ?`;
@@ -982,7 +984,7 @@ function findReplaceSource(clientPhone: string, platform: string, email: string,
     .get(d9, plat, mail, wholesalerId) as Row | undefined;
   // 2) Mismo correo, aunque el perfil figure con otro dueño.
   if (!row) row = db.prepare(`${profileBase} AND lower(trim(a.email)) = ? LIMIT 1`).get(d9, plat, mail) as Row | undefined;
-  if (row) return { kind: "profile", profileId: row.profileId, preservedExpiresAt: row.preservedExpiresAt };
+  if (row) return { kind: "profile", profileId: row.profileId, preservedExpiresAt: row.preservedExpiresAt, fullAccount: !row.hasProfiles };
 
   const ovBase = `SELECT id, expires_at AS expiresAt FROM manual_account_overrides
     WHERE substr(client_phone, -9) = ? AND upper(trim(platform)) = ?`;
@@ -995,10 +997,28 @@ function findReplaceSource(clientPhone: string, platform: string, email: string,
   const profiles = db.prepare(`${profileBase} LIMIT 2`).all(d9, plat) as Row[];
   const overrides = db.prepare(`${ovBase} LIMIT 2`).all(d9, plat) as { id: number; expiresAt: string | null }[];
   if (profiles.length + overrides.length === 1) {
-    if (profiles.length === 1) return { kind: "profile", profileId: profiles[0]!.profileId, preservedExpiresAt: profiles[0]!.preservedExpiresAt };
+    if (profiles.length === 1) return { kind: "profile", profileId: profiles[0]!.profileId, preservedExpiresAt: profiles[0]!.preservedExpiresAt, fullAccount: !profiles[0]!.hasProfiles };
     return { kind: "override", overrideId: overrides[0]!.id, preservedExpiresAt: overrides[0]!.expiresAt };
   }
   return null;
+}
+
+/** ¿La cuenta actual de este cliente es una cuenta completa (sin perfiles)? */
+export function isFullAccountSource(clientPhone: string, platform: string, email: string, wholesalerId: number | null): boolean {
+  const source = findReplaceSource(clientPhone, platform, email, wholesalerId);
+  return !!source && source.kind === "profile" && !!source.fullAccount;
+}
+
+/** Cuentas vigentes de la plataforma que están ENTERAS libres (ningún perfil
+ *  con cliente ni de stock mayorista) — destino de un reemplazo de cuenta completa. */
+export function listWholeFreeAccountIds(platform: string, todayISO: string): Set<number> {
+  const rows = db.prepare(`
+    SELECT a.id AS id FROM access_accounts a
+    WHERE upper(a.platform) = ? AND (a.expires_at IS NULL OR a.expires_at >= ?)
+      AND EXISTS (SELECT 1 FROM access_profiles p WHERE p.account_id = a.id)
+      AND NOT EXISTS (SELECT 1 FROM access_profiles p WHERE p.account_id = a.id AND (p.client_phone != '' OR p.wholesaler_id IS NOT NULL))
+  `).all(platform.trim().toUpperCase(), todayISO) as { id: number }[];
+  return new Set(rows.map(r => r.id));
 }
 
 function releaseReplaceSource(source: ReplaceSource): void {
@@ -1074,6 +1094,20 @@ export const replaceClientAccount = db.transaction((params: {
 
   const freeProfileId = findFreeProfileId(params.targetAccountId);
   if (!freeProfileId) throw new Error("La cuenta elegida no tiene perfiles libres.");
+
+  // Cuenta completa → la cuenta destino entera pasa a este cliente (como
+  // «👤 Cuenta completa»): se quitan sus otros perfiles, todos libres.
+  if (source.kind === "profile" && source.fullAccount) {
+    const target = db.prepare(`SELECT has_profiles AS hasProfiles FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { hasProfiles: number } | undefined;
+    if (target?.hasProfiles) {
+      const busy = db.prepare(`
+        SELECT 1 FROM access_profiles WHERE account_id = ? AND (client_phone != '' OR wholesaler_id IS NOT NULL) LIMIT 1
+      `).get(params.targetAccountId);
+      if (busy) throw new Error("Para reemplazar una cuenta completa, la cuenta nueva tiene que estar entera libre.");
+      db.prepare(`DELETE FROM access_profiles WHERE account_id = ? AND id <> ?`).run(params.targetAccountId, freeProfileId);
+      db.prepare(`UPDATE access_accounts SET has_profiles = 0, updated_at = datetime('now') WHERE id = ?`).run(params.targetAccountId);
+    }
+  }
 
   releaseReplaceSource(source);
   assignProfileClient(freeProfileId, params.clientPhone);

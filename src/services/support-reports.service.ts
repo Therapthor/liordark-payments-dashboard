@@ -1,7 +1,7 @@
 import { db } from "../db/db";
 import {
   listAccountsByClientPhone, getActiveAccountForClient, getAccountById, listAccountsWithFreeProfiles,
-  replaceClientAccount, replaceClientAccountManual,
+  replaceClientAccount, replaceClientAccountManual, isFullAccountSource, listWholeFreeAccountIds,
 } from "../db/access.repository";
 import {
   createSupportTicket, findOpenTicketForAccount, countTicketsTodayForClient, getSupportTicketById,
@@ -127,6 +127,11 @@ export function reviewMessage(platform: string): string {
     `Te avisamos apenas quede lista. ¡Gracias por tu paciencia! 🥭`;
 }
 
+export function reactivatedMessage(platform: string): string {
+  return `♻️ ¡Listo! Reactivamos tu cuenta de ${platformTitle(platform)}: ya tiene suscripción de nuevo ✅\n` +
+    `Cierra sesión y vuelve a entrar con tus mismos datos. ¡Gracias por tu paciencia! 🥭`;
+}
+
 export function activeMessage(platform: string): string {
   return `✅ ¡Hola! Revisamos tu cuenta de ${platformTitle(platform)}: tiene su suscripción activa y no presenta caídas 🎬\n` +
     `Cierra sesión y vuelve a ingresar con tus datos para que se actualice. ¡Cualquier duda, aquí estamos! 🥭`;
@@ -166,6 +171,8 @@ export const WHOLESALE_REPORT_REASONS = [
   "Otro",
 ] as const;
 export const CODES_RESET_PROBLEM = "Restablecer límite de códigos";
+/** «🔁 Pedir reemplazo» del panel mayorista (perfil o cuenta completa sin suscripción). */
+export const WHOLESALE_REPLACE_REASON = "Sin suscripción — pide reemplazo";
 const MAX_WHOLESALE_REPORTS_PER_DAY = 10;
 
 export function reportWholesalerProblem(params: {
@@ -195,7 +202,8 @@ export function reportWholesalerProblem(params: {
     }
     problem = CODES_RESET_PROBLEM;
   } else {
-    const reason = WHOLESALE_REPORT_REASONS.find(r => r === params.reason) ?? "Otro";
+    const reason = params.reason === WHOLESALE_REPLACE_REASON ? WHOLESALE_REPLACE_REASON
+      : WHOLESALE_REPORT_REASONS.find(r => r === params.reason) ?? "Otro";
     const detail = String(params.detail ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
     if (reason === "Otro" && !detail) return { ok: false, status: 400, message: "Cuéntanos qué pasa con la cuenta." };
     problem = detail ? `${reason} — ${detail}` : reason;
@@ -244,6 +252,21 @@ export function resolveTicketActive(id: number): { ticket: SupportTicket; messag
   }
   if (before.status !== "attended" && before.wholesalerId) {
     wholesalerUpdate(before, `✅ Revisamos ${clientRef(before)}: tiene su suscripción activa. Que cierre sesión y vuelva a entrar con sus datos.`);
+  }
+  return ticket ? { ticket, message } : null;
+}
+
+/** «♻️ Reactivada»: se reactivó la MISMA cuenta (sin cambiarla). */
+export function resolveTicketReactivated(id: number): { ticket: SupportTicket; message: string } | null {
+  const before = getSupportTicketById(id);
+  if (!before) return null;
+  const message = reactivatedMessage(before.platform);
+  const ticket = markSupportTicketResolved(id, "reactivated", message);
+  if (before.status !== "attended" && !before.wholesalerId) {
+    createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
+  }
+  if (before.status !== "attended" && before.wholesalerId) {
+    wholesalerUpdate(before, `♻️ Reactivamos ${clientRef(before)}: ya tiene suscripción de nuevo. Que cierre sesión y vuelva a entrar con sus mismos datos.`);
   }
   return ticket ? { ticket, message } : null;
 }
@@ -298,11 +321,13 @@ export type ReplaceOption = {
  *  Soportes que para «Cambiar cuenta» desde Accesos. */
 export type ReplaceSubject = { clientPhone: string; platform: string; accountEmail: string; wholesalerId: number | null };
 
-export function replaceOptions(ticket: SupportTicket): { fresh: ReplaceOption[]; shared: ReplaceOption[] } {
+export function replaceOptions(ticket: SupportTicket): { fresh: ReplaceOption[]; shared: ReplaceOption[]; full: boolean } {
   return replaceOptionsFor(ticket);
 }
 
-export function replaceOptionsFor(ticket: ReplaceSubject): { fresh: ReplaceOption[]; shared: ReplaceOption[] } {
+/** full: la cuenta actual es una cuenta completa → «nueva» = otra cuenta
+ *  ENTERA libre (pasa completa al cliente), no un perfil suelto. */
+export function replaceOptionsFor(ticket: ReplaceSubject): { fresh: ReplaceOption[]; shared: ReplaceOption[]; full: boolean } {
   const today = limaTodayISO();
   const rows = db.prepare(`
     SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt,
@@ -315,10 +340,14 @@ export function replaceOptionsFor(ticket: ReplaceSubject): { fresh: ReplaceOptio
     GROUP BY a.id
     ORDER BY a.expires_at DESC
   `).all(ticket.platform.toUpperCase(), today, ticket.accountEmail) as ReplaceOption[];
-  const freeIds = new Set(listAccountsWithFreeProfiles(ticket.platform, 1, today).map(a => a.id));
+  const full = isFullAccountSource(ticket.clientPhone, ticket.platform, ticket.accountEmail, ticket.wholesalerId);
+  const freeIds = full
+    ? listWholeFreeAccountIds(ticket.platform, today)
+    : new Set(listAccountsWithFreeProfiles(ticket.platform, 1, today).map(a => a.id));
   return {
     fresh: rows.filter(r => r.freeCount > 0 && freeIds.has(r.id)),
     shared: rows,
+    full,
   };
 }
 
@@ -349,6 +378,7 @@ export function replaceClientTo(
     return { ok: false, message: "Elige una cuenta distinta a la actual." };
   }
   let newProfile = "";
+  let fullAccount = false;
   let expiresAt: string | null = null;
   try {
     if (mode === "fresh") {
@@ -357,11 +387,13 @@ export function replaceClientTo(
         targetAccountId, wholesalerId: ticket.wholesalerId,
       });
       const row = db.prepare(`
-        SELECT p.profile_name AS profileName, COALESCE(p.expires_override, a.expires_at) AS expiresAt
+        SELECT p.profile_name AS profileName, COALESCE(p.expires_override, a.expires_at) AS expiresAt, a.has_profiles AS hasProfiles
         FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id
         WHERE p.account_id = ? AND substr(p.client_phone, -9) = ? ORDER BY p.id DESC LIMIT 1
-      `).get(targetAccountId, last9(ticket.clientPhone)) as { profileName: string; expiresAt: string | null } | undefined;
-      newProfile = row?.profileName || "";
+      `).get(targetAccountId, last9(ticket.clientPhone)) as { profileName: string; expiresAt: string | null; hasProfiles: number } | undefined;
+      // Cuenta completa: no hay perfil que nombrar.
+      fullAccount = !!row && !row.hasProfiles;
+      newProfile = fullAccount ? "" : row?.profileName || "";
       expiresAt = row?.expiresAt ?? null;
     } else {
       replaceClientAccountManual({
@@ -389,7 +421,7 @@ export function replaceClientTo(
     const detail = [
       `Cliente: ${String(ticket.clientPhone).replace(/\D/g, "").slice(-9)}`,
       `📧 Correo: ${target.email}`, `🔑 Contraseña: ${target.password}`,
-      ...(newProfile ? [`👤 Perfil: ${newProfile}`] : []),
+      ...(newProfile ? [`👤 Perfil: ${newProfile}`] : fullAccount ? ["👤 Cuenta completa"] : []),
       ...(expiresAt ? [`📅 Vence: ${fmtDate(expiresAt)}`] : []),
     ].join("\n");
     createWholesalerNotification(ticket.wholesalerId, "account_replaced", ticket.platform, target.email, detail);
@@ -397,7 +429,7 @@ export function replaceClientTo(
   if (!ticket.wholesalerId) {
     const detail = [
       `📧 Correo: ${target.email}`, `🔑 Contraseña: ${target.password}`,
-      ...(newProfile ? [`👤 Perfil: ${newProfile}`] : []),
+      ...(newProfile ? [`👤 Perfil: ${newProfile}`] : fullAccount ? ["👤 Cuenta completa"] : []),
       ...(expiresAt ? [`📅 Vence: ${fmtDate(expiresAt)}`] : []),
     ].join("\n");
     createCustomerNotification(ticket.clientPhone, "account_replaced", ticket.platform, target.email, detail);

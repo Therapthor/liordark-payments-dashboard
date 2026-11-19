@@ -61,6 +61,7 @@
     if (t.status === "pending") return `<span class="soporte-badge soporte-badge-new">🆕 Nuevo</span>`;
     if (t.status === "seen") return `<span class="soporte-badge soporte-badge-review">🔎 En revisión</span>`;
     if (t.resolution === "replaced") return `<span class="soporte-badge soporte-badge-done">🔁 Cuenta reemplazada</span>`;
+    if (t.resolution === "reactivated") return `<span class="soporte-badge soporte-badge-done">♻️ Reactivada</span>`;
     if (t.resolution === "solved") return `<span class="soporte-badge soporte-badge-done">🎉 Solucionado</span>`;
     return `<span class="soporte-badge soporte-badge-done">✅ Tenía suscripción</span>`;
   }
@@ -76,6 +77,7 @@
     const actions = !open ? "" : codes ? `
             <button class="btn-primary btn-sm" data-act="reset-codes" type="button">🔑 Restablecer límite de hoy</button>` : `
             <button class="btn-secondary btn-sm" data-act="review" type="button"${t.status === "seen" ? " disabled" : ""}>${t.status === "seen" ? "🔎 En revisión ✓" : "🔎 En revisión"}</button>
+            <button class="btn-secondary btn-sm" data-act="reactivated" type="button" title="Reactivaste la misma cuenta: ya tiene suscripción de nuevo">♻️ Reactivada</button>
             <button class="btn-secondary btn-sm" data-act="active" type="button">✅ Tiene suscripción</button>
             <button class="btn-secondary btn-sm" data-act="solved" type="button">🎉 Listo</button>
             <button class="btn-primary btn-sm" data-act="replace" type="button">🔁 Reemplazar cuenta</button>`;
@@ -146,12 +148,14 @@
   const QUICK_CONFIRM = {
     active: "¿Avisarle que su cuenta SÍ tiene suscripción y cerrar el reporte?",
     solved: "¿Avisarle que su problema ya está solucionado y cerrar el reporte?",
+    reactivated: "¿Avisarle que reactivaste su cuenta (ya tiene suscripción de nuevo) y cerrar el reporte?",
     "reset-codes": "¿Restablecer las consultas de códigos de hoy de esta cuenta? Podrá volver a pedir su código.",
   };
   const QUICK_DONE = {
     review: "🔎 Le avisamos que su cuenta está en revisión.",
     active: "✅ Le avisamos que su cuenta tiene suscripción.",
     solved: "🎉 Le avisamos que su problema está solucionado.",
+    reactivated: "♻️ Le avisamos que su cuenta fue reactivada.",
     "reset-codes": "🔑 Límite de códigos restablecido.",
   };
 
@@ -181,13 +185,18 @@
   function renderReplaceOptions() {
     const box = $("soporte-replace-options");
     const items = replaceMode === "fresh" ? replaceData.fresh : replaceData.shared;
+    const full = !!replaceData.full;
     $("soporte-replace-hint").textContent = replaceMode === "fresh"
-      ? "El cliente pasa a un perfil libre de la cuenta que elijas y conserva su fecha de vencimiento."
+      ? (full
+        ? "Cuenta completa: el cliente pasa a la cuenta ENTERA que elijas (todos sus perfiles libres) y conserva su fecha de vencimiento."
+        : "El cliente pasa a un perfil libre de la cuenta que elijas y conserva su fecha de vencimiento.")
       : "Uso temporal: se le pasan los datos de una cuenta que ya usan otros clientes (no ocupa perfil) y conserva su fecha.";
     $("soporte-replace-profile-wrap").hidden = replaceMode !== "shared";
     if (!items.length) {
       box.innerHTML = `<p class="feed-empty">${replaceMode === "fresh"
-        ? "No hay cuentas de esta plataforma con perfiles libres. Prueba «Compartida» o agrega una en Accesos."
+        ? (full
+          ? "No hay cuentas de esta plataforma enteras libres. Prueba «Ya en uso» o agrega una en Accesos."
+          : "No hay cuentas de esta plataforma con perfiles libres. Prueba «Ya en uso» o agrega una en Accesos.")
         : "No hay otras cuentas vigentes de esta plataforma."}</p>`;
       return;
     }

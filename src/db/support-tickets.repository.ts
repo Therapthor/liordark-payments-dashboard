@@ -14,7 +14,7 @@ import { findWholesalerById } from "./wholesaler.repository";
 // ─────────────────────────────────────────────────────────────
 
 export type SupportTicketStatus = "pending" | "seen" | "attended";
-export type SupportTicketResolution = "" | "active" | "solved" | "replaced";
+export type SupportTicketResolution = "" | "active" | "solved" | "replaced" | "reactivated";
 
 export type SupportTicketKind = "" | "account" | "codes";
 

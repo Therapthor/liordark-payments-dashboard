@@ -161,6 +161,7 @@
   // ─────────────────────────────────────────────────────────────
 
   const ICON_PATHS = {
+    swap:    '<path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/>',
     home:    '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
     users:   '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.2A6.5 6.5 0 0 1 21.5 20"/>',
     cart:    '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"/>',
@@ -2306,7 +2307,13 @@
       icon: "alert", tone: "tone-coral", title: "Problema con una cuenta", submit: "Enviar reporte",
       sub: "Elige la cuenta de tu cliente y cuéntanos qué pasa. Te avisamos por la campanita.",
     },
+    replace: {
+      icon: "swap", tone: "tone-leaf", title: "Pedir reemplazo de cuenta", submit: "Pedir reemplazo",
+      sub: "Elige el perfil o la cuenta completa que dice «sin suscripción». Te damos otra cuenta o la reactivamos, y te avisamos por la campanita con los datos.",
+    },
   };
+  // Motivo fijo de «Pedir reemplazo» (el panel lo reconoce).
+  const REPLACE_REASON = "Sin suscripción — pide reemplazo";
 
   // "2026-11-11 15:04:05" (UTC de SQLite) → ISO, para mostrarlo en hora de Lima.
   function sqliteToIso(value) {
@@ -2382,7 +2389,7 @@
         c,
         // Códigos: solo se puede pedir si ya usó todas las consultas de hoy.
         disabled: supportKind === "codes" && c.codes.remaining > 0,
-        label: `${platformName(c.platform)} · ${c.clientPhone}${c.profileName ? " · " + c.profileName : ""}`,
+        label: `${platformName(c.platform)} · ${c.clientPhone} · ${c.accountHasProfiles ? (c.profileName || "Perfil") : "Cuenta completa"}`,
       }));
     if (supportKind === "codes") options.sort((a, b) => Number(a.disabled) - Number(b.disabled));
     const usable = options.filter(o => !o.disabled);
@@ -2408,7 +2415,7 @@
   }
 
   async function openSupportForm(kind, preselectId) {
-    supportKind = kind === "codes" ? "codes" : "account";
+    supportKind = kind === "codes" ? "codes" : kind === "replace" ? "replace" : "account";
     const copy = SUPPORT_COPY[supportKind];
     const iconEl = document.getElementById("support-modal-icon");
     iconEl.className = "modal-icon " + copy.tone;
@@ -2416,7 +2423,7 @@
     document.getElementById("support-modal-title").textContent = copy.title;
     document.getElementById("support-modal-sub").textContent = copy.sub;
     document.getElementById("support-submit").textContent = copy.submit;
-    document.getElementById("support-reason-wrap").hidden = supportKind === "codes";
+    document.getElementById("support-reason-wrap").hidden = supportKind !== "account";
     document.getElementById("support-detail-wrap").hidden = supportKind === "codes";
     document.getElementById("support-detail").value = "";
     document.getElementById("support-detail").required = false;
@@ -2473,8 +2480,8 @@
       setFormError("support-error", "");
       const profileId = Number(document.getElementById("support-account").value);
       if (!profileId) { setFormError("support-error", "Elige una cuenta."); return; }
-      const reason = supportKind === "account" ? selectedSupportReason() : "";
-      const detail = supportKind === "account" ? document.getElementById("support-detail").value.trim() : "";
+      const reason = supportKind === "account" ? selectedSupportReason() : supportKind === "replace" ? REPLACE_REASON : "";
+      const detail = supportKind !== "codes" ? document.getElementById("support-detail").value.trim() : "";
       if (supportKind === "account" && reason === "Otro" && !detail) {
         setFormError("support-error", "Cuéntanos qué pasa con la cuenta.");
         return;
@@ -2482,9 +2489,11 @@
       const btn = document.getElementById("support-submit");
       btn.disabled = true;
       try {
-        await api("/support/tickets", { method: "POST", body: { profileId, kind: supportKind, reason, detail } });
+        await api("/support/tickets", { method: "POST", body: { profileId, kind: supportKind === "codes" ? "codes" : "account", reason, detail } });
         closeSupportForm();
-        toast(supportKind === "codes" ? "Pedido enviado — te avisamos al restablecerlo" : "Reporte enviado — te avisamos por la campanita");
+        toast(supportKind === "codes" ? "Pedido enviado — te avisamos al restablecerlo"
+          : supportKind === "replace" ? "Reemplazo pedido — te avisamos por la campanita con los datos"
+          : "Reporte enviado — te avisamos por la campanita");
         loadSoporte();
       } catch (err) {
         setFormError("support-error", err.message);

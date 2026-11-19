@@ -694,6 +694,7 @@ function ticketForWholesaler(t: SupportTicket) {
     : t.status === "seen" ? "En revisión"
     : t.kind === "codes" ? "Límite restablecido"
     : t.resolution === "replaced" ? "Cuenta reemplazada"
+    : t.resolution === "reactivated" ? "Cuenta reactivada"
     : t.resolution === "active" ? "Tenía suscripción activa"
     : "Solucionado";
   return {

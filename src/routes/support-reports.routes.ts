@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { listSupportTickets, countPendingSupportTickets, getSupportTicketById } from "../db/support-tickets.repository";
 import {
-  setTicketInReview, resolveTicketActive, resolveTicketSolved, replaceOptions, replaceTicketAccount, resetCodesForTicket,
+  setTicketInReview, resolveTicketActive, resolveTicketSolved, resolveTicketReactivated, replaceOptions, replaceTicketAccount, resetCodesForTicket,
 } from "../services/support-reports.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -35,6 +35,13 @@ router.post("/tickets/:id/active", (req, res) => {
 
 router.post("/tickets/:id/solved", (req, res) => {
   const result = resolveTicketSolved(Number(req.params.id));
+  if (!result) return res.status(404).json({ message: "Reporte no encontrado." });
+  res.json(result);
+});
+
+// «♻️ Reactivada»: se reactivó la misma cuenta (no se cambia).
+router.post("/tickets/:id/reactivated", (req, res) => {
+  const result = resolveTicketReactivated(Number(req.params.id));
   if (!result) return res.status(404).json({ message: "Reporte no encontrado." });
   res.json(result);
 });

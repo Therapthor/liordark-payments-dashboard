@@ -961,6 +961,7 @@ select.input {
 .support-option-icon .ic { width: 22px; height: 22px; }
 .tone-mango { background: var(--mango); color: #2B1B0E; }
 .tone-coral { background: var(--coral-soft); color: var(--coral-deep); }
+.tone-leaf  { background: var(--leaf-soft); color: var(--leaf); }
 .tone-wa    { background: #DCF8E6; color: #128C4B; }
 :root[data-theme="dark"] .tone-wa { background: #123222; color: #5BE39A; }
 .support-option-text { flex: 1; min-width: 0; }
