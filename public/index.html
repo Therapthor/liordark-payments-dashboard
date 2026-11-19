@@ -1478,6 +1478,29 @@
     </form>
   </div>
 
+  <!-- ───────────── MODAL: cuenta completa para un cliente (no mayorista) ───────────── -->
+  <div id="full-client-modal" class="modal-backdrop" hidden>
+    <form id="full-client-form" class="modal-card">
+      <div class="modal-head">
+        <h3>Cuenta completa</h3>
+        <button type="button" class="modal-x" data-close-modal="full-client-modal">✕</button>
+      </div>
+      <p id="full-client-info" class="text-muted" style="margin-top:-8px;font-size:13px;"></p>
+      <label>Celular del cliente (WhatsApp)
+        <input id="full-client-phone" type="text" inputmode="numeric" placeholder="51987654321" required />
+      </label>
+      <label>Vence el
+        <input id="full-client-expires" type="date" required />
+      </label>
+      <p class="panel-hint" style="margin:0;">Todos los perfiles pasan a este cliente: queda como una sola cuenta suya (nadie más la ocupa) y se renueva como cuenta completa.</p>
+      <p id="full-client-error" class="login-error" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal="full-client-modal">Cancelar</button>
+        <button type="submit" class="btn-primary">Asignar cuenta completa</button>
+      </div>
+    </form>
+  </div>
+
   <!-- ───────────── MODAL: detalle del día ───────────── -->
   <div id="day-modal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card--wide">

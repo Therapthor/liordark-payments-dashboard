@@ -371,6 +371,13 @@
     return `<button class="btn-secondary btn-sm access-renew-account" data-account-id="${account.id}">🔄 Renovar</button>`;
   }
 
+  // «👤 Cuenta completa» solo en cuentas con perfiles y todos libres
+  // (ni clientes ni stock de mayorista).
+  function canGiveFullAccount(account) {
+    return account.hasProfiles && account.profiles.length > 0 &&
+      account.profiles.every(p => !p.clientPhone && p.wholesalerId == null);
+  }
+
   function renderAccountCard(account, opts) {
     const open = !!(opts && opts.open);
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
@@ -410,6 +417,7 @@
               <button class="btn-secondary btn-sm access-copy-account" data-account="${accountAttr}">📋 Copiar datos</button>
               <button class="btn-secondary btn-sm access-copy-credentials" data-account="${accountAttr}">📋 Copiar cuenta</button>
               ${renderRenewControls(account)}
+              ${canGiveFullAccount(account) ? `<button class="btn-secondary btn-sm access-full-client" data-account-id="${account.id}" title="Dar la cuenta entera (todos los perfiles) a un cliente">👤 Cuenta completa</button>` : ""}
               <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
               <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
             </div>
@@ -583,6 +591,9 @@
       });
     });
 
+    target.querySelectorAll(".access-full-client").forEach(btn => {
+      btn.addEventListener("click", () => openFullClientModal(Number(btn.dataset.accountId)));
+    });
     target.querySelectorAll(".access-edit-account").forEach(btn => {
       btn.addEventListener("click", () => openEditModal(Number(btn.dataset.accountId)));
     });
@@ -1214,6 +1225,50 @@
   // ─────────────────────────────────────────────────────────────
   // MODAL — asignar/cambiar el teléfono de un perfil
   // ─────────────────────────────────────────────────────────────
+
+  // ── «👤 Cuenta completa» para un cliente normal ──
+  let fullClientAccountId = null;
+
+  async function openFullClientModal(accountId) {
+    let account;
+    try { ({ account } = await api("/accounts/" + accountId)); }
+    catch (err) { alert(err.message || "No se pudo abrir la cuenta."); return; }
+    fullClientAccountId = accountId;
+    document.getElementById("full-client-form").reset();
+    document.getElementById("full-client-error").hidden = true;
+    document.getElementById("full-client-info").textContent = account.platform + " · " + account.email;
+    document.getElementById("full-client-expires").value = account.expiresAt || "";
+    document.getElementById("full-client-modal").hidden = false;
+    setTimeout(() => document.getElementById("full-client-phone").focus(), 60);
+  }
+
+  function initFullClientModal() {
+    document.getElementById("full-client-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("full-client-error");
+      const submit = e.target.querySelector('button[type="submit"]');
+      errorEl.hidden = true;
+      submit.disabled = true;
+      try {
+        const saved = await api("/accounts/" + fullClientAccountId + "/full-client", {
+          method: "POST",
+          body: JSON.stringify({
+            clientPhone: document.getElementById("full-client-phone").value,
+            expiresAt:   document.getElementById("full-client-expires").value,
+          }),
+        });
+        document.getElementById("full-client-modal").hidden = true;
+        refreshAccountInPlace(fullClientAccountId);
+        const extra = saved && saved.codesWarning ? "\n\n⚠️ " + saved.codesWarning : "";
+        setTimeout(() => alert("✅ Cuenta completa asignada al cliente. Envíale los datos con 📧." + extra), 50);
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  }
 
   function openProfileModal(ctx) {
     currentProfileForModal = ctx;
@@ -2022,6 +2077,7 @@
     initBulkModal();
     initEditModal();
     initProfileModal();
+    initFullClientModal();
     initHistoryModal();
     initRenewingModal();
     initRenewalHistoryModal();

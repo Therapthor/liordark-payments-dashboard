@@ -10,6 +10,7 @@ import {
   listPlatforms,
   listAccountsByPlatform,
   assignProfileClient,
+  assignFullAccountToClient,
   releaseProfile,
   setProfileRenewal,
   searchAccountsByEmail,
@@ -710,6 +711,20 @@ router.put("/profiles/:id", (req, res) => {
   const profile = assignProfileClient(Number(req.params.id), clientPhone);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   res.json({ profile, codesWarning: clientCodesWarning(profile.accountId) });
+});
+
+// «👤 Cuenta completa» — la cuenta entera (todos sus perfiles libres) pasa a
+// un cliente normal (no mayorista). Queda como cuenta sin perfiles con su
+// celular, igual que una cuenta completa de mayorista.
+router.post("/accounts/:id/full-client", (req, res) => {
+  const digits = String(req.body?.clientPhone ?? "").replace(/\D/g, "");
+  if (digits.length < 9) { res.status(400).json({ message: "Escribe el celular del cliente (9 dígitos)." }); return; }
+  const expiresAt = String(req.body?.expiresAt ?? "").trim();
+  if (expiresAt && !/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) { res.status(400).json({ message: "Fecha de vencimiento inválida." }); return; }
+
+  const result = assignFullAccountToClient({ accountId: Number(req.params.id), clientPhone: digits, expiresAt: expiresAt || undefined });
+  if (!result.ok) { res.status(result.status).json({ message: result.message }); return; }
+  res.json({ account: result.account, codesWarning: clientCodesWarning(result.account.id) });
 });
 
 router.post("/profiles/:id/release", (req, res) => {

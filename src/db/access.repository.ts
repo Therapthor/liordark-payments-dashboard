@@ -603,6 +603,40 @@ export const createManualActivationForWholesaler = db.transaction((params: {
 });
 
 /**
+ * Cuenta completa para un cliente RETAIL (Accesos › «👤 Cuenta completa»):
+ * una cuenta con perfiles, todos libres, pasa a ser una sola cuenta de ese
+ * cliente — igual que las cuentas «sin perfiles» (CANVA, cuentas completas
+ * de mayorista): queda 1 lugar con su celular y los demás perfiles vacíos
+ * se quitan, así nadie más la ocupa y se renueva como cuenta completa.
+ */
+export const assignFullAccountToClient = db.transaction((params: {
+  accountId: number; clientPhone: string; expiresAt?: string | undefined;
+}): { ok: true; account: AccessAccountWithProfiles } | { ok: false; status: number; message: string } => {
+  const account = getAccountById(params.accountId);
+  if (!account) return { ok: false, status: 404, message: "Cuenta no encontrada." };
+  if (!account.hasProfiles) {
+    return { ok: false, status: 409, message: "Esta cuenta ya es completa (sin perfiles): usa «➕ Asignar»." };
+  }
+  if (account.profiles.some(p => p.clientPhone || p.wholesalerId != null)) {
+    return { ok: false, status: 409, message: "Esta cuenta ya tiene perfiles ocupados (o de un mayorista). Para darla completa, todos sus perfiles tienen que estar libres." };
+  }
+  const keep = [...account.profiles].sort((a, b) => a.slotNumber - b.slotNumber)[0];
+  if (!keep) return { ok: false, status: 409, message: "Esta cuenta no tiene perfiles." };
+
+  db.prepare(`DELETE FROM access_profiles WHERE account_id = ? AND id <> ?`).run(account.id, keep.id);
+  db.prepare(`
+    UPDATE access_profiles
+    SET client_phone = ?, order_ref = ?, renewal_status = '', expires_override = NULL, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(normalizePeruPhone(params.clientPhone), "admin-full:" + Date.now(), keep.id);
+  db.prepare(`UPDATE access_accounts SET has_profiles = 0, updated_at = datetime('now') WHERE id = ?`).run(account.id);
+  if (params.expiresAt) {
+    db.prepare(`UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?`).run(params.expiresAt, account.id);
+  }
+  return { ok: true, account: getAccountById(account.id)! };
+});
+
+/**
  * Misma idea que createManualActivationForWholesaler pero para un cliente
  * RETAIL (liordark.com/WhatsApp) — sin wholesaler_id. Antes de esto, el
  * endpoint /canva-orders creaba la cuenta sin dueño (sin client_phone), así
