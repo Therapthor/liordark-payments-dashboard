@@ -27,7 +27,7 @@
   MP.collapse.register(".catalog-actions", { keep: 2, prefer: [".provider-renewal-done-btn", ".provider-renewal-renew-btn", "[class*='toggle-btn']", "[class*='edit-btn']"] });
 
   // ── Accesos ──
-  MP.collapse.register(".access-account-summary-actions", { keep: 2 });
+  MP.collapse.register(".access-account-summary-actions", { keep: 3, prefer: [".access-open-code", ".access-provider-support", ".access-reset-expiry"] });
   MP.collapse.register(".access-account-actions", { keep: 2, prefer: [".access-copy-credentials", ".access-renew-account"] });
   MP.collapse.register(".access-row-actions", { keep: 2 });
   MP.collapse.register(".access-client-item-actions", { keep: 2 });

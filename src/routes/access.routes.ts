@@ -26,6 +26,8 @@ import {
   listPendingActivations,
   markActivationDone,
   getProfileForRenewalMessage,
+  setAccountExpiry,
+  duplicateAccount,
   type AccessAccountWithProfiles,
   type BulkAccountPair,
   type ProfileWithAccount,
@@ -33,7 +35,7 @@ import {
   type SoldProfile,
 } from "../db/access.repository";
 import {
-  renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO,
+  renewAccount, accountStatus, daysLeft, runRenewalCutover, limaTodayISO, addDaysISO,
   listCycleRenewalsAwaitingConfirmation, confirmCycleRenewal, assignPendingClients,
   accountNoticeFor, listActiveSubscribers, notifyActiveSubscribers, minTargetExpiry,
 } from "../services/access.service";
@@ -54,6 +56,8 @@ import {
   getLatestCodeForAccount,
   getLastSeenCodeForEmail,
   saveIncomingCode,
+  inheritCodeConfigFromSiblings,
+  countCodeSiblings,
 } from "../db/codes.repository";
 import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES, loginApprovalOf, parseProviderDate, type CodeLookupResult } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo, inboxInfoFor } from "../services/codes-brain.service";
@@ -238,14 +242,24 @@ router.post("/accounts/bulk", async (req, res) => {
     providerRenewalNextDate: providerRenewalNextDate ?? null,
   });
 
-  res.status(201).json({ accounts: accounts.map(withStatus) });
+  // «🔑 Código» compartido por correo: la cuenta nueva sin código toma el de
+  // otra con el mismo correo; si trae uno, pasa a todas las de ese correo.
+  for (const a of accounts) {
+    if (!a.codeSource) { inheritCodeConfigFromSiblings(a.id); continue; }
+    setAccountCodesEnabled(a.id, true);
+    setAccountCodeSource(a.id, a.codeSource);
+    setAccountTotpSecret(a.id, a.totpSecret);
+    setAccountCodeInboxUrl(a.id, a.codeInboxUrl || null);
+  }
+
+  res.status(201).json({ accounts: accounts.map(a => withStatus(getAccountById(a.id)!)) });
 });
 
 router.get("/accounts/:id", (req, res) => {
   const account = getAccountById(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
   // Para el "Avisar a los N clientes con suscripción vigente" de Editar cuenta.
-  res.json({ account: withStatus(account), activeClientCount: listActiveSubscribers(account.id).length });
+  res.json({ account: withStatus(account), activeClientCount: listActiveSubscribers(account.id).length, codeSiblings: countCodeSiblings(account.id) });
 });
 
 // Editar cuenta — si cambió el correo (reemplazo de cuenta) o solo la
@@ -282,6 +296,10 @@ router.put("/accounts/:id", (req, res) => {
     ...(providerRenewalNextDate !== undefined ? { providerRenewalNextDate } : {}),
   });
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+
+  // Pasó a otro correo (o plataforma) que ya tiene «🔑 Código»: toma ese.
+  const sameKey = (x: { platform: string; email: string }) => x.platform.trim().toUpperCase() + "|" + x.email.trim().toLowerCase();
+  if (sameKey(before) !== sameKey(account)) inheritCodeConfigFromSiblings(id, true);
 
   if (before.password !== account.password) markPasswordChanged(id);
   const notice = accountNoticeFor(before, account);
@@ -337,6 +355,27 @@ router.post("/accounts/:id/provider-renewal/mark-renewed", (req, res) => {
   const account = markProviderRenewalRenewed(Number(req.params.id));
   if (!account) { res.status(404).json({ message: "Cuenta no encontrada o sin fecha de renovación." }); return; }
   res.json({ account });
+});
+
+// «↺ 30 días»: la cuenta vuelve a vencer en 30 días desde hoy (para el stock
+// que no se vendió a tiempo). Sin aviso a clientes ni registro de renovación.
+router.post("/accounts/:id/reset-expiry", (req, res) => {
+  const id = Number(req.params.id);
+  const current = getAccountById(id);
+  if (!current) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const target = addDaysISO(limaTodayISO(), 30);
+  if (current.expiresAt && current.expiresAt > target) { res.status(400).json({ message: "Esta cuenta ya vence en más de 30 días." }); return; }
+  const account = setAccountExpiry(id, target);
+  res.json({ account: withStatus(account!) });
+});
+
+// «⧉ Duplicar»: copia la cuenta con todos los perfiles libres.
+router.post("/accounts/:id/duplicate", (req, res) => {
+  const src = getAccountById(Number(req.params.id));
+  if (!src) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  const hasProfiles = getCatalogProductByPlatform(src.platform)?.hasProfiles ?? src.hasProfiles;
+  const account = duplicateAccount(src.id, hasProfiles);
+  res.status(201).json({ account: withStatus(account!) });
 });
 
 router.post("/accounts/:id/renew", (req, res) => {

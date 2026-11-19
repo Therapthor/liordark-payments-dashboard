@@ -9,8 +9,20 @@ import { limaTodayISO } from "../services/access.service";
 
 export const CODE_MAX_AGE_HOURS = 24;
 
+// «🔑 Código» compartido: las cuentas con el mismo correo en la misma
+// plataforma (ej. ChatGPT, hasta 10 accesos por correo) usan la misma
+// configuración — se guarda en todas a la vez.
+const SAME_EMAIL_GROUP = `
+  SELECT b.id FROM access_accounts a
+  JOIN access_accounts b
+    ON b.id = a.id
+    OR (TRIM(a.email) <> ''
+        AND UPPER(TRIM(b.platform)) = UPPER(TRIM(a.platform))
+        AND LOWER(TRIM(b.email)) = LOWER(TRIM(a.email)))
+  WHERE a.id = ?`;
+
 export function setAccountCodesEnabled(accountId: number, enabled: boolean): void {
-  db.prepare(`UPDATE access_accounts SET codes_enabled = ? WHERE id = ?`).run(enabled ? 1 : 0, accountId);
+  db.prepare(`UPDATE access_accounts SET codes_enabled = ? WHERE id IN (${SAME_EMAIL_GROUP})`).run(enabled ? 1 : 0, accountId);
 }
 
 /** «Mayorista ve todos los códigos» (sin filtros de inicio de sesión). */
@@ -26,7 +38,7 @@ export function isAccountCodesUnfiltered(accountId: number): boolean {
 /** Cuál página externa consultar para esta cuenta — null = sin configurar
  *  (ver services/codes-lookup.service.ts para los ids válidos). */
 export function setAccountCodeSource(accountId: number, sourceId: string | null): void {
-  db.prepare(`UPDATE access_accounts SET code_source = ? WHERE id = ?`).run(sourceId, accountId);
+  db.prepare(`UPDATE access_accounts SET code_source = ? WHERE id IN (${SAME_EMAIL_GROUP})`).run(sourceId, accountId);
 }
 
 /** ¿Esta cuenta entrega códigos? (código habilitado + fuente configurada). */
@@ -45,12 +57,51 @@ export function getAccountCodeSource(accountId: number): string | null {
  *  utils/totp.util.ts). Independiente de code_source: una cuenta usa UNO
  *  de los dos mecanismos, nunca ambos a la vez. */
 export function setAccountTotpSecret(accountId: number, secret: string | null): void {
-  db.prepare(`UPDATE access_accounts SET totp_secret = ? WHERE id = ?`).run(secret, accountId);
+  db.prepare(`UPDATE access_accounts SET totp_secret = ? WHERE id IN (${SAME_EMAIL_GROUP})`).run(secret, accountId);
 }
 
 /** Link privado de la bandeja del proveedor ('' = sin link). */
 export function setAccountCodeInboxUrl(accountId: number, url: string | null): void {
-  db.prepare(`UPDATE access_accounts SET code_inbox_url = ? WHERE id = ?`).run(url ?? "", accountId);
+  db.prepare(`UPDATE access_accounts SET code_inbox_url = ? WHERE id IN (${SAME_EMAIL_GROUP})`).run(url ?? "", accountId);
+}
+
+/** Cuentas del mismo correo y plataforma que comparten el «🔑 Código» (sin contar esta). */
+export function countCodeSiblings(accountId: number): number {
+  const row = db.prepare(`SELECT COUNT(*) AS n FROM (${SAME_EMAIL_GROUP})`).get(accountId) as { n: number };
+  return Math.max(0, row.n - 1);
+}
+
+/** Copia el «🔑 Código» de una cuenta del mismo correo a esta, si esta no
+ *  tiene uno (alta nueva). force = aunque ya tenga uno (cambió de correo). */
+export function inheritCodeConfigFromSiblings(accountId: number, force = false): boolean {
+  const donor = db.prepare(`
+    SELECT codes_enabled, code_source, totp_secret, code_inbox_url FROM access_accounts
+    WHERE id IN (${SAME_EMAIL_GROUP}) AND id <> ? AND codes_enabled = 1 AND code_source IS NOT NULL
+    ORDER BY id DESC LIMIT 1
+  `).get(accountId, accountId) as { codes_enabled: number; code_source: string; totp_secret: string | null; code_inbox_url: string | null } | undefined;
+  if (!donor) return false;
+  const r = db.prepare(`
+    UPDATE access_accounts SET codes_enabled = 1, code_source = ?, totp_secret = ?, code_inbox_url = ?
+    WHERE id = ? AND (? = 1 OR codes_enabled = 0 OR code_source IS NULL)
+  `).run(donor.code_source, donor.totp_secret, donor.code_inbox_url ?? "", accountId, force ? 1 : 0);
+  return r.changes > 0;
+}
+
+/** Una vez al arrancar: las cuentas sin «🔑 Código» toman el de otra cuenta
+ *  con el mismo correo y plataforma. Devuelve cuántas se completaron. */
+export function syncSharedCodeConfig(): number {
+  const ids = db.prepare(`
+    SELECT a.id FROM access_accounts a
+    WHERE (a.codes_enabled = 0 OR a.code_source IS NULL) AND TRIM(a.email) <> ''
+      AND EXISTS (
+        SELECT 1 FROM access_accounts b
+        WHERE b.id <> a.id AND b.codes_enabled = 1 AND b.code_source IS NOT NULL
+          AND UPPER(TRIM(b.platform)) = UPPER(TRIM(a.platform))
+          AND LOWER(TRIM(b.email)) = LOWER(TRIM(a.email)))
+  `).all() as { id: number }[];
+  let n = 0;
+  for (const { id } of ids) if (inheritCodeConfigFromSiblings(id)) n++;
+  return n;
 }
 
 export function getAccountTotpSecret(accountId: number): string | null {

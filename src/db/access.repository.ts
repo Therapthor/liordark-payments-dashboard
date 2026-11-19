@@ -236,6 +236,32 @@ function addOneMonth(dateISO: string): string {
   return dt.toISOString().slice(0, 10);
 }
 
+/** «⧉ Duplicar»: otra cuenta igual (correo, contraseña, proveedor, fecha,
+ *  «🔑 Código», link y notas) con todos sus perfiles libres. hasProfiles
+ *  viene del catálogo, así una cuenta ya vendida como completa se duplica
+ *  como stock normal. */
+export function duplicateAccount(id: number, hasProfiles: boolean): AccessAccountWithProfiles | null {
+  const src = getAccountById(id);
+  if (!src) return null;
+  const [copy] = createAccountsBulk({
+    platform: src.platform, provider: src.provider, hasProfiles,
+    expiresAt: src.expiresAt,
+    pairs: [{ email: src.email, password: src.password }],
+    providerRenewalEnabled:  src.providerRenewalEnabled,
+    providerRenewalCost:     src.providerRenewalCost,
+    providerRenewalCurrency: src.providerRenewalCurrency,
+    providerRenewalNextDate: src.providerRenewalNextDate,
+  });
+  db.prepare(`
+    UPDATE access_accounts
+    SET (link, notes, plan_months, codes_enabled, codes_unfiltered, code_source, totp_secret, code_inbox_url) =
+        (SELECT link, notes, plan_months, codes_enabled, codes_unfiltered, code_source, totp_secret, code_inbox_url
+         FROM access_accounts WHERE id = ?)
+    WHERE id = ?
+  `).run(id, copy!.id);
+  return getAccountById(copy!.id);
+}
+
 export function setAccountExpiry(id: number, expiresAt: string): AccessAccountWithProfiles | null {
   db.prepare(`
     UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?

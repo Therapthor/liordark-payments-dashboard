@@ -51,6 +51,7 @@ import { applyPendingPasswordRotation } from "./services/auth.service";
 import { scanPastChatMessages, runPendingFraudCleanups } from "./services/security.service";
 import { removeFakePayments } from "./db/payments.repository";
 import { syncSingleSlotExpiry } from "./db/access.repository";
+import { syncSharedCodeConfig } from "./db/codes.repository";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -303,6 +304,10 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
     const n = syncSingleSlotExpiry();
     if (n) console.log(`📅 Vencimientos de reemplazos pasados a su cuenta: ${n}`);
   } catch (err: any) { console.error("⚠️ vencimientos de reemplazos:", err?.message); }
+  try {
+    const n = syncSharedCodeConfig();
+    if (n) console.log(`🔑 Cuentas que tomaron el «Código» de su mismo correo: ${n}`);
+  } catch (err: any) { console.error("⚠️ código compartido:", err?.message); }
   try {
     const bad = findSuspiciousApprovedOrders();
     console.log(bad.length

@@ -378,6 +378,12 @@
       account.profiles.every(p => !p.clientPhone && p.wholesalerId == null);
   }
 
+  // «📅 30 días» (resetear fecha): solo si le quedan menos de 30 días — en
+  // cuentas de varios meses acortaría el plan.
+  function canResetExpiry(account) {
+    return account.daysLeft == null || account.daysLeft < 30;
+  }
+
   function renderAccountCard(account, opts) {
     const open = !!(opts && opts.open);
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
@@ -401,6 +407,8 @@
           <span class="access-account-summary-actions">
             <button type="button" class="btn-secondary btn-sm access-open-code" data-email="${escapeHtml(account.email)}" title="Ver el código de este correo en Códigos">🔢 Código</button>
             <button type="button" class="btn-secondary btn-sm access-provider-support" data-account="${accountAttr}" title="Pedir soporte al proveedor por WhatsApp">🔑 Soporte</button>
+            ${canResetExpiry(account) ? `<button type="button" class="btn-secondary btn-sm access-reset-expiry" data-account-id="${account.id}" data-clients="${occupiedCount}" title="Resetear fecha: que venza en 30 días desde hoy">📅 30 días</button>` : ""}
+            <button type="button" class="btn-secondary btn-sm access-duplicate" data-account-id="${account.id}" title="Crear otra cuenta igual, con todos los perfiles libres">⧉ Duplicar</button>
             <button type="button" class="btn-secondary btn-sm access-provider-renew-request" data-account="${accountAttr}" title="Pedir al proveedor que renueve esta cuenta">🔁 Renovar proveedor</button>
           </span>
         </summary>
@@ -544,6 +552,44 @@
         }
         const msg = `Hola! Necesito soporte con una cuenta de *${account.platform}*.\n📧 Correo: ${account.email}`;
         window.open(waLink(phone, msg), "_blank");
+      });
+    });
+
+    target.querySelectorAll(".access-reset-expiry").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const clients = Number(btn.dataset.clients) || 0;
+        if (clients > 0 && !confirm(`Esta cuenta tiene ${clients} cliente(s): su vencimiento también pasará a 30 días desde hoy. ¿Seguir?`)) return;
+        btn.disabled = true;
+        try {
+          await api("/accounts/" + btn.dataset.accountId + "/reset-expiry", { method: "POST" });
+          await refreshAccountInPlace(Number(btn.dataset.accountId));
+          if (window.MP && MP.toast) MP.toast("📅 Vence en 30 días");
+        } catch (err) {
+          btn.disabled = false;
+          alert(err.message);
+        }
+      });
+    });
+
+    target.querySelectorAll(".access-duplicate").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!confirm("¿Duplicar esta cuenta? Se crea otra igual con todos los perfiles libres.")) return;
+        const el = btn.closest(".access-account");
+        try {
+          const { account } = await api("/accounts/" + btn.dataset.accountId + "/duplicate", { method: "POST" });
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = renderAccountCard(account, { open: false }).trim();
+          const newEl = wrapper.firstElementChild;
+          if (el) { el.after(newEl); wireAccountCardEvents(newEl); } else await refresh();
+          refreshPlatformSummaryText(account.platform);
+          if (window.MP && MP.toast) MP.toast("⧉ Cuenta duplicada");
+        } catch (err) {
+          alert(err.message);
+        }
       });
     });
 
@@ -1032,13 +1078,26 @@
   // MODAL — editar cuenta existente
   // ─────────────────────────────────────────────────────────────
 
+  // Huella del «🔑 Código» del modal: solo se guarda si cambió (se comparte
+  // con las cuentas del mismo correo y no debe pisarlas al editar otra cosa).
+  let editingOriginalCodes = "";
+  function editCodesKey() {
+    const enabled = document.getElementById("account-edit-codes-enabled").checked;
+    const source  = document.getElementById("account-edit-code-source").value || "";
+    return JSON.stringify(enabled ? [
+      source,
+      source === TOTP_SOURCE_ID ? document.getElementById("account-edit-totp-secret").value.trim() : "",
+      INBOX_LINK_SOURCES.includes(source) ? document.getElementById("account-edit-inbox-url").value.trim() : "",
+    ] : []);
+  }
+
   async function openEditModal(accountId) {
     await Promise.all([loadCatalog(), loadProviderCatalog()]);
     editingAccountId = accountId;
     document.getElementById("account-edit-form").reset();
     document.getElementById("account-edit-error").hidden = true;
 
-    const { account, activeClientCount } = await api("/accounts/" + accountId);
+    const { account, activeClientCount, codeSiblings } = await api("/accounts/" + accountId);
     editingAccountPlatform = account.platform;
     editPlatformTouched = false;
     editingOriginalCredentials = { email: account.email, password: account.password };
@@ -1068,6 +1127,12 @@
     document.getElementById("account-edit-totp-secret").value = account.totpSecret || "";
     document.getElementById("account-edit-inbox-url").value = account.codeInboxUrl || "";
     syncTotpField();
+    // «🔑 Código» compartido: se guarda en todas las cuentas con este correo.
+    const siblings = Number(codeSiblings) || 0;
+    const sharedEl = document.getElementById("account-edit-codes-shared");
+    sharedEl.textContent = siblings > 0 ? `🔗 Se guarda también en las otras ${siblings} cuenta(s) con este correo.` : "";
+    sharedEl.hidden = siblings === 0;
+    editingOriginalCodes = editCodesKey();
 
     document.getElementById("account-edit-modal").hidden = false;
   }
@@ -1189,17 +1254,22 @@
         errorEl.hidden = false;
         return;
       }
+      const codesChanged = editCodesKey() !== editingOriginalCodes;
       try {
-        if (needsInbox) {
-          await api("/accounts/" + editingAccountId + "/code-inbox-url", { method: "POST", body: JSON.stringify({ url: inboxUrl }) });
-        }
         const saved = await api("/accounts/" + editingAccountId, { method: "PUT", body: JSON.stringify(body) });
         // Ya guardado (y avisado): si se vuelve a guardar, no se repite el aviso.
         editingOriginalCredentials = { email: body.email, password: body.password };
         syncEditNotify();
-        await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
-        await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
-        await api("/accounts/" + editingAccountId + "/totp-secret", { method: "POST", body: JSON.stringify({ totpSecret: codesEnabled ? totpSecret : null }) });
+        // Después del PUT: si cambió el correo, el código va al grupo del correo nuevo.
+        if (codesChanged) {
+          if (needsInbox) {
+            await api("/accounts/" + editingAccountId + "/code-inbox-url", { method: "POST", body: JSON.stringify({ url: inboxUrl }) });
+          }
+          await api("/accounts/" + editingAccountId + "/codes-enabled", { method: "POST", body: JSON.stringify({ enabled: codesEnabled }) });
+          await api("/accounts/" + editingAccountId + "/code-source", { method: "POST", body: JSON.stringify({ codeSource: codesEnabled ? codeSource : null }) });
+          await api("/accounts/" + editingAccountId + "/totp-secret", { method: "POST", body: JSON.stringify({ totpSecret: codesEnabled ? totpSecret : null }) });
+          editingOriginalCodes = editCodesKey();
+        }
         await api("/accounts/" + editingAccountId + "/codes-unfiltered", { method: "POST", body: JSON.stringify({ unfiltered: codesUnfiltered }) });
         document.getElementById("account-edit-modal").hidden = true;
         // Si cambió de plataforma, la tarjeta se mueve de acordeón — ahí sí
