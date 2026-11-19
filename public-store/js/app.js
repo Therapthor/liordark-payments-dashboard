@@ -1803,7 +1803,14 @@
           <span class="codes-acc-count" title="Consultas usadas hoy"><span class="codes-acc-dots">${dots}</span> ${a.used} de ${a.limit} hoy</span>
           <button class="btn-primary codes-open-btn" type="button" ${canOpen ? "" : "disabled"}>${label}</button>
         </div>
+        ${canOpen ? "" : a.resetRequested
+          ? `<p class="codes-reset-note">⏳ Pediste restablecer tus intentos. Te avisamos en la campanita 🔔.</p>`
+          : `<button class="btn-secondary codes-reset-btn" type="button">🔁 Pedir más intentos hoy</button>`}
       </div>`;
+  }
+
+  function requestCodesReset(accountId) {
+    return api("/codes/" + encodeURIComponent(accountId) + "/reset-request", { method: "POST" });
   }
 
   async function refreshCodesAvailability() {
@@ -1845,6 +1852,19 @@
 
   function initCodesView() {
     document.getElementById("codes-list").addEventListener("click", async (e) => {
+      const resetBtn = e.target.closest(".codes-reset-btn");
+      if (resetBtn && !resetBtn.disabled) {
+        const card = resetBtn.closest("[data-account-id]");
+        resetBtn.disabled = true;
+        try {
+          await requestCodesReset(card.dataset.accountId);
+          alert("✅ Pedido enviado. Te avisamos en la campanita 🔔 apenas puedas volver a pedir tu código.");
+        } catch (err) {
+          alert(err.message || "No se pudo enviar el pedido.");
+        }
+        loadCodesAccounts();
+        return;
+      }
       const btn = e.target.closest(".codes-open-btn");
       if (!btn || btn.disabled) return;
       const card = btn.closest("[data-account-id]");
@@ -1935,7 +1955,10 @@
       { id: "nosub", label: "📺 Mi cuenta dice «sin suscripción»" },
       { id: "login", label: "🔒 No puedo ingresar a mi cuenta" },
       { id: "other", label: "⚠️ Otro problema con mi cuenta" },
-      ...(hasCodesAccounts ? [{ id: "codes", label: "🔑 Necesito un código" }] : []),
+      ...(hasCodesAccounts ? [
+        { id: "codes", label: "🔑 Necesito un código" },
+        { id: "codes-reset", label: "🔁 Se acabaron mis intentos de códigos" },
+      ] : []),
     ]);
   }
 
@@ -1973,6 +1996,49 @@
       })),
       BACK_OPTION,
     ]);
+  }
+
+  let supportCodesAccounts = [];
+
+  async function supportPickCodesReset() {
+    supportSay("Un momento, reviso tus intentos de hoy… ⏳");
+    try {
+      const { accounts } = await api("/codes");
+      supportCodesAccounts = (accounts || []).filter(a => !a.openUrl && a.remaining <= 0);
+    } catch (err) {
+      supportSay(escapeHtml(err.message || "No se pudo cargar tus cuentas."), [BACK_OPTION]);
+      return;
+    }
+    if (!supportCodesAccounts.length) {
+      supportSay("Todavía te quedan intentos hoy en tus cuentas 👍. Pide tu código desde «Códigos».", [
+        { id: "codes", label: "🔑 Ir a Códigos" },
+        BACK_OPTION,
+      ]);
+      return;
+    }
+    supportSay("¿De cuál cuenta necesitas más intentos hoy? 👇", [
+      ...supportCodesAccounts.map((a, i) => ({
+        id: "creset:" + i,
+        label: `${a.platform} · ${a.email}${a.resetRequested ? " · ya pedido" : ""}`,
+        disabled: a.resetRequested,
+      })),
+      BACK_OPTION,
+    ]);
+  }
+
+  async function supportCodesReset(index) {
+    const acc = supportCodesAccounts[index];
+    if (!acc) return supportMenu("Elige una opción 👇");
+    try {
+      await requestCodesReset(acc.accountId);
+      supportSay(
+        `✅ ¡Listo! Pedimos que te restablezcan los intentos de <b>${escapeHtml(acc.platform)}</b> (${escapeHtml(acc.email)}) 🔑<br>` +
+        `Te avisamos en la campanita 🔔 apenas puedas volver a pedir tu código. 🥭`
+      );
+      finishSupport();
+    } catch (err) {
+      supportSay(escapeHtml(err.message || "No se pudo enviar el pedido."), [BACK_OPTION]);
+    }
   }
 
   function finishSupport() {
@@ -2013,6 +2079,8 @@
       }, 700);
       return;
     }
+    if (id === "codes-reset") return supportPickCodesReset();
+    if (id.startsWith("creset:")) return supportCodesReset(Number(id.slice(7)));
     if (id.startsWith("acc:")) return supportReport(Number(id.slice(4)));
   }
 

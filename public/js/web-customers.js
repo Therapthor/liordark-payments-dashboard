@@ -133,6 +133,7 @@
         ${passwordArea}
         <button class="btn-secondary btn-sm web-customer-pinlink-btn" type="button">🔑 Link cambio de PIN</button>
         <button class="btn-secondary btn-sm web-customer-resetpin-btn" type="button">♻️ Resetear PIN y cerrar sesión</button>
+        <button class="btn-secondary btn-sm web-customer-codes-reset-btn" type="button" title="Sus consultas de «Códigos» de hoy dejan de contar: puede volver a pedir su código">🔁 Restablecer intentos</button>
         ${emailArea}
         ${letInBtn}
         <button class="btn-secondary btn-sm web-customer-suspend-btn" type="button">⏸ Suspender</button>
@@ -183,6 +184,21 @@
         : "Listo. Cuenta borrada y número bloqueado (no tenía cuentas asignadas).");
       await load();
     } catch (err) { alert(err.message); }
+  }
+
+  // «🔁 Restablecer intentos» — consultas de «Códigos» de hoy (todas sus cuentas).
+  async function resetCodeAttempts(id, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const r = await api(`/${id}/reset-code-attempts`, { method: "POST" });
+      alert("✅ Intentos de códigos restablecidos: ya puede volver a pedir su código hoy." +
+        (r.tickets ? `\n\nSe cerró su pedido en Soportes y le llegó el aviso a su campanita.` : ""));
+      if (r.tickets && window.LiordarkSoportes) window.LiordarkSoportes.load();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function unlock(id) {
@@ -301,6 +317,7 @@
       if (e.target.closest(".web-customer-ban-btn")) ban(id);
       if (e.target.closest(".web-customer-unlock-btn")) unlock(id);
       if (e.target.closest(".web-customer-resetpin-btn")) resetPin(id);
+      if (e.target.closest(".web-customer-codes-reset-btn")) resetCodeAttempts(id, e.target.closest(".web-customer-codes-reset-btn"));
       if (e.target.closest(".web-customer-access-btn")) createAccess(row.dataset.phone);
       if (e.target.closest(".web-customer-pinlink-btn")) openPinLink(id, row.dataset.phone);
       if (e.target.closest(".web-customer-fraud-btn")) markFraud(row.dataset.phone);

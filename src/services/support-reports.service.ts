@@ -11,7 +11,7 @@ import { createCustomerNotification } from "../db/customer-notifications.reposit
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 import { findOpenWholesalerTicket, countWholesalerTicketsToday } from "../db/support-tickets.repository";
 import { getProfileById } from "../db/access.repository";
-import { resetWholesalerCodeQuota } from "../db/code-links.repository";
+import { resetWholesalerCodeQuota, resetClientCodeQuota } from "../db/code-links.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
 import { limaTodayISO } from "./access.service";
 
@@ -92,6 +92,30 @@ export function reportNoSubscription(phone: string, platform: string, email: str
     clientPhone: phone, wholesalerId: null, platform: account.platform, accountEmail: account.email,
     accountPassword: account.password, profileName: profile?.profileName || "",
     provider: account.provider || "", problem: NOSUB_PROBLEM,
+  });
+  return { ok: true, ticket };
+}
+
+/** El cliente pide (Soporte o «Códigos») que le restablezcan los intentos de
+ *  códigos de hoy de una cuenta suya. La ruta ya validó que la cuenta es suya,
+ *  tiene códigos y que gastó todos sus intentos de hoy. */
+export function requestClientCodesReset(phone: string, accountId: number): ReportResult {
+  const account = getAccountById(accountId);
+  if (!account) return { ok: false, status: 404, message: "Esa cuenta no está en tu perfil." };
+  if (findOpenTicketForAccount(phone, account.platform, account.email, "codes")) {
+    return { ok: false, status: 409, message: "Ya pediste restablecer los intentos de esta cuenta ✋. Te avisamos en la campanita 🔔 apenas esté listo." };
+  }
+  if (countTicketsTodayForClient(phone) >= MAX_REPORTS_PER_DAY) {
+    return { ok: false, status: 429, message: "Ya enviaste varios pedidos hoy. Si es urgente, escríbenos por WhatsApp al +51 963 081 436." };
+  }
+  const profile = db.prepare(`
+    SELECT id, profile_name AS profileName FROM access_profiles
+    WHERE account_id = ? AND substr(client_phone, -9) = ? ORDER BY slot_number LIMIT 1
+  `).get(account.id, last9(phone)) as { id: number; profileName: string } | undefined;
+  const ticket = createSupportTicket({
+    clientPhone: phone, wholesalerId: null, platform: account.platform, accountEmail: account.email,
+    accountPassword: account.password, profileName: profile?.profileName || "",
+    provider: account.provider || "", problem: CODES_RESET_PROBLEM, kind: "codes", profileId: profile?.id ?? null,
   });
   return { ok: true, ticket };
 }
@@ -243,7 +267,19 @@ export function resolveTicketSolved(id: number): { ticket: SupportTicket; messag
 export function resetCodesForTicket(id: number): { ok: true; ticket: SupportTicket; message: string } | { ok: false; message: string } {
   const before = getSupportTicketById(id);
   if (!before) return { ok: false, message: "Reporte no encontrado." };
-  if (before.kind !== "codes" || !before.profileId) return { ok: false, message: "Este reporte no es de códigos." };
+  if (before.kind !== "codes") return { ok: false, message: "Este reporte no es de códigos." };
+  if (!before.wholesalerId) {
+    // Cliente de liordark.com: se restablecen sus intentos de hoy de esa cuenta.
+    const accountId = before.profileId ? getProfileById(before.profileId)?.accountId : undefined;
+    resetClientCodeQuota(before.clientPhone, accountId);
+    const message = `🔑 Listo: te restablecimos los intentos de códigos de hoy de tu cuenta de ${platformTitle(before.platform)}. Ya puedes volver a pedir tu código en «Códigos».`;
+    const ticket = markSupportTicketResolved(id, "solved", message);
+    if (before.status !== "attended") {
+      createCustomerNotification(before.clientPhone, "support_update", before.platform, before.accountEmail, message);
+    }
+    return { ok: true, ticket: ticket ?? before, message };
+  }
+  if (!before.profileId) return { ok: false, message: "Este reporte no es de códigos." };
   resetWholesalerCodeQuota(before.profileId);
   const message = `🔑 Listo: te restablecimos las consultas de códigos de hoy de ${clientRef(before)}. Ya puedes volver a consultar.`;
   const ticket = markSupportTicketResolved(id, "solved", message);

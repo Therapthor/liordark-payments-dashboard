@@ -107,14 +107,25 @@ export function listSupportTickets(limit = 300): SupportTicket[] {
 }
 
 /** Reporte abierto (pendiente o en revisión) de ESTA cuenta de ESTE cliente. */
-export function findOpenTicketForAccount(phone: string, platform: string, email: string): SupportTicket | null {
+export function findOpenTicketForAccount(phone: string, platform: string, email: string, kind: "codes" | "account" = "account"): SupportTicket | null {
+  // «account» = reportes de la cuenta (sin suscripción…); «codes» = pedidos de
+  // restablecer los intentos de códigos. Uno no tapa al otro.
+  const kindSql = kind === "codes" ? "kind = 'codes'" : "kind <> 'codes'";
   const row = db.prepare(`
     SELECT * FROM support_tickets
-    WHERE substr(client_phone, -9) = ? AND wholesaler_id IS NULL
+    WHERE substr(client_phone, -9) = ? AND wholesaler_id IS NULL AND ${kindSql}
       AND platform = ? AND lower(account_email) = lower(?) AND status IN ('pending', 'seen')
     ORDER BY id DESC LIMIT 1
   `).get(last9(phone), platform.trim().toUpperCase(), email.trim());
   return row ? toTicket(row) : null;
+}
+
+/** Pedidos abiertos de «restablecer intentos de códigos» de este cliente. */
+export function listOpenClientCodesTickets(phone: string): SupportTicket[] {
+  return (db.prepare(`
+    SELECT * FROM support_tickets
+    WHERE substr(client_phone, -9) = ? AND wholesaler_id IS NULL AND kind = 'codes' AND status IN ('pending', 'seen')
+  `).all(last9(phone)) as any[]).map(toTicket);
 }
 
 /** Reportes de hoy (hora Lima) de este cliente — tope anti-spam. */

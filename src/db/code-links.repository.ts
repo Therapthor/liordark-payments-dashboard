@@ -70,7 +70,7 @@ export function countBotLinksToday(clientPhone: string): number {
   const startSql = start.toISOString().slice(0, 19).replace("T", " ");
   const r = db.prepare(`
     SELECT COUNT(*) AS n FROM code_links
-    WHERE created_by = 'bot' AND substr(client_phone, -9) = ? AND created_at >= ?
+    WHERE created_by = 'bot' AND substr(client_phone, -9) = ? AND created_at >= ? AND quota_reset = 0
   `).get(digits, startSql) as { n: number };
   return r.n;
 }
@@ -87,9 +87,23 @@ export function countClientLinksToday(accountId: number, clientPhone: string): n
   const digits = clientPhone.replace(/\D/g, "").slice(-9);
   const r = db.prepare(`
     SELECT COUNT(*) AS n FROM code_links
-    WHERE created_by = 'client' AND account_id = ? AND substr(client_phone, -9) = ? AND created_at >= ?
+    WHERE created_by = 'client' AND account_id = ? AND substr(client_phone, -9) = ? AND created_at >= ? AND quota_reset = 0
   `).get(accountId, digits, limaMidnightUtcSql()) as { n: number };
   return r.n;
+}
+
+/** Restablece los intentos de hoy de un cliente (liordark.com): sus consultas
+ *  de «Códigos» de hoy dejan de contar — de una cuenta, o de todas si no se
+ *  indica. Las que sigan abiertas siguen sirviendo. Devuelve cuántas había. */
+export function resetClientCodeQuota(clientPhone: string, accountId?: number): number {
+  const digits = clientPhone.replace(/\D/g, "").slice(-9);
+  const byAccount = accountId != null ? " AND account_id = ?" : "";
+  const args: (string | number)[] = [digits, limaMidnightUtcSql()];
+  if (accountId != null) args.push(accountId);
+  return db.prepare(`
+    UPDATE code_links SET quota_reset = 1
+    WHERE created_by IN ('client', 'bot') AND substr(client_phone, -9) = ? AND created_at >= ? AND quota_reset = 0${byAccount}
+  `).run(...args).changes;
 }
 
 /** La consulta de «Códigos» que sigue abierta (no vencida ni cerrada), si hay. */

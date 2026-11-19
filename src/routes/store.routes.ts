@@ -31,7 +31,8 @@ import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
 import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection, MULTI_DISCOUNT_MIN, MULTI_DISCOUNT_PCT, listPayLinkCandidates, findOrCreateSelfPayLink, cleanOldPayLinks } from "../db/renewal-pay-links.repository";
 import { loginRateLimit } from "../utils/rate-limit.util";
-import { listReportableAccounts, reportNoSubscription } from "../services/support-reports.service";
+import { listReportableAccounts, reportNoSubscription, requestClientCodesReset } from "../services/support-reports.service";
+import { findOpenTicketForAccount } from "../db/support-tickets.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
@@ -671,9 +672,30 @@ router.get("/codes", (req, res) => {
       limit:       CODES_PER_ACCOUNT_PER_DAY,
       remaining:   Math.max(0, CODES_PER_ACCOUNT_PER_DAY - used),
       openUrl:     open ? "/codigo/" + open.token + "?from=tienda" : null,
+      resetRequested: !!findOpenTicketForAccount(customer.phone, a.platform, a.email, "codes"),
     };
   });
   res.json({ accounts, limit: CODES_PER_ACCOUNT_PER_DAY });
+});
+
+// Pedir que restablezcan los intentos de hoy de una cuenta (solo si ya los
+// gastó todos). Llega a panel › Soportes con «Restablecer límite de hoy».
+router.post("/codes/:accountId/reset-request", (req, res) => {
+  const customerId = (req as unknown as RequestWithCustomer).customerId;
+  const customer   = findCustomerById(customerId);
+  if (!customer) return res.status(401).json({ message: "Sesión inválida." });
+
+  const accountId = Number(req.params.accountId);
+  const account = codesAccountsFor(customer.phone).find(a => a.accountId === accountId);
+  if (!account) return res.status(404).json({ message: "Esa cuenta no tiene códigos disponibles en tu perfil." });
+  const remaining = CODES_PER_ACCOUNT_PER_DAY - countClientLinksToday(accountId, customer.phone);
+  if (remaining > 0) {
+    return res.status(409).json({ message: `Todavía te quedan ${remaining} ${remaining === 1 ? "intento" : "intentos"} hoy para esta cuenta 👍.` });
+  }
+  const result = requestClientCodesReset(customer.phone, accountId);
+  if (!result.ok) return res.status(result.status).json({ message: result.message });
+  emitDashboardEvent({ type: "support_report", id: result.ticket.id, platform: result.ticket.platform });
+  res.status(201).json({ ok: true, platformTag: result.ticket.platformTag, email: result.ticket.accountEmail });
 });
 
 router.post("/codes/:accountId/open", (req, res) => {
@@ -692,7 +714,7 @@ router.post("/codes/:accountId/open", (req, res) => {
   const used = countClientLinksToday(accountId, customer.phone);
   if (used >= CODES_PER_ACCOUNT_PER_DAY) {
     return res.status(429).json({
-      message: `Ya usaste tus ${CODES_PER_ACCOUNT_PER_DAY} consultas de hoy para esta cuenta. Mañana se renuevan; si es urgente, escríbenos por Soporte.`,
+      message: `Ya usaste tus ${CODES_PER_ACCOUNT_PER_DAY} consultas de hoy para esta cuenta. Mañana se renuevan; si es urgente, toca «Pedir más intentos hoy».`,
     });
   }
 

@@ -15,6 +15,9 @@ import {
   createCustomer,
 } from "../db/customer.repository";
 import { listAccessClientStats } from "../db/access.repository";
+import { resetClientCodeQuota } from "../db/code-links.repository";
+import { listOpenClientCodesTickets } from "../db/support-tickets.repository";
+import { resetCodesForTicket } from "../services/support-reports.service";
 import { generatePassword, hashPassword } from "../services/customer-auth.service";
 import { limaTodayISO } from "../services/access.service";
 import { checkLockout } from "../services/login-lockout.service";
@@ -156,6 +159,18 @@ router.post("/:id/unlock", (req, res) => {
   if (ban) unblockPhone(customer.phone);
   unlockCustomerLogin(customer.phone, ban?.ip ? [ban.ip] : []);
   res.json({ ok: true });
+});
+
+// «Restablecer intentos»: las consultas de «Códigos» de hoy del cliente
+// (todas sus cuentas) dejan de contar. Si tenía pedidos abiertos en Soportes
+// para esto, se cierran y le llega el aviso a su campanita.
+router.post("/:id/reset-code-attempts", (req, res) => {
+  const customer = findCustomerById(Number(req.params.id));
+  if (!customer) return res.status(404).json({ message: "Cliente no encontrado." });
+  const tickets = listOpenClientCodesTickets(customer.phone);
+  for (const t of tickets) resetCodesForTicket(t.id);
+  const reset = resetClientCodeQuota(customer.phone);
+  res.json({ ok: true, reset, tickets: tickets.length });
 });
 
 // Permite al admin poner/corregir el correo de aviso de vencimiento de un

@@ -1088,3 +1088,7 @@ body[data-nav-dir="back"] .page { --pg-x: -22px; --pg-y: 0px; }
   .buy-toast { left: 24px; bottom: 24px; transform: translateX(-28px); }
   .buy-toast.is-in { transform: none; }
 }
+
+/* «Pedir más intentos hoy» (Códigos sin consultas) */
+.codes-reset-btn { margin-top: 10px; width: 100%; min-height: 42px; border-radius: 14px; font-size: 13.5px; }
+.codes-reset-note { margin: 10px 0 0; font-size: 12.5px; font-weight: 700; color: var(--muted-2); }

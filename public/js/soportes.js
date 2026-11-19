@@ -146,7 +146,7 @@
   const QUICK_CONFIRM = {
     active: "¿Avisarle que su cuenta SÍ tiene suscripción y cerrar el reporte?",
     solved: "¿Avisarle que su problema ya está solucionado y cerrar el reporte?",
-    "reset-codes": "¿Restablecer las consultas de códigos de hoy de esta cuenta? El mayorista podrá volver a consultar.",
+    "reset-codes": "¿Restablecer las consultas de códigos de hoy de esta cuenta? Podrá volver a pedir su código.",
   };
   const QUICK_DONE = {
     review: "🔎 Le avisamos que su cuenta está en revisión.",
