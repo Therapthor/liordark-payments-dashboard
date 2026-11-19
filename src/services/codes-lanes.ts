@@ -50,6 +50,13 @@ const COOLDOWN_MAX_MS = 120_000;
 // demasiado — la fila espera (20 s, 40 s… 2 min) en vez de insistir.
 const QUICK_PAGE_LANES = new Set(["juanpa"]);
 
+// Página rápida que empieza a tardar (>3 s) o falla: queda «frenada» 2 min
+// y los pedidos de clientes la miran cada 20 s en vez de cada 5 s (ver
+// code-requests.service.ts). Un resultado de hace <3 s se reusa.
+const SLOW_MS = 3_000;
+const SLOW_HOLD_MS = 2 * 60_000;
+const REUSE_MS = 3_000;
+
 function isThrottle(err: any, laneId = ""): boolean {
   const status = err?.response?.status;
   if (status === 429 || status === 403 || status === 503) return true;
@@ -76,12 +83,21 @@ class Lane {
   private lastError: string | null = null;
   private lastOkAt: number | null = null;
   private done = 0;
+  private slowUntil = 0;
+  private recent = new Map<string, { at: number; value: unknown }>();
 
   constructor(readonly id: string, private readonly cfg: LaneConfig) {}
+
+  /** ¿Está tardando o fallando? (solo páginas rápidas). */
+  isSlow(): boolean {
+    return QUICK_PAGE_LANES.has(this.id) && Math.max(this.slowUntil, this.cooldownUntil) > Date.now();
+  }
 
   run<T>(key: string, priority: LanePriority, fn: () => Promise<T>): Promise<T> {
     const same = this.shared.get(key);
     if (same) return same as Promise<T>;
+    const fresh = this.recent.get(key);
+    if (fresh && Date.now() - fresh.at < REUSE_MS) return Promise.resolve(fresh.value as T);
     const p = new Promise<unknown>((resolve, reject) => {
       this.queue.push({ key, priority, at: Date.now(), run: fn, resolve, reject });
       this.queue.sort((a, b) => a.priority - b.priority || a.at - b.at);
@@ -105,12 +121,20 @@ class Lane {
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     const job = this.queue.shift();
     if (!job) { this.busy = false; return; }
+    const quick = QUICK_PAGE_LANES.has(this.id);
+    const started = Date.now();
     try {
       const result = await job.run();
       this.cooldownMs = 0;
       this.lastOkAt = Date.now();
+      if (quick) {
+        if (Date.now() - started > SLOW_MS) this.slowUntil = Date.now() + SLOW_HOLD_MS;
+        this.recent.set(job.key, { at: Date.now(), value: result });
+        if (this.recent.size > 200) this.recent.delete(this.recent.keys().next().value!);
+      }
       job.resolve(result);
     } catch (err: any) {
+      if (quick) this.slowUntil = Date.now() + SLOW_HOLD_MS;
       if (isThrottle(err, this.id)) {
         this.cooldownMs = Math.min(COOLDOWN_MAX_MS, this.cooldownMs ? this.cooldownMs * 2 : COOLDOWN_FIRST_MS);
         this.cooldownUntil = Date.now() + this.cooldownMs;
@@ -141,6 +165,11 @@ export function laneFor(sourceId: string): Lane {
   let lane = lanes.get(id);
   if (!lane) { lane = new Lane(id, LANES[id] ?? LANES.otro!); lanes.set(id, lane); }
   return lane;
+}
+
+/** ¿La página de esta fuente está tardando o fallando? (ver isSlow). */
+export function laneIsSlow(sourceId: string): boolean {
+  return laneFor(sourceId).isSlow();
 }
 
 export function lanesStatus(): LaneStatus[] {

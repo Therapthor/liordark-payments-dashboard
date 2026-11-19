@@ -1,7 +1,7 @@
 import axios from "axios";
 import { AsyncLocalStorage } from "async_hooks";
 import { env } from "../config/env";
-import { laneFor } from "./codes-lanes";
+import { laneFor, laneIsSlow } from "./codes-lanes";
 import { recentCodeMailFor, connectedMailBody } from "./mail-connections.service";
 import { db } from "../db/db";
 
@@ -599,7 +599,22 @@ export function lookupCodeForClientWithRetries(
   if (sourceId === "netflix_con_opciones") {
     return lookupCodeActionWithRetries(sourceId, email, "codigo_login", exclude);
   }
+  if (INBOX_LINK_SOURCES.includes(sourceId)) return lookupQuickPageWithRetries(sourceId, email, exclude);
   return lookupCodeWithRetries(sourceId, email, exclude);
+}
+
+/** Bandeja de Juanpa (responde en ~0,2 s): cada 5 s durante 1 minuto; si la
+ *  página tarda o falla, cada 20 s (ver laneIsSlow en codes-lanes.ts). */
+async function lookupQuickPageWithRetries(sourceId: string, email: string, exclude: SeenCode | null): Promise<CodeLookupResult> {
+  const started = Date.now();
+  for (;;) {
+    let result: CodeLookupResult = { found: false, kind: null, value: null };
+    try { result = await lookupCode(sourceId, email); } catch { /* se reintenta igual */ }
+    if (result.found && !isSameCode(result, exclude)) return result;
+    const wait = laneIsSlow(sourceId) ? 20_000 : 5_000;
+    if (Date.now() - started + wait > 60_000) return { found: false, kind: null, value: null };
+    await new Promise(resolve => setTimeout(resolve, wait));
+  }
 }
 
 /** Sub-acciones de una fuente, para que el admin elija puntualmente qué

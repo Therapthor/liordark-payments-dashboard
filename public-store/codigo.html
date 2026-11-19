@@ -129,8 +129,9 @@
   }
 
   // El servidor busca solo, por turnos con el proveedor (aunque se cierre
-  // esta página). Acá solo se lee el estado cada 5 s.
-  const POLL_MS = 5_000, MANUAL_GAP_MS = 8_000;
+  // esta página). Acá solo se lee el estado cada 2 s (no consulta al
+  // proveedor: apenas el servidor lo tiene, se muestra).
+  const POLL_MS = 2_000, MANUAL_GAP_MS = 8_000;
   let nextPollAt = 0, manualUntil = 0, checking = false, serverChecking = false;
   function paintCooldown() {
     const busy = checking || serverChecking || Date.now() < manualUntil;

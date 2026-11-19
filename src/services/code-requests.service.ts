@@ -8,7 +8,7 @@ import {
   sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID, codeSourceLabel, loginApprovalOf,
   type CodeLookupResult, type LoginApproval, deliversHousehold, householdLinkOf, sameCodeValue,
 } from "./codes-lookup.service";
-import { laneIdOf } from "./codes-lanes";
+import { laneIdOf, laneIsSlow } from "./codes-lanes";
 import { alertClientWaiting, logCodeEvent } from "./codes-brain.service";
 import { emitDashboardEvent } from "../utils/live-events.util";
 
@@ -64,6 +64,23 @@ ensureColumn("code_searches", "found_extra", "found_extra TEXT");
 const OLD_EMAIL_MARGIN_MS = 10 * 60 * 1000;
 // Cada pedido se revisa cada ~8 s; la fila del proveedor pone el ritmo real.
 const CHECK_EVERY_MS = 8_000;
+// Juanpa (bandeja): su página responde en ~0,2 s — el primer minuto de cada
+// pedido (o desde «Buscar ahora» / «Buscar otro») se mira cada 5 s para
+// entregar el código apenas llega. Si la página tarda (>3 s) o falla, se
+// frena sola: cada 20 s (ver laneIsSlow).
+const FAST_SOURCES = new Set(["juanpa_bandeja", "juanpa_disney"]);
+const FAST_CHECK_EVERY_MS = 5_000;
+const FAST_WINDOW_MS = 60_000;
+const BRAKED_CHECK_EVERY_MS = 20_000;
+const fastSince = new Map<string, number>();
+
+function checkEveryMs(req: CodeRequestRow): number {
+  if (!FAST_SOURCES.has(req.sourceId)) return CHECK_EVERY_MS;
+  if (laneIsSlow(req.sourceId)) return BRAKED_CHECK_EVERY_MS;
+  const since = fastSince.get(req.token) ?? sqliteDate(req.createdAt)?.getTime() ?? 0;
+  return Date.now() - since < FAST_WINDOW_MS ? FAST_CHECK_EVERY_MS : CHECK_EVERY_MS;
+}
+
 // Si el cliente sigue mirando y no llegó nada, el link se alarga solo.
 const EXTEND_WHEN_LEFT_MS = 45_000;
 const EXTEND_MINUTES = 3;
@@ -131,6 +148,7 @@ export function ensureCodeRequest(link: CodeLink): CodeRequestRow {
   const row = getRequest(link.token)!;
   announce(row);
   rushed.add(link.token);
+  fastSince.set(link.token, Date.now());
   return row;
 }
 
@@ -141,6 +159,7 @@ export function markClientSeen(token: string): void {
 /** «Buscar ahora»: pasa adelante en su turno. */
 export function rushRequest(token: string): void {
   rushed.add(token);
+  fastSince.set(token, Date.now());
 }
 
 /** «¿No te sirvió? Buscar otro»: el que se mostró ya no cuenta; se espera uno más nuevo. */
@@ -152,6 +171,7 @@ export function searchAgain(token: string): void {
     found_kind: "", found_value: "", found_received_at: "", found_html: null, found_extra: null, found_at: null, note: "", last_state: "",
   });
   rushed.add(token);
+  fastSince.set(token, Date.now());
   const row = getRequest(token);
   if (row) announce(row);
 }
@@ -290,9 +310,11 @@ function extendLink(token: string, minutes: number): void {
 }
 
 function tick(): void {
+  for (const [t, at] of fastSince) if (Date.now() - at > 30 * 60_000) fastSince.delete(t);
   const rows = (db.prepare(`SELECT ${COLS} FROM code_searches WHERE status IN ('searching', 'found')`).all() as any[]).map(toRow);
   for (const req of rows) {
     if (req.sourceId === TOTP_SOURCE_ID) continue;
+    if (req.status !== "searching") fastSince.delete(req.token);
     const link = findCodeLink(req.token);
     if (!link) { update(req.token, { status: req.status === "found" ? "delivered" : "closed" }); continue; }
     const state = codeLinkState(link);
@@ -330,7 +352,7 @@ function tick(): void {
     }
     if (inFlight.has(req.token)) continue;
     const last = sqliteDate(req.lastCheckAt);
-    const due = rushed.has(req.token) || !last || Date.now() - last.getTime() >= CHECK_EVERY_MS;
+    const due = rushed.has(req.token) || !last || Date.now() - last.getTime() >= checkEveryMs(req);
     if (!due) continue;
     rushed.delete(req.token);
     inFlight.add(req.token);
