@@ -2389,7 +2389,7 @@
         c,
         // Códigos: solo se puede pedir si ya usó todas las consultas de hoy.
         disabled: supportKind === "codes" && c.codes.remaining > 0,
-        label: `${platformName(c.platform)} · ${c.clientPhone} · ${c.accountHasProfiles ? (c.profileName || "Perfil") : "Cuenta completa"}`,
+        label: `${platformName(c.platform)} · ${c.clientPhone} · ${isFullAccountClient(c) ? "Cuenta completa" : c.accountHasProfiles ? (c.profileName || "Perfil") : "Cuenta"}`,
       }));
     if (supportKind === "codes") options.sort((a, b) => Number(a.disabled) - Number(b.disabled));
     const usable = options.filter(o => !o.disabled);

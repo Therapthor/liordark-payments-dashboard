@@ -174,7 +174,11 @@ router.post("/:id/assign-account", (req, res) => {
     return res.status(400).json({ message: "Celular del cliente inválido." });
   }
 
-  const orderRef = "admin-assign:" + wholesalerId + ":" + Date.now();
+  // «Cuenta completa (a mano)» se marca como tal; desde stock es una venta
+  // normal (perfil, o la cuenta de una plataforma sin perfiles): con el mismo
+  // prefijo que una compra del panel mayorista para que no figure como
+  // «Cuenta completa» ni se cobre su precio al renovar.
+  const orderRef = (mode === "manual" ? "admin-assign:" : "wholesale:admin-assign:") + wholesalerId + ":" + Date.now();
 
   // Planes por meses (CANVA, GEMINI): el admin elige 1, 3, 6 o 12 meses —
   // queda guardado en la cuenta (sale en «Pendientes» como «Plan 3 meses»)

@@ -432,6 +432,10 @@ function isFullAccountSale(hasProfiles: boolean, platform: string, orderRef: str
   if (hasProfiles || !product) return false;
   if (isManualActivationPlatform(platform)) return false;
   if (String(orderRef || "").startsWith("wholesale:")) return false;
+  // Sin referencia (ej. una venta reemplazada antes de que el reemplazo la
+  // conservara): en una plataforma SIN perfiles es una venta normal; en una
+  // con perfiles, una cuenta sin perfiles sí es una cuenta completa.
+  if (!orderRef) return product.hasProfiles;
   return product.hasProfiles || Number(product.wholesaleFullPrice) > 0;
 }
 

@@ -312,6 +312,7 @@ export function resetCodesForTicket(id: number): { ok: true; ticket: SupportTick
 
 export type ReplaceOption = {
   id: number; email: string; expiresAt: string | null; freeCount: number; usedCount: number; totalCount: number;
+  codes: number; // 1 = tiene «🔑 Código» (el cliente verá Códigos con esa cuenta)
 };
 
 /** Destinos para el reemplazo: cuentas vigentes de la misma plataforma.
@@ -321,46 +322,53 @@ export type ReplaceOption = {
  *  Soportes que para «Cambiar cuenta» desde Accesos. */
 export type ReplaceSubject = { clientPhone: string; platform: string; accountEmail: string; wholesalerId: number | null };
 
-export function replaceOptions(ticket: SupportTicket): { fresh: ReplaceOption[]; shared: ReplaceOption[]; full: boolean } {
+type ReplaceOptions = { fresh: ReplaceOption[]; shared: ReplaceOption[]; full: boolean; single: boolean };
+
+export function replaceOptions(ticket: SupportTicket): ReplaceOptions {
   return replaceOptionsFor(ticket);
 }
 
-/** full: la cuenta actual es una cuenta completa → «nueva» = otra cuenta
- *  ENTERA libre (pasa completa al cliente), no un perfil suelto. */
-export function replaceOptionsFor(ticket: ReplaceSubject): { fresh: ReplaceOption[]; shared: ReplaceOption[]; full: boolean } {
+/** Según lo que compró: single = su cuenta actual es de un solo lugar → «nueva»
+ *  = otra cuenta ENTERA libre. full = además la plataforma tiene perfiles (es
+ *  una cuenta completa de verdad, no una venta normal de una plataforma sin
+ *  perfiles como ChatGPT). Un perfil → un perfil libre. */
+export function replaceOptionsFor(ticket: ReplaceSubject): ReplaceOptions {
   const today = limaTodayISO();
   const rows = db.prepare(`
     SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt,
            SUM(CASE WHEN p.id IS NOT NULL AND p.client_phone = '' THEN 1 ELSE 0 END) AS freeCount,
            SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS usedCount,
-           COUNT(p.id) AS totalCount
+           COUNT(p.id) AS totalCount,
+           (a.codes_enabled = 1 AND a.code_source IS NOT NULL) AS codes
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
     WHERE a.platform = ? AND (a.expires_at IS NULL OR a.expires_at >= ?) AND lower(a.email) != lower(?)
     GROUP BY a.id
     ORDER BY a.expires_at DESC
   `).all(ticket.platform.toUpperCase(), today, ticket.accountEmail) as ReplaceOption[];
-  const full = isFullAccountSource(ticket.clientPhone, ticket.platform, ticket.accountEmail, ticket.wholesalerId);
-  const freeIds = full
+  const single = isFullAccountSource(ticket.clientPhone, ticket.platform, ticket.accountEmail, ticket.wholesalerId);
+  const full = single && (getCatalogProductByPlatform(ticket.platform)?.hasProfiles ?? true);
+  const freeIds = single
     ? listWholeFreeAccountIds(ticket.platform, today)
     : new Set(listAccountsWithFreeProfiles(ticket.platform, 1, today).map(a => a.id));
   return {
     fresh: rows.filter(r => r.freeCount > 0 && freeIds.has(r.id)),
     shared: rows,
     full,
+    single,
   };
 }
 
 export function replaceTicketAccount(
   id: number, mode: "fresh" | "shared", targetAccountId: number, profileName: string
-): { ok: true; ticket: SupportTicket; message: string } | { ok: false; message: string } {
+): { ok: true; ticket: SupportTicket; message: string; codesWarning: string } | { ok: false; message: string } {
   const ticket = getSupportTicketById(id);
   if (!ticket) return { ok: false, message: "Reporte no encontrado." };
   if (ticket.status === "attended") return { ok: false, message: "Este reporte ya está resuelto." };
   const done = replaceClientTo(ticket, mode, targetAccountId, profileName);
   if (!done.ok) return done;
   const resolved = markSupportTicketResolved(id, "replaced", done.message);
-  return { ok: true, ticket: resolved ?? ticket, message: done.message };
+  return { ok: true, ticket: resolved ?? ticket, message: done.message, codesWarning: done.codesWarning };
 }
 
 /** Cambia la cuenta del cliente: «fresh» = pasa a un perfil libre de la
@@ -369,7 +377,7 @@ export function replaceTicketAccount(
  *  campanita (cliente o mayorista). Devuelve el mensaje para enviarle. */
 export function replaceClientTo(
   ticket: ReplaceSubject, mode: "fresh" | "shared", targetAccountId: number, profileName: string
-): { ok: true; message: string; email: string } | { ok: false; message: string } {
+): { ok: true; message: string; email: string; codesWarning: string } | { ok: false; message: string } {
   const target = getAccountById(targetAccountId);
   if (!target || target.platform.toUpperCase() !== ticket.platform.toUpperCase()) {
     return { ok: false, message: "Elige una cuenta de la misma plataforma." };
@@ -434,5 +442,7 @@ export function replaceClientTo(
     ].join("\n");
     createCustomerNotification(ticket.clientPhone, "account_replaced", ticket.platform, target.email, detail);
   }
-  return { ok: true, message, email: target.email };
+  const codesWarning = target.codesEnabled && target.codeSource ? ""
+    : "La cuenta nueva no tiene «🔑 Código»: no verá Códigos hasta que lo actives (Accesos › ⋯ › Editar cuenta).";
+  return { ok: true, message, email: target.email, codesWarning };
 }

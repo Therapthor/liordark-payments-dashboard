@@ -186,15 +186,18 @@
     const box = $("soporte-replace-options");
     const items = replaceMode === "fresh" ? replaceData.fresh : replaceData.shared;
     const full = !!replaceData.full;
+    const single = !!replaceData.single;
     $("soporte-replace-hint").textContent = replaceMode === "fresh"
       ? (full
-        ? "Cuenta completa: el cliente pasa a la cuenta ENTERA que elijas (todos sus perfiles libres) y conserva su fecha de vencimiento."
-        : "El cliente pasa a un perfil libre de la cuenta que elijas y conserva su fecha de vencimiento.")
+        ? "Compró una cuenta completa: pasa a la cuenta ENTERA que elijas (todos sus perfiles libres) y conserva su fecha de vencimiento."
+        : single
+          ? "Pasa a otra cuenta libre de esta plataforma y conserva su fecha de vencimiento."
+          : "Compró un perfil: pasa a un perfil libre de la cuenta que elijas y conserva su fecha de vencimiento.")
       : "Uso temporal: se le pasan los datos de una cuenta que ya usan otros clientes (no ocupa perfil) y conserva su fecha.";
     $("soporte-replace-profile-wrap").hidden = replaceMode !== "shared";
     if (!items.length) {
       box.innerHTML = `<p class="feed-empty">${replaceMode === "fresh"
-        ? (full
+        ? (single
           ? "No hay cuentas de esta plataforma enteras libres. Prueba «Ya en uso» o agrega una en Accesos."
           : "No hay cuentas de esta plataforma con perfiles libres. Prueba «Ya en uso» o agrega una en Accesos.")
         : "No hay otras cuentas vigentes de esta plataforma."}</p>`;
@@ -204,7 +207,7 @@
       <label class="soporte-replace-option">
         <input type="radio" name="soporte-replace-target" value="${a.id}"${pickedAccountId === a.id ? " checked" : ""}>
         <span><b>${escapeHtml(a.email)}</b><br>
-          <small>Vence ${escapeHtml(fmtDay(a.expiresAt))} · ${a.usedCount}/${a.totalCount || a.usedCount} en uso${a.freeCount ? ` · ${a.freeCount} libre${a.freeCount === 1 ? "" : "s"}` : ""}</small>
+          <small>Vence ${escapeHtml(fmtDay(a.expiresAt))} · ${a.usedCount}/${a.totalCount || a.usedCount} en uso${a.freeCount ? ` · ${a.freeCount} libre${a.freeCount === 1 ? "" : "s"}` : ""} · ${a.codes ? "🔑 Código ✓" : "sin 🔑 Código"}</small>
         </span>
       </label>`).join("");
   }
@@ -286,7 +289,8 @@
       // Sin WhatsApp: el aviso con los datos nuevos le llega por la web
       // (campanita del cliente o del mayorista).
       $("soporte-replace-result").innerHTML = `
-        <p>✅ Listo. El cliente ya tiene su cuenta nueva y le llegó el aviso con sus datos a su campanita en la web.</p>`;
+        <p>✅ Listo. El cliente ya tiene su cuenta nueva y le llegó el aviso con sus datos a su campanita en la web.</p>
+        ${data && data.codesWarning ? `<p class="form-error">⚠️ ${escapeHtml(data.codesWarning)}</p>` : ""}`;
       $("soporte-replace-result").hidden = false;
       btn.hidden = true;
       $("soporte-replace-cancel").textContent = "Cerrar";

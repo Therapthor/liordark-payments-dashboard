@@ -1094,6 +1094,12 @@ export const replaceClientAccount = db.transaction((params: {
 
   const freeProfileId = findFreeProfileId(params.targetAccountId);
   if (!freeProfileId) throw new Error("La cuenta elegida no tiene perfiles libres.");
+  // La venta sigue siendo la misma (perfil, cuenta, cuenta completa): se
+  // lleva su referencia al lugar nuevo. Sin esto, al mayorista una venta
+  // normal de una plataforma sin perfiles le figuraba como «Cuenta completa».
+  const sourceRef = source.kind === "profile"
+    ? ((db.prepare(`SELECT order_ref AS ref FROM access_profiles WHERE id = ?`).get(source.profileId) as { ref: string } | undefined)?.ref || "")
+    : "";
 
   // Cuenta completa → la cuenta destino entera pasa a este cliente (como
   // «👤 Cuenta completa»): se quitan sus otros perfiles, todos libres.
@@ -1113,9 +1119,9 @@ export const replaceClientAccount = db.transaction((params: {
   assignProfileClient(freeProfileId, params.clientPhone);
   db.prepare(`
     UPDATE access_profiles
-    SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?
+    SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?, order_ref = ?
     WHERE id = ?
-  `).run(params.expiresAt ?? source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, freeProfileId);
+  `).run(params.expiresAt ?? source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, sourceRef, freeProfileId);
 
   const account = db.prepare(`SELECT email FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { email: string };
   return { accountId: params.targetAccountId, email: account.email };
