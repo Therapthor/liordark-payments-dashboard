@@ -2,34 +2,65 @@ import { db } from "../db/db";
 import { addDaysISO, limaTodayISO } from "./access.service";
 
 // ─────────────────────────────────────────────────────────────
-// PLANES POR MESES — plataformas de activación manual que se venden por
-// duración (hoy: GEMINI AI PRO y CANVA PRO). Cada compra es una cuenta individual,
-// así que su vencimiento sale directo del plan elegido.
-// El mayorista paga S/ 1 menos en cada plan.
+// PLANES POR MESES
+//  · Activación manual (GEMINI AI PRO, CANVA PRO): cada compra es una cuenta
+//    individual; el mayorista paga S/ 1 menos en cada plan.
+//  · Perfiles / accesos compartidos (CRUNCHYROLL, NETFLIX, CHATGPT, CAPCUT):
+//    el cliente tiene su propia fecha dentro de la cuenta (ver
+//    services/brain.service.ts). El mayorista solo compra los planes con
+//    `wholesale` (1 mes y, en Crunchyroll, el anual).
+// wholesalePrice null = el precio mayorista del catálogo (Configuración ›
+// Catálogo), para no pisar lo que ya está configurado.
 // ─────────────────────────────────────────────────────────────
 
-export type PlanOption = { months: number; days: number; price: number; wholesalePrice: number; label: string };
+export type PlanOption = {
+  months: number; days: number; price: number; label: string;
+  wholesalePrice: number | null; wholesale: boolean;
+};
 
 const WHOLESALE_DISCOUNT = 1;
 
-function plan(months: number, price: number): PlanOption {
+function plan(months: number, price: number, wholesale: number | null | false = Math.round((price - WHOLESALE_DISCOUNT) * 100) / 100): PlanOption {
   return {
     months,
     days: months === 12 ? 365 : months * 30,
     price,
-    wholesalePrice: Math.round((price - WHOLESALE_DISCOUNT) * 100) / 100,
+    wholesalePrice: wholesale === false ? null : wholesale,
+    wholesale: wholesale !== false,
     label: months === 12 ? "Anual" : months === 1 ? "1 mes" : `${months} meses`,
   };
 }
 
 const GEMINI_PLANS: PlanOption[] = [plan(1, 6), plan(3, 15), plan(6, 25), plan(12, 49.9)];
 const CANVA_PLANS:  PlanOption[] = [plan(1, 5), plan(3, 10), plan(6, 15), plan(12, 25)];
+// Perfiles: 1 mes al mismo precio de siempre; los paquetes salen más baratos por mes.
+const CRUNCHYROLL_PLANS: PlanOption[] = [plan(1, 4, 3), plan(3, 8, false), plan(6, 14, false), plan(12, 25, 20)];
+const NETFLIX_PLANS:     PlanOption[] = [plan(1, 16, null), plan(3, 45, false), plan(6, 85, false)];
+const CHATGPT_PLANS:     PlanOption[] = [plan(1, 15, null), plan(3, 40, false)];
+const CAPCUT_PLANS:      PlanOption[] = [plan(1, 15, null), plan(3, 40, false)];
 
 export function plansFor(platform: string | null | undefined): PlanOption[] | null {
   const p = String(platform ?? "");
   if (/gemini/i.test(p)) return GEMINI_PLANS;
   if (/canva/i.test(p))  return CANVA_PLANS;
+  if (/crunchyroll/i.test(p)) return CRUNCHYROLL_PLANS;
+  if (/netflix/i.test(p))     return NETFLIX_PLANS;
+  if (/chatgpt/i.test(p))     return CHATGPT_PLANS;
+  if (/capcut/i.test(p))      return CAPCUT_PLANS;
   return null;
+}
+
+/** Planes que puede comprar un mayorista, con su precio ya resuelto
+ *  (null en el plan = el precio mayorista del catálogo). */
+export function wholesalePlansFor(platform: string, catalogWholesalePrice: string | number | null | undefined):
+  (PlanOption & { wholesalePrice: number })[] | null {
+  const plans = plansFor(platform);
+  if (!plans) return null;
+  const fallback = Number(catalogWholesalePrice ?? 0);
+  return plans
+    .filter(p => p.wholesale)
+    .map(p => ({ ...p, wholesalePrice: p.wholesalePrice ?? fallback }))
+    .filter(p => Number.isFinite(p.wholesalePrice) && p.wholesalePrice > 0);
 }
 
 /** El plan elegido; si la plataforma no tiene planes o los meses no existen, null. */
@@ -53,14 +84,19 @@ export function money(n: number): string {
 // Con planes, el título no lleva la duración ("Canva Pro Anual" → "Canva Pro"):
 // la elige el cliente.
 export function syncPlanCatalogPrices(): void {
-  const rows = db.prepare(`SELECT id, platform, title FROM catalog_products`).all() as { id: number; platform: string; title: string }[];
+  const rows = db.prepare(`SELECT id, platform, title, active FROM catalog_products`).all() as { id: number; platform: string; title: string; active: number }[];
   for (const r of rows) {
     const plans = plansFor(r.platform);
-    if (!plans) continue;
+    // Apagado (ej. «Crunchyroll Anual», ya unido a Crunchyroll): no se toca.
+    if (!plans || r.active === 0) continue;
     const monthly = plans[0]!;
     const title = String(r.title ?? "").replace(/\s+anual\s*$/i, "").trim() || r.title;
-    db.prepare(`UPDATE catalog_products SET price = ?, wholesale_price = ?, title = ? WHERE id = ?`)
-      .run(money(monthly.price), money(monthly.wholesalePrice), title, r.id);
+    if (monthly.wholesalePrice !== null) {
+      db.prepare(`UPDATE catalog_products SET price = ?, wholesale_price = ?, title = ? WHERE id = ?`)
+        .run(money(monthly.price), money(monthly.wholesalePrice), title, r.id);
+    } else {
+      db.prepare(`UPDATE catalog_products SET price = ?, title = ? WHERE id = ?`).run(money(monthly.price), title, r.id);
+    }
   }
 }
 

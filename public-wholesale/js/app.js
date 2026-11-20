@@ -922,7 +922,7 @@
     const days   = daysLeftFor(c.expiresAt);
     const tone   = expiryTone(days);
     const status = c.renewalStatus || "";
-    const phoneLine = escapeHtml(c.clientPhone) + (c.profileName ? " · " + escapeHtml(c.profileName) : "");
+    const phoneLine = escapeHtml(c.clientPhone) + (c.profileName ? " · " + escapeHtml(c.profileName) : "") + (c.pin ? " · 🔐 " + escapeHtml(c.pin) : "");
 
     // "Es para el propio mayorista" (asignada desde el panel admin) — no
     // es un cliente real, así que se marca para no confundirla con uno.
@@ -1081,7 +1081,7 @@
     const credLine = client.password
       ? `Correo: ${client.email || "—"}\nContraseña: ${client.password}`
       : `Correo (pendiente de activar): ${client.email || "—"}`;
-    const profileLine = client.profileName ? `\nPerfil: ${client.profileName}` : "";
+    const profileLine = (client.profileName ? `\nPerfil: ${client.profileName}` : "") + (client.pin ? `\nPIN: ${client.pin}` : "");
     const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${client.platform}*:\n\n${credLine}${profileLine}\n\nCualquier duda me escribes por acá. 🙌`;
     window.open(waLink(client.clientPhone, msg), "_blank");
   }
@@ -1972,6 +1972,7 @@
         ${a.planLabel ? `<div class="success-account-row"><b>Plan:</b> ${escapeHtml(a.planLabel)}${a.expiresAt ? " · vence " + escapeHtml(a.expiresAt) : ""}</div>` : ""}
         ${a.password ? `<div class="success-account-row"><b>Contraseña:</b> ${escapeHtml(a.password)}</div>` : `<div class="muted small">Se activa a mano en ese correo — te avisamos cuando esté lista.</div>`}
         ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> ${escapeHtml(a.profileName)}</div>` : ""}
+        ${a.pin ? `<div class="success-account-row"><b>PIN:</b> 🔐 ${escapeHtml(a.pin)}</div>` : ""}
         <div class="success-account-actions">
           <button class="btn-wa btn-xs" data-act="send" data-idx="${idx}" type="button">${icon("send")}Enviar</button>
           <button class="btn-ghost btn-xs" data-act="copy" data-idx="${idx}" type="button">${icon("copy")}Copiar</button>
@@ -2116,13 +2117,13 @@
       if (!account) return;
       if (btn.dataset.act === "send") {
         const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
-        const profileLine = account.profileName ? `\nPerfil: ${account.profileName}` : "";
+        const profileLine = (account.profileName ? `\nPerfil: ${account.profileName}` : "") + (account.pin ? `\nPIN: ${account.pin}` : "");
         const msg = `Hola! 👋 Te paso los datos de tu cuenta de *${account.platform}*:\n\n${credLine}${profileLine}\n\n¡Gracias por tu compra! 🙌`;
         window.open(waLink(lastPurchaseClientPhone, msg), "_blank");
       } else if (btn.dataset.act === "copy") {
         try {
           const credLine = account.password ? `Correo: ${account.email}\nContraseña: ${account.password}` : `Correo (pendiente de activar): ${account.email}`;
-          const profileLine = account.profileName ? `\nPerfil: ${account.profileName}` : "";
+          const profileLine = (account.profileName ? `\nPerfil: ${account.profileName}` : "") + (account.pin ? `\nPIN: ${account.pin}` : "");
           await navigator.clipboard.writeText(`${account.platform}\n${credLine}${profileLine}`);
           const original = btn.innerHTML;
           btn.innerHTML = icon("check") + "Copiado";

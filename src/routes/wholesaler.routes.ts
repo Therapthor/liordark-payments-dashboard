@@ -58,7 +58,8 @@ import {
   markFullAccountSeenByWholesaler,
   countUnseenFullAccountsForWholesaler,
 } from "../db/wholesale-full-account.repository";
-import { plansFor, planFor, planExpiresAt, money } from "../services/plans.service";
+import { plansFor, planFor, planExpiresAt, money, wholesalePlansFor } from "../services/plans.service";
+import { isBrainPlatform, extendClientDate } from "../db/brain-platforms";
 import { isSafeEmail, cleanEmail } from "../utils/email.util";
 import { getAccountCodesConfig } from "../db/codes.repository";
 import { listWholesalerTickets, type SupportTicket } from "../db/support-tickets.repository";
@@ -216,13 +217,14 @@ router.get("/catalog", (req, res) => {
       const plat = product.platform.trim().toUpperCase();
       const manual = isManualActivationPlatform(plat);
       const stock = availability.find(s => s.platform === plat);
-      const plans = plansFor(plat);
+      const plans = wholesalePlansFor(plat, product.wholesalePrice);
       return {
         platform:          plat,
         title:             product.title || plat,
-        wholesalePrice:    plans ? money(plans[0]!.wholesalePrice) : product.wholesalePrice,
-        // GEMINI: el mayorista elige 1, 3, 6 o 12 meses (S/ 1 menos que la tienda).
-        plans:             plans ? plans.map(pl => ({ months: pl.months, label: pl.label, price: money(pl.wholesalePrice) })) : null,
+        wholesalePrice:    plans && plans[0] ? money(plans[0].wholesalePrice) : product.wholesalePrice,
+        // GEMINI/CANVA: 1, 3, 6 o 12 meses (S/ 1 menos que la tienda).
+        // CRUNCHYROLL: 1 mes o anual. Con un solo plan no hay nada que elegir.
+        plans:             plans && plans.length > 1 ? plans.map(pl => ({ months: pl.months, label: pl.label, price: money(pl.wholesalePrice) })) : null,
         wholesaleFullPrice: product.wholesaleFullPrice,
         imageUrl:          product.imageUrl,
         // CANVA/GEMINI/YOUTUBE no tienen perfiles pre-cargados — nunca "sin stock".
@@ -282,8 +284,10 @@ router.post("/purchase", (req, res) => {
   const planByPlatform: Record<string, NonNullable<ReturnType<typeof planFor>>> = {};
   for (const platform of platforms) {
     if (!plansFor(platform)) continue;
-    const plan = planFor(platform, rawMonths[platform] ?? 1);
-    if (!plan) return res.status(400).json({ message: `Elige un plan válido para "${platform}" (1, 3, 6 o 12 meses).` });
+    const wplans = wholesalePlansFor(platform, getCatalogProductByPlatform(platform)?.wholesalePrice) ?? [];
+    const months = Number(rawMonths[platform] ?? 1);
+    const plan = wplans.find(p => p.months === months);
+    if (!plan) return res.status(400).json({ message: `Ese plan no está disponible para mayoristas en "${platform}".` });
     planByPlatform[platform] = plan;
   }
 
@@ -291,7 +295,7 @@ router.post("/purchase", (req, res) => {
   for (const platform of platforms) {
     const product = getCatalogProductByPlatform(platform);
     const plan = planByPlatform[platform];
-    const price = plan ? plan.wholesalePrice : Number(product?.wholesalePrice ?? 0);
+    const price = plan ? (plan.wholesalePrice ?? Number(product?.wholesalePrice ?? 0)) : Number(product?.wholesalePrice ?? 0);
     if (!Number.isFinite(price) || price <= 0) {
       return res.status(422).json({ message: `"${platform}" no tiene precio mayorista configurado.` });
     }
@@ -304,7 +308,7 @@ router.post("/purchase", (req, res) => {
     return res.status(402).json({ message: deduction.error });
   }
 
-  const sold: { platform: string; email: string; password: string; profileName: string; planLabel?: string; expiresAt?: string }[] = [];
+  const sold: { platform: string; email: string; password: string; profileName: string; pin?: string; planLabel?: string; expiresAt?: string }[] = [];
   const createdManualAccountIds: number[] = [];
   const failedPlatforms: string[] = [];
   for (const platform of platforms) {
@@ -319,13 +323,18 @@ router.post("/purchase", (req, res) => {
       sold.push({ platform, email: created.email, password: "", profileName: "", ...(plan ? { planLabel: plan.label, expiresAt } : {}) });
       continue;
     }
-    const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef);
+    const wplan = planByPlatform[platform];
+    const result = sellProfileForWholesaler(platform, wholesalerId, clientPhone, orderRef, wplan ? { days: wplan.days, months: wplan.months } : undefined);
     if (result) {
       const account = getAccountById(result.accountId);
       // result.profileName: el perfil/PIN que le tocó dentro de la cuenta
       // compartida (Crunchyroll, Netflix, etc.) — sin esto el mayorista ve
       // el correo/contraseña de todos pero no sabe cuál casilla es la suya.
-      sold.push({ platform, email: account?.email ?? "", password: account?.password ?? "", profileName: result.profileName || "" });
+      sold.push({
+        platform, email: account?.email ?? "", password: account?.password ?? "", profileName: result.profileName || "",
+        ...(result.pin ? { pin: result.pin } : {}),
+        ...(wplan ? { planLabel: wplan.label } : {}), ...(result.expiresAt ? { expiresAt: result.expiresAt } : {}),
+      });
     } else {
       failedPlatforms.push(platform);
     }
@@ -612,6 +621,18 @@ router.post("/clients/:profileId/renew", (req, res) => {
   if (!deduction.ok) return res.status(402).json({ message: deduction.error });
 
   touchWholesalerActivity(wholesalerId);
+
+  // Cerebro: el cliente suma sus 30 días al instante (cada uno tiene su
+  // fecha); qué cuentas renovar con el proveedor lo decide el cerebro.
+  if (isBrainPlatform(account.platform)) {
+    const newDate = extendClientDate(profile.id, 30);
+    createWholesalerNotification(wholesalerId, "renewal_active", account.platform, account.email);
+    notifyAdminOfRenewal(wholesalerId, account, profile.clientPhone, { ...quote, pending: false }, newDate);
+    return res.json({
+      ok: true, account: { ...publicAccount(getAccountById(account.id)), expiresAt: newDate },
+      kind: quote.kind, priceCents: quote.priceCents, expiresAt: newDate,
+    });
+  }
 
   // Cuenta con perfiles: NO se suman días a la cuenta entera al pagar —
   // queda marcado "renueva" y el admin la confirma en "Renovados" cuando ya

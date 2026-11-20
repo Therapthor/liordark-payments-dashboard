@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
-import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles } from "../db/access.repository";
+import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setProfilePin, setClientDate, getProfileById } from "../db/access.repository";
+import { isBrainPlatform, setNewClientDate, extendClientDate } from "../db/brain-platforms";
+import { runBrain, brainOverview, markProviderRenewed } from "../services/brain.service";
+import { planFor } from "../services/plans.service";
 import {
   createAccountsBulk,
   updateAccount,
@@ -93,6 +96,8 @@ function withStatus(account: AccessAccountWithProfiles) {
     ...account,
     status:   accountStatus(account.expiresAt),
     daysLeft: daysLeft(account.expiresAt),
+    // Cerebro: cada cliente con su fecha; la de la cuenta es la del proveedor.
+    brain:    isBrainPlatform(account.platform),
   };
 }
 
@@ -747,9 +752,83 @@ router.put("/profiles/:id", (req, res) => {
   const { clientPhone } = req.body ?? {};
   if (!clientPhone?.trim()) { res.status(400).json({ message: "El teléfono es obligatorio." }); return; }
 
+  const before = getProfileById(Number(req.params.id));
+  if (before?.pinResetPending && !before.clientPhone) {
+    res.status(409).json({ message: "Este perfil espera un PIN nuevo (el cliente anterior conoce el de antes). Ponle uno nuevo primero." });
+    return;
+  }
   const profile = assignProfileClient(Number(req.params.id), clientPhone);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
-  res.json({ profile, codesWarning: clientCodesWarning(profile.accountId) });
+  // Cerebro: cliente NUEVO en el perfil → su propia fecha según el plan
+  // elegido (1 mes por defecto). Si solo se corrigió el celular, la conserva.
+  const account = getAccountById(profile.accountId);
+  if (account && isBrainPlatform(account.platform) && !before?.clientPhone) {
+    const months = Number(req.body?.months) || 1;
+    const plan = planFor(account.platform, months);
+    setNewClientDate(profile.id, plan ? plan.days : months * 30, plan ? plan.months : months);
+  }
+  res.json({ profile: getProfileById(profile.id), codesWarning: clientCodesWarning(profile.accountId) });
+});
+
+// ── CEREBRO (Pagos › Renovaciones y Accesos) ──
+
+router.get("/brain", (_req, res) => {
+  res.json(brainOverview());
+});
+
+router.post("/brain/run", (_req, res) => {
+  const plan = runBrain("manual");
+  res.json({ plan, overview: brainOverview() });
+});
+
+// «✅ Ya la renové» con el proveedor: la cuenta suma 30 días (los clientes no cambian).
+router.post("/accounts/:id/provider-renewed", (req, res) => {
+  const r = markProviderRenewed(Number(req.params.id));
+  if (!r.ok) { res.status(404).json({ message: r.message }); return; }
+  res.json({ ok: true, expiresAt: r.expiresAt, account: withStatus(getAccountById(Number(req.params.id))!) });
+});
+
+// «🔒 Perfiles con PIN» en una cuenta.
+router.post("/accounts/:id/pin-mode", (req, res) => {
+  const id = Number(req.params.id);
+  if (!getAccountById(id)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  setAccountPinMode(id, req.body?.on === true);
+  res.json({ account: withStatus(getAccountById(id)!) });
+});
+
+// PIN de un perfil (4 a 6 dígitos). Quita el «PIN por cambiar».
+router.post("/profiles/:id/pin", (req, res) => {
+  const pin = String(req.body?.pin ?? "").trim();
+  if (pin && !/^\d{4,6}$/.test(pin)) { res.status(400).json({ message: "El PIN debe tener de 4 a 6 números." }); return; }
+  const profile = setProfilePin(Number(req.params.id), pin);
+  if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
+  res.json({ profile });
+});
+
+// Fecha propia del cliente: «➕ días» (renovación cobrada a mano) o una
+// fecha exacta (corrección). Solo plataformas del cerebro.
+router.post("/profiles/:id/client-date", (req, res) => {
+  const profile = getProfileById(Number(req.params.id));
+  if (!profile || !profile.clientPhone) { res.status(404).json({ message: "Ese perfil no tiene cliente." }); return; }
+  const account = getAccountById(profile.accountId);
+  if (!account || !isBrainPlatform(account.platform)) { res.status(400).json({ message: "Esta plataforma no maneja fecha por cliente." }); return; }
+  const days = Number(req.body?.addDays);
+  const date = String(req.body?.date ?? "").trim();
+  let newDate: string | null = null;
+  if (Number.isFinite(days) && days > 0 && days <= 400) {
+    newDate = extendClientDate(profile.id, Math.round(days));
+    if (newDate) {
+      if (profile.wholesalerId !== null) createWholesalerNotification(profile.wholesalerId, "renewal_active", account.platform, account.email);
+      else createCustomerNotification(profile.clientPhone, "renewed", account.platform, account.email);
+    }
+  } else if (DATE_RE.test(date)) {
+    setClientDate(profile.id, date);
+    newDate = date;
+  } else {
+    res.status(400).json({ message: "Indica los días a sumar o la fecha (AAAA-MM-DD)." });
+    return;
+  }
+  res.json({ ok: true, expiresAt: newDate, profile: getProfileById(profile.id) });
 });
 
 // «👤 Cuenta completa» — la cuenta entera (todos sus perfiles libres) pasa a

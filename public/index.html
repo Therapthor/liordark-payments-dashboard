@@ -684,6 +684,14 @@
           <div class="mp-kpi is-soft"><b data-mp-mirror="renewals-notif-today-failed">0</b><span>Fallidos</span></div>
         </div>
 
+        <!-- 🧠 CEREBRO — qué renovar con el proveedor, stock, movidos, PIN. Ver public/js/brain.js. -->
+        <div class="panel-header standalone">
+          <h2>🧠 Cerebro de cuentas</h2>
+          <button id="brain-run-btn" type="button" class="btn-secondary btn-sm">Correr ahora</button>
+        </div>
+        <p class="panel-hint">Cada noche a las 10 pm: libera a quien venció, decide qué cuentas renovar con el proveedor (el mínimo donde caben todos los que pagaron), mueve a los clientes de las que sobran (conservan su fecha, les llega aviso) y te dice si falta stock.</p>
+        <div id="brain-box" class="brain-box"></div>
+
         <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
              se venden al cliente como plan anual pero Liordark las paga
              mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
@@ -1471,6 +1479,9 @@
       <label>Teléfono (WhatsApp)
         <input id="profile-client-phone" type="text" inputmode="numeric" placeholder="51987654321" required />
       </label>
+      <label id="profile-plan-wrap" hidden>Plan (define hasta cuándo es su perfil)
+        <select id="profile-plan"></select>
+      </label>
       <p id="profile-error" class="login-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="profile-cancel" class="btn-secondary">Cancelar</button>
@@ -1995,6 +2006,7 @@
   <script src="js/wholesalers.js"></script>
   <script src="js/soportes.js"></script>
   <script src="js/full-renewals.js"></script>
+  <script src="js/brain.js"></script>
   <script src="js/course-admin.js"></script>
   <script src="js/mango.js"></script>
   <script src="js/mango-views.js"></script>

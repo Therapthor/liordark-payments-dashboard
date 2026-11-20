@@ -15,6 +15,7 @@ import {
   getProfileById,
   getAccountById,
   setAccountExpiry,
+  setClientDate,
 } from "../db/access.repository";
 import {
   listPendingFullAccountQueue,
@@ -29,6 +30,7 @@ import { unlockWholesalerLogin } from "../services/login-unlock.service";
 import { renewAccount } from "../services/access.service";
 import type { Wholesaler } from "../db/wholesaler.repository";
 import { plansFor, planFor, planExpiresAt } from "../services/plans.service";
+import { isBrainPlatform, extendClientDate } from "../db/brain-platforms";
 
 // CANVA, GEMINI AI PRO y YOUTUBE PREMIUM no tienen stock de perfiles — se
 // activan a mano (mismo criterio que wholesaler.routes.ts, duplicado acá
@@ -240,7 +242,9 @@ router.post("/:id/assign-account", (req, res) => {
   // La cuenta de stock ya trae su propio vencimiento (el de Accesos) —
   // acá se pisa con la fecha real que puso el admin (compra de hace unos
   // días), igual que en los otros 2 modos de este mismo endpoint.
-  setAccountExpiry(result.accountId, expiresAt);
+  // Cerebro: esa fecha es la del CLIENTE (la cuenta guarda la del proveedor).
+  if (isBrainPlatform(result.platform)) setClientDate(result.profileId, expiresAt);
+  else setAccountExpiry(result.accountId, expiresAt);
   touchWholesalerActivity(wholesalerId);
   res.status(201).json({ ok: true, account: { platform: result.platform, email: result.email } });
 });
@@ -267,6 +271,12 @@ router.post("/:id/clients/:profileId/renew", (req, res) => {
     return res.status(400).json({ message: account.platform + " no es renovable — se asigna de nuevo." });
   }
 
+  // Cerebro: se renueva al cliente (+30 días a su fecha); la cuenta con el
+  // proveedor la pide renovar el cerebro si hace falta.
+  if (isBrainPlatform(account.platform)) {
+    const expiresAt = extendClientDate(profile.id, 30);
+    return res.json({ ok: true, expiresAt, account: getAccountById(account.id) });
+  }
   renewAccount(account.id);
   res.json({ ok: true, account: getAccountById(account.id) });
 });

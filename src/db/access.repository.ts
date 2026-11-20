@@ -3,6 +3,7 @@ import { normalizePeruPhone } from "../utils/phone.util";
 import { createCustomerNotification } from "./customer-notifications.repository";
 import { createWholesalerNotification } from "./wholesaler-notifications.repository";
 import { createManualOverride, deleteManualOverride, findManualOverride, listManualOverridesForClient } from "./manual-overrides.repository";
+import { isBrainPlatform, isRotatePlatform, setNewClientDate, recordBrainSale, brainPlatforms } from "./brain-platforms";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -23,6 +24,13 @@ export type AccessProfile = {
   // dejar vender como retail lo que ya es stock de un mayorista.
   wholesalerId:  number | null;
   updatedAt:     string;
+  // Cerebro: fecha propia del cliente (null = la de la cuenta), plan que
+  // compró (meses), PIN del perfil y si hay que ponerle uno nuevo.
+  clientExpiresAt: string | null;
+  planMonths:      number | null;
+  pin:             string;
+  pinResetPending: boolean;
+  movedAt:         string | null;
 };
 
 export type AccessAccount = {
@@ -57,6 +65,10 @@ export type AccessAccount = {
   passwordChangePending: boolean;
   createdAt:   string;
   updatedAt:   string;
+  // Cerebro (ver services/brain.service.ts).
+  pinMode:        boolean;
+  brainAction:    "" | "renew" | "drop";
+  brainActionFor: string | null;
 };
 
 export type AccessAccountWithProfiles = AccessAccount & { profiles: AccessProfile[] };
@@ -290,18 +302,32 @@ export function getAccountById(id: number): AccessAccountWithProfiles | null {
 
 export function listPlatforms(): PlatformSummary[] {
   const floor = minSellableDateISO();
-  return db.prepare(`
+  const tomorrow = addDaysISOLocal(limaTodayISOLocal(), 1);
+  // Mismo criterio que la venta (ver pickFreeProfile): en los perfiles del
+  // cerebro cuenta todo perfil libre de una cuenta viva mañana que no se va
+  // a dejar vencer y no espera PIN nuevo.
+  const rows = db.prepare(`
     SELECT
       a.platform AS platform,
       COUNT(DISTINCT a.id) AS accountCount,
       COUNT(p.id) AS profileCount,
       SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS occupiedCount,
-      SUM(CASE WHEN p.client_phone = '' AND a.expires_at IS NOT NULL AND a.expires_at >= ? THEN 1 ELSE 0 END) AS sellableCount
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+               AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS sellableCount,
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+               AND a.has_profiles = 1 AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS brainSellable,
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+               AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS rotateSellable
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
     GROUP BY a.platform
     ORDER BY a.platform ASC
-  `).all(floor) as PlatformSummary[];
+  `).all({ floor, tomorrow }) as (PlatformSummary & { brainSellable: number; rotateSellable: number })[];
+  return rows.map(({ brainSellable, rotateSellable, ...r }) => ({
+    ...r,
+    sellableCount: isRotatePlatform(r.platform) ? (rotateSellable ?? 0)
+      : isBrainPlatform(r.platform) ? (brainSellable ?? 0) : (r.sellableCount ?? 0),
+  }));
 }
 
 export function listAccountsByPlatform(platform: string): AccessAccountWithProfiles[] {
@@ -356,11 +382,13 @@ export function assignProfileClient(id: number, clientPhone: string): AccessProf
 /** Cuentas de un solo lugar cuyo cliente tiene su fecha guardada aparte
  *  (reemplazos de antes): la fecha pasa a la cuenta. Idempotente. */
 export function syncSingleSlotExpiry(): number {
-  const rows = db.prepare(`
-    SELECT a.id AS accountId, p.id AS profileId, p.expires_override AS date
+  // En las plataformas del cerebro el cliente guarda SU fecha aparte (la de
+  // la cuenta es la del proveedor): ahí no se toca.
+  const rows = (db.prepare(`
+    SELECT a.id AS accountId, a.platform AS platform, p.id AS profileId, p.expires_override AS date
     FROM access_accounts a JOIN access_profiles p ON p.account_id = a.id
     WHERE a.has_profiles = 0 AND p.client_phone != '' AND p.expires_override IS NOT NULL
-  `).all() as { accountId: number; profileId: number; date: string }[];
+  `).all() as { accountId: number; platform: string; profileId: number; date: string }[]).filter(r => !isBrainPlatform(r.platform));
   db.transaction(() => {
     for (const r of rows) {
       db.prepare(`UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?`).run(r.date, r.accountId);
@@ -370,11 +398,34 @@ export function syncSingleSlotExpiry(): number {
   return rows.length;
 }
 
+/** «🔒 Perfiles con PIN» de una cuenta. */
+export function setAccountPinMode(accountId: number, on: boolean): void {
+  db.prepare(`UPDATE access_accounts SET pin_mode = ?, updated_at = datetime('now') WHERE id = ?`).run(on ? 1 : 0, accountId);
+  if (!on) db.prepare(`UPDATE access_profiles SET pin_reset_pending = 0 WHERE account_id = ?`).run(accountId);
+}
+
+/** PIN del perfil (vacío = sin PIN). Poner uno quita el «PIN por cambiar». */
+export function setProfilePin(profileId: number, pin: string): AccessProfile | null {
+  const r = db.prepare(`UPDATE access_profiles SET pin = ?, pin_reset_pending = 0, updated_at = datetime('now') WHERE id = ?`).run(pin, profileId);
+  return r.changes ? getProfileById(profileId) : null;
+}
+
+/** Fecha exacta del cliente (corrección a mano del admin). */
+export function setClientDate(profileId: number, dateISO: string): void {
+  db.prepare(`UPDATE access_profiles SET expires_override = ?, updated_at = datetime('now') WHERE id = ?`).run(dateISO, profileId);
+}
+
 export function releaseProfile(id: number): AccessProfile | null {
   // expires_override también se limpia: si no, un cliente nuevo que caiga
   // en este mismo slot heredaría la fecha congelada del cliente anterior.
+  // Cuenta con PIN: quien se va conoce el PIN de ese perfil → hay que poner
+  // uno nuevo antes de volver a venderlo (ver pin_reset_pending).
   const result = db.prepare(`
-    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', expires_override = NULL, updated_at = datetime('now') WHERE id = ?
+    UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', expires_override = NULL,
+      plan_months = NULL, moved_at = NULL,
+      pin_reset_pending = CASE WHEN client_phone != '' AND (SELECT pin_mode FROM access_accounts WHERE id = access_profiles.account_id) = 1 THEN 1 ELSE pin_reset_pending END,
+      updated_at = datetime('now')
+    WHERE id = ?
   `).run(id);
   if (result.changes === 0) return null;
   return getProfileById(id);
@@ -394,6 +445,9 @@ export function setProfileRenewal(id: number, status: RenewalStatus): AccessProf
  *  limpia expires_override: si Soporte le había congelado la fecha a algún
  *  cliente de esta cuenta, una renovación normal la reemplaza por la real. */
 export function resetRenewalMarkers(accountId: number): void {
+  const acc = db.prepare(`SELECT platform FROM access_accounts WHERE id = ?`).get(accountId) as { platform: string } | undefined;
+  // Cerebro: renovar la cuenta es pagarle al proveedor; cada cliente conserva su fecha.
+  if (acc && isBrainPlatform(acc.platform)) return;
   db.prepare(`
     UPDATE access_profiles SET renewal_status = '', expiry_notified_at = NULL, expires_override = NULL,
       sms_reminder_sent_at = NULL
@@ -415,7 +469,7 @@ export type RenewingProfile = {
 export function listRenewingProfiles(): RenewingProfile[] {
   return db.prepare(`
     SELECT p.id AS profileId, a.id AS accountId, p.client_phone AS clientPhone, a.platform AS platform,
-           COALESCE(c.title, '') AS platformTag, a.expires_at AS expiresAt
+           COALESCE(c.title, '') AS platformTag, COALESCE(p.expires_override, a.expires_at) AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
@@ -453,9 +507,10 @@ export function listAccountsWithPendingRenewal(): AccountWithRenewalCount[] {
 
 /** Universo del corte automático — cuentas con perfiles y fecha de vencimiento. */
 export function listRenewableAccountsWithProfiles(): AccessAccountWithProfiles[] {
-  const rows = db.prepare(`
+  // Las del cerebro se renuevan solas por cliente (ver brain.service.ts).
+  const rows = (db.prepare(`
     SELECT * FROM access_accounts WHERE has_profiles = 1 AND expires_at IS NOT NULL
-  `).all() as any[];
+  `).all() as any[]).filter(r => !isBrainPlatform(r.platform));
   return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
 }
 
@@ -471,9 +526,9 @@ export function applyRenewalExtension(accountId: number, newExpiresAt: string, c
 
 /** Cuentas con una limpieza de ciclo pendiente para hoy (o atrasada). */
 export function listAccountsDueForRenewalCleanup(todayISO: string): AccessAccountWithProfiles[] {
-  const rows = db.prepare(`
+  const rows = (db.prepare(`
     SELECT * FROM access_accounts WHERE renewal_cleanup_due_at IS NOT NULL AND renewal_cleanup_due_at <= ?
-  `).all(todayISO) as any[];
+  `).all(todayISO) as any[]).filter(r => !isBrainPlatform(r.platform)); // el cerebro saca a cada uno por su fecha
   return rows.map(row => ({ ...toAccount(row), profiles: getProfilesByAccount(row.id) }));
 }
 
@@ -527,6 +582,7 @@ export type SoldProfile = {
   password:    string;
   profileName: string;
   expiresAt:   string | null;
+  pin?:        string;
 };
 
 /**
@@ -539,28 +595,78 @@ export type SoldProfile = {
  * asignó a un mayorista (Accesos > Asignar a mayorista) es SU inventario,
  * nunca se le puede vender por error a un cliente normal de retail.
  */
-export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string, preferAccountId: number | null = null): SoldProfile | null => {
-  const plat = platform.trim().toUpperCase();
-  const digits = normalizePeruPhone(clientPhone);
-  const floor = minSellableDateISO();
+export type SellOptions = { days?: number; months?: number | null };
 
-  const row = db.prepare(`
-    SELECT p.id AS profileId, p.profile_name AS profileName,
+// Cerebro: dónde conviene vender. Primero las cuentas que igual se van a
+// renovar (tienen clientes que siguen después de su vencimiento con el
+// proveedor), luego las que todavía duran (≥ 28 días), las más llenas
+// primero (así no quedan perfiles muertos repartidos), y la que más dura.
+// Nunca una cuenta que el cerebro decidió dejar vencer, ni un perfil al que
+// hay que ponerle PIN nuevo.
+const BRAIN_SELL_ORDER = `
+  ORDER BY (a.id = @prefer) DESC,
+    (a.brain_action = 'renew') DESC,
+    (a.expires_at > @tomorrow AND EXISTS (SELECT 1 FROM access_profiles q WHERE q.account_id = a.id AND (q.client_phone != '' OR q.wholesaler_id IS NOT NULL)
+            AND COALESCE(q.expires_override, a.expires_at) > a.expires_at)) DESC,
+    (a.expires_at >= @floor28) DESC,
+    (SELECT COUNT(*) FROM access_profiles q WHERE q.account_id = a.id AND (q.client_phone != '' OR q.wholesaler_id IS NOT NULL)) DESC,
+    a.expires_at DESC`;
+
+/** Piso de venta: rotativas (ChatGPT, CapCut) y plataformas de siempre,
+ *  28 días; perfiles del cerebro, que la cuenta siga viva mañana (el cerebro
+ *  la renueva o mueve al cliente). */
+function sellFloor(platform: string): string {
+  return isBrainPlatform(platform) ? addDaysISOLocal(limaTodayISOLocal(), 1) : minSellableDateISO();
+}
+
+function pickFreeProfile(platform: string, wholesalerId: number | null, preferAccountId: number | null): any {
+  const plat = platform.trim().toUpperCase();
+  const floor = sellFloor(plat);
+  const owner = wholesalerId === null ? "p.wholesaler_id IS NULL" : "(p.wholesaler_id = @wid OR p.wholesaler_id IS NULL)";
+  const rotate = isRotatePlatform(plat);
+  const brain = isBrainPlatform(plat) && !rotate;
+  // Rotativas (ChatGPT, CapCut): el correo que más dura (menos cambios después).
+  const order = brain
+    ? (wholesalerId === null ? BRAIN_SELL_ORDER : BRAIN_SELL_ORDER.replace("ORDER BY", "ORDER BY (p.wholesaler_id IS NULL) ASC,"))
+    : rotate
+      ? (wholesalerId === null ? "ORDER BY (a.id = @prefer) DESC, a.expires_at DESC" : "ORDER BY (p.wholesaler_id IS NULL) ASC, a.expires_at DESC")
+      : wholesalerId === null ? "ORDER BY (a.id = @prefer) DESC, a.expires_at ASC" : "ORDER BY (p.wholesaler_id IS NULL) ASC, a.expires_at ASC";
+  // Cuenta completa ya vendida a alguien (sin perfiles) en una plataforma de
+  // perfiles: no se revende como si fuera un perfil.
+  const shape = brain ? "AND a.has_profiles = 1" : "";
+  return db.prepare(`
+    SELECT p.id AS profileId, p.profile_name AS profileName, CASE WHEN a.pin_mode = 1 THEN p.pin ELSE '' END AS pin,
            a.id AS accountId, a.platform AS platform, a.email AS email,
            a.password AS password, a.expires_at AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE a.platform = ? AND p.client_phone = '' AND p.wholesaler_id IS NULL
-      AND a.expires_at IS NOT NULL AND a.expires_at >= ?
-    ORDER BY (a.id = ?) DESC, a.expires_at ASC
+    WHERE a.platform = @plat AND p.client_phone = '' AND ${owner}
+      AND p.pin_reset_pending = 0 AND a.brain_action != 'drop' ${shape}
+      AND a.expires_at IS NOT NULL AND a.expires_at >= @floor
+    ${order}
     LIMIT 1
-  `).get(plat, floor, preferAccountId) as any;
+  `).get({ plat, floor, floor28: minSellableDateISO(), tomorrow: addDaysISOLocal(limaTodayISOLocal(), 1), prefer: preferAccountId ?? -1, wid: wholesalerId ?? -1 }) as any;
+}
 
+/** Después de vender en una plataforma del cerebro: fecha propia del cliente
+ *  (hoy + días del plan) y la venta queda contada para calcular stock. */
+function afterBrainSale(row: any, opts: SellOptions | undefined): void {
+  if (!isBrainPlatform(row.platform)) return;
+  const days = opts?.days ?? 30;
+  const months = opts?.months ?? Math.max(1, Math.round(days / 30));
+  row.expiresAt = setNewClientDate(row.profileId, days, months === 12 || days >= 365 ? 12 : months);
+  recordBrainSale(row.platform);
+}
+
+export const sellProfile = db.transaction((platform: string, clientPhone: string, orderRef: string, preferAccountId: number | null = null, opts?: SellOptions): SoldProfile | null => {
+  const digits = normalizePeruPhone(clientPhone);
+  const row = pickFreeProfile(platform, null, preferAccountId);
   if (!row) return null;
 
   db.prepare(`
     UPDATE access_profiles SET client_phone = ?, order_ref = ?, updated_at = datetime('now') WHERE id = ?
   `).run(digits, orderRef, row.profileId);
+  afterBrainSale(row, opts);
 
   createCustomerNotification(digits, "new_account", row.platform, row.email);
 
@@ -579,25 +685,10 @@ export const sellProfile = db.transaction((platform: string, clientPhone: string
  * Marca seen_by_wholesaler = 0 para el badge "(n)" de Cuentas.
  */
 export const sellProfileForWholesaler = db.transaction((
-  platform: string, wholesalerId: number, clientPhone: string, orderRef: string
+  platform: string, wholesalerId: number, clientPhone: string, orderRef: string, opts?: SellOptions
 ): SoldProfile | null => {
-  const plat = platform.trim().toUpperCase();
   const digits = normalizePeruPhone(clientPhone);
-  const floor = minSellableDateISO();
-
-  const row = db.prepare(`
-    SELECT p.id AS profileId, p.profile_name AS profileName,
-           a.id AS accountId, a.platform AS platform, a.email AS email,
-           a.password AS password, a.expires_at AS expiresAt
-    FROM access_profiles p
-    JOIN access_accounts a ON a.id = p.account_id
-    WHERE a.platform = ? AND p.client_phone = ''
-      AND (p.wholesaler_id = ? OR p.wholesaler_id IS NULL)
-      AND a.expires_at IS NOT NULL AND a.expires_at >= ?
-    ORDER BY (p.wholesaler_id IS NULL) ASC, a.expires_at ASC
-    LIMIT 1
-  `).get(plat, wholesalerId, floor) as any;
-
+  const row = pickFreeProfile(platform, wholesalerId, null);
   if (!row) return null;
 
   db.prepare(`
@@ -605,6 +696,7 @@ export const sellProfileForWholesaler = db.transaction((
     SET client_phone = ?, order_ref = ?, wholesaler_id = ?, seen_by_wholesaler = 0, updated_at = datetime('now')
     WHERE id = ?
   `).run(digits, orderRef, wholesalerId, row.profileId);
+  afterBrainSale(row, opts);
 
   createWholesalerNotification(wholesalerId, "purchase_added", row.platform, row.email);
 
@@ -772,15 +864,26 @@ export function listPendingActivations(): PendingActivation[] {
  */
 export function listWholesalerAvailability(wholesalerId: number): { platform: string; free: number }[] {
   const floor = minSellableDateISO();
-  return db.prepare(`
+  const tomorrow = addDaysISOLocal(limaTodayISOLocal(), 1);
+  const rows = db.prepare(`
     SELECT a.platform AS platform,
-           SUM(CASE WHEN p.client_phone = '' AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS free
+           SUM(CASE WHEN p.client_phone = '' AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+                    AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS free,
+           SUM(CASE WHEN p.client_phone = '' AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+                    AND a.has_profiles = 1 AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS brainFree,
+           SUM(CASE WHEN p.client_phone = '' AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+                    AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS rotateFree
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id = @wholesalerId OR p.wholesaler_id IS NULL
     GROUP BY a.platform
     ORDER BY a.platform ASC
-  `).all({ wholesalerId, floor }) as { platform: string; free: number }[];
+  `).all({ wholesalerId, floor, tomorrow }) as { platform: string; free: number; brainFree: number; rotateFree: number }[];
+  return rows.map(r => ({
+    platform: r.platform,
+    free: isRotatePlatform(r.platform) ? (r.rotateFree ?? 0)
+      : isBrainPlatform(r.platform) ? (r.brainFree ?? 0) : (r.free ?? 0),
+  }));
 }
 
 /** Asigna perfiles ya existentes (libres, sin dueño) a un mayorista — bulk, por ids. Admin-only. */
@@ -813,7 +916,8 @@ export function listWholesalerClients(wholesalerId: number): WholesalerClientPro
            CASE WHEN p.expires_override IS NOT NULL THEN p.expires_override
                 WHEN a.renewal_cleanup_due_at IS NOT NULL AND COALESCE(p.renewal_status, '') != 'yes'
                 THEN a.renewal_cleanup_due_at ELSE a.expires_at END AS expiresAt,
-           a.email AS email, a.password AS password, a.has_profiles AS accountHasProfiles
+           a.email AS email, a.password AS password, a.has_profiles AS accountHasProfiles,
+           CASE WHEN a.pin_mode = 1 THEN p.pin ELSE '' END AS pin
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id = ? AND p.client_phone != ''
@@ -868,6 +972,23 @@ export function findAccountByClientPhone(platform: string, clientPhone: string):
   return row ? { ...toAccount(row), profiles: getProfilesByAccount(row.id) } : null;
 }
 
+/** Perfil de este cliente en la plataforma (el que vence primero) con sus
+ *  datos de acceso y su fecha propia — para la renovación del bot. */
+export function findClientProfileForRenewal(platform: string, clientPhone: string): (SoldProfile & { clientExpiresAt: string | null }) | null {
+  const digits = clientPhone.replace(/\D/g, "");
+  if (digits.length < 9) return null;
+  const row = db.prepare(`
+    SELECT p.id AS profileId, p.profile_name AS profileName, CASE WHEN a.pin_mode = 1 THEN p.pin ELSE '' END AS pin,
+           a.id AS accountId, a.platform AS platform, a.email AS email, a.password AS password,
+           COALESCE(p.expires_override, a.expires_at) AS expiresAt
+    FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id
+    WHERE a.platform = ? AND substr(p.client_phone, -9) = substr(?, -9)
+    ORDER BY COALESCE(p.expires_override, a.expires_at) ASC
+    LIMIT 1
+  `).get(platform.trim().toUpperCase(), digits) as any;
+  return row ? { ...row, clientExpiresAt: row.expiresAt } : null;
+}
+
 export type CustomerAccount = {
   platform:    string;
   email:       string;
@@ -875,6 +996,7 @@ export type CustomerAccount = {
   link:        string;
   profileName: string;
   expiresAt:   string | null;
+  pin?:        string;   // PIN del perfil (cuentas con «Perfiles con PIN»)
 };
 
 /** Todas las cuentas activas de un cliente (cualquier plataforma) — para
@@ -916,7 +1038,8 @@ export function listAccountsByClientPhone(clientPhone: string): CustomerAccount[
   const real = db.prepare(`
     SELECT a.platform AS platform, a.email AS email, a.password AS password,
            a.link AS link, p.profile_name AS profileName,
-           COALESCE(p.expires_override, a.expires_at) AS expiresAt
+           COALESCE(p.expires_override, a.expires_at) AS expiresAt,
+           CASE WHEN a.pin_mode = 1 THEN p.pin ELSE '' END AS pin
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) = ?
@@ -946,7 +1069,7 @@ export function getActiveAccountForClient(clientPhone: string, platform: string,
   if (!digits) return null;
   const row = db.prepare(`
     SELECT a.platform AS platform, a.email AS email, a.password AS password,
-           a.provider AS provider, a.expires_at AS expiresAt
+           a.provider AS provider, COALESCE(p.expires_override, a.expires_at) AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ?
@@ -969,7 +1092,7 @@ export function getActiveAccountForWholesalerClient(
   if (!digits) return null;
   const row = db.prepare(`
     SELECT a.platform AS platform, a.email AS email, a.password AS password,
-           a.provider AS provider, a.expires_at AS expiresAt
+           a.provider AS provider, COALESCE(p.expires_override, a.expires_at) AS expiresAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) = ? AND a.platform = ? AND a.email = ? AND p.wholesaler_id = ?
@@ -1171,8 +1294,8 @@ export const replaceClientAccount = db.transaction((params: {
   // toda del cliente, así que su vencimiento ES el del cliente — se guarda en
   // la cuenta (lo ven Accesos, Códigos, renovaciones y avisos), no aparte.
   const keepDate = params.expiresAt ?? source.preservedExpiresAt;
-  const single = db.prepare(`SELECT has_profiles AS hasProfiles FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { hasProfiles: number } | undefined;
-  if (keepDate && single && !single.hasProfiles) {
+  const single = db.prepare(`SELECT has_profiles AS hasProfiles, platform FROM access_accounts WHERE id = ?`).get(params.targetAccountId) as { hasProfiles: number; platform: string } | undefined;
+  if (keepDate && single && !single.hasProfiles && !isBrainPlatform(single.platform)) {
     db.prepare(`UPDATE access_accounts SET expires_at = ?, updated_at = datetime('now') WHERE id = ?`).run(keepDate, params.targetAccountId);
     db.prepare(`UPDATE access_profiles SET expires_override = NULL WHERE id = ?`).run(freeProfileId);
   }
@@ -1229,7 +1352,7 @@ export function listRenewalAccountsByPhone(clientPhone: string): RenewalAccountV
 
   return db.prepare(`
     SELECT a.platform AS platform, COALESCE(c.title, '') AS platformTag,
-           a.email AS email, a.expires_at AS expiresAt, COALESCE(c.price, '') AS price
+           a.email AS email, COALESCE(p.expires_override, a.expires_at) AS expiresAt, COALESCE(c.price, '') AS price
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
@@ -1253,7 +1376,7 @@ export function getProfileForRenewalMessage(profileId: number): RenewalMessageDa
   const row = db.prepare(`
     SELECT p.profile_name AS profileName, p.client_phone AS clientPhone,
            a.platform AS platform, COALESCE(c.title, '') AS platformTag,
-           a.email AS email, a.expires_at AS expiresAt, COALESCE(c.price, '') AS price
+           a.email AS email, COALESCE(p.expires_override, a.expires_at) AS expiresAt, COALESCE(c.price, '') AS price
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
@@ -1292,20 +1415,20 @@ export function listExpiringClients(days: number, opts?: { excludeAlreadyExpired
   const today = limaTodayISOLocal();
   const limit = addDaysISOLocal(today, days);
   const dateFilter = opts?.exact
-    ? "AND a.expires_at = @limit"
-    : `AND a.expires_at <= @limit ${opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : ""}`;
+    ? "AND COALESCE(p.expires_override, a.expires_at) = @limit"
+    : `AND COALESCE(p.expires_override, a.expires_at) <= @limit ${opts?.excludeAlreadyExpired ? "AND COALESCE(p.expires_override, a.expires_at) >= @today" : ""}`;
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
            COALESCE((SELECT c.price FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS price,
-           a.email AS email, a.password AS password, a.expires_at AS expiresAt,
+           a.email AS email, a.password AS password, COALESCE(p.expires_override, a.expires_at) AS expiresAt,
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND a.expires_at IS NOT NULL
+    WHERE p.client_phone != '' AND p.wholesaler_id IS NULL AND COALESCE(p.expires_override, a.expires_at) IS NOT NULL
       ${dateFilter}
       AND p.order_ref NOT LIKE 'combo:%'
-    ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
+    ORDER BY (p.reminder_sent_at IS NOT NULL), COALESCE(p.expires_override, a.expires_at) ASC
   `).all({ today, limit }) as ExpiringClient[];
 }
 
@@ -1314,19 +1437,19 @@ export function listExpiringClientsForWholesaler(wholesalerId: number, days: num
   const today = limaTodayISOLocal();
   const limit = addDaysISOLocal(today, days);
   const dateFilter = opts?.exact
-    ? "AND a.expires_at = @limit"
-    : `AND a.expires_at <= @limit ${opts?.excludeAlreadyExpired ? "AND a.expires_at >= @today" : ""}`;
+    ? "AND COALESCE(p.expires_override, a.expires_at) = @limit"
+    : `AND COALESCE(p.expires_override, a.expires_at) <= @limit ${opts?.excludeAlreadyExpired ? "AND COALESCE(p.expires_override, a.expires_at) >= @today" : ""}`;
   return db.prepare(`
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
            COALESCE((SELECT c.wholesale_price FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS price,
-           a.email AS email, a.password AS password, a.expires_at AS expiresAt,
+           a.email AS email, a.password AS password, COALESCE(p.expires_override, a.expires_at) AS expiresAt,
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId AND a.expires_at IS NOT NULL
+    WHERE p.client_phone != '' AND p.wholesaler_id = @wholesalerId AND COALESCE(p.expires_override, a.expires_at) IS NOT NULL
       ${dateFilter}
-    ORDER BY (p.reminder_sent_at IS NOT NULL), a.expires_at ASC
+    ORDER BY (p.reminder_sent_at IS NOT NULL), COALESCE(p.expires_override, a.expires_at) ASC
   `).all({ today, limit, wholesalerId }) as ExpiringClient[];
 }
 
@@ -1354,12 +1477,12 @@ export function listExpiringClientsForDate(dateISO: string, onlyWithoutSms = fal
     SELECT p.id AS profileId, p.client_phone AS clientPhone, a.platform AS platform,
            COALESCE((SELECT c.title FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS platformTag,
            COALESCE((SELECT c.price FROM catalog_products c WHERE UPPER(TRIM(c.platform)) = a.platform ORDER BY c.id LIMIT 1), '') AS price,
-           a.email AS email, a.password AS password, a.expires_at AS expiresAt,
+           a.email AS email, a.password AS password, COALESCE(p.expires_override, a.expires_at) AS expiresAt,
            p.reminder_sent_at AS reminderSentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.client_phone != '' AND p.wholesaler_id IS NULL
-      AND a.expires_at = @dateISO
+      AND COALESCE(p.expires_override, a.expires_at) = @dateISO
       AND p.order_ref NOT LIKE 'combo:%'
       AND (@onlyWithoutSms = 0 OR p.sms_reminder_sent_at IS NULL)
     ORDER BY p.client_phone ASC
@@ -1389,7 +1512,7 @@ export function listUnnotifiedExpiringClientsForCustomer(
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id IS NULL AND substr(p.client_phone, -9) = @last9
-      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
+      AND COALESCE(p.expires_override, a.expires_at) <= @limit AND p.expiry_notified_at IS NULL
       AND p.order_ref NOT LIKE 'combo:%'
   `).all({ last9, limit }) as { profileId: number; platform: string; email: string }[];
 }
@@ -1407,7 +1530,7 @@ export function listAllUnnotifiedExpiringRetailClients(
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE p.wholesaler_id IS NULL AND p.client_phone != ''
-      AND a.expires_at <= @limit AND p.expiry_notified_at IS NULL
+      AND COALESCE(p.expires_override, a.expires_at) <= @limit AND p.expiry_notified_at IS NULL
       AND p.order_ref NOT LIKE 'combo:%'
   `).all({ limit }) as { profileId: number; clientPhone: string; platform: string; email: string }[];
 }
@@ -1435,13 +1558,13 @@ export function listEmailReminderCandidates(days: number): EmailReminderCandidat
     SELECT p.id AS profileId, p.client_phone AS clientPhone, c.email AS customerEmail,
            a.platform AS platform, COALESCE(cp.title, '') AS platformTag, COALESCE(cp.price, '') AS price,
            COALESCE(cp.image_url, '') AS imageUrl,
-           a.expires_at AS expiresAt, p.email_reminder_3d_sent_at AS d3SentAt
+           COALESCE(p.expires_override, a.expires_at) AS expiresAt, p.email_reminder_3d_sent_at AS d3SentAt
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     JOIN customers c ON substr(c.phone, -9) = substr(p.client_phone, -9)
     LEFT JOIN catalog_products cp ON UPPER(TRIM(cp.platform)) = a.platform
     WHERE p.wholesaler_id IS NULL AND p.client_phone != '' AND c.email != ''
-      AND a.expires_at <= @limit AND p.email_reminder_1d_sent_at IS NULL
+      AND COALESCE(p.expires_override, a.expires_at) <= @limit AND p.email_reminder_1d_sent_at IS NULL
       AND p.order_ref NOT LIKE 'combo:%'
       AND a.platform NOT LIKE '%YOUTUBE%'
   `).all({ limit }) as any[]).map(row => ({
@@ -1650,6 +1773,9 @@ function toAccount(row: any): AccessAccount {
     passwordChangePending: row.password_change_pending === 1,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
+    pinMode:        row.pin_mode === 1,
+    brainAction:    (row.brain_action ?? "") as "" | "renew" | "drop",
+    brainActionFor: row.brain_action_for ?? null,
   };
 }
 
@@ -1664,5 +1790,10 @@ function toProfile(row: any): AccessProfile {
     orderRef:      row.order_ref ?? "",
     wholesalerId:  row.wholesaler_id ?? null,
     updatedAt:     row.updated_at,
+    clientExpiresAt: row.expires_override ?? null,
+    planMonths:      row.plan_months ?? null,
+    pin:             row.pin ?? "",
+    pinResetPending: row.pin_reset_pending === 1,
+    movedAt:         row.moved_at ?? null,
   };
 }

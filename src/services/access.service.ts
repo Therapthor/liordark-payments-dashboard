@@ -20,6 +20,8 @@ import {
   createPendingAssignment, listPendingAssignments, markPendingAssigned, countPendingAssignments,
 } from "../db/pending-assignments.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
+import { isBrainPlatform } from "../db/brain-platforms";
+import { markProviderRenewed } from "./brain.service";
 import { db } from "../db/db";
 import { logRenewalHistory } from "../db/renewal-history.repository";
 import { createCustomerNotifications, createCustomerNotification } from "../db/customer-notifications.repository";
@@ -93,6 +95,14 @@ export function accountStatus(expiresAt: string | null): AccountStatus {
 export function renewAccount(id: number): AccessAccountWithProfiles | null {
   const account = getAccountById(id);
   if (!account) return null;
+
+  // Cerebro: renovar la cuenta = pagarle al proveedor 30 días más. Cada
+  // cliente conserva su propia fecha (se renueva aparte, al pagar).
+  if (isBrainPlatform(account.platform)) {
+    markProviderRenewed(id);
+    setRenewalPending(id, false);
+    return getAccountById(id);
+  }
 
   const base = account.expiresAt && daysLeft(account.expiresAt)! >= 0
     ? account.expiresAt

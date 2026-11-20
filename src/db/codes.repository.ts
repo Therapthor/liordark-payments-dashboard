@@ -158,12 +158,12 @@ export function listClientCodesAccounts(clientPhone: string): ClientCodesAccount
 
   return db.prepare(`
     SELECT a.id AS accountId, a.platform AS platform, a.email AS email,
-           p.profile_name AS profileName, a.expires_at AS expiresAt, a.totp_secret AS totpSecret
+           p.profile_name AS profileName, COALESCE(p.expires_override, a.expires_at) AS expiresAt, a.totp_secret AS totpSecret
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE a.codes_enabled = 1
       AND substr(p.client_phone, -9) = substr(?, -9)
-      AND a.expires_at IS NOT NULL AND a.expires_at >= ?
+      AND COALESCE(p.expires_override, a.expires_at) IS NOT NULL AND COALESCE(p.expires_override, a.expires_at) >= ?
     ORDER BY a.platform ASC
   `).all(digits, limaTodayISO()) as ClientCodesAccount[];
 }

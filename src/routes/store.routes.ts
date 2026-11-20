@@ -88,6 +88,7 @@ function availableFor(platform: string, stock: Map<string, number>): number {
 const MIN_CUSTOM_COMBO_ITEMS = 2;
 
 function customComboDiscountRate(itemCount: number): number {
+  if (itemCount >= 5) return 0.20;
   if (itemCount >= 3) return 0.15;
   if (itemCount === 2) return 0.05;
   return 0;

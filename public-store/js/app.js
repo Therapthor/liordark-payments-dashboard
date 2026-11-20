@@ -738,7 +738,7 @@
   // ─────────────────────────────────────────────────────────────
   // ARMA TU COMBO — carrito interactivo: el cliente elige 2 o más
   // productos sueltos y arma su propio combo con descuento por cantidad
-  // (2 = 5%, 3+ = 15%). El precio final SIEMPRE lo recalcula el servidor
+  // (2 = 5%, 3–4 = 15%, 5+ = 20%). El precio final SIEMPRE lo recalcula el servidor
   // en /checkout — acá solo se muestra una vista previa.
   // ─────────────────────────────────────────────────────────────
 
@@ -832,7 +832,8 @@
     const chips = (n, size, cls) => plats.slice(0, n).map((p, i) => `<span class="${cls}" style="--i:${i}">${platformChip(p, size)}</span>`).join("");
     const arrow = `<svg class="cbv-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`;
     const btn = (label, cls = "") => `<button class="cbv-btn ${cls}" id="build-combo-btn" type="button">${label}${arrow}</button>`;
-    const tiers = `<li><b>2</b> plataformas <em>−${two}%</em></li><li><b>3 o más</b> <em>−${max}%</em></li>`;
+    const mid = Math.round(comboDiscountRate(3) * 100);
+    const tiers = `<li><b>2</b> <em>−${two}%</em></li><li><b>3–4</b> <em>−${mid}%</em></li><li><b>5+</b> <em>−${max}%</em></li>`;
 
     if (v === 1) return `
       <section class="cbv cbv-1" aria-label="Arma tu combo">
@@ -919,11 +920,11 @@
         <span class="build-combo-prompt-arrow">→</span>
         <div class="build-combo-prompt-badge">
           <span class="build-combo-prompt-badge-top">Hasta</span>
-          <span class="build-combo-prompt-badge-bottom">-15%</span>
+          <span class="build-combo-prompt-badge-bottom">-20%</span>
         </div>
         <div class="build-combo-prompt-text-wrap">
           <p class="build-combo-prompt-title">Junta tus plataformas, paga menos</p>
-          <p class="build-combo-prompt-desc">Elige 2 o más del catálogo y ahorra hasta 15% de descuento.</p>
+          <p class="build-combo-prompt-desc">Elige 2 o más del catálogo y ahorra hasta 20% de descuento.</p>
         </div>
         <button class="build-combo-prompt-btn" id="build-combo-btn" type="button">🛒 Armar combo</button>
       </div>
@@ -931,6 +932,7 @@
   }
 
   function comboDiscountRate(count) {
+    if (count >= 5) return 0.20;
     if (count >= 3) return 0.15;
     if (count === 2) return 0.05;
     return 0;
@@ -997,17 +999,21 @@
     } else if (rate < 0.15) {
       discountLabel.textContent = "5% de descuento — agrega 1 más para 15%";
       totalEl.textContent = "S/ " + total.toFixed(2);
+    } else if (rate < 0.20) {
+      const falta = 5 - items.length;
+      discountLabel.textContent = "15% de descuento — agrega " + falta + " más para 20%";
+      totalEl.textContent = "S/ " + total.toFixed(2);
     } else {
-      discountLabel.textContent = "🎉 15% de descuento aplicado";
+      discountLabel.textContent = "🎉 20% de descuento aplicado";
       totalEl.textContent = "S/ " + total.toFixed(2);
     }
 
     buyBtn.disabled = items.length < MIN_CUSTOM_COMBO_ITEMS;
 
     // Barra de progreso del header — 1 seg prendido por cada producto
-    // agregado (tope 3, que ya es el tramo máximo de descuento).
-    const litSegs = Math.min(items.length, 3);
-    for (let i = 1; i <= 3; i++) {
+    // agregado: 1, 2 (5%), 3–4 (15%), 5+ (20%).
+    const litSegs = items.length >= 5 ? 4 : Math.min(items.length, 3);
+    for (let i = 1; i <= 4; i++) {
       document.getElementById("build-combo-seg-" + i).classList.toggle("on", i <= litSegs);
     }
 
@@ -1655,6 +1661,7 @@
           <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
           <div class="success-account-row"><b>Contraseña:</b> <span class="success-account-value">${escapeHtml(a.password)}</span></div>
           ${a.profileName ? `<div class="success-account-row"><b>Perfil:</b> <span class="success-account-value">${escapeHtml(a.profileName)}</span></div>` : ""}
+          ${a.pin ? `<div class="success-account-row"><b>PIN del perfil:</b> <span class="success-account-value">🔐 ${escapeHtml(a.pin)}</span></div>` : ""}
           ${a.link ? `<div class="success-account-row"><b>Código:</b> <a class="success-account-link" href="${escapeHtml(a.link)}" target="_blank" rel="noopener">Abrir enlace ↗</a></div>` : ""}
           ${needsNewAccount && nonRenewable ? `
             <div class="success-account-renew-box">
@@ -1729,7 +1736,8 @@
 
   function accountCopyText(a) {
     return `Manguitope — ${a.platform}\nCorreo: ${a.email}\nContraseña: ${a.password}` +
-      (a.profileName ? `\nPerfil: ${a.profileName}` : "");
+      (a.profileName ? `\nPerfil: ${a.profileName}` : "") +
+      (a.pin ? `\nPIN: ${a.pin}` : "");
   }
 
   function wireSuccessCopyButtons(container, accounts) {

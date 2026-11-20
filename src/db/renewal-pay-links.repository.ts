@@ -1,6 +1,37 @@
 import crypto from "crypto";
 import { db } from "./db";
 import { getProfileById, setProfileRenewal, limaTodayISOLocal, addDaysISOLocal } from "./access.repository";
+import { isBrainPlatform, extendClientDate } from "./brain-platforms";
+import { createCustomerNotification } from "./customer-notifications.repository";
+import { createWholesalerNotification } from "./wholesaler-notifications.repository";
+
+/** Renovación pagada de un perfil: en el cerebro suma los 30 días al
+ *  cliente al instante (y le avisa); si no, queda marcado «✅ Renueva» para
+ *  que el admin lo confirme como siempre. Devuelve true si se aplicó. */
+export function applyProfileRenewal(profileId: number): boolean {
+  const row = db.prepare(`
+    SELECT p.client_phone AS phone, p.wholesaler_id AS wid, a.platform AS platform, a.email AS email
+    FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id WHERE p.id = ?
+  `).get(profileId) as { phone: string; wid: number | null; platform: string; email: string } | undefined;
+  if (!row) return false;
+  if (!isBrainPlatform(row.platform)) {
+    setProfileRenewal(profileId, "yes");
+    return true;
+  }
+  const date = extendClientDate(profileId, 30);
+  if (!date) return false;
+  if (row.wid !== null) createWholesalerNotification(row.wid, "renewal_active", row.platform, row.email);
+  else if (row.phone) createCustomerNotification(row.phone, "renewed", row.platform, row.email);
+  return true;
+}
+
+/** Ítems de este link ya pagados (en cualquiera de sus órdenes). */
+function paidKeysOf(code: string): Set<string> {
+  const rows = db.prepare(`SELECT keys_json FROM renewal_pay_link_orders WHERE code = ? AND paid_at IS NOT NULL`).all(code) as { keys_json: string | null }[];
+  const out = new Set<string>();
+  for (const r of rows) { try { for (const k of JSON.parse(r.keys_json || "[]")) out.add(String(k)); } catch { /* sin selección */ } }
+  return out;
+}
 
 // ─────────────────────────────────────────────────────────────
 // LINK DE PAGO DE RENOVACIÓN (botón 💬 Reno-manual del panel)
@@ -258,10 +289,13 @@ export type PayLinkItemState = PayLinkItem & { paid: boolean; valid: boolean };
  * liberó alguno después de mandar el link, ya no se cobra por él).
  */
 export function itemStates(link: PayLink): PayLinkItemState[] {
+  // En el cerebro el perfil no queda marcado «Renueva» (se suma al instante):
+  // lo pagado se reconoce por las órdenes pagadas de este mismo link.
+  const paidKeys = paidKeysOf(link.code);
   return link.items.map(it => {
     const profiles = it.profileIds.map(id => getProfileById(id));
     const valid = profiles.every(p => !!p && last9(p.clientPhone) === last9(link.clientPhone));
-    const paid  = valid && profiles.every(p => p!.renewalStatus === "yes");
+    const paid  = valid && (paidKeys.has(it.key) || profiles.every(p => p!.renewalStatus === "yes"));
     return { ...it, paid, valid };
   });
 }
@@ -306,8 +340,7 @@ export function applyPayLinkPayment(orderName: string): { applied: boolean; prof
       for (const id of it.profileIds) {
         const profile = getProfileById(id);
         if (!profile || last9(profile.clientPhone) !== last9(link.clientPhone)) continue;
-        setProfileRenewal(id, "yes");
-        count++;
+        if (applyProfileRenewal(id)) count++;
       }
     }
     db.prepare(`UPDATE renewal_pay_link_orders SET paid_at = datetime('now') WHERE order_name = ?`).run(orderName);

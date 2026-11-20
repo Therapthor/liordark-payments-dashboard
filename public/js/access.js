@@ -92,12 +92,39 @@
 
   /** Datos de perfil + cuenta combinados, tal como los necesitan los mensajes de WhatsApp. */
   function profileCtx(account, p) {
+    // Cerebro: el cliente tiene su propia fecha (la de la cuenta es la del proveedor).
+    const own = account.brain && p.clientExpiresAt ? p.clientExpiresAt : account.expiresAt;
     return {
       id: p.id, accountId: account.id, platform: account.platform,
       email: account.email, password: account.password,
       profileName: p.profileName || "", clientPhone: p.clientPhone,
-      expiresAt: account.expiresAt, daysLeft: account.daysLeft, status: account.status,
+      expiresAt: own, daysLeft: own ? daysBetweenToday(own) : account.daysLeft, status: account.status,
+      brain: !!account.brain, pinMode: !!account.pinMode, pin: p.pin || "", planMonths: p.planMonths || null,
     };
+  }
+
+  // Días desde hoy (Lima) hasta una fecha AAAA-MM-DD.
+  function daysBetweenToday(ymd) {
+    const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+    return Math.round((Date.parse(ymd) - Date.parse(today)) / 86400e3);
+  }
+
+  function planLabel(m) {
+    const n = Number(m) || 1;
+    return n === 12 ? "12m" : n + "m";
+  }
+
+  // Etiquetas por plan de los clientes de la cuenta: «12m×2 · 1m×3».
+  function planTags(account) {
+    const counts = {};
+    for (const p of account.profiles) {
+      if (!p.clientPhone) continue;
+      const k = planLabel(p.planMonths);
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    const order = ["12m", "6m", "3m", "1m"];
+    return Object.keys(counts).sort((a, b) => order.indexOf(a) - order.indexOf(b))
+      .map(k => `<span class="badge access-plan-tag access-plan-${k}">${k}×${counts[k]}</span>`).join("");
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -123,6 +150,12 @@
       platformCatalog = [];
     }
     return platformCatalog;
+  }
+
+  /** Planes (1/3/6/12 meses) de la plataforma, del catálogo ya cargado. */
+  function cachedCatalogPlans(platform) {
+    const p = platformCatalog.find(x => String(x.platform).toUpperCase() === String(platform).toUpperCase());
+    return p && Array.isArray(p.plans) && p.plans.length ? p.plans : null;
   }
 
   async function loadProviderCatalog() {
@@ -362,6 +395,11 @@
   // "Confirmar pago" suma los 30 días de verdad. Así queda registro de que
   // el cliente pagó antes de extender la cuenta, en vez de fiarse del clic.
   function renderRenewControls(account) {
+    // Cerebro: renovar la cuenta es solo pagarle al proveedor (cada cliente
+    // ya tiene su fecha).
+    if (account.brain) {
+      return `<button class="${account.brainAction === "renew" ? "btn-primary" : "btn-secondary"} btn-sm access-provider-renewed" data-account-id="${account.id}" title="Ya le pagué al proveedor: la cuenta suma 30 días">✅ Ya la renové</button>`;
+    }
     if (account.renewalPendingAt) {
       return `
         <button class="btn-primary btn-sm access-renew-confirm" data-account-id="${account.id}">✅ Confirmar pago</button>
@@ -401,8 +439,12 @@
             ${account.provider ? `<span>🏷 ${escapeHtml(account.provider)}</span>` : ""}
             <span class="badge access-badge-${STATUS_CLASS[account.status]}">${STATUS_LABEL[account.status]}</span>
             ${account.renewalPendingAt ? `<span class="badge access-badge-pending" title="Renovar: pendiente de pago">⏳ Pendiente de pago</span>` : ""}
-            <span>${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
+            <span>${account.brain ? "Proveedor: " : ""}${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
             <span class="access-occupancy">${occupancyLabel}</span>
+            ${account.brain ? planTags(account) : ""}
+            ${account.brain && account.brainAction === "renew" ? `<span class="badge access-badge-renew" title="El cerebro necesita esta cuenta: renuévala con el proveedor">🔁 Renovar</span>` : ""}
+            ${account.brain && account.brainAction === "drop" ? `<span class="badge access-badge-drop" title="El cerebro movió a sus clientes: déjala vencer">⏹ Dejar vencer</span>` : ""}
+            ${account.pinMode ? `<span class="badge access-badge-pin" title="Perfiles con PIN">🔒 PIN</span>` : ""}
           </span>
           <span class="access-account-summary-actions">
             <button type="button" class="btn-secondary btn-sm access-open-code" data-email="${escapeHtml(account.email)}" title="Ver el código de este correo en Códigos">🔢 Código</button>
@@ -426,6 +468,7 @@
               <button class="btn-secondary btn-sm access-copy-credentials" data-account="${accountAttr}">📋 Copiar cuenta</button>
               ${renderRenewControls(account)}
               ${canGiveFullAccount(account) ? `<button class="btn-secondary btn-sm access-full-client" data-account-id="${account.id}" title="Dar la cuenta entera (todos los perfiles) a un cliente">👤 Cuenta completa</button>` : ""}
+              ${account.hasProfiles ? `<button class="btn-secondary btn-sm access-pin-mode" data-account-id="${account.id}" data-on="${account.pinMode ? 1 : 0}" title="Cada perfil con su PIN: el cliente solo entra al suyo">${account.pinMode ? "🔓 Quitar PIN" : "🔒 Perfiles con PIN"}</button>` : ""}
               <button class="btn-secondary btn-sm access-edit-account" data-account-id="${account.id}">✏️ Editar cuenta</button>
               <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
             </div>
@@ -459,9 +502,13 @@
     const wholesaleOwned = p.wholesalerId != null;
     const ctx = JSON.stringify(profileCtx(account, p)).replace(/"/g, "&quot;");
 
+    const pinBtn = account.pinMode ? `<button class="row-action" data-act="pin" data-ctx="${ctx}" title="Cambiar PIN de este perfil">🔐</button>` : "";
     let actions;
-    if (occupied) {
+    if (!occupied && !wholesaleOwned && p.pinResetPending) {
+      actions = `<button class="row-action row-action-warn" data-act="pin" data-ctx="${ctx}" title="El cliente anterior conoce el PIN: ponle uno nuevo (y cierra sus dispositivos)">🔐 PIN nuevo</button>`;
+    } else if (occupied) {
       actions = `
+        ${pinBtn}
         <button class="row-action" data-act="send" data-ctx="${ctx}" title="Enviar cuenta">📧</button>
         <button class="row-action" data-act="renew-manual" data-ctx="${ctx}" title="Reno-manual — armar mensaje de renovación por WhatsApp">💬</button>
         <button class="row-action" data-act="replace" data-ctx="${ctx}" title="Cambiar a otra cuenta (nueva o en uso)">🔄</button>
@@ -475,9 +522,16 @@
     }
 
     const cells = [];
-    if (account.hasProfiles) cells.push(`<td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}</td>`);
-    cells.push(`<td>${occupied ? escapeHtml(p.clientPhone) : "<span class=\"text-muted\">Libre</span>"}</td>`);
-    cells.push(`<td>${occupied ? renderRenewalButton(p) : ""}</td>`);
+    const pinTxt = account.pinMode && p.pin ? ` <span class="access-pin">🔐 ${escapeHtml(p.pin)}</span>` : "";
+    if (account.hasProfiles) cells.push(`<td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}${pinTxt}</td>`);
+    // Cerebro: debajo del celular, la fecha propia del cliente y su plan.
+    let clientCell = occupied ? escapeHtml(p.clientPhone) : `<span class="text-muted">${p.pinResetPending ? "Libre · PIN por cambiar" : "Libre"}</span>`;
+    if (occupied && account.brain && p.clientExpiresAt) {
+      const left = daysBetweenToday(p.clientExpiresAt);
+      clientCell += `<div class="access-client-date${left <= 3 ? " soon" : ""}">vence ${fmtDateLong(p.clientExpiresAt)} · ${left}d · ${planLabel(p.planMonths)}</div>`;
+    }
+    cells.push(`<td>${clientCell}${!account.hasProfiles ? pinTxt : ""}</td>`);
+    cells.push(`<td>${occupied ? (account.brain ? `<button class="row-action" data-act="extend" data-ctx="${ctx}" title="Renovación cobrada a mano: sumar días a este cliente">➕30</button>` : renderRenewalButton(p)) : ""}</td>`);
     cells.push(`<td class="access-row-actions">${actions}</td>`);
 
     const rowClass = wholesaleOwned ? ` class="profile-row-wholesale"` : "";
@@ -637,6 +691,29 @@
       });
     });
 
+    target.querySelectorAll(".access-provider-renewed").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("¿Ya le pagaste al proveedor? La cuenta suma 30 días (los clientes conservan su fecha).")) return;
+        btn.disabled = true;
+        try {
+          await api("/accounts/" + btn.dataset.accountId + "/provider-renewed", { method: "POST" });
+          refreshAccountInPlace(Number(btn.dataset.accountId));
+          if (window.MP && MP.toast) MP.toast("✅ Cuenta renovada con el proveedor");
+        } catch (err) { btn.disabled = false; alert(err.message); }
+      });
+    });
+
+    target.querySelectorAll(".access-pin-mode").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const on = btn.dataset.on !== "1";
+        if (on && !confirm("Perfiles con PIN: cada cliente recibe el PIN de su perfil.\nDespués pon el PIN de cada perfil con el botón 🔐 de su fila.")) return;
+        try {
+          await api("/accounts/" + btn.dataset.accountId + "/pin-mode", { method: "POST", body: JSON.stringify({ on }) });
+          refreshAccountInPlace(Number(btn.dataset.accountId));
+        } catch (err) { alert(err.message); }
+      });
+    });
+
     target.querySelectorAll(".access-full-client").forEach(btn => {
       btn.addEventListener("click", () => openFullClientModal(Number(btn.dataset.accountId)));
     });
@@ -686,6 +763,29 @@
     if (act === "edit")         return openProfileModal(ctx);
     if (act === "release")      return releaseProfile(ctx.id, ctx.accountId);
     if (act === "replace")      return openReplaceAccount(ctx.id, ctx.platform, ctx.email, ctx.clientPhone);
+    if (act === "pin")          return setProfilePin(ctx);
+    if (act === "extend")       return extendClient(ctx);
+  }
+
+  async function setProfilePin(ctx) {
+    const pin = prompt(`PIN del perfil ${ctx.profileName || ""} (${ctx.platform}) — de 4 a 6 números.\n\nSi cambió de dueño: cierra sesión en sus dispositivos y borra su historial antes.`, ctx.pin || "");
+    if (pin === null) return;
+    try {
+      await api("/profiles/" + ctx.id + "/pin", { method: "POST", body: JSON.stringify({ pin: pin.trim() }) });
+      refreshAccountInPlace(ctx.accountId);
+    } catch (err) { alert(err.message); }
+  }
+
+  async function extendClient(ctx) {
+    const raw = prompt(`Renovación cobrada a mano — ¿cuántos días sumarle a ${ctx.clientPhone}?\nVence hoy: ${ctx.expiresAt || "—"}`, "30");
+    if (raw === null) return;
+    const days = Number(raw);
+    if (!Number.isFinite(days) || days <= 0) { alert("Escribe un número de días."); return; }
+    try {
+      const r = await api("/profiles/" + ctx.id + "/client-date", { method: "POST", body: JSON.stringify({ addDays: days }) });
+      refreshAccountInPlace(ctx.accountId);
+      if (window.MP && MP.toast) MP.toast("✅ Vence " + r.expiresAt);
+    } catch (err) { alert(err.message); }
   }
 
   // 🔄 Cambiar cuenta: si se cae una cuenta, el cliente pasa a otra nueva
@@ -1340,12 +1440,19 @@
     });
   }
 
-  function openProfileModal(ctx) {
+  async function openProfileModal(ctx) {
+    await loadCatalog();
     currentProfileForModal = ctx;
     document.getElementById("profile-form").reset();
     document.getElementById("profile-error").hidden = true;
     document.getElementById("profile-modal-title").textContent = ctx.clientPhone ? "Cambiar teléfono" : "Asignar cliente";
     document.getElementById("profile-client-phone").value = ctx.clientPhone || "";
+    // Cerebro: cliente nuevo → elegir su plan (define su fecha).
+    const planWrap = document.getElementById("profile-plan-wrap");
+    const planSel = document.getElementById("profile-plan");
+    const plans = (cachedCatalogPlans(ctx.platform) || [{ months: 1, label: "1 mes" }]);
+    planWrap.hidden = !(ctx.brain && !ctx.clientPhone);
+    planSel.innerHTML = plans.map(pl => `<option value="${pl.months}">${escapeHtml(pl.label)}</option>`).join("");
     document.getElementById("profile-modal").hidden = false;
   }
 
@@ -1355,6 +1462,7 @@
     document.getElementById("profile-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const body = { clientPhone: document.getElementById("profile-client-phone").value };
+      if (!document.getElementById("profile-plan-wrap").hidden) body.months = Number(document.getElementById("profile-plan").value) || 1;
       const errorEl = document.getElementById("profile-error");
       errorEl.hidden = true;
       try {

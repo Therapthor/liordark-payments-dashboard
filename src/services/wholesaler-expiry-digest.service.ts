@@ -59,7 +59,7 @@ function expiringCounts(dateISO: string, wholesalerId: number | null): { wholesa
     WHERE p.wholesaler_id IS NOT NULL AND p.client_phone != ''
       AND (@wid IS NULL OR p.wholesaler_id = @wid)
       AND COALESCE(p.renewal_status, '') NOT IN ('yes', 'no')
-      AND COALESCE(a.renewal_cleanup_due_at, a.expires_at) = @date
+      AND COALESCE(p.expires_override, a.renewal_cleanup_due_at, a.expires_at) = @date
       AND a.platform NOT LIKE '%youtube%'
     GROUP BY p.wholesaler_id
   `).all({ date: dateISO, wid: wholesalerId }) as { wholesalerId: number; count: number }[];

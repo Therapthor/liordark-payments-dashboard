@@ -518,4 +518,39 @@ db.exec(`
   );
 `);
 
+// ── CEREBRO DE CUENTAS (ver services/brain.service.ts) ──
+// Cada cliente tiene su propia fecha (access_profiles.expires_override) y la
+// cuenta guarda hasta cuándo está pagada al proveedor (access_accounts.expires_at).
+// PIN por perfil (opcional por cuenta): al cambiar de dueño hay que poner uno
+// nuevo (pin_reset_pending) antes de volver a venderlo.
+ensureColumn("access_profiles", "pin",               "pin TEXT NOT NULL DEFAULT ''");
+ensureColumn("access_profiles", "pin_reset_pending", "pin_reset_pending INTEGER NOT NULL DEFAULT 0");
+ensureColumn("access_profiles", "plan_months",       "plan_months INTEGER");
+ensureColumn("access_profiles", "moved_at",          "moved_at TEXT");
+ensureColumn("access_accounts", "pin_mode",          "pin_mode INTEGER NOT NULL DEFAULT 0");
+// Decisión del cerebro para el vencimiento actual con el proveedor:
+// 'renew' (hay que renovarla) | 'drop' (dejarla vencer) | '' (sin decidir).
+ensureColumn("access_accounts", "brain_action",      "brain_action TEXT NOT NULL DEFAULT ''");
+ensureColumn("access_accounts", "brain_action_for",  "brain_action_for TEXT");
+// Costo de UNA cuenta al mes con el proveedor (USDT) — para la lista de renovaciones.
+ensureColumn("catalog_products", "provider_cost",    "provider_cost TEXT NOT NULL DEFAULT ''");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS brain_runs (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ran_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    origin    TEXT NOT NULL DEFAULT 'auto',
+    plan_json TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE TABLE IF NOT EXISTS brain_sales (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL,
+    at       TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_brain_sales_platform ON brain_sales(platform, at);
+  CREATE TABLE IF NOT EXISTS app_migrations (
+    name TEXT PRIMARY KEY,
+    at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 console.log("🗄️  SQLite inicializado:", DB_PATH);

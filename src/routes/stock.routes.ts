@@ -17,8 +17,11 @@ import {
   markActivationPending,
   setAccountExpiry,
   setAccountPlanMonths,
+  findClientProfileForRenewal,
 } from "../db/access.repository";
 import { findPlanOrder, planFor, plansFor } from "../services/plans.service";
+import { isBrainPlatform, extendClientDate } from "../db/brain-platforms";
+import { db } from "../db/db";
 import { renewAccount, accountStatus, daysLeft, limaTodayISO, addDaysISO } from "../services/access.service";
 import {
   createPendingOrder,
@@ -113,7 +116,28 @@ router.post("/sell", (req, res) => {
     return;
   }
 
-  const sold = sellProfile(platform, clientPhone, typeof orderRef === "string" ? orderRef : "");
+  const ref = typeof orderRef === "string" ? orderRef : "";
+
+  // Cerebro: una RENOVACIÓN no le vende un perfil nuevo — ya se le sumaron
+  // sus días al confirmarse el pago (confirmRenewalLog); se le devuelve su
+  // mismo perfil con la fecha nueva. Si ya no tenía (venció y se liberó),
+  // sigue como una venta normal de 1 mes.
+  if (ref && isBrainPlatform(platform) && isRenewalOrder(ref)) {
+    const own = findClientProfileForRenewal(platform, clientPhone);
+    if (own) {
+      res.status(201).json({ success: true, renewed: true, account: {
+        profileId: own.profileId, platform: own.platform, email: own.email, password: own.password,
+        profileName: withPin(own.profileName, own.pin), pin: own.pin || "", expiresAt: own.clientExpiresAt,
+      } });
+      return;
+    }
+  }
+
+  // Plan por meses elegido en la tienda (Crunchyroll, Netflix, ChatGPT, CapCut).
+  const planOrder = ref ? findPlanOrder(ref) : null;
+  const plan = planOrder ? planFor(platform, planOrder.months) : null;
+
+  const sold = sellProfile(platform, clientPhone, ref, null, plan ? { days: plan.days, months: plan.months } : undefined);
   if (!sold) {
     res.status(409).json({ success: false, message: "Sin stock disponible en esa plataforma." });
     return;
@@ -126,11 +150,21 @@ router.post("/sell", (req, res) => {
       platform:    sold.platform,
       email:       sold.email,
       password:    sold.password,
-      profileName: sold.profileName,
+      profileName: withPin(sold.profileName, sold.pin),
+      pin:         sold.pin || "",
       expiresAt:   sold.expiresAt,
     },
   });
 });
+
+/** El bot muestra el perfil tal cual: con PIN va incluido («Perfil 2 (PIN 1234)»). */
+function withPin(profileName: string, pin: string | undefined): string {
+  return pin ? `${profileName || "Perfil"} (PIN ${pin})` : profileName;
+}
+
+function isRenewalOrder(orderName: string): boolean {
+  return !!db.prepare(`SELECT 1 FROM renewals_log WHERE order_name = ?`).get(orderName);
+}
 
 // GET /profile/:id — reconsulta un perfil ya vendido (para reenviar credenciales
 // si algo falló entre la venta y que el cliente las recibiera por WhatsApp).
@@ -147,8 +181,9 @@ router.get("/profile/:id", (req, res) => {
     email:       account.email,
     password:    account.password,
     profileName: profile.profileName,
+    pin:         profile.pin || "",
     clientPhone: profile.clientPhone,
-    expiresAt:   account.expiresAt,
+    expiresAt:   profile.clientExpiresAt ?? account.expiresAt,
   });
 });
 
@@ -190,6 +225,12 @@ router.post("/renew", (req, res) => {
     return;
   }
 
+  if (isBrainPlatform(platform)) {
+    const own = findClientProfileForRenewal(platform, clientPhone);
+    const date = own ? extendClientDate(own.profileId, 30) : null;
+    res.json({ success: !!date, expiresAt: date });
+    return;
+  }
   const renewed = renewAccount(account.id);
   res.json({ success: true, expiresAt: renewed?.expiresAt ?? null });
 });

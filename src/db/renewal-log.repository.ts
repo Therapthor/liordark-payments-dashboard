@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { findAccountByClientPhone, setProfileRenewal } from "./access.repository";
-import { applyPayLinkPayment } from "./renewal-pay-links.repository";
+import { applyPayLinkPayment, applyProfileRenewal } from "./renewal-pay-links.repository";
 
 function last9(phone: string): string {
   return phone.replace(/\D/g, "").slice(-9);
@@ -39,8 +39,10 @@ export function createRenewalLog(params: {
  */
 export function confirmRenewalLog(orderName: string): { found: boolean } {
   const row = db.prepare(`
-    SELECT phone, platform FROM renewals_log WHERE order_name = ?
-  `).get(orderName) as { phone: string; platform: string } | undefined;
+    SELECT phone, platform, status FROM renewals_log WHERE order_name = ?
+  `).get(orderName) as { phone: string; platform: string; status: string } | undefined;
+  // El bot puede reintentar la confirmación: la renovación se aplica una sola vez.
+  const alreadyConfirmed = row?.status === "Confirmado";
 
   const result = db.prepare(`
     UPDATE renewals_log SET status = 'Confirmado' WHERE order_name = ?
@@ -51,10 +53,11 @@ export function confirmRenewalLog(orderName: string): { found: boolean } {
   const payLink = applyPayLinkPayment(orderName);
   if (payLink.applied) return { found: true };
 
-  if (result.changes > 0 && row) {
+  if (result.changes > 0 && row && !alreadyConfirmed) {
     const account = findAccountByClientPhone(row.platform, row.phone);
     const profile = account?.profiles.find(p => last9(p.clientPhone) === last9(row.phone));
-    if (profile) setProfileRenewal(profile.id, "yes");
+    // Cerebro: suma los 30 días al cliente ya mismo; si no, «✅ Renueva».
+    if (profile) applyProfileRenewal(profile.id);
   }
 
   return { found: result.changes > 0 };

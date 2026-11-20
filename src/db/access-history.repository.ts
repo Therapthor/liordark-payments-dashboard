@@ -158,7 +158,14 @@ export function archiveExpiredAccounts(todayISO: string): number {
         SELECT 1 FROM access_profiles p
         WHERE p.account_id = access_accounts.id AND p.renewal_status = 'yes'
       )
-  `).all(todayISO) as any[];
+      -- Cerebro: nunca se archiva una cuenta con un cliente que todavía
+      -- tiene días (su fecha propia sigue vigente) — el cerebro lo mueve antes.
+      AND NOT EXISTS (
+        SELECT 1 FROM access_profiles p
+        WHERE p.account_id = access_accounts.id AND (p.client_phone != '' OR p.wholesaler_id IS NOT NULL)
+          AND p.expires_override IS NOT NULL AND p.expires_override >= ?
+      )
+  `).all(todayISO, todayISO) as any[];
 
   if (expired.length === 0) return 0;
 

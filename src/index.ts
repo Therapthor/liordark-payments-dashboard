@@ -52,6 +52,7 @@ import { scanPastChatMessages, runPendingFraudCleanups } from "./services/securi
 import { removeFakePayments } from "./db/payments.repository";
 import { syncSingleSlotExpiry } from "./db/access.repository";
 import { syncSharedCodeConfig } from "./db/codes.repository";
+import { runBrain, runBrainMigration } from "./services/brain.service";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -301,6 +302,9 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   } catch (err: any) { console.error("⚠️ limpieza de pagos falsos:", err?.message); }
   try { runPendingFraudCleanups(); } catch (err: any) { console.error("⚠️ limpieza de fraude:", err?.message); }
   try {
+    for (const line of runBrainMigration()) console.log("🧠 Migración del cerebro: " + line);
+  } catch (err: any) { console.error("⚠️ migración del cerebro:", err?.message); }
+  try {
     const n = syncSingleSlotExpiry();
     if (n) console.log(`📅 Vencimientos de reemplazos pasados a su cuenta: ${n}`);
   } catch (err: any) { console.error("⚠️ vencimientos de reemplazos:", err?.message); }
@@ -443,6 +447,15 @@ const RENEWAL_CUTOVER_HOUR_LIMA   = 22;
 const RENEWAL_CUTOVER_MINUTE_LIMA = 0;
 
 function runRenewalCutoverJob(): void {
+  // Cerebro primero (libera vencidos, decide qué renovar, mueve clientes);
+  // después el corte de siempre para las plataformas que no son del cerebro
+  // y los «Pendientes de cuenta nueva».
+  try {
+    const plan = runBrain("auto");
+    console.log(`🧠 Cerebro: ${plan.renew.length} por renovar, ${plan.drop.length} dejar vencer, ${plan.moves.length} movidos, ${plan.stock.length} pedidos de stock`);
+  } catch (err: any) {
+    console.error("⚠️ Error en el cerebro de cuentas:", err?.message);
+  }
   try {
     const result = runRenewalCutover();
     if (result.cleaned.length > 0 || result.relocated > 0 || result.pendingNew > 0 || result.assignedPending > 0) {

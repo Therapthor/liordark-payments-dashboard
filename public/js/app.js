@@ -366,6 +366,7 @@
       loadSmsDays();
       if (window.LiordarkAccess) {
         window.LiordarkAccess.loadProviderRenewals();
+        if (window.LiordarkBrain) window.LiordarkBrain.load();
         window.LiordarkAccess.loadPasswordChangePending();
       }
       if (window.LiordarkFullRenewals) window.LiordarkFullRenewals.load();
