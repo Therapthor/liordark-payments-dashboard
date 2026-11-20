@@ -2218,6 +2218,8 @@ button.mp-kpi:active { transform: scale(0.98); }
 .brain-row.is-overdue { background: #fff1f2; }
 .brain-row-main { flex: 1; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
 .brain-row-sub { font-size: 12px; color: var(--muted, #8a7b6a); margin-top: 2px; }
+.brain-login { font-size: 13px; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; word-break: break-all; }
+.brain-login .brain-copy { padding: 2px 8px; min-height: 0; }
 .brain-cost { font-weight: 800; font-size: 13px; white-space: nowrap; }
 .brain-moves summary { cursor: pointer; font-weight: 700; font-size: 13px; }
 .brain-moves ul { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; display: grid; gap: 4px; }

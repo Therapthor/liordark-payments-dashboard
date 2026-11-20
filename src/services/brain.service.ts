@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { db } from "../db/db";
 import {
   brainPlatforms, isRotatePlatform, isBrainPlatform, limaToday, addDays, invalidateBrainPlatforms,
@@ -378,7 +380,7 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
 export type BrainOverview = {
   renew: (BrainRenew & { daysLeft: number | null })[];
   lastRun: BrainPlan | null;
-  pinTasks: { profileId: number; accountId: number; platform: string; email: string; profileName: string; slot: number }[];
+  pinTasks: { profileId: number; accountId: number; platform: string; email: string; password: string; profileName: string; slot: number }[];
   passwordTasks: { accountId: number; platform: string; email: string }[];
   totalCostUSDT: number;
   // Próximos 7 días: cuentas con clientes que siguen (para ir juntando el pago).
@@ -408,7 +410,7 @@ export function brainOverview(): BrainOverview {
   let lastRun: BrainPlan | null = null;
   try { lastRun = last ? JSON.parse(last.plan_json) : null; } catch { lastRun = null; }
   const pinTasks = (db.prepare(`
-    SELECT p.id AS profileId, a.id AS accountId, a.platform, a.email, p.profile_name AS profileName, p.slot_number AS slot
+    SELECT p.id AS profileId, a.id AS accountId, a.platform, a.email, a.password, p.profile_name AS profileName, p.slot_number AS slot
     FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id
     WHERE p.pin_reset_pending = 1 AND a.pin_mode = 1 AND p.client_phone = '' AND p.wholesaler_id IS NULL
     ORDER BY a.platform, a.email, p.slot_number
@@ -461,6 +463,18 @@ export function runBrainMigration(): string[] {
   const done = db.prepare(`SELECT 1 FROM app_migrations WHERE name = ?`).get("brain-v1");
   if (done) return [];
   const log: string[] = [];
+  // Copia de seguridad de la base ANTES de tocar nada (una sola vez), por si
+  // hay que volver atrás: data/payments-antes-del-cerebro.db.
+  try {
+    const backup = path.join(path.dirname(db.name), "payments-antes-del-cerebro.db");
+    if (!fs.existsSync(backup)) {
+      db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
+      log.push("Copia de seguridad: " + path.basename(backup));
+    }
+  } catch (err: any) {
+    // El resto del sistema ya trabaja con fecha por cliente: se migra igual.
+    log.push("⚠️ No se pudo hacer la copia de seguridad: " + (err?.message ?? "error"));
+  }
   const today = limaToday();
   db.transaction(() => {
     // Crunchyroll Anual → Crunchyroll (sus clientes quedan como plan de 12 meses).

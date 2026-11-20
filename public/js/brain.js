@@ -51,7 +51,9 @@
     const pending = (last && last.pending) || [];
 
     const pinRows = o.pinTasks.map(t => `
-      <li class="brain-row"><div class="brain-row-main"><b>${esc(t.platform)}</b> · ${esc(t.email)} · ${esc(t.profileName || "Perfil " + t.slot)}
+      <li class="brain-row"><div class="brain-row-main"><b>${esc(t.platform)}</b> · ${esc(t.profileName || "Perfil " + t.slot)}
+        <div class="brain-login">Correo: <b>${esc(t.email)}</b> · Contraseña: <b>${esc(t.password)}</b>
+          <button type="button" class="btn-ghost btn-sm brain-copy" data-copy="${esc(t.email + "\n" + t.password)}" title="Copiar correo y contraseña">📋</button></div>
         <div class="brain-row-sub">Se liberó y ya se puede vender. Si quieres, cierra sus dispositivos y cámbiale el PIN; tú decides.</div></div>
         <button type="button" class="btn-secondary btn-sm brain-pin" data-id="${t.profileId}" data-name="${esc(t.profileName)}">🔐 PIN nuevo</button>
         <button type="button" class="btn-secondary btn-sm brain-pin-keep" data-id="${t.profileId}">Dejar igual</button></li>`).join("");
@@ -85,6 +87,10 @@
       btn.disabled = true;
       try { await api("/accounts/" + btn.dataset.id + "/provider-renewed", { method: "POST" }); await load(); }
       catch (err) { btn.disabled = false; alert(err.message); }
+    }));
+    el.querySelectorAll(".brain-copy").forEach(btn => btn.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copy); if (window.MP && MP.toast) MP.toast("📋 Copiado"); }
+      catch { prompt("Copia:", btn.dataset.copy); }
     }));
     el.querySelectorAll(".brain-pin-keep").forEach(btn => btn.addEventListener("click", async () => {
       btn.disabled = true;
