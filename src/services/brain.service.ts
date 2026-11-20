@@ -67,7 +67,8 @@ export type BrainPlan = {
 };
 
 const occupied = (p: Prof) => p.clientPhone !== "" || p.wholesalerId !== null;
-const isFree = (p: Prof) => !occupied(p) && !p.pinPending;
+// «PIN por cambiar» no bloquea: el admin decide si lo cambia o lo deja igual.
+const isFree = (p: Prof) => !occupied(p);
 
 function loadUnits(platform: string): Unit[] {
   const accounts = db.prepare(`
@@ -297,7 +298,8 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
           // Rotativas: el correo que más dura. Perfiles: la cuenta más llena, luego la que más dura.
           if (u.policy === "rotate") return String(y.t.providerDate ?? "9999").localeCompare(String(x.t.providerDate ?? "9999"));
           const occ = (t: Unit) => t.profiles.filter(occupied).length;
-          return (occ(y.t) - occ(x.t)) || String(y.t.providerDate ?? "9999").localeCompare(String(x.t.providerDate ?? "9999")) || x.q.slot - y.q.slot;
+          return (occ(y.t) - occ(x.t)) || String(y.t.providerDate ?? "9999").localeCompare(String(x.t.providerDate ?? "9999"))
+            || (Number(x.q.pinPending) - Number(y.q.pinPending)) || x.q.slot - y.q.slot;
         });
       const pick = targets[0];
       if (pick) {
@@ -408,7 +410,8 @@ export function brainOverview(): BrainOverview {
   const pinTasks = (db.prepare(`
     SELECT p.id AS profileId, a.id AS accountId, a.platform, a.email, p.profile_name AS profileName, p.slot_number AS slot
     FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id
-    WHERE p.pin_reset_pending = 1 ORDER BY a.platform, a.email, p.slot_number
+    WHERE p.pin_reset_pending = 1 AND a.pin_mode = 1 AND p.client_phone = '' AND p.wholesaler_id IS NULL
+    ORDER BY a.platform, a.email, p.slot_number
   `).all() as any[]);
   const passwordTasks = (db.prepare(`
     SELECT id AS accountId, platform, email FROM access_accounts WHERE password_change_pending = 1 ORDER BY platform, email

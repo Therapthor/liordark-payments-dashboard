@@ -5,7 +5,8 @@ import { addDaysISO, limaTodayISO } from "./access.service";
 // PLANES POR MESES
 //  · Activación manual (GEMINI AI PRO, CANVA PRO): cada compra es una cuenta
 //    individual; el mayorista paga S/ 1 menos en cada plan.
-//  · Perfiles / accesos compartidos (CRUNCHYROLL, NETFLIX, CHATGPT, CAPCUT):
+//  · Perfiles / accesos compartidos (CRUNCHYROLL, NETFLIX, PRIME VIDEO, HBO,
+//    PARAMOUNT, CHATGPT, CAPCUT):
 //    el cliente tiene su propia fecha dentro de la cuenta (ver
 //    services/brain.service.ts). El mayorista solo compra los planes con
 //    `wholesale` (1 mes y, en Crunchyroll, el anual).
@@ -38,6 +39,9 @@ const CRUNCHYROLL_PLANS: PlanOption[] = [plan(1, 4, 3), plan(3, 8, false), plan(
 const NETFLIX_PLANS:     PlanOption[] = [plan(1, 16, null), plan(3, 45, false), plan(6, 85, false)];
 const CHATGPT_PLANS:     PlanOption[] = [plan(1, 15, null), plan(3, 40, false)];
 const CAPCUT_PLANS:      PlanOption[] = [plan(1, 15, null), plan(3, 40, false)];
+const PRIME_PLANS:       PlanOption[] = [plan(1, 4, null), plan(3, 10, false), plan(6, 18, false), plan(12, 32, false)];
+const HBO_PLANS:         PlanOption[] = [plan(1, 4, null), plan(3, 10, false), plan(6, 18, false), plan(12, 32, false)];
+const PARAMOUNT_PLANS:   PlanOption[] = [plan(1, 5, null), plan(3, 13, false), plan(6, 24, false), plan(12, 48, false)];
 
 export function plansFor(platform: string | null | undefined): PlanOption[] | null {
   const p = String(platform ?? "");
@@ -47,6 +51,9 @@ export function plansFor(platform: string | null | undefined): PlanOption[] | nu
   if (/netflix/i.test(p))     return NETFLIX_PLANS;
   if (/chatgpt/i.test(p))     return CHATGPT_PLANS;
   if (/capcut/i.test(p))      return CAPCUT_PLANS;
+  if (/amazon/i.test(p))      return PRIME_PLANS;
+  if (/hbo/i.test(p))         return HBO_PLANS;
+  if (/paramount/i.test(p))   return PARAMOUNT_PLANS;
   return null;
 }
 

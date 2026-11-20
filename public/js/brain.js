@@ -52,8 +52,9 @@
 
     const pinRows = o.pinTasks.map(t => `
       <li class="brain-row"><div class="brain-row-main"><b>${esc(t.platform)}</b> · ${esc(t.email)} · ${esc(t.profileName || "Perfil " + t.slot)}
-        <div class="brain-row-sub">Cierra sus dispositivos, borra el historial y pon un PIN nuevo para volver a venderlo.</div></div>
-        <button type="button" class="btn-secondary btn-sm brain-pin" data-id="${t.profileId}" data-name="${esc(t.profileName)}">🔐 Poner PIN</button></li>`).join("");
+        <div class="brain-row-sub">Se liberó y ya se puede vender. Si quieres, cierra sus dispositivos y cámbiale el PIN; tú decides.</div></div>
+        <button type="button" class="btn-secondary btn-sm brain-pin" data-id="${t.profileId}" data-name="${esc(t.profileName)}">🔐 PIN nuevo</button>
+        <button type="button" class="btn-secondary btn-sm brain-pin-keep" data-id="${t.profileId}">Dejar igual</button></li>`).join("");
 
     el.innerHTML = `
       <div class="brain-section">
@@ -71,7 +72,7 @@
         <h3>Stock ${stock.length ? `<span class="badge">${stock.length}</span>` : ""}</h3>
         ${stock.length ? `<ul class="brain-list">${stockRows}</ul>` : `<p class="brain-note">Hay stock suficiente para las ventas de los próximos días.</p>`}
       </div>
-      ${o.pinTasks.length ? `<div class="brain-section"><h3>PIN por cambiar <span class="badge">${o.pinTasks.length}</span></h3><ul class="brain-list">${pinRows}</ul></div>` : ""}
+      ${o.pinTasks.length ? `<div class="brain-section"><h3>¿Cambiar PIN? <span class="badge">${o.pinTasks.length}</span></h3><ul class="brain-list">${pinRows}</ul></div>` : ""}
       <div class="brain-section">
         <h3>Última corrida</h3>
         ${last ? `<p class="brain-note">${new Date(last.ranAt).toLocaleString("es-PE", { timeZone: "America/Lima" })} (${last.origin === "manual" ? "a mano" : "10 pm"}) · ${moves.length} cliente(s) movidos · ${expired} vencido(s) liberados · ${(last.drop || []).length} cuenta(s) para dejar vencer${last.forcedRenew ? ` · ${last.forcedRenew} renovación(es) forzadas (no había dónde moverlos)` : ""}${pending.length ? ` · ${pending.length} en «Pendientes de cuenta nueva»` : ""}${o.passwordTasks.length ? ` · ${o.passwordTasks.length} cuenta(s) para cambiar contraseña` : ""}</p>
@@ -83,6 +84,11 @@
       if (!confirm("¿Ya le pagaste al proveedor? La cuenta suma 30 días.")) return;
       btn.disabled = true;
       try { await api("/accounts/" + btn.dataset.id + "/provider-renewed", { method: "POST" }); await load(); }
+      catch (err) { btn.disabled = false; alert(err.message); }
+    }));
+    el.querySelectorAll(".brain-pin-keep").forEach(btn => btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try { await api("/profiles/" + btn.dataset.id + "/pin", { method: "POST", body: JSON.stringify({ keep: true }) }); await load(); }
       catch (err) { btn.disabled = false; alert(err.message); }
     }));
     el.querySelectorAll(".brain-pin").forEach(btn => btn.addEventListener("click", async () => {

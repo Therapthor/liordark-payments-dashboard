@@ -312,11 +312,11 @@ export function listPlatforms(): PlatformSummary[] {
       COUNT(DISTINCT a.id) AS accountCount,
       COUNT(p.id) AS profileCount,
       SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS occupiedCount,
-      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop'
                AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS sellableCount,
-      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop'
                AND a.has_profiles = 1 AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS brainSellable,
-      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop'
                AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS rotateSellable
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
@@ -410,6 +410,12 @@ export function setProfilePin(profileId: number, pin: string): AccessProfile | n
   return r.changes ? getProfileById(profileId) : null;
 }
 
+/** «Dejar igual»: el admin decide no cambiar el PIN de un perfil que se liberó. */
+export function dismissPinReminder(profileId: number): AccessProfile | null {
+  const r = db.prepare(`UPDATE access_profiles SET pin_reset_pending = 0, updated_at = datetime('now') WHERE id = ?`).run(profileId);
+  return r.changes ? getProfileById(profileId) : null;
+}
+
 /** Fecha exacta del cliente (corrección a mano del admin). */
 export function setClientDate(profileId: number, dateISO: string): void {
   db.prepare(`UPDATE access_profiles SET expires_override = ?, updated_at = datetime('now') WHERE id = ?`).run(dateISO, profileId);
@@ -418,8 +424,8 @@ export function setClientDate(profileId: number, dateISO: string): void {
 export function releaseProfile(id: number): AccessProfile | null {
   // expires_override también se limpia: si no, un cliente nuevo que caiga
   // en este mismo slot heredaría la fecha congelada del cliente anterior.
-  // Cuenta con PIN: quien se va conoce el PIN de ese perfil → hay que poner
-  // uno nuevo antes de volver a venderlo (ver pin_reset_pending).
+  // Cuenta con PIN: quien se va conoce el PIN de ese perfil → queda el aviso
+  // «¿cambiar PIN?» (pin_reset_pending). No bloquea la venta: decide el admin.
   const result = db.prepare(`
     UPDATE access_profiles SET client_phone = '', renewal_status = '', order_ref = '', expires_override = NULL,
       plan_months = NULL, moved_at = NULL,
@@ -601,8 +607,8 @@ export type SellOptions = { days?: number; months?: number | null };
 // renovar (tienen clientes que siguen después de su vencimiento con el
 // proveedor), luego las que todavía duran (≥ 28 días), las más llenas
 // primero (así no quedan perfiles muertos repartidos), y la que más dura.
-// Nunca una cuenta que el cerebro decidió dejar vencer, ni un perfil al que
-// hay que ponerle PIN nuevo.
+// Nunca una cuenta que el cerebro decidió dejar vencer. Dentro de la cuenta,
+// primero los perfiles sin el aviso «¿cambiar PIN?» (el aviso no bloquea).
 const BRAIN_SELL_ORDER = `
   ORDER BY (a.id = @prefer) DESC,
     (a.brain_action = 'renew') DESC,
@@ -610,7 +616,7 @@ const BRAIN_SELL_ORDER = `
             AND COALESCE(q.expires_override, a.expires_at) > a.expires_at)) DESC,
     (a.expires_at >= @floor28) DESC,
     (SELECT COUNT(*) FROM access_profiles q WHERE q.account_id = a.id AND (q.client_phone != '' OR q.wholesaler_id IS NOT NULL)) DESC,
-    a.expires_at DESC`;
+    a.expires_at DESC, p.pin_reset_pending ASC, p.slot_number ASC`;
 
 /** Piso de venta: rotativas (ChatGPT, CapCut) y plataformas de siempre,
  *  28 días; perfiles del cerebro, que la cuenta siga viva mañana (el cerebro
@@ -641,7 +647,7 @@ function pickFreeProfile(platform: string, wholesalerId: number | null, preferAc
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE a.platform = @plat AND p.client_phone = '' AND ${owner}
-      AND p.pin_reset_pending = 0 AND a.brain_action != 'drop' ${shape}
+      AND a.brain_action != 'drop' ${shape}
       AND a.expires_at IS NOT NULL AND a.expires_at >= @floor
     ${order}
     LIMIT 1
@@ -867,11 +873,11 @@ export function listWholesalerAvailability(wholesalerId: number): { platform: st
   const tomorrow = addDaysISOLocal(limaTodayISOLocal(), 1);
   const rows = db.prepare(`
     SELECT a.platform AS platform,
-           SUM(CASE WHEN p.client_phone = '' AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop'
                     AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS free,
-           SUM(CASE WHEN p.client_phone = '' AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop'
                     AND a.has_profiles = 1 AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS brainFree,
-           SUM(CASE WHEN p.client_phone = '' AND p.pin_reset_pending = 0 AND a.brain_action != 'drop'
+           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop'
                     AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS rotateFree
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id

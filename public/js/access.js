@@ -505,7 +505,12 @@
     const pinBtn = account.pinMode ? `<button class="row-action" data-act="pin" data-ctx="${ctx}" title="Cambiar PIN de este perfil">🔐</button>` : "";
     let actions;
     if (!occupied && !wholesaleOwned && p.pinResetPending) {
-      actions = `<button class="row-action row-action-warn" data-act="pin" data-ctx="${ctx}" title="El cliente anterior conoce el PIN: ponle uno nuevo (y cierra sus dispositivos)">🔐 PIN nuevo</button>`;
+      // Aviso opcional: el cliente anterior conoce el PIN. El admin decide.
+      actions = `
+        <button class="row-action row-action-warn" data-act="pin" data-ctx="${ctx}" title="El cliente anterior conoce el PIN: si quieres, ponle uno nuevo (y cierra sus dispositivos)">🔐 PIN nuevo</button>
+        <button class="row-action" data-act="pin-keep" data-ctx="${ctx}" title="Dejar el mismo PIN">Dejar igual</button>
+        <button class="row-action" data-act="edit" data-ctx="${ctx}" title="Asignar cliente">➕ Asignar</button>
+      `;
     } else if (occupied) {
       actions = `
         ${pinBtn}
@@ -525,7 +530,7 @@
     const pinTxt = account.pinMode && p.pin ? ` <span class="access-pin">🔐 ${escapeHtml(p.pin)}</span>` : "";
     if (account.hasProfiles) cells.push(`<td>${escapeHtml(p.profileName || ("Perfil " + p.slotNumber))}${pinTxt}</td>`);
     // Cerebro: debajo del celular, la fecha propia del cliente y su plan.
-    let clientCell = occupied ? escapeHtml(p.clientPhone) : `<span class="text-muted">${p.pinResetPending ? "Libre · PIN por cambiar" : "Libre"}</span>`;
+    let clientCell = occupied ? escapeHtml(p.clientPhone) : `<span class="text-muted">${p.pinResetPending && account.pinMode ? "Libre · ¿cambiar PIN?" : "Libre"}</span>`;
     if (occupied && account.brain && p.clientExpiresAt) {
       const left = daysBetweenToday(p.clientExpiresAt);
       clientCell += `<div class="access-client-date${left <= 3 ? " soon" : ""}">vence ${fmtDateLong(p.clientExpiresAt)} · ${left}d · ${planLabel(p.planMonths)}</div>`;
@@ -764,6 +769,7 @@
     if (act === "release")      return releaseProfile(ctx.id, ctx.accountId);
     if (act === "replace")      return openReplaceAccount(ctx.id, ctx.platform, ctx.email, ctx.clientPhone);
     if (act === "pin")          return setProfilePin(ctx);
+    if (act === "pin-keep")     return keepProfilePin(ctx);
     if (act === "extend")       return extendClient(ctx);
   }
 
@@ -772,6 +778,13 @@
     if (pin === null) return;
     try {
       await api("/profiles/" + ctx.id + "/pin", { method: "POST", body: JSON.stringify({ pin: pin.trim() }) });
+      refreshAccountInPlace(ctx.accountId);
+    } catch (err) { alert(err.message); }
+  }
+
+  async function keepProfilePin(ctx) {
+    try {
+      await api("/profiles/" + ctx.id + "/pin", { method: "POST", body: JSON.stringify({ keep: true }) });
       refreshAccountInPlace(ctx.accountId);
     } catch (err) { alert(err.message); }
   }

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
-import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setProfilePin, setClientDate, getProfileById } from "../db/access.repository";
+import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setProfilePin, dismissPinReminder, setClientDate, getProfileById } from "../db/access.repository";
 import { isBrainPlatform, setNewClientDate, extendClientDate } from "../db/brain-platforms";
 import { runBrain, brainOverview, markProviderRenewed } from "../services/brain.service";
 import { planFor } from "../services/plans.service";
@@ -753,10 +753,6 @@ router.put("/profiles/:id", (req, res) => {
   if (!clientPhone?.trim()) { res.status(400).json({ message: "El teléfono es obligatorio." }); return; }
 
   const before = getProfileById(Number(req.params.id));
-  if (before?.pinResetPending && !before.clientPhone) {
-    res.status(409).json({ message: "Este perfil espera un PIN nuevo (el cliente anterior conoce el de antes). Ponle uno nuevo primero." });
-    return;
-  }
   const profile = assignProfileClient(Number(req.params.id), clientPhone);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   // Cerebro: cliente NUEVO en el perfil → su propia fecha según el plan
@@ -798,6 +794,13 @@ router.post("/accounts/:id/pin-mode", (req, res) => {
 
 // PIN de un perfil (4 a 6 dígitos). Quita el «PIN por cambiar».
 router.post("/profiles/:id/pin", (req, res) => {
+  // «Dejar igual»: quita el aviso «¿cambiar PIN?» sin tocar el PIN.
+  if (req.body?.keep === true) {
+    const kept = dismissPinReminder(Number(req.params.id));
+    if (!kept) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
+    res.json({ profile: kept });
+    return;
+  }
   const pin = String(req.body?.pin ?? "").trim();
   if (pin && !/^\d{4,6}$/.test(pin)) { res.status(400).json({ message: "El PIN debe tener de 4 a 6 números." }); return; }
   const profile = setProfilePin(Number(req.params.id), pin);
