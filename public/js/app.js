@@ -361,8 +361,6 @@
 
     if (view === "history") { loadHistory(); loadChart(); }
     if (view === "renewals") {
-      loadReminderRuns();
-      loadRenewalNotifications();
       loadSmsDays();
       if (window.LiordarkAccess) {
         window.LiordarkAccess.loadProviderRenewals();
@@ -1355,6 +1353,7 @@
 
   function renderRunStatusBadge(status) {
     const el = document.getElementById("reminders-run-status-badge");
+    if (!el) return;
     el.className = "badge " + ({ pending: "badge-run-pending", incomplete: "badge-run-incomplete", complete: "badge-run-complete" }[status] || "badge-run-pending");
     el.textContent = RUN_STATUS_LABEL[status] || status;
     el.hidden = false;
@@ -1382,8 +1381,10 @@
   async function loadRenewalNotifications() {
     try {
       const { todaySent, todayFailed } = await api("/renewals/notifications?limit=300");
-      document.getElementById("renewals-notif-today-sent").textContent   = todaySent;
-      document.getElementById("renewals-notif-today-failed").textContent = todayFailed;
+      const sentEl = document.getElementById("renewals-notif-today-sent");
+      const failEl = document.getElementById("renewals-notif-today-failed");
+      if (sentEl) sentEl.textContent = todaySent;
+      if (failEl) failEl.textContent = todayFailed;
     } catch {
       // el bot puede estar reiniciando — se deja lo último mostrado
     }
@@ -1651,7 +1652,7 @@
 
   function initSmsReminders() {
     document.getElementById("sms-section-hint").textContent =
-      "Tú eliges por día: ⬇ CSV para importarlo como público en una difusión de WhatsApp Business, o 📨 SMS (cada uno con su link de renovación; cuesta créditos).";
+      "Un día antes de que venza: 📨 SMS a cada cliente con su link de renovación (cuesta créditos), o ⬇ CSV si prefieres mandarlo tú.";
     initSmsDays();
     document.getElementById("sms-history-btn").addEventListener("click", openSmsHistory);
   }
@@ -1798,7 +1799,7 @@
     initApprovedSearch();
     initRenewalNotifSearch();
     initSmsReminders();
-    document.getElementById("whatsapp-history-btn").addEventListener("click", openWhatsappHistory);
+    document.getElementById("whatsapp-history-btn")?.addEventListener("click", openWhatsappHistory);
     initApprovedCompactToggle();
     initMonthsModal();
     loadPendingOrders();

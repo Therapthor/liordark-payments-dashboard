@@ -676,66 +676,43 @@
       <!-- ═══════════ VISTA: RENOVACIONES ═══════════ -->
       <section id="view-renewals" class="view" hidden>
 
-        <!-- Números de un vistazo (se copian de los contadores de cada sección) -->
+        <!-- Números de un vistazo (los llena public/js/brain.js) -->
         <div class="mp-kpis" aria-label="Resumen de renovaciones">
-          <div class="mp-kpi is-green"><b data-mp-mirror="full-renewals-count">0</b><span>Renovados</span></div>
-          <div class="mp-kpi is-peach"><b data-mp-mirror="password-change-count">0</b><span>Cambiar clave</span></div>
-          <div class="mp-kpi is-blue"><b data-mp-mirror="renewals-notif-today-sent">0</b><span>Avisos hoy</span></div>
-          <div class="mp-kpi is-soft"><b data-mp-mirror="renewals-notif-today-failed">0</b><span>Fallidos</span></div>
+          <div class="mp-kpi is-peach"><b id="brain-kpi-now">0</b><span>Pagar ahora</span></div>
+          <div class="mp-kpi is-blue"><b id="brain-kpi-soon">0</b><span>Próximos 7 días</span></div>
+          <div class="mp-kpi is-green"><b id="brain-kpi-stock">0</b><span>Stock por comprar</span></div>
+          <div class="mp-kpi is-soft"><b id="brain-kpi-tasks">0</b><span>Tareas</span></div>
         </div>
 
-        <!-- 🧠 CEREBRO — qué renovar con el proveedor, stock, movidos, PIN. Ver public/js/brain.js. -->
+        <!-- 🧠 CEREBRO — pagos al proveedor, stock y última corrida. Ver public/js/brain.js. -->
         <div class="panel-header standalone">
           <h2>🧠 Cerebro de cuentas</h2>
           <button id="brain-run-btn" type="button" class="btn-secondary btn-sm">Correr ahora</button>
         </div>
-        <p class="panel-hint">Cada noche a las 10 pm: libera a quien venció, decide qué cuentas renovar con el proveedor (el mínimo donde caben todos los que pagaron), mueve a los clientes de las que sobran (conservan su fecha, les llega aviso) y te dice si falta stock.</p>
+        <p class="panel-hint">Cada noche a las 10 pm: libera a quien venció, decide qué cuentas pagarle al proveedor (el mínimo donde caben todos los que pagaron), mueve a los clientes de las que sobran (conservan su fecha y les llega aviso) y te dice si falta stock. «Correr ahora» hace lo mismo al instante.</p>
         <div id="brain-box" class="brain-box"></div>
 
-        <!-- Cuentas de Accesos marcadas con "renovación con proveedor" —
-             se venden al cliente como plan anual pero Liordark las paga
-             mes a mes. Se activa por cuenta al crearla/editarla en Accesos.
-             Va primero: es lo que más importa revisar acá. -->
-        <!-- RENOVADOS — cuentas con perfiles donde algún cliente ya pagó su
-             renovación; la cuenta entera espera la confirmación del admin
-             (ya renovada con el proveedor). Ver public/js/full-renewals.js. -->
+        <!-- ✅ TAREAS — PIN por cambiar (brain.js) y contraseñas por cambiar (access.js) -->
         <div class="panel-header standalone">
-          <h2>Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
+          <h2>✅ Tareas</h2>
+        </div>
+        <div class="brain-card brain-tasks">
+          <div id="brain-pin-box"></div>
+          <div id="password-change-wrap" class="brain-task-group" hidden>
+            <h3 class="brain-card-title">🔑 Cambiar contraseña <span class="badge" id="password-change-count">0</span></h3>
+            <p class="brain-note">Salió un cliente de una cuenta sin PIN: cambia la contraseña para que no vuelva a entrar. Al marcarla, quienes se quedan reciben la nueva por su campanita.</p>
+            <ul id="password-change-list" class="brain-list"></ul>
+            <p id="password-change-empty" hidden></p>
+          </div>
+          <p id="brain-tasks-empty" class="brain-note brain-empty">Nada pendiente. ✨</p>
         </div>
 
-        <p class="panel-hint">Cuentas donde algún cliente ya pagó su renovación. 🟢 Conviene renovar = pagó más de la mitad: renuévala con el proveedor y confírmala (+30 días). 🔴 No conviene = la mitad o menos: 1 día antes de vencer, a los que pagaron se los mueve solos a otra cuenta (o quedan en "Pendientes de cuenta nueva", en Accesos).</p>
-
-        <ul id="full-renewals-list" class="catalog-list"></ul>
-        <p id="full-renewals-empty" class="feed-empty" hidden>No hay cuentas esperando confirmación de renovación. 🎉</p>
-
+        <!-- 📣 AVISOS A CLIENTES — SMS del día antes + link único de renovación -->
         <div class="panel-header standalone">
-          <h2>⚠️ Cuentas por cambiar contraseña</h2>
-          <span class="badge orders-count-badge" id="password-change-count">0</span>
+          <h2>📣 Avisos a clientes</h2>
+          <button id="sms-history-btn" class="btn-secondary btn-sm">Historial</button>
         </div>
-        <p class="panel-hint">Se sacó a algún cliente que no renovó — cambia la contraseña para que no pueda volver a entrar.</p>
-        <ul id="password-change-list" class="catalog-list"></ul>
-        <p id="password-change-empty" class="feed-empty" hidden>Ninguna cuenta pendiente de cambiar contraseña.</p>
-
-        <div class="panel-header standalone">
-          <h2>Renovación con proveedor</h2>
-        </div>
-
-        <p class="panel-hint">Cuentas de Accesos marcadas para recordatorio de pago al proveedor — independiente del vencimiento del cliente. Se activa al crear o editar la cuenta.</p>
-
-        <ul id="provider-renewal-list" class="catalog-list"></ul>
-        <p id="provider-renewal-empty" class="feed-empty" hidden>No hay cuentas marcadas para renovación con proveedor.</p>
-
-        <!-- SMS automático (ClickLab/Infobip). Corridas pendientes/hechas
-             por día — Hoy (quedaron colgados sin mandar) y Mañana (tanda
-             nueva), cada uno con su propio botón de envío. El remitente
-             que ve el cliente es un shortcode genérico, no la marca. -->
-        <div class="panel-header standalone">
-          <h2>Recordatorios por SMS</h2>
-          <button id="sms-history-btn" class="btn-secondary">Historial</button>
-        </div>
-
         <p class="panel-hint" id="sms-section-hint"></p>
-
         <div id="sms-days-list" class="sms-days-list"></div>
         <p id="sms-summary" class="panel-hint" hidden></p>
 
@@ -744,7 +721,7 @@
         <div class="self-renew-card">
           <div class="self-renew-head">
             <strong>Link único de renovación</strong>
-            <span class="panel-hint">El mismo para todos: el cliente escribe su número y ve lo que le vence en los próximos 3 días (puede adelantarse), con su descuento. Los avisos (SMS / CSV) salen 1 día antes.</span>
+            <span class="panel-hint">El cliente escribe su número y ve lo que le vence en los próximos 3 días (puede adelantarse), con su descuento.</span>
           </div>
           <div class="self-renew-row">
             <code id="self-renew-url">liordark.com/renovar</code>
@@ -753,25 +730,26 @@
           </div>
         </div>
 
-        <!-- Corte automático de ciclo (ver runRenewalCutover en
-             access.service.ts) — corre solo 1 vez al día (6am), pero
-             queda el disparo manual para una gestión puntual. El aviso de
-             "cambiar contraseña" es lo más urgente: salió un cliente que
-             no renovó y no debe poder volver a entrar con la vieja. -->
-        <div class="panel-header standalone">
-          <h2>Corte de renovación</h2>
-          <button id="renewal-cutover-run-btn" class="btn-secondary btn-sm" type="button">🔁 Procesar ahora</button>
-        </div>
-        <p class="panel-hint">Automático a las 6am: saca a quien no renovó en las cuentas que ya confirmaste en "Renovados" (en su fecha de vencimiento original). Ya no suma días solo — eso se confirma en "Renovados".</p>
-        <p id="renewal-cutover-status" class="panel-hint" hidden></p>
-
-        <div class="panel-header standalone">
-          <h2>Renovaciones — avisos enviados</h2>
-          <span id="reminders-run-status-badge" class="badge" hidden></span>
-          <button id="whatsapp-history-btn" class="btn-secondary">Historial</button>
+        <!-- OTRAS PLATAFORMAS (sin cerebro, ej. YouTube): solo aparecen si hay algo.
+             RENOVADOS — ver public/js/full-renewals.js. -->
+        <div id="full-renewals-wrap" hidden>
+          <div class="panel-header standalone">
+            <h2>🔁 Otras plataformas · Renovados <span id="full-renewals-count" class="badge" hidden></span></h2>
+          </div>
+          <p class="panel-hint">Solo plataformas que no usan el cerebro. Cuentas donde algún cliente ya pagó: renuévala con el proveedor y confírmala (+30 días), o manda a los que pagaron a otra cuenta.</p>
+          <ul id="full-renewals-list" class="catalog-list"></ul>
+          <p id="full-renewals-empty" class="feed-empty" hidden>No hay cuentas esperando confirmación de renovación.</p>
         </div>
 
-        <p class="panel-hint">Hoy: <b id="renewals-notif-today-sent">0</b> enviados · <b id="renewals-notif-today-failed">0</b> fallidos</p>
+        <!-- Aviso de pago al proveedor por cuenta (solo plataformas sin cerebro). -->
+        <div id="provider-renewal-wrap" hidden>
+          <div class="panel-header standalone">
+            <h2>🔁 Otras plataformas · Pago al proveedor</h2>
+          </div>
+          <p class="panel-hint">Cuentas marcadas para recordar el pago al proveedor, aparte del vencimiento del cliente.</p>
+          <ul id="provider-renewal-list" class="catalog-list"></ul>
+          <p id="provider-renewal-empty" class="feed-empty" hidden>No hay cuentas marcadas.</p>
+        </div>
 
       </section>
 

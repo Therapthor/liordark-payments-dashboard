@@ -378,14 +378,31 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
 // ── Lo que ve el admin en Pagos › Renovaciones ──
 
 export type BrainOverview = {
-  renew: (BrainRenew & { daysLeft: number | null })[];
+  today: string;
+  renew: (BrainRenew & { daysLeft: number | null; plans: PlanMix })[];
   lastRun: BrainPlan | null;
   pinTasks: { profileId: number; accountId: number; platform: string; email: string; password: string; profileName: string; slot: number }[];
   passwordTasks: { accountId: number; platform: string; email: string }[];
   totalCostUSDT: number;
-  // Próximos 7 días: cuentas con clientes que siguen (para ir juntando el pago).
-  upcoming: { accountId: number; platform: string; email: string; providerDate: string; stayers: number; cost: string }[];
+  // Próximos 7 días (aún sin decidir): cuentas con clientes que siguen.
+  upcoming: { accountId: number; platform: string; email: string; providerDate: string; stayers: number; capacity: number;
+    cost: string; daysLeft: number; decideOn: string; plans: PlanMix }[];
 };
+
+/** Cuántos clientes de cada plan (12 = anual) siguen después de la fecha del proveedor. */
+export type PlanMix = { months: number; count: number }[];
+
+function planMixOf(accountId: number, providerDate: string | null): PlanMix {
+  if (!providerDate) return [];
+  return (db.prepare(`
+    SELECT COALESCE(p.plan_months, 1) AS months, COUNT(*) AS count
+    FROM access_profiles p
+    WHERE p.account_id = ? AND (p.client_phone != '' OR p.wholesaler_id IS NOT NULL)
+      AND COALESCE(p.expires_override, ?) > ?
+    GROUP BY COALESCE(p.plan_months, 1)
+    ORDER BY months DESC
+  `).all(accountId, providerDate, providerDate) as PlanMix);
+}
 
 export function brainOverview(): BrainOverview {
   const today = limaToday();
@@ -405,6 +422,7 @@ export function brainOverview(): BrainOverview {
     capacity: r.capacity, cost: r.cost, overdue: !!r.expires_at && r.expires_at < today,
     reason: r.stayers > 0 ? `${r.stayers} cliente(s) siguen después del ${ddmmyyyy(r.expires_at)}` : "Para tener stock libre para ventas nuevas",
     daysLeft: r.expires_at ? Math.round((Date.parse(r.expires_at) - Date.parse(today)) / 86400e3) : null,
+    plans: planMixOf(r.id, r.expires_at),
   }));
   const last = db.prepare(`SELECT plan_json FROM brain_runs ORDER BY id DESC LIMIT 1`).get() as { plan_json: string } | undefined;
   let lastRun: BrainPlan | null = null;
@@ -419,18 +437,26 @@ export function brainOverview(): BrainOverview {
     SELECT id AS accountId, platform, email FROM access_accounts WHERE password_change_pending = 1 ORDER BY platform, email
   `).all() as any[]).filter(r => isBrainPlatform(r.platform));
   const totalCostUSDT = renew.reduce((s, r) => s + (Number(r.cost) || 0), 0);
+  // Sin decidir todavía: desde las vencidas dentro de la gracia hasta 7 días
+  // adelante. El cerebro decide la víspera (10 pm) si se paga o se mueve.
   const upcoming = (db.prepare(`
     SELECT a.id AS accountId, a.platform, a.email, a.expires_at AS providerDate, COALESCE(c.provider_cost, '') AS cost,
+      (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id) AS capacity,
       (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND (p.client_phone != '' OR p.wholesaler_id IS NOT NULL)
          AND COALESCE(p.expires_override, a.expires_at) > a.expires_at) AS stayers
     FROM access_accounts a
     LEFT JOIN catalog_products c ON UPPER(TRIM(c.platform)) = a.platform
-    WHERE a.expires_at > ? AND a.expires_at <= ? AND a.brain_action = ''
+    WHERE a.expires_at >= ? AND a.expires_at <= ?
+      AND (a.brain_action = '' OR a.brain_action_for IS NULL OR a.brain_action_for != a.expires_at)
     GROUP BY a.id
-    ORDER BY a.expires_at ASC
-  `).all(addDays(today, 1), addDays(today, 7)) as any[])
-    .filter(r => isBrainPlatform(r.platform) && !isRotatePlatform(r.platform) && r.stayers > 0);
-  return { renew, lastRun, pinTasks, passwordTasks, totalCostUSDT: Math.round(totalCostUSDT * 100) / 100, upcoming };
+    ORDER BY a.expires_at ASC, a.platform ASC
+  `).all(addDays(today, -GRACE_DAYS), addDays(today, 7)) as any[])
+    .filter(r => isBrainPlatform(r.platform) && !isRotatePlatform(r.platform) && r.stayers > 0)
+    .map(r => {
+      const daysLeft = Math.round((Date.parse(r.providerDate) - Date.parse(today)) / 86400e3);
+      return { ...r, daysLeft, decideOn: daysLeft <= 1 ? today : addDays(r.providerDate, -1), plans: planMixOf(r.accountId, r.providerDate) };
+    });
+  return { today, renew, lastRun, pinTasks, passwordTasks, totalCostUSDT: Math.round(totalCostUSDT * 100) / 100, upcoming };
 }
 
 /** «✅ Ya la renové»: la cuenta suma 30 días con el proveedor (desde su fecha

@@ -80,6 +80,9 @@
     list.innerHTML = "";
     count.hidden = cached.length === 0;
     count.textContent = String(cached.length);
+    // Solo plataformas sin cerebro: si no hay nada, la sección no se muestra.
+    const wrap = document.getElementById("full-renewals-wrap");
+    if (wrap) wrap.hidden = cached.length === 0;
     if (cached.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
     for (const r of cached) list.appendChild(renderItem(r));

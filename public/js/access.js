@@ -1039,6 +1039,15 @@
       (codeSources || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(codeSourceOptionLabel(s))}</option>`).join("");
   }
 
+  // Plataformas del cerebro: sin «Avisar renovación con proveedor» (lo maneja el cerebro).
+  function syncBulkRenewalVisibility() {
+    const plat = document.getElementById("bulk-platform").value;
+    const brain = !!(cachedPlatformSummaries || []).find(p => p.platform === plat)?.brain;
+    const box = document.getElementById("bulk-renewal-enabled");
+    box.closest("label").hidden = brain;
+    if (brain) { box.checked = false; document.getElementById("bulk-renewal-fields").hidden = true; }
+  }
+
   function applyBulkCodeSuggestion() {
     if (bulkCodeTouched) return;
     const select = document.getElementById("bulk-code-source");
@@ -1131,6 +1140,7 @@
     populateBulkCodeSelect();
     bulkCodeTouched = false;
     applyBulkCodeSuggestion();
+    syncBulkRenewalVisibility();
     document.getElementById("bulk-expires").value = addDaysISO(todayISO(), 30);
     document.getElementById("bulk-expires").min = todayISO();
     document.getElementById("bulk-renewal-fields").hidden = true;
@@ -1146,6 +1156,7 @@
     });
 
     document.getElementById("bulk-platform").addEventListener("change", applyBulkCodeSuggestion);
+    document.getElementById("bulk-platform").addEventListener("change", syncBulkRenewalVisibility);
     document.getElementById("bulk-provider").addEventListener("change", applyBulkCodeSuggestion);
     document.getElementById("bulk-code-source").addEventListener("change", () => { bulkCodeTouched = true; syncBulkCodeHint(); });
     document.getElementById("bulk-lines").addEventListener("input", () => { document.getElementById("bulk-error").hidden = true; });
@@ -1226,8 +1237,10 @@
     populateProviderSelect(document.getElementById("account-edit-provider"), account.provider);
     document.getElementById("account-edit-expires").value = account.expiresAt || "";
     document.getElementById("account-edit-link").value = account.link || "";
-    document.getElementById("account-edit-renewal-enabled").checked = !!account.providerRenewalEnabled;
-    document.getElementById("account-edit-renewal-fields").hidden = !account.providerRenewalEnabled;
+    document.getElementById("account-edit-renewal-enabled").checked = !!account.providerRenewalEnabled && !account.brain;
+    document.getElementById("account-edit-renewal-fields").hidden = !account.providerRenewalEnabled || !!account.brain;
+    // Cerebro: el pago al proveedor se ve en Renovaciones › Pagos al proveedor.
+    document.getElementById("account-edit-renewal-enabled").closest("label").hidden = !!account.brain;
     document.getElementById("account-edit-renewal-cost").value = account.providerRenewalCost || "";
     document.getElementById("account-edit-renewal-currency").value = account.providerRenewalCurrency || "USDT";
     document.getElementById("account-edit-renewal-next-date").value = account.providerRenewalNextDate || "";
@@ -2112,6 +2125,9 @@
     const empty = document.getElementById("provider-renewal-empty");
     if (!list) return;
     list.innerHTML = "";
+    // Solo plataformas sin cerebro: si no hay ninguna, la sección no se muestra.
+    const wrap = document.getElementById("provider-renewal-wrap");
+    if (wrap) wrap.hidden = cachedProviderRenewals.length === 0;
     if (cachedProviderRenewals.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
     for (const a of cachedProviderRenewals) list.appendChild(renderProviderRenewal(a));
@@ -2171,17 +2187,16 @@
 
   function renderPasswordChangeItem(a) {
     const li = document.createElement("li");
-    li.className = "catalog-item";
+    li.className = "brain-row brain-task";
     li.dataset.id = a.id;
     li.innerHTML = `
-      <div class="catalog-thumb catalog-thumb-empty">🔑</div>
-      <div class="catalog-main">
-        <div class="catalog-name">${escapeHtml(a.platform)} — ${escapeHtml(a.email)}</div>
-        <div class="catalog-desc">Contraseña actual: ${escapeHtml(a.password)}</div>
+      <div class="brain-row-main">
+        <b>${escapeHtml(a.platform)}</b>
+        <div class="brain-login">Correo: <b>${escapeHtml(a.email)}</b> · Contraseña actual: <b>${escapeHtml(a.password)}</b></div>
       </div>
-      <div class="catalog-actions">
+      <div class="brain-row-actions">
         <button class="btn-secondary btn-sm password-change-edit-btn" type="button">✏️ Cambiar</button>
-        <button class="icon-btn-sm password-change-done-btn" title="Ya la cambié">✅</button>
+        <button class="btn-primary btn-sm password-change-done-btn" type="button">✅ Ya la cambié</button>
       </div>
     `;
     return li;
@@ -2194,9 +2209,12 @@
     if (!list) return;
     list.innerHTML = "";
     badge.textContent = String(cachedPasswordChangeAccounts.length);
-    if (cachedPasswordChangeAccounts.length === 0) { empty.hidden = false; return; }
-    empty.hidden = true;
+    const wrap = document.getElementById("password-change-wrap");
+    if (wrap) wrap.hidden = cachedPasswordChangeAccounts.length === 0;
+    if (empty) empty.hidden = true;
     for (const a of cachedPasswordChangeAccounts) list.appendChild(renderPasswordChangeItem(a));
+    // Renovaciones › Tareas: el contador y el «Nada pendiente» (ver brain.js).
+    document.dispatchEvent(new CustomEvent("renewals:tasks"));
   }
 
   async function loadPasswordChangePending() {
@@ -2211,7 +2229,7 @@
     const list = document.getElementById("password-change-list");
     if (!list) return;
     list.addEventListener("click", async (e) => {
-      const li = e.target.closest(".catalog-item");
+      const li = e.target.closest("li[data-id]");
       if (!li) return;
       const id = Number(li.dataset.id);
 

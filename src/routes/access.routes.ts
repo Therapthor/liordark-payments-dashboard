@@ -145,7 +145,7 @@ router.get("/history", (req, res) => {
 // cuenta como «Sin stock» (no se vende, así que no es una alerta).
 router.get("/platforms", (_req, res) => {
   const off = new Set(listCatalogProducts().filter(p => !p.active).map(p => p.platform.trim().toUpperCase()));
-  res.json({ platforms: listPlatforms().map(p => ({ ...p, active: !off.has(String(p.platform).trim().toUpperCase()) })) });
+  res.json({ platforms: listPlatforms().map(p => ({ ...p, active: !off.has(String(p.platform).trim().toUpperCase()), brain: isBrainPlatform(p.platform) })) });
 });
 
 router.get("/platforms/:platform/accounts", (req, res) => {
@@ -164,8 +164,11 @@ router.get("/platforms/:platform/accounts", (req, res) => {
 router.post("/accounts/bulk", async (req, res) => {
   const {
     platform, provider, expiresAt, lines,
-    providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
+    providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
   } = req.body ?? {};
+  // Plataformas del cerebro: el pago al proveedor lo maneja el cerebro
+  // (Renovaciones › Pagos al proveedor), no el aviso viejo por cuenta.
+  const providerRenewalEnabled = !!req.body?.providerRenewalEnabled && !isBrainPlatform(platform);
 
   // De dónde sacar el código para TODAS las cuentas del lote (vacío = sin
   // código).
@@ -275,9 +278,13 @@ router.get("/accounts/:id", (req, res) => {
 router.put("/accounts/:id", (req, res) => {
   const {
     platform, email, password, provider, expiresAt, link, notes,
-    providerRenewalEnabled, providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
+    providerRenewalCost, providerRenewalCurrency, providerRenewalNextDate,
   } = req.body ?? {};
   const id = Number(req.params.id);
+  // Plataformas del cerebro: el aviso viejo de pago al proveedor queda apagado.
+  const current = getAccountById(id);
+  const providerRenewalEnabled = req.body?.providerRenewalEnabled === undefined ? undefined
+    : (!!req.body.providerRenewalEnabled && !isBrainPlatform(platform ?? current?.platform));
 
   if (expiresAt !== undefined && expiresAt !== null && !DATE_RE.test(expiresAt)) {
     res.status(400).json({ message: "Fecha inválida, usa YYYY-MM-DD." });
@@ -353,7 +360,7 @@ router.post("/combo-order", (req, res) => {
 // ── RENOVACIÓN CON PROVEEDOR (Pagos > Renovaciones) ──
 
 router.get("/provider-renewals", (_req, res) => {
-  res.json({ accounts: listProviderRenewalAccounts() });
+  res.json({ accounts: listProviderRenewalAccounts().filter(a => !isBrainPlatform(a.platform)) });
 });
 
 router.post("/accounts/:id/provider-renewal/mark-renewed", (req, res) => {
@@ -773,8 +780,12 @@ router.get("/brain", (_req, res) => {
 });
 
 router.post("/brain/run", (_req, res) => {
+  // Igual que las 10 pm: el cerebro y después el corte de las plataformas
+  // que no son del cerebro (y los «Pendientes de cuenta nueva»).
   const plan = runBrain("manual");
-  res.json({ plan, overview: brainOverview() });
+  let cutover: ReturnType<typeof runRenewalCutover> | null = null;
+  try { cutover = runRenewalCutover(); } catch (err: any) { console.error("⚠️ Corte de renovación:", err?.message); }
+  res.json({ plan, cutover, overview: brainOverview() });
 });
 
 // «✅ Ya la renové» con el proveedor: la cuenta suma 30 días (los clientes no cambian).
