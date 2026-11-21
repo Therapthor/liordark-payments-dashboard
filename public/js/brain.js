@@ -49,7 +49,7 @@
 
   function payRow(r, decided, today) {
     const status = decided
-      ? `<span class="brain-tag is-pay">Pagar</span>${r.stayers > 0 ? `${r.stayers} cliente(s) siguen después del ${ddmm(r.providerDate)}` : "Para tener stock libre para ventas nuevas"}`
+      ? `<span class="brain-tag is-pay">Pagar</span>${esc(r.reason || `${r.stayers} cliente(s) siguen después del ${ddmm(r.providerDate)}`)}`
       : `<span class="brain-tag">Se decide ${r.decideOn <= today ? "hoy 10 pm" : "el " + ddmm(r.decideOn) + " (10 pm)"}</span>pagarla o mover a sus ${r.stayers} cliente(s)`;
     return `
       <li class="brain-pay${decided ? " is-decided" : ""}">

@@ -154,6 +154,19 @@ function moveClient(from: Prof, fromUnit: Unit, to: Prof, toUnit: Unit): void {
   notifyMoved(to, toUnit);
 }
 
+function overviewReason(accountId: number, stayers: number, capacity: number, providerDate: string | null): string {
+  const annual = planMixOf(accountId, providerDate).filter(p => p.months >= 12).reduce((s, p) => s + p.count, 0);
+  const why = annual ? `tiene ${annual} cliente(s) anual(es)` : stayers * 2 > capacity ? "más de la mitad sigue" : "no hay dónde moverlos";
+  return `${stayers} cliente(s) siguen después del ${ddmmyyyy(providerDate)} · ${why}`;
+}
+
+/** Por qué conviene pagar esta cuenta (lo ve el admin en «Pagos al proveedor»). */
+function renewReason(st: Prof[], capacity: number, providerDate: string | null): string {
+  const annual = st.filter(p => (p.planMonths ?? 1) >= 12).length;
+  const why = annual ? `tiene ${annual} cliente(s) anual(es)` : st.length * 2 > capacity ? "más de la mitad sigue" : "no hay dónde moverlos";
+  return `${st.length} cliente(s) siguen después del ${ddmmyyyy(providerDate)} · ${why}`;
+}
+
 function ddmmyyyy(d: string | null): string {
   if (!d) return "—";
   const [y, m, dd] = d.split("-");
@@ -256,30 +269,39 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
       if (stayersOf(u).length > 0 && !beyondGrace(u)) renewList.add(u); else dropList.add(u);
     }
 
-    // 2b) Perfiles: el mínimo de cuentas que hay que renovar.
+    // 2b) Perfiles: qué cuentas conviene renovar (pedido del dueño, nov-2026):
+    //   · Nunca una cuenta sin clientes que sigan: el stock para ventas
+    //     nuevas se compra nuevo (ver «Stock por comprar»), no se renueva.
+    //   · Siempre la que tiene clientes ANUALES que siguen, o la que tiene
+    //     más de la mitad de sus perfiles con clientes que siguen.
+    //   · Las demás (pocos clientes de meses): sus clientes pasan a lugares
+    //     libres de otras cuentas; solo si no alcanza el espacio, se renueva
+    //     el mínimo (las de más clientes primero).
     if (units.some(x => x.policy === "normal")) {
       const normal = units.filter(x => x.policy === "normal");
       const dueUnits = normal.filter(due);
-      const forced = dueUnits.filter(beyondGrace);           // ya pasó la espera: no se pueden contar como renovadas
-      const candidates = dueUnits.filter(u => !beyondGrace(u));
+      const candidates = dueUnits.filter(u => !beyondGrace(u) && stayersOf(u).length > 0);
+      const worthIt = (u: Unit) => {
+        const st = stayersOf(u);
+        return st.some(p => (p.planMonths ?? 1) >= 12) || st.length * 2 > u.profiles.length;
+      };
       // Lugares libres hoy en cuentas que no vencen todavía.
       let avail = normal.filter(u => !due(u)).reduce((s, u) => s + u.profiles.filter(isFree).length, 0);
+      const keep = (u: Unit) => { renewList.add(u); avail += u.profiles.length - stayersOf(u).length; };
+      for (const u of candidates) if (worthIt(u) || u.action === "renew") keep(u);
       const score = (u: Unit) => {
         const st = stayersOf(u);
-        return (u.action === "renew" ? 1000 : 0) + st.length * 10 +
-          st.filter(p => (p.planMonths ?? 1) >= 6).length * 3 + st.filter(p => recentlyMoved(p, today)).length * 5;
+        return st.length * 10 + st.filter(p => (p.planMonths ?? 1) >= 6).length * 3 + st.filter(p => recentlyMoved(p, today)).length * 5;
       };
-      candidates.sort((a, b) => score(b) - score(a) || (b.profiles.length - a.profiles.length) || a.id - b.id);
+      const rest = candidates.filter(u => !renewList.has(u))
+        .sort((a, b) => score(b) - score(a) || (b.profiles.length - a.profiles.length) || a.id - b.id);
       const notRenewedNeed = () => dueUnits.filter(u => !renewList.has(u)).reduce((s, u) => s + stayersOf(u).length, 0);
-      for (const u of candidates) {
-        const sticky = u.action === "renew" && stayersOf(u).length > 0;
-        if (!sticky && notRenewedNeed() + reserve <= avail) break;
-        renewList.add(u);
-        avail += u.profiles.length - stayersOf(u).length;
+      for (const u of rest) {
+        if (notRenewedNeed() <= avail) break;
+        keep(u);
       }
       for (const u of dueUnits) if (!renewList.has(u)) dropList.add(u);
       for (const u of [...dropList].filter(x => x.policy === "normal")) for (const p of stayersOf(u)) movers.push({ p, u });
-      void forced;
     }
 
     // 2c) ChatGPT / CapCut: nunca se renuevan, quien sigue pasa a otro correo.
@@ -337,9 +359,7 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
         accountId: u.id, platform, email: u.email, providerDate: u.providerDate,
         stayers: stayersOf(u).length, capacity: u.profiles.length, cost,
         overdue: !!u.providerDate && u.providerDate < today,
-        reason: stayersOf(u).length > 0
-          ? `${stayersOf(u).length} cliente(s) siguen después del ${ddmmyyyy(u.providerDate)}`
-          : "Para tener stock libre para ventas nuevas",
+        reason: renewReason(stayersOf(u), u.profiles.length, u.providerDate),
       });
     }
     for (const u of dropList) {
@@ -417,10 +437,11 @@ export function brainOverview(): BrainOverview {
     GROUP BY a.id
     ORDER BY a.expires_at ASC, a.platform ASC
   `).all() as any[];
-  const renew = rows.map(r => ({
+  // Solo cuentas con clientes que siguen: nunca se paga una cuenta vacía.
+  const renew = rows.filter(r => r.stayers > 0).map(r => ({
     accountId: r.id, platform: r.platform, email: r.email, providerDate: r.expires_at, stayers: r.stayers,
     capacity: r.capacity, cost: r.cost, overdue: !!r.expires_at && r.expires_at < today,
-    reason: r.stayers > 0 ? `${r.stayers} cliente(s) siguen después del ${ddmmyyyy(r.expires_at)}` : "Para tener stock libre para ventas nuevas",
+    reason: overviewReason(r.id, r.stayers, r.capacity, r.expires_at),
     daysLeft: r.expires_at ? Math.round((Date.parse(r.expires_at) - Date.parse(today)) / 86400e3) : null,
     plans: planMixOf(r.id, r.expires_at),
   }));
@@ -484,6 +505,18 @@ const DEFAULT_PROVIDER_COST: Record<string, string> = {
   "NETFLIX PREMIUN": "10", "CRUNCHYROLL": "1.5", "AMAZON": "1.5", "HBO": "2", "PARAMOUNT": "4.5",
   "DISNEY+ PLUS": "3.8", "DISNEY PREMIUN CON ESPN": "8", "CHATGPT": "11", "CAPCUT PRO": "2", "VIX": "0.8",
 };
+
+/** Quita el «Pagar» de cuentas sin clientes que sigan (decisiones de antes
+ *  de nov-2026, cuando se renovaba para tener stock). Se corre al arrancar. */
+export function clearEmptyRenewDecisions(): number {
+  return db.prepare(`
+    UPDATE access_accounts SET brain_action = '', brain_action_for = NULL
+    WHERE brain_action = 'renew' AND NOT EXISTS (
+      SELECT 1 FROM access_profiles p WHERE p.account_id = access_accounts.id
+        AND (p.client_phone != '' OR p.wholesaler_id IS NOT NULL)
+        AND COALESCE(p.expires_override, access_accounts.expires_at) > access_accounts.expires_at)
+  `).run().changes;
+}
 
 export function runBrainMigration(): string[] {
   const done = db.prepare(`SELECT 1 FROM app_migrations WHERE name = ?`).get("brain-v1");

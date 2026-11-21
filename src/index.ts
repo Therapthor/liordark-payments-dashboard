@@ -52,7 +52,7 @@ import { scanPastChatMessages, runPendingFraudCleanups } from "./services/securi
 import { removeFakePayments } from "./db/payments.repository";
 import { syncSingleSlotExpiry } from "./db/access.repository";
 import { syncSharedCodeConfig } from "./db/codes.repository";
-import { runBrain, runBrainMigration } from "./services/brain.service";
+import { runBrain, runBrainMigration, clearEmptyRenewDecisions } from "./services/brain.service";
 import { cleanOldPendingPurchases } from "./services/course.service";
 import { requireWholesalerSession } from "./services/wholesaler-auth.service";
 import { seedCatalogIfEmpty } from "./db/catalog.repository";
@@ -303,6 +303,8 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   try { runPendingFraudCleanups(); } catch (err: any) { console.error("⚠️ limpieza de fraude:", err?.message); }
   try {
     for (const line of runBrainMigration()) console.log("🧠 Migración del cerebro: " + line);
+    const cleared = clearEmptyRenewDecisions();
+    if (cleared) console.log(`🧠 Cerebro: ${cleared} cuenta(s) sin clientes ya no piden renovar`);
   } catch (err: any) { console.error("⚠️ migración del cerebro:", err?.message); }
   try {
     const n = syncSingleSlotExpiry();
