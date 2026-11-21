@@ -1730,7 +1730,8 @@
         </div>
         <div class="access-client-item-right">
           <span class="badge access-badge-${STATUS_CLASS[p.status]}">${STATUS_LABEL[p.status]}</span>
-          <span>${fmtDateLong(p.expiresAt)} · ${daysLabel(p.status, p.daysLeft)}</span>
+          <span>${fmtDateLong(p.expiresAt)} · ${daysLabel(p.status, p.daysLeft)}${p.planMonths ? " · " + planLabel(p.planMonths) : ""}</span>
+          ${p.providerExpiresAt && p.providerExpiresAt !== p.expiresAt ? `<span class="text-muted" title="Hasta cuándo está pagada la cuenta al proveedor">Proveedor: ${fmtDateLong(p.providerExpiresAt)}</span>` : ""}
           <div class="access-client-item-actions">
             <button class="btn-secondary btn-sm client-view-account" data-idx="${idx}">👁 Ver cuenta</button>
             <button class="btn-secondary btn-sm client-send-account" data-idx="${idx}">📧 Enviar cuenta</button>

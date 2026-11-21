@@ -1790,7 +1790,10 @@ export type ProfileWithAccount = AccessProfile & {
   password:         string;
   provider:         string;
   hasProfiles:      boolean;
+  // Fecha del CLIENTE (la suya propia si la tiene; si no, la de la cuenta).
   expiresAt:        string | null;
+  // Hasta cuándo está pagada la cuenta al proveedor.
+  providerExpiresAt: string | null;
   renewalPendingAt: string | null;
 };
 
@@ -1818,11 +1821,12 @@ export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
     SELECT p.*,
            a.platform AS platform, a.email AS email, a.password AS password,
            a.provider AS provider, a.has_profiles AS has_profiles, a.expires_at AS account_expires_at,
+           COALESCE(p.expires_override, a.expires_at) AS client_expires_at,
            a.renewal_pending_at AS renewal_pending_at
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE substr(p.client_phone, -9) LIKE '%' || substr(?, -9) || '%'
-    ORDER BY a.expires_at ASC
+    ORDER BY COALESCE(p.expires_override, a.expires_at) ASC
   `).all(digits) as any[];
 
   return rows.map(row => ({
@@ -1832,7 +1836,10 @@ export function searchProfilesByPhone(term: string): ProfileWithAccount[] {
     password:         row.password,
     provider:         row.provider ?? "",
     hasProfiles:      row.has_profiles === 1,
-    expiresAt:        row.account_expires_at ?? null,
+    // Antes mostraba la fecha de la cuenta (la del proveedor): a un cliente de
+    // 3 meses le aparecía 1 mes al buscarlo por su celular.
+    expiresAt:        row.client_expires_at ?? null,
+    providerExpiresAt: row.account_expires_at ?? null,
     renewalPendingAt: row.renewal_pending_at ?? null,
   }));
 }
