@@ -71,7 +71,9 @@
   }
 
   function msgEntrega(p) {
-    const perfilLine = (p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "") + (p.pinMode && p.pin ? `\n🔐 PIN: *${p.pin}*` : "");
+    // El PIN solo llega si la cuenta usa PIN (en ventas, el servidor ya lo
+    // manda vacío si no; en filas del panel viene pinMode).
+    const perfilLine = (p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "") + (p.pin && p.pinMode !== false ? `\n🔐 PIN: *${p.pin}*` : "");
     return `✅ *${p.platform}*\n\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Vencimiento: *${fmtDateLong(p.expiresAt)}*`;
   }
   function msgResumen(items) {
