@@ -144,7 +144,7 @@
               <div class="brain-login">Correo: <b>${esc(t.email)}</b> · Contraseña: <b>${esc(t.password)}</b>
                 <button type="button" class="btn-ghost btn-sm brain-copy" data-copy="${esc(t.email + "\n" + t.password)}" title="Copiar correo y contraseña">📋</button></div></div>
               <div class="brain-row-actions">
-                <button type="button" class="btn-secondary btn-sm brain-pin" data-id="${t.profileId}" data-name="${esc(t.profileName)}">🔐 PIN nuevo</button>
+                <button type="button" class="btn-secondary btn-sm brain-pin" data-id="${t.profileId}" data-name="${esc(t.profileName)}" data-platform="${esc(t.platform)}">🔐 PIN nuevo</button>
                 <button type="button" class="btn-secondary btn-sm brain-pin-keep" data-id="${t.profileId}">Dejar igual</button>
               </div></li>`).join("")}</ul>
         </div>` : "";
@@ -174,7 +174,8 @@
         catch (err) { btn.disabled = false; alert(err.message); }
       }));
       pinBox.querySelectorAll(".brain-pin").forEach(btn => btn.addEventListener("click", async () => {
-        const pin = prompt(`PIN nuevo para ${btn.dataset.name || "el perfil"} (4 a 6 números):`, "");
+        const five = /amazon|prime/i.test(btn.dataset.platform || "");
+        const pin = prompt(`PIN nuevo para ${btn.dataset.name || "el perfil"} (${five ? "5" : "4"} números):`, "");
         if (pin === null) return;
         try { await api("/profiles/" + btn.dataset.id + "/pin", { method: "POST", body: JSON.stringify({ pin: pin.trim() }) }); await load(); }
         catch (err) { alert(err.message); }

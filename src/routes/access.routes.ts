@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
-import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setProfilePin, dismissPinReminder, setClientDate, getProfileById } from "../db/access.repository";
+import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setProfilePin, dismissPinReminder, setAccountPins, pinLengthFor, validPinFor, randomPin, setClientDate, getProfileById } from "../db/access.repository";
 import { isBrainPlatform, setNewClientDate, extendClientDate } from "../db/brain-platforms";
 import { runBrain, brainOverview, markProviderRenewed } from "../services/brain.service";
 import { planFor } from "../services/plans.service";
@@ -813,10 +813,59 @@ router.post("/profiles/:id/pin", (req, res) => {
     return;
   }
   const pin = String(req.body?.pin ?? "").trim();
-  if (pin && !/^\d{4,6}$/.test(pin)) { res.status(400).json({ message: "El PIN debe tener de 4 a 6 números." }); return; }
+  const current = getProfileById(Number(req.params.id));
+  const platform = current ? (getAccountById(current.accountId)?.platform ?? "") : "";
+  if (pin && !validPinFor(platform, pin)) {
+    res.status(400).json({ message: pinLengthFor(platform) === 5 ? "En Prime Video el PIN tiene 5 números." : "El PIN debe tener de 4 a 6 números." });
+    return;
+  }
   const profile = setProfilePin(Number(req.params.id), pin);
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   res.json({ profile });
+});
+
+// PIN de TODOS los perfiles de una cuenta (prende «Perfiles con PIN»):
+//  · { pins: ["1234", "-", …] } → en orden de perfil; «-» o vacío = dejarlo igual.
+//  · { generate: "empty" | "all" } → al azar: 4 números (Prime Video: 5),
+//    solo a los que no tienen PIN o a todos.
+// A los clientes cuyo PIN cambió les llega aviso por su campanita.
+router.post("/accounts/:id/pins", (req, res) => {
+  const id = Number(req.params.id);
+  const account = getAccountById(id);
+  if (!account) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  if (!account.hasProfiles) { res.status(400).json({ message: "Esta cuenta no tiene perfiles." }); return; }
+  const profiles = [...account.profiles].sort((a, b) => a.slotNumber - b.slotNumber);
+  const len = pinLengthFor(account.platform);
+  const entries: { profileId: number; pin: string }[] = [];
+
+  if (Array.isArray(req.body?.pins)) {
+    const pins = (req.body.pins as unknown[]).map(x => String(x ?? "").trim());
+    if (pins.length > profiles.length) { res.status(400).json({ message: `Escribiste ${pins.length} PIN y la cuenta tiene ${profiles.length} perfiles.` }); return; }
+    for (let i = 0; i < pins.length; i++) {
+      const pin = pins[i]!;
+      if (!pin || pin === "-") continue;
+      if (!validPinFor(account.platform, pin)) {
+        res.status(400).json({ message: `El PIN n.º ${i + 1} («${pin}») no sirve: ${len === 5 ? "en Prime Video son 5 números" : "deben ser de 4 a 6 números"}.` });
+        return;
+      }
+      entries.push({ profileId: profiles[i]!.id, pin });
+    }
+  } else if (req.body?.generate === "empty" || req.body?.generate === "all") {
+    const all = req.body.generate === "all";
+    const taken = new Set(all ? [] : profiles.map(p => p.pin).filter(Boolean));
+    for (const p of profiles) {
+      if (!all && p.pin) continue;
+      const pin = randomPin(len, taken);
+      taken.add(pin);
+      entries.push({ profileId: p.id, pin });
+    }
+  } else {
+    res.status(400).json({ message: "Faltan los PIN." });
+    return;
+  }
+
+  const updated = setAccountPins(id, entries);
+  res.json({ changed: entries.length, profiles: updated.map(p => ({ id: p.id, name: p.profileName || ("Perfil " + p.slotNumber), pin: p.pin, client: !!p.clientPhone })) });
 });
 
 // Fecha propia del cliente: «➕ días» (renovación cobrada a mano) o una

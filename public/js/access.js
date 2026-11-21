@@ -473,6 +473,7 @@
               <button class="btn-secondary btn-sm access-delete-account" data-account-id="${account.id}">🗑 Eliminar cuenta</button>
             </div>
           </div>
+          ${account.hasProfiles && account.pinMode ? renderPinBar(account) : ""}
           <table class="access-table">
             <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
@@ -709,15 +710,17 @@
       });
     });
 
+    target.querySelectorAll(".access-pins-row").forEach(btn => btn.addEventListener("click", () => pinsInRow(btn)));
+    target.querySelectorAll(".access-pins-gen").forEach(btn => btn.addEventListener("click", () => pinsGenerate(btn)));
+
     target.querySelectorAll(".access-pin-mode").forEach(btn => {
       btn.addEventListener("click", async () => {
         const on = btn.dataset.on !== "1";
         const accountId = Number(btn.dataset.accountId);
-        if (on && !confirm("Perfiles con PIN: cada cliente recibe el PIN de su perfil.\n\nA continuación te pide el PIN de cada perfil (déjalo vacío para saltar uno). Después puedes cambiarlo con el botón 🔐 de su fila.")) return;
+        if (on && !confirm("Perfiles con PIN: cada cliente recibe el PIN de su perfil.\n\nDespués usa «🔢 Poner en fila» (escribes todos los PIN de una vez) o «🎲 Generar PIN».")) return;
         if (!on && !confirm("¿Quitar los PIN de esta cuenta? Los clientes dejan de ver su PIN.")) return;
         try {
           await api("/accounts/" + accountId + "/pin-mode", { method: "POST", body: JSON.stringify({ on }) });
-          if (on) await askAllPins(accountId);
           refreshAccountInPlace(accountId);
         } catch (err) { alert(err.message); }
       });
@@ -778,7 +781,7 @@
   }
 
   async function setProfilePin(ctx) {
-    const pin = prompt(`PIN del perfil ${ctx.profileName || ""} (${ctx.platform}) — de 4 a 6 números.\n\nSi cambió de dueño: cierra sesión en sus dispositivos y borra su historial antes.`, ctx.pin || "");
+    const pin = prompt(`PIN del perfil ${ctx.profileName || ""} (${ctx.platform}) — ${pinLen(ctx.platform) === 5 ? "5 números" : "4 números"}.\n\nSi cambió de dueño: cierra sesión en sus dispositivos y borra su historial antes.`, ctx.pin || "");
     if (pin === null) return;
     try {
       await api("/profiles/" + ctx.id + "/pin", { method: "POST", body: JSON.stringify({ pin: pin.trim() }) });
@@ -786,24 +789,60 @@
     } catch (err) { alert(err.message); }
   }
 
-  // Al activar «Perfiles con PIN»: pide el PIN de cada perfil, uno tras otro.
-  // Vacío = saltar ese perfil; Cancelar = terminar.
-  async function askAllPins(accountId) {
-    const { account } = await api("/accounts/" + accountId);
-    for (const p of account.profiles || []) {
-      const name = p.profileName || ("Perfil " + p.slotNumber);
-      let pin;
-      for (;;) {
-        pin = prompt(`PIN de «${name}» (4 a 6 números).\nVacío = saltar · Cancelar = terminar`, p.pin || "");
-        if (pin === null) return;
-        pin = pin.trim();
-        if (!pin || /^\d{4,6}$/.test(pin)) break;
-        alert("El PIN debe tener de 4 a 6 números.");
-      }
-      if (!pin || pin === p.pin) continue;
-      await api("/profiles/" + p.id + "/pin", { method: "POST", body: JSON.stringify({ pin }) });
-    }
-    if (window.MP && MP.toast) MP.toast("🔐 PIN guardados");
+  // ── PIN de todos los perfiles de una cuenta ──
+  // Prime Video: 5 números; las demás: 4 (a mano se aceptan 4 a 6).
+  function pinLen(platform) { return /amazon|prime/i.test(String(platform || "")) ? 5 : 4; }
+
+  function renderPinBar(account) {
+    const profiles = [...(account.profiles || [])].sort((a, b) => a.slotNumber - b.slotNumber);
+    const missing = profiles.filter(p => !p.pin).length;
+    const pins = profiles.map(p => p.pin || "-").join(" ");
+    const data = `data-account-id="${account.id}" data-count="${profiles.length}" data-missing="${missing}" data-len="${pinLen(account.platform)}" data-pins="${escapeHtml(pins)}"`;
+    return `
+      <div class="access-pin-bar">
+        <span class="access-pin-bar-label">🔒 PIN de perfiles${missing ? ` · <b>${missing} sin PIN</b>` : " · todos listos"}</span>
+        <button type="button" class="btn-secondary btn-sm access-pins-row" ${data} title="Escribe todos los PIN en orden y se ponen al tiro">🔢 Poner en fila</button>
+        <button type="button" class="btn-secondary btn-sm access-pins-gen" ${data} title="PIN al azar de ${pinLen(account.platform)} números">🎲 Generar PIN</button>
+      </div>`;
+  }
+
+  // Lista para copiar y ponerlos en la app de la plataforma.
+  async function showPinsResult(profiles, changed) {
+    const list = profiles.map(p => `${p.name}: ${p.pin || "—"}`).join("\n");
+    try { await navigator.clipboard.writeText(list); } catch { /* sin portapapeles */ }
+    alert(`✅ ${changed} PIN guardado(s). Ponlos también en la app de la plataforma (ya están copiados):\n\n${list}`);
+  }
+
+  async function pinsInRow(btn) {
+    const len = Number(btn.dataset.len);
+    const raw = prompt(
+      `Escribe los PIN en orden (Perfil 1, Perfil 2, …), separados por espacio o coma.\n` +
+      `«-» = dejar ese perfil igual · ${len === 5 ? "Prime Video: 5 números" : "4 números"}.`,
+      btn.dataset.pins || "");
+    if (raw === null) return;
+    const pins = raw.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
+    if (!pins.length) return;
+    btn.disabled = true;
+    try {
+      const r = await api("/accounts/" + btn.dataset.accountId + "/pins", { method: "POST", body: JSON.stringify({ pins }) });
+      await refreshAccountInPlace(Number(btn.dataset.accountId));
+      await showPinsResult(r.profiles, r.changed);
+    } catch (err) { btn.disabled = false; alert(err.message); }
+  }
+
+  async function pinsGenerate(btn) {
+    const len = Number(btn.dataset.len), missing = Number(btn.dataset.missing), count = Number(btn.dataset.count);
+    let generate = "empty";
+    if (missing === 0) {
+      if (!confirm(`Todos los perfiles ya tienen PIN. ¿Generar PIN nuevos de ${len} números para los ${count}?\n\nA los clientes les llega su PIN nuevo por la campanita; cámbialos también en la app.`)) return;
+      generate = "all";
+    } else if (!confirm(`¿Generar PIN de ${len} números para los ${missing} perfil(es) sin PIN?`)) return;
+    btn.disabled = true;
+    try {
+      const r = await api("/accounts/" + btn.dataset.accountId + "/pins", { method: "POST", body: JSON.stringify({ generate }) });
+      await refreshAccountInPlace(Number(btn.dataset.accountId));
+      await showPinsResult(r.profiles, r.changed);
+    } catch (err) { btn.disabled = false; alert(err.message); }
   }
 
   async function keepProfilePin(ctx) {

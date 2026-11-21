@@ -1,3 +1,4 @@
+import { randomInt } from "crypto";
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { createCustomerNotification } from "./customer-notifications.repository";
@@ -404,10 +405,69 @@ export function setAccountPinMode(accountId: number, on: boolean): void {
   if (!on) db.prepare(`UPDATE access_profiles SET pin_reset_pending = 0 WHERE account_id = ?`).run(accountId);
 }
 
-/** PIN del perfil (vacío = sin PIN). Poner uno quita el «PIN por cambiar». */
+/** PIN del perfil (vacío = sin PIN). Poner uno quita el «PIN por cambiar».
+ *  Si el perfil tiene cliente y el PIN cambió, se le avisa por su campanita. */
 export function setProfilePin(profileId: number, pin: string): AccessProfile | null {
+  const before = getProfileById(profileId);
   const r = db.prepare(`UPDATE access_profiles SET pin = ?, pin_reset_pending = 0, updated_at = datetime('now') WHERE id = ?`).run(pin, profileId);
-  return r.changes ? getProfileById(profileId) : null;
+  if (!r.changes) return null;
+  if (before && pin && before.pin !== pin) notifyPinChanged(before, pin);
+  return getProfileById(profileId);
+}
+
+// ─── PIN de todos los perfiles de una cuenta (Accesos › 🔢 / 🎲) ───
+
+/** Prime Video pide PIN de 5 números; las demás, 4 (se aceptan 4 a 6 a mano). */
+export function pinLengthFor(platform: string): number {
+  return /amazon|prime/i.test(platform) ? 5 : 4;
+}
+
+export function validPinFor(platform: string, pin: string): boolean {
+  return pinLengthFor(platform) === 5 ? /^\d{5}$/.test(pin) : /^\d{4,6}$/.test(pin);
+}
+
+/** PIN al azar de `len` números: sin todos iguales (1111) ni seguidos
+ *  (1234 / 4321), y distinto de los que ya se usan en la cuenta. */
+export function randomPin(len: number, taken: Set<string>): string {
+  for (let i = 0; i < 500; i++) {
+    const pin = Array.from({ length: len }, () => String(randomInt(10))).join("");
+    const d = pin.split("").map(Number);
+    const same = d.every(x => x === d[0]);
+    const up = d.every((x, k) => k === 0 || x === d[k - 1]! + 1);
+    const down = d.every((x, k) => k === 0 || x === d[k - 1]! - 1);
+    if (!same && !up && !down && !taken.has(pin)) return pin;
+  }
+  return Array.from({ length: len }, () => String(randomInt(10))).join("");
+}
+
+/** Pone varios PIN a la vez (prende «Perfiles con PIN» en la cuenta) y avisa
+ *  a los clientes cuyo PIN cambió. Devuelve los perfiles con su PIN. */
+export function setAccountPins(accountId: number, entries: { profileId: number; pin: string }[]): AccessProfile[] {
+  const befores = new Map(entries.map(e => [e.profileId, getProfileById(e.profileId)]));
+  db.transaction(() => {
+    db.prepare(`UPDATE access_accounts SET pin_mode = 1, updated_at = datetime('now') WHERE id = ?`).run(accountId);
+    const up = db.prepare(`UPDATE access_profiles SET pin = ?, pin_reset_pending = 0, updated_at = datetime('now') WHERE id = ? AND account_id = ?`);
+    for (const e of entries) up.run(e.pin, e.profileId, accountId);
+  })();
+  for (const e of entries) {
+    const before = befores.get(e.profileId);
+    if (before && before.pin !== e.pin) notifyPinChanged(before, e.pin);
+  }
+  return (db.prepare(`SELECT id FROM access_profiles WHERE account_id = ? ORDER BY slot_number ASC`).all(accountId) as { id: number }[])
+    .map(r => getProfileById(r.id)!).filter(Boolean);
+}
+
+/** «Tu perfil X de Plataforma tiene PIN nuevo: 1234» — solo si tiene cliente
+ *  y la cuenta usa PIN. */
+function notifyPinChanged(profile: AccessProfile, pin: string): void {
+  const acc = db.prepare(`SELECT platform, email, pin_mode FROM access_accounts WHERE id = ?`).get(profile.accountId) as { platform: string; email: string; pin_mode: number } | undefined;
+  if (!acc || acc.pin_mode !== 1) return;
+  const name = profile.profileName || ("Perfil " + profile.slotNumber);
+  const title = (db.prepare(`SELECT title FROM catalog_products WHERE UPPER(TRIM(platform)) = UPPER(TRIM(?)) AND active = 1 LIMIT 1`).get(acc.platform) as { title: string } | undefined)?.title || acc.platform;
+  const msg = `🔐 Tu perfil «${name}» de ${title} tiene PIN nuevo: ${pin}`;
+  if (!profile.clientPhone) return; // libre o stock mayorista sin vender
+  if (profile.wholesalerId != null) createWholesalerNotification(profile.wholesalerId, "support_update", acc.platform, acc.email, msg);
+  else createCustomerNotification(profile.clientPhone, "support_update", acc.platform, acc.email, msg);
 }
 
 /** «Dejar igual»: el admin decide no cambiar el PIN de un perfil que se liberó. */
