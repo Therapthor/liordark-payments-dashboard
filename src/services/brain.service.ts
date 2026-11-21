@@ -163,7 +163,7 @@ function ddmmyyyy(d: string | null): string {
 function movedDetail(p: Prof, u: Unit): string {
   return `📧 Correo: ${u.email}\n🔑 Contraseña: ${u.password}` +
     (u.hasProfiles && p.name ? `\n👤 Perfil: ${p.name}` : "") +
-    (p.pin ? `\n🔐 PIN: ${p.pin}` : "") +
+    (u.pinMode && p.pin ? `\n🔐 PIN: ${p.pin}` : "") +
     `\n📅 Tu fecha sigue igual: ${ddmmyyyy(p.date)}` +
     `\n\nTe pasamos a otra cuenta para darte un mejor servicio. Tus días se mantienen. 😊`;
 }

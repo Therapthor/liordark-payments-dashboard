@@ -71,12 +71,12 @@
   }
 
   function msgEntrega(p) {
-    const perfilLine = p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "";
+    const perfilLine = (p.profileName ? `\n👤 Perfil: *${p.profileName}*` : "") + (p.pinMode && p.pin ? `\n🔐 PIN: *${p.pin}*` : "");
     return `✅ *${p.platform}*\n\n📧 Correo: *${p.email}*\n🔑 Contraseña: *${p.password}*${perfilLine}\n⏳ Vencimiento: *${fmtDateLong(p.expiresAt)}*`;
   }
   function msgResumen(items) {
     const lines = items.map((it, i) => {
-      const perfilLine = it.profileName ? `\n👤 Perfil: ${it.profileName}` : "";
+      const perfilLine = (it.profileName ? `\n👤 Perfil: ${it.profileName}` : "") + (it.pin ? `\n🔐 PIN: ${it.pin}` : "");
       return `${i + 1}️⃣ *${it.platform}*${perfilLine}\n📧 Correo: ${it.email}\n🔑 Contraseña: ${it.password}\n⏳ Vence: ${fmtDateLong(it.expiresAt)} (${daysLabel(it.status, it.daysLeft)})`;
     }).join("\n\n");
     return `📋 *Resumen de tus cuentas*\n\n${lines}`;
