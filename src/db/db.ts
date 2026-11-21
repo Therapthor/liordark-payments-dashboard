@@ -527,6 +527,20 @@ ensureColumn("access_profiles", "pin",               "pin TEXT NOT NULL DEFAULT 
 ensureColumn("access_profiles", "pin_reset_pending", "pin_reset_pending INTEGER NOT NULL DEFAULT 0");
 ensureColumn("access_profiles", "plan_months",       "plan_months INTEGER");
 ensureColumn("access_profiles", "moved_at",          "moved_at TEXT");
+// 🔄 Reemplazo: de qué cuenta viene el cliente de este perfil (lo ve el panel).
+ensureColumn("access_profiles", "replaced_from",     "replaced_from TEXT");
+ensureColumn("access_profiles", "replaced_at",       "replaced_at TEXT");
+ensureColumn("access_profiles", "replaced_by",       "replaced_by TEXT");
+ensureColumn("manual_account_overrides", "replaced_from", "replaced_from TEXT");
+// Perfil que queda libre (por donde sea): sin marca de reemplazo.
+db.exec(`
+  CREATE TRIGGER IF NOT EXISTS trg_profile_freed_clear_replaced
+  AFTER UPDATE OF client_phone ON access_profiles
+  WHEN NEW.client_phone = '' AND OLD.client_phone != ''
+  BEGIN
+    UPDATE access_profiles SET replaced_from = NULL, replaced_at = NULL, replaced_by = NULL WHERE id = NEW.id;
+  END;
+`);
 ensureColumn("access_accounts", "pin_mode",          "pin_mode INTEGER NOT NULL DEFAULT 0");
 // ⏸ Venta en pausa: la cuenta tiene problemas — no se ofrece (tienda, bot,
 // mayoristas, combos, cerebro); sus clientes actuales siguen igual.

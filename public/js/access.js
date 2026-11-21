@@ -424,6 +424,47 @@
     return account.daysLeft == null || account.daysLeft < 30;
   }
 
+  // «21/11» de un datetime de SQLite (UTC) en hora de Lima.
+  function ddmmFromSql(ts) {
+    const t = Date.parse(String(ts || "").replace(" ", "T") + "Z");
+    if (!Number.isFinite(t)) return "";
+    const d = new Date(t - 5 * 3600e3);
+    return String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0");
+  }
+
+  /** ¿El cliente ve su reemplazo? (usuario web / aviso leído / mayorista) */
+  function seenText(seen) {
+    if (!seen) return "";
+    if (seen.wholesaler) return `<span class="access-replaced-seen ok">🏪 Lo ve su mayorista</span>`;
+    const web = seen.web
+      ? `<span class="access-replaced-seen ok">👁 Lo ve en «Mis cuentas»</span>`
+      : `<span class="access-replaced-seen warn" title="Este celular no tiene usuario en liordark.com">⚠️ Sin usuario web: no lo ve en «Mis cuentas»</span>`;
+    const read = seen.read === true ? `<span class="access-replaced-seen ok">🔔 Aviso leído</span>`
+      : seen.read === false ? `<span class="access-replaced-seen">🔔 Aviso sin leer</span>` : "";
+    return web + read;
+  }
+
+  function replacedTag(by, from, at, seen) {
+    const label = by === "cerebro" ? "🔀 Movido por el cerebro" : "🔄 Reemplazo";
+    return `<div class="access-replaced"><span class="access-replaced-main">${label}${from ? ` · antes: <b>${escapeHtml(from)}</b>` : ""}${at ? " · " + ddmmFromSql(at) : ""}</span>${seenText(seen)}</div>`;
+  }
+
+  /** Reemplazos «en uso» que apuntan a esta cuenta (no ocupan perfil). */
+  function renderOverrides(account) {
+    const list = account.overrides || [];
+    if (!list.length) return "";
+    return `
+      <div class="access-overrides">
+        <div class="access-overrides-title">🔄 Reemplazos «en uso» en esta cuenta <span class="badge">${list.length}</span>
+          <span class="text-muted">— no ocupan perfil; comparten uno ya usado</span></div>
+        <ul>${list.map(o => `
+          <li><b>${escapeHtml(o.clientPhone)}</b>${o.wholesalerId != null ? " 🏪" : ""}${o.profileName ? ` · ${escapeHtml(o.profileName)}` : ""}
+            · desde ${ddmmFromSql(o.createdAt)}${o.expiresAt ? ` · vence ${fmtDateLong(o.expiresAt)}` : ""}
+            ${o.replacedFrom ? `<div class="access-replaced-main">antes: <b>${escapeHtml(o.replacedFrom)}</b></div>` : ""}
+            <div>${seenText(o.seen)}</div></li>`).join("")}</ul>
+      </div>`;
+  }
+
   function renderAccountCard(account, opts) {
     const open = !!(opts && opts.open);
     const rows = account.profiles.map(p => renderProfileRow(account, p)).join("");
@@ -481,6 +522,7 @@
             </div>
           </div>
           ${account.hasProfiles && account.pinMode ? renderPinBar(account) : ""}
+          ${renderOverrides(account)}
           <table class="access-table">
             <thead><tr>${account.hasProfiles ? "<th>Perfil</th>" : ""}<th>Teléfono</th><th title="¿Confirmó que renueva?">Renueva</th><th></th></tr></thead>
             <tbody>${rows}</tbody>
@@ -544,6 +586,8 @@
       const left = daysBetweenToday(p.clientExpiresAt);
       clientCell += `<div class="access-client-date${left <= 3 ? " soon" : ""}">vence ${fmtDateLong(p.clientExpiresAt)} · ${left}d · ${planLabel(p.planMonths)}</div>`;
     }
+    // 🔄 De qué cuenta viene (reemplazo o movido por el cerebro) y si el cliente lo ve.
+    if (occupied && p.replacedAt) clientCell += replacedTag(p.replacedBy, p.replacedFrom, p.replacedAt, p.replacedSeen);
     cells.push(`<td>${clientCell}${!account.hasProfiles ? pinTxt : ""}</td>`);
     cells.push(`<td>${occupied ? (account.brain ? `<button class="row-action" data-act="extend" data-ctx="${ctx}" title="Renovación cobrada a mano: sumar días a este cliente">➕30</button>` : renderRenewalButton(p)) : ""}</td>`);
     cells.push(`<td class="access-row-actions">${actions}</td>`);

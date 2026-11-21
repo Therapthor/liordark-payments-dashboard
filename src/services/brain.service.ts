@@ -134,11 +134,12 @@ function moveClient(from: Prof, fromUnit: Unit, to: Prof, toUnit: Unit): void {
       UPDATE access_profiles
       SET client_phone = ?, order_ref = ?, renewal_status = '', wholesaler_id = ?, seen_by_wholesaler = ?,
           expires_override = ?, plan_months = ?, moved_at = datetime('now'),
+          replaced_from = ?, replaced_at = datetime('now'), replaced_by = 'cerebro',
           reminder_sent_at = ?, sms_reminder_sent_at = ?, expiry_notified_at = ?,
           email_reminder_3d_sent_at = ?, email_reminder_1d_sent_at = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(from.clientPhone, from.orderRef, from.wholesalerId, from.wholesalerId === null ? 1 : 0,
-      from.date, from.planMonths, from.reminders.r, from.reminders.s, from.reminders.e, from.reminders.d3, from.reminders.d1, to.id);
+      from.date, from.planMonths, fromUnit.email + (fromUnit.hasProfiles && from.name ? " · " + from.name : ""), from.reminders.r, from.reminders.s, from.reminders.e, from.reminders.d3, from.reminders.d1, to.id);
     db.prepare(`
       UPDATE access_profiles
       SET client_phone = '', order_ref = '', renewal_status = '', wholesaler_id = NULL, expires_override = NULL,

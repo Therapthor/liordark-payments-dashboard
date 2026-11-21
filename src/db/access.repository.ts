@@ -32,6 +32,10 @@ export type AccessProfile = {
   pin:             string;
   pinResetPending: boolean;
   movedAt:         string | null;
+  // 🔄 De qué cuenta viene el cliente (reemplazo de Soporte/panel o el cerebro).
+  replacedFrom:    string | null;
+  replacedAt:      string | null;
+  replacedBy:      string | null;
 };
 
 export type AccessAccount = {
@@ -1261,6 +1265,19 @@ export function listWholeFreeAccountIds(platform: string, todayISO: string): Set
   return new Set(rows.map(r => r.id));
 }
 
+/** «correo · Perfil 2» de donde venía el cliente (para la marca 🔄). */
+function describeReplaceSource(source: ReplaceSource): string {
+  if (source.kind === "profile") {
+    const r = db.prepare(`
+      SELECT a.email AS email, p.profile_name AS name, a.has_profiles AS hp
+      FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id WHERE p.id = ?
+    `).get(source.profileId) as { email: string; name: string; hp: number } | undefined;
+    return r ? r.email + (r.hp && r.name ? " · " + r.name : "") : "";
+  }
+  const o = db.prepare(`SELECT email, profile_name AS name FROM manual_account_overrides WHERE id = ?`).get(source.overrideId) as { email: string; name: string } | undefined;
+  return o ? o.email + (o.name ? " · " + o.name : "") : "";
+}
+
 function releaseReplaceSource(source: ReplaceSource): void {
   if (source.kind === "profile") releaseProfile(source.profileId);
   else deleteManualOverride(source.overrideId);
@@ -1355,13 +1372,15 @@ export const replaceClientAccount = db.transaction((params: {
     }
   }
 
+  const from = describeReplaceSource(source);
   releaseReplaceSource(source);
   assignProfileClient(freeProfileId, params.clientPhone);
   db.prepare(`
     UPDATE access_profiles
-    SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?, order_ref = ?
+    SET expires_override = ?, wholesaler_id = ?, seen_by_wholesaler = ?, order_ref = ?,
+        replaced_from = ?, replaced_at = datetime('now'), replaced_by = 'reemplazo'
     WHERE id = ?
-  `).run(params.expiresAt ?? source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, sourceRef, freeProfileId);
+  `).run(params.expiresAt ?? source.preservedExpiresAt, params.wholesalerId, params.wholesalerId === null ? 1 : 0, sourceRef, from || null, freeProfileId);
   // Cuenta de un solo lugar (cuenta completa, o plataforma sin perfiles): es
   // toda del cliente, así que su vencimiento ES el del cliente — se guarda en
   // la cuenta (lo ven Accesos, Códigos, renovaciones y avisos), no aparte.
@@ -1388,8 +1407,10 @@ export const replaceClientAccountManual = db.transaction((params: {
   const source = findReplaceSource(params.clientPhone, params.platform, params.email, params.wholesalerId);
   if (!source) throw new Error(NO_SOURCE_MSG);
 
+  const from = describeReplaceSource(source);
   releaseReplaceSource(source);
   createManualOverride({
+    replacedFrom: from,
     clientPhone:  params.clientPhone,
     wholesalerId: params.wholesalerId,
     platform:     params.platform,
@@ -1868,5 +1889,8 @@ function toProfile(row: any): AccessProfile {
     pin:             row.pin ?? "",
     pinResetPending: row.pin_reset_pending === 1,
     movedAt:         row.moved_at ?? null,
+    replacedFrom:    row.replaced_from ?? null,
+    replacedAt:      row.replaced_at ?? null,
+    replacedBy:      row.replaced_by ?? null,
   };
 }

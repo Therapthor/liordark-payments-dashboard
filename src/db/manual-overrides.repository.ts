@@ -20,6 +20,7 @@ export type ManualAccountOverride = {
   provider:     string;
   expiresAt:    string | null;
   createdAt:    string;
+  replacedFrom: string;
 };
 
 function last9(phone: string): string {
@@ -38,23 +39,35 @@ function toOverride(row: any): ManualAccountOverride {
     provider:     row.provider ?? "",
     expiresAt:    row.expires_at,
     createdAt:    row.created_at,
+    replacedFrom: row.replaced_from ?? "",
   };
 }
 
 export function createManualOverride(params: {
   clientPhone: string; wholesalerId: number | null; platform: string;
   email: string; password: string; profileName: string; provider: string; expiresAt: string | null;
+  replacedFrom?: string;
 }): ManualAccountOverride {
   const digits = params.clientPhone.replace(/\D/g, "");
   const info = db.prepare(`
     INSERT INTO manual_account_overrides
-      (client_phone, wholesaler_id, platform, email, password, profile_name, provider, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (client_phone, wholesaler_id, platform, email, password, profile_name, provider, expires_at, replaced_from)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     digits, params.wholesalerId, params.platform.trim().toUpperCase(), params.email.trim(),
-    params.password, params.profileName.trim(), params.provider.trim(), params.expiresAt
+    params.password, params.profileName.trim(), params.provider.trim(), params.expiresAt, params.replacedFrom || null
   );
   return toOverride(db.prepare(`SELECT * FROM manual_account_overrides WHERE id = ?`).get(info.lastInsertRowid));
+}
+
+/** Reemplazos «en uso» que apuntan a esta cuenta (correo + plataforma):
+ *  no ocupan perfil, así que el panel los muestra aparte en la tarjeta. */
+export function listManualOverridesForAccount(platform: string, email: string): ManualAccountOverride[] {
+  return (db.prepare(`
+    SELECT * FROM manual_account_overrides
+    WHERE platform = ? AND LOWER(TRIM(email)) = LOWER(TRIM(?)) AND (expires_at IS NULL OR expires_at >= date('now', '-5 hours'))
+    ORDER BY id DESC
+  `).all(platform.trim().toUpperCase(), email) as any[]).map(toOverride);
 }
 
 /** Para "Mis cuentas" de liordark.com — solo overrides de clientes retail. */

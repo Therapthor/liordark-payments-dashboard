@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { listManualOverridesForAccount } from "../db/manual-overrides.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { db } from "../db/db";
 import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
@@ -92,9 +93,34 @@ function safeTotp(secret: string, accountId: number): { code: string; secondsRem
 
 // ── serialización — agrega estado/días calculados a la cuenta ──
 
+// ¿El cliente puede ver su reemplazo? Retail: si tiene usuario web lo ve en
+// «Mis cuentas»; además, si ya leyó el aviso de la campanita. Mayorista: lo
+// ve en su panel (Clientes).
+function replacementSeen(clientPhone: string, wholesalerId: number | null, platform: string, email: string) {
+  if (wholesalerId != null) return { wholesaler: true, web: false, read: null as boolean | null };
+  const d9 = String(clientPhone || "").replace(/\D/g, "").slice(-9);
+  if (!d9) return { wholesaler: false, web: false, read: null as boolean | null };
+  const web = !!db.prepare(`SELECT 1 FROM customers WHERE substr(phone, -9) = ? LIMIT 1`).get(d9);
+  const n = db.prepare(`
+    SELECT read_at AS readAt FROM customer_notifications
+    WHERE substr(client_phone, -9) = ? AND type = 'account_replaced' AND UPPER(platform) = UPPER(?) AND LOWER(account_email) = LOWER(?)
+    ORDER BY id DESC LIMIT 1
+  `).get(d9, platform, email) as { readAt: string | null } | undefined;
+  return { wholesaler: false, web, read: n ? !!n.readAt : null };
+}
+
 function withStatus(account: AccessAccountWithProfiles) {
   return {
     ...account,
+    profiles: account.profiles.map(p => p.replacedAt && p.clientPhone
+      ? { ...p, replacedSeen: replacementSeen(p.clientPhone, p.wholesalerId, account.platform, account.email) }
+      : p),
+    // Reemplazos «en uso» a esta cuenta: no ocupan perfil, se muestran aparte.
+    overrides: listManualOverridesForAccount(account.platform, account.email).map(o => ({
+      id: o.id, clientPhone: o.clientPhone, wholesalerId: o.wholesalerId, profileName: o.profileName,
+      expiresAt: o.expiresAt, createdAt: o.createdAt, replacedFrom: o.replacedFrom,
+      seen: replacementSeen(o.clientPhone, o.wholesalerId, account.platform, account.email),
+    })),
     status:   accountStatus(account.expiresAt),
     daysLeft: daysLeft(account.expiresAt),
     // Cerebro: cada cliente con su fecha; la de la cuenta es la del proveedor.
