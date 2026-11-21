@@ -44,7 +44,7 @@ type Prof = {
 
 type Unit = {
   id: number; platform: string; email: string; password: string; providerDate: string | null;
-  hasProfiles: boolean; pinMode: boolean; action: string; actionFor: string | null;
+  hasProfiles: boolean; pinMode: boolean; paused: boolean; action: string; actionFor: string | null;
   profiles: Prof[]; policy: Policy;
 };
 
@@ -74,7 +74,7 @@ const isFree = (p: Prof) => !occupied(p);
 
 function loadUnits(platform: string): Unit[] {
   const accounts = db.prepare(`
-    SELECT id, platform, email, password, expires_at, has_profiles, pin_mode, brain_action, brain_action_for
+    SELECT id, platform, email, password, expires_at, has_profiles, pin_mode, sale_paused, brain_action, brain_action_for
     FROM access_accounts WHERE platform = ?
   `).all(platform) as any[];
   const profStmt = db.prepare(`
@@ -93,7 +93,7 @@ function loadUnits(platform: string): Unit[] {
     }));
     return {
       id: a.id, platform: a.platform, email: a.email, password: a.password, providerDate: a.expires_at ?? null,
-      hasProfiles: a.has_profiles === 1, pinMode: a.pin_mode === 1, action: a.brain_action ?? "", actionFor: a.brain_action_for ?? null,
+      hasProfiles: a.has_profiles === 1, pinMode: a.pin_mode === 1, paused: a.sale_paused === 1, action: a.brain_action ?? "", actionFor: a.brain_action_for ?? null,
       profiles, policy: rotate ? "rotate" : a.has_profiles === 1 ? "normal" : "renewOnly",
     } as Unit;
   });
@@ -286,8 +286,9 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
         return st.some(p => (p.planMonths ?? 1) >= 12) || st.length * 2 > u.profiles.length;
       };
       // Lugares libres hoy en cuentas que no vencen todavía.
-      let avail = normal.filter(u => !due(u)).reduce((s, u) => s + u.profiles.filter(isFree).length, 0);
-      const keep = (u: Unit) => { renewList.add(u); avail += u.profiles.length - stayersOf(u).length; };
+      // (Las cuentas con la venta en pausa no reciben a nadie.)
+      let avail = normal.filter(u => !due(u) && !u.paused).reduce((s, u) => s + u.profiles.filter(isFree).length, 0);
+      const keep = (u: Unit) => { renewList.add(u); if (!u.paused) avail += u.profiles.length - stayersOf(u).length; };
       for (const u of candidates) if (worthIt(u) || u.action === "renew") keep(u);
       const score = (u: Unit) => {
         const st = stayersOf(u);
@@ -315,7 +316,7 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
     const keptUnits = () => units.filter(u => !dropList.has(u) && (renewList.has(u) || !due(u)) && (u.policy !== "renewOnly"));
     for (const { p, u } of movers) {
       const targets = keptUnits()
-        .filter(t => t.id !== u.id && (u.policy === "rotate" ? t.policy === "rotate" : t.policy === "normal"))
+        .filter(t => t.id !== u.id && !t.paused && (u.policy === "rotate" ? t.policy === "rotate" : t.policy === "normal"))
         .filter(t => !t.providerDate || t.providerDate > tomorrow || renewList.has(t))
         .flatMap(t => t.profiles.filter(isFree).map(q => ({ q, t })))
         .sort((x, y) => {
@@ -369,7 +370,7 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
     }
 
     // 4) Stock para mañana: lugares libres (o que se liberan) en cuentas que siguen.
-    const kept = units.filter(u => !dropList.has(u) && (renewList.has(u) || !due(u)) && u.policy !== "renewOnly");
+    const kept = units.filter(u => !dropList.has(u) && (renewList.has(u) || !due(u)) && u.policy !== "renewOnly" && !u.paused);
     const freeTomorrow = kept.reduce((s, u) => s + u.profiles.filter(p => !occupied(p) || !p.date || p.date <= tomorrow).length, 0);
     // Esperan lugar: los que no se pudieron mover todavía + los que quedaron
     // en «Pendientes de cuenta nueva» en esta corrida.

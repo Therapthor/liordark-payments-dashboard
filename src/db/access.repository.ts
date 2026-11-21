@@ -68,6 +68,7 @@ export type AccessAccount = {
   updatedAt:   string;
   // Cerebro (ver services/brain.service.ts).
   pinMode:        boolean;
+  salePaused:     boolean;
   brainAction:    "" | "renew" | "drop";
   brainActionFor: string | null;
 };
@@ -313,11 +314,11 @@ export function listPlatforms(): PlatformSummary[] {
       COUNT(DISTINCT a.id) AS accountCount,
       COUNT(p.id) AS profileCount,
       SUM(CASE WHEN p.client_phone != '' THEN 1 ELSE 0 END) AS occupiedCount,
-      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop'
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop' AND a.sale_paused = 0
                AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS sellableCount,
-      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop'
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop' AND a.sale_paused = 0
                AND a.has_profiles = 1 AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS brainSellable,
-      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop'
+      SUM(CASE WHEN p.client_phone = '' AND p.wholesaler_id IS NULL AND a.brain_action != 'drop' AND a.sale_paused = 0
                AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS rotateSellable
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
@@ -397,6 +398,11 @@ export function syncSingleSlotExpiry(): number {
     }
   })();
   return rows.length;
+}
+
+/** ⏸ / ▶ Venta de una cuenta (ver access_accounts.sale_paused). */
+export function setAccountSalePaused(accountId: number, paused: boolean): boolean {
+  return db.prepare(`UPDATE access_accounts SET sale_paused = ?, updated_at = datetime('now') WHERE id = ?`).run(paused ? 1 : 0, accountId).changes > 0;
 }
 
 /** «🔒 Perfiles con PIN» de una cuenta. */
@@ -707,7 +713,7 @@ function pickFreeProfile(platform: string, wholesalerId: number | null, preferAc
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
     WHERE a.platform = @plat AND p.client_phone = '' AND ${owner}
-      AND a.brain_action != 'drop' ${shape}
+      AND a.brain_action != 'drop' AND a.sale_paused = 0 ${shape}
       AND a.expires_at IS NOT NULL AND a.expires_at >= @floor
     ${order}
     LIMIT 1
@@ -933,11 +939,11 @@ export function listWholesalerAvailability(wholesalerId: number): { platform: st
   const tomorrow = addDaysISOLocal(limaTodayISOLocal(), 1);
   const rows = db.prepare(`
     SELECT a.platform AS platform,
-           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop'
+           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop' AND a.sale_paused = 0
                     AND a.expires_at IS NOT NULL AND a.expires_at >= @floor THEN 1 ELSE 0 END) AS free,
-           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop'
+           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop' AND a.sale_paused = 0
                     AND a.has_profiles = 1 AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS brainFree,
-           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop'
+           SUM(CASE WHEN p.client_phone = '' AND a.brain_action != 'drop' AND a.sale_paused = 0
                     AND a.expires_at IS NOT NULL AND a.expires_at >= @tomorrow THEN 1 ELSE 0 END) AS rotateFree
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
@@ -1248,7 +1254,7 @@ export function isFullAccountSource(clientPhone: string, platform: string, email
 export function listWholeFreeAccountIds(platform: string, todayISO: string): Set<number> {
   const rows = db.prepare(`
     SELECT a.id AS id FROM access_accounts a
-    WHERE upper(a.platform) = ? AND (a.expires_at IS NULL OR a.expires_at >= ?)
+    WHERE upper(a.platform) = ? AND (a.expires_at IS NULL OR a.expires_at >= ?) AND a.sale_paused = 0
       AND EXISTS (SELECT 1 FROM access_profiles p WHERE p.account_id = a.id)
       AND NOT EXISTS (SELECT 1 FROM access_profiles p WHERE p.account_id = a.id AND (p.client_phone != '' OR p.wholesaler_id IS NOT NULL))
   `).all(platform.trim().toUpperCase(), todayISO) as { id: number }[];
@@ -1275,7 +1281,7 @@ export function listAccountsWithFreeProfiles(platform: string, minFree: number, 
     SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt,
            (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND p.client_phone = '') AS freeCount
     FROM access_accounts a
-    WHERE a.platform = ? AND a.has_profiles = 1 AND (a.expires_at IS NULL OR a.expires_at >= ?)
+    WHERE a.platform = ? AND a.has_profiles = 1 AND (a.expires_at IS NULL OR a.expires_at >= ?) AND a.sale_paused = 0
       AND (SELECT COUNT(*) FROM access_profiles p WHERE p.account_id = a.id AND p.client_phone = '') >= ?
     ORDER BY a.expires_at DESC
   `).all(platform.trim().toUpperCase(), todayISO, minFree) as { id: number; email: string; expiresAt: string | null; freeCount: number }[];
@@ -1290,7 +1296,7 @@ export function listPlacementSlots(platform: string, todayISO: string):
     SELECT a.id AS id, a.email AS email, a.expires_at AS expiresAt, COUNT(p.id) AS freeCount
     FROM access_accounts a
     JOIN access_profiles p ON p.account_id = a.id AND p.client_phone = '' AND p.wholesaler_id IS NULL
-    WHERE a.platform = ? AND a.has_profiles = 1 AND (a.expires_at IS NULL OR a.expires_at >= ?)
+    WHERE a.platform = ? AND a.has_profiles = 1 AND (a.expires_at IS NULL OR a.expires_at >= ?) AND a.sale_paused = 0
     GROUP BY a.id
   `).all(platform.trim().toUpperCase(), todayISO) as { id: number; email: string; expiresAt: string | null; freeCount: number }[];
 }
@@ -1840,6 +1846,7 @@ function toAccount(row: any): AccessAccount {
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
     pinMode:        row.pin_mode === 1,
+    salePaused:     row.sale_paused === 1,
     brainAction:    (row.brain_action ?? "") as "" | "renew" | "drop",
     brainActionFor: row.brain_action_for ?? null,
   };

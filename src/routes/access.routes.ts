@@ -1,7 +1,8 @@
 import { Router } from "express";
+import { emitDashboardEvent } from "../utils/live-events.util";
 import { db } from "../db/db";
 import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
-import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setProfilePin, dismissPinReminder, setAccountPins, pinLengthFor, validPinFor, randomPin, setClientDate, getProfileById } from "../db/access.repository";
+import { replaceClientAccount, replaceClientAccountManual, listAccountsWithFreeProfiles, setAccountPinMode, setAccountSalePaused, setProfilePin, dismissPinReminder, setAccountPins, pinLengthFor, validPinFor, randomPin, setClientDate, getProfileById } from "../db/access.repository";
 import { isBrainPlatform, setNewClientDate, extendClientDate } from "../db/brain-platforms";
 import { runBrain, brainOverview, markProviderRenewed } from "../services/brain.service";
 import { planFor } from "../services/plans.service";
@@ -796,6 +797,15 @@ router.post("/accounts/:id/provider-renewed", (req, res) => {
 });
 
 // «🔒 Perfiles con PIN» en una cuenta.
+// ⏸ / ▶ Venta: con la venta en pausa la cuenta no se ofrece a nadie (tienda,
+// bot, mayoristas, combos, cerebro); sus clientes siguen igual.
+router.post("/accounts/:id/sale", (req, res) => {
+  const id = Number(req.params.id);
+  if (!setAccountSalePaused(id, req.body?.paused === true)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }
+  emitDashboardEvent({ type: "stock_changed" });
+  res.json({ account: withStatus(getAccountById(id)!) });
+});
+
 router.post("/accounts/:id/pin-mode", (req, res) => {
   const id = Number(req.params.id);
   if (!getAccountById(id)) { res.status(404).json({ message: "Cuenta no encontrada." }); return; }

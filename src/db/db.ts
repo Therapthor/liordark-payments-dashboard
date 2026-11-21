@@ -528,6 +528,9 @@ ensureColumn("access_profiles", "pin_reset_pending", "pin_reset_pending INTEGER 
 ensureColumn("access_profiles", "plan_months",       "plan_months INTEGER");
 ensureColumn("access_profiles", "moved_at",          "moved_at TEXT");
 ensureColumn("access_accounts", "pin_mode",          "pin_mode INTEGER NOT NULL DEFAULT 0");
+// ⏸ Venta en pausa: la cuenta tiene problemas — no se ofrece (tienda, bot,
+// mayoristas, combos, cerebro); sus clientes actuales siguen igual.
+ensureColumn("access_accounts", "sale_paused",       "sale_paused INTEGER NOT NULL DEFAULT 0");
 // Decisión del cerebro para el vencimiento actual con el proveedor:
 // 'renew' (hay que renovarla) | 'drop' (dejarla vencer) | '' (sin decidir).
 ensureColumn("access_accounts", "brain_action",      "brain_action TEXT NOT NULL DEFAULT ''");

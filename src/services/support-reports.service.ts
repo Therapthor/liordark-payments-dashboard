@@ -342,7 +342,7 @@ export function replaceOptionsFor(ticket: ReplaceSubject): ReplaceOptions {
            (a.codes_enabled = 1 AND a.code_source IS NOT NULL) AS codes
     FROM access_accounts a
     LEFT JOIN access_profiles p ON p.account_id = a.id
-    WHERE a.platform = ? AND (a.expires_at IS NULL OR a.expires_at >= ?) AND lower(a.email) != lower(?)
+    WHERE a.platform = ? AND (a.expires_at IS NULL OR a.expires_at >= ?) AND lower(a.email) != lower(?) AND a.sale_paused = 0
     GROUP BY a.id
     ORDER BY a.expires_at DESC
   `).all(ticket.platform.toUpperCase(), today, ticket.accountEmail) as ReplaceOption[];

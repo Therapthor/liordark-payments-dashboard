@@ -443,6 +443,11 @@
             ${account.renewalPendingAt ? `<span class="badge access-badge-pending" title="Renovar: pendiente de pago">⏳ Pendiente de pago</span>` : ""}
             <span>${account.brain ? "Proveedor: " : ""}${fmtDateLong(account.expiresAt)} · ${daysLabel(account.status, account.daysLeft)}</span>
             <span class="access-occupancy">${occupancyLabel}</span>
+            <span class="access-sale-toggle" role="group" aria-label="Venta de esta cuenta">
+              <button type="button" class="access-sale-btn${account.salePaused ? " is-on" : ""}" data-account-id="${account.id}" data-paused="1" title="Parar la venta: esta cuenta deja de ofrecerse (sus clientes siguen igual)">⏸</button>
+              <button type="button" class="access-sale-btn${account.salePaused ? "" : " is-on"}" data-account-id="${account.id}" data-paused="0" title="Seguir vendiendo esta cuenta">▶</button>
+            </span>
+            ${account.salePaused ? `<span class="badge access-badge-paused" title="No se ofrece en la tienda, el bot ni a mayoristas. Solo queda en el panel.">⏸ Venta en pausa</span>` : ""}
             ${account.brain ? planTags(account) : ""}
             ${account.brain && account.brainAction === "renew" ? `<span class="badge access-badge-renew" title="El cerebro necesita esta cuenta: renuévala con el proveedor">🔁 Renovar</span>` : ""}
             ${account.brain && account.brainAction === "drop" ? `<span class="badge access-badge-drop" title="El cerebro movió a sus clientes: déjala vencer">⏹ Dejar vencer</span>` : ""}
@@ -582,6 +587,23 @@
     // Soporte / renovación con proveedor / código / copiar correo viven en
     // el <summary>, que no se cierra al compactar — sin preventDefault, el
     // clic en el botón también abriría/cerraría la tarjeta.
+    // ⏸ / ▶ Venta (vive en el <summary>: sin abrir/cerrar la tarjeta).
+    target.querySelectorAll(".access-sale-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const paused = btn.dataset.paused === "1";
+        if (btn.classList.contains("is-on")) return;
+        if (paused && !confirm("¿Parar la venta de esta cuenta?\n\nDeja de ofrecerse en la tienda, el bot, a mayoristas y en «Agregar cliente», y el cerebro no mueve clientes a ella. Sus clientes actuales siguen igual.")) return;
+        btn.disabled = true;
+        try {
+          await api("/accounts/" + btn.dataset.accountId + "/sale", { method: "POST", body: JSON.stringify({ paused }) });
+          await refreshAccountInPlace(Number(btn.dataset.accountId));
+          if (window.MP && MP.toast) MP.toast(paused ? "⏸ Venta en pausa" : "▶ Se vuelve a vender");
+        } catch (err) { btn.disabled = false; alert(err.message); }
+      });
+    });
+
     target.querySelectorAll(".access-copy-email").forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
