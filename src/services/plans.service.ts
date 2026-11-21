@@ -45,6 +45,11 @@ const PARAMOUNT_PLANS:   PlanOption[] = [plan(1, 5, null), plan(3, 13, false), p
 // Disney Premium con ESPN (8 USDT la cuenta de 5 perfiles): 3 meses a S/ 35
 // (pedido del dueño); 6 y 12 con el mismo escalón de descuento.
 const DISNEY_ESPN_PLANS: PlanOption[] = [plan(1, 15, null), plan(3, 35, false), plan(6, 65, false), plan(12, 120, false)];
+// Disney+ Plus (3.8 USDT la cuenta de 5): mismo escalón que Prime/HBO (−17/−25/−33 %).
+const DISNEY_PLUS_PLANS: PlanOption[] = [plan(1, 10, null), plan(3, 25, false), plan(6, 45, false), plan(12, 80, false)];
+// Spotify (2 USDT la cuenta individual, se paga mes a mes): margen chico,
+// descuentos chicos (−8/−12/−17 %).
+const SPOTIFY_PLANS:     PlanOption[] = [plan(1, 12, null), plan(3, 33, false), plan(6, 63, false), plan(12, 120, false)];
 
 export function plansFor(platform: string | null | undefined): PlanOption[] | null {
   const p = String(platform ?? "");
@@ -58,6 +63,8 @@ export function plansFor(platform: string | null | undefined): PlanOption[] | nu
   if (/hbo/i.test(p))         return HBO_PLANS;
   if (/paramount/i.test(p))   return PARAMOUNT_PLANS;
   if (/disney/i.test(p) && /espn|premi/i.test(p)) return DISNEY_ESPN_PLANS;
+  if (/disney/i.test(p))      return DISNEY_PLUS_PLANS;
+  if (/spotify/i.test(p))     return SPOTIFY_PLANS;
   return null;
 }
 

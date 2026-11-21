@@ -157,14 +157,14 @@ function moveClient(from: Prof, fromUnit: Unit, to: Prof, toUnit: Unit): void {
 
 function overviewReason(accountId: number, stayers: number, capacity: number, providerDate: string | null): string {
   const annual = planMixOf(accountId, providerDate).filter(p => p.months >= 12).reduce((s, p) => s + p.count, 0);
-  const why = annual ? `tiene ${annual} cliente(s) anual(es)` : stayers * 2 > capacity ? "más de la mitad sigue" : "no hay dónde moverlos";
+  const why = capacity <= 1 ? "cuenta individual: el cliente sigue" : annual ? `tiene ${annual} cliente(s) anual(es)` : stayers * 2 > capacity ? "más de la mitad sigue" : "no hay dónde moverlos";
   return `${stayers} cliente(s) siguen después del ${ddmmyyyy(providerDate)} · ${why}`;
 }
 
 /** Por qué conviene pagar esta cuenta (lo ve el admin en «Pagos al proveedor»). */
 function renewReason(st: Prof[], capacity: number, providerDate: string | null): string {
   const annual = st.filter(p => (p.planMonths ?? 1) >= 12).length;
-  const why = annual ? `tiene ${annual} cliente(s) anual(es)` : st.length * 2 > capacity ? "más de la mitad sigue" : "no hay dónde moverlos";
+  const why = capacity <= 1 ? "cuenta individual: el cliente sigue" : annual ? `tiene ${annual} cliente(s) anual(es)` : st.length * 2 > capacity ? "más de la mitad sigue" : "no hay dónde moverlos";
   return `${st.length} cliente(s) siguen después del ${ddmmyyyy(providerDate)} · ${why}`;
 }
 
@@ -505,7 +505,7 @@ export function markProviderRenewed(accountId: number): { ok: true; expiresAt: s
 
 const DEFAULT_PROVIDER_COST: Record<string, string> = {
   "NETFLIX PREMIUN": "10", "CRUNCHYROLL": "1.5", "AMAZON": "1.5", "HBO": "2", "PARAMOUNT": "4.5",
-  "DISNEY+ PLUS": "3.8", "DISNEY PREMIUN CON ESPN": "8", "CHATGPT": "11", "CAPCUT PRO": "2", "VIX": "0.8",
+  "DISNEY+ PLUS": "3.8", "DISNEY PREMIUN CON ESPN": "8", "CHATGPT": "11", "CAPCUT PRO": "2", "VIX": "0.8", "SPOTIFY PREMIUN": "2",
 };
 
 /** Quita el «Pagar» de cuentas sin clientes que sigan (decisiones de antes
@@ -520,9 +520,56 @@ export function clearEmptyRenewDecisions(): number {
   `).run().changes;
 }
 
+/** Pasa cuentas al cerebro: cada cliente queda con su fecha propia (la que
+ *  tenía; +30 si ya había pagado la renovación) y la cuenta con la fecha que
+ *  se le pagó al proveedor. Usado por las migraciones brain-v1 y brain-v2. */
+function migrateAccountsToBrain(accounts: any[], today: string): { fixed: number; providerMoved: number; paidRenewals: number } {
+  let fixed = 0, providerMoved = 0, paidRenewals = 0;
+  for (const a of accounts) {
+    // Cuenta con el ciclo ya confirmado: quien no pagó vence en la fecha vieja.
+    if (a.renewal_cleanup_due_at) {
+      db.prepare(`
+        UPDATE access_profiles SET expires_override = ?
+        WHERE account_id = ? AND client_phone != '' AND expires_override IS NULL AND COALESCE(renewal_status, '') != 'yes'
+      `).run(a.renewal_cleanup_due_at, a.id);
+    } else {
+      // Pagaron la renovación y esperaban la confirmación: se les suman sus 30 días.
+      const yes = db.prepare(`SELECT id FROM access_profiles WHERE account_id = ? AND client_phone != '' AND renewal_status = 'yes'`).all(a.id) as { id: number }[];
+      for (const p of yes) {
+        const cur = (db.prepare(`SELECT COALESCE(expires_override, ?) AS d FROM access_profiles WHERE id = ?`).get(a.expires_at, p.id) as { d: string | null }).d;
+        const base = cur && cur >= today ? cur : today;
+        db.prepare(`UPDATE access_profiles SET expires_override = ? WHERE id = ?`).run(addDays(base, 30), p.id);
+        paidRenewals++;
+      }
+    }
+    if (a.expires_at) {
+      fixed += db.prepare(`
+        UPDATE access_profiles SET expires_override = ?
+        WHERE account_id = ? AND client_phone != '' AND expires_override IS NULL
+      `).run(a.expires_at, a.id).changes;
+    }
+    db.prepare(`UPDATE access_profiles SET renewal_status = '' WHERE account_id = ?`).run(a.id);
+    // Las que se pagaban mes a mes en «Renovaciones con proveedor» (anuales):
+    // la cuenta queda con la fecha pagada al proveedor; el cerebro pide renovarla.
+    let expires = a.expires_at;
+    if (a.provider_renewal_enabled === 1 && a.provider_renewal_next_date && (!expires || a.provider_renewal_next_date < expires)) {
+      // Si la próxima fecha ya pasó sin marcarla, vence hoy: el cerebro la
+      // pide renovar esta noche (nunca mueve a los anuales por eso).
+      expires = a.provider_renewal_next_date < today ? today : a.provider_renewal_next_date;
+      providerMoved++;
+    }
+    db.prepare(`
+      UPDATE access_accounts SET expires_at = ?, renewal_cleanup_due_at = NULL, renewal_pending_at = NULL,
+        provider_renewal_enabled = CASE WHEN ? = 1 THEN 0 ELSE provider_renewal_enabled END
+      WHERE id = ?
+    `).run(expires, a.provider_renewal_enabled === 1 && a.provider_renewal_next_date ? 1 : 0, a.id);
+  }
+  return { fixed, providerMoved, paidRenewals };
+}
+
 export function runBrainMigration(): string[] {
   const done = db.prepare(`SELECT 1 FROM app_migrations WHERE name = ?`).get("brain-v1");
-  if (done) return [];
+  if (done) return runBrainMigrationV2();
   const log: string[] = [];
   // Copia de seguridad de la base ANTES de tocar nada (una sola vez), por si
   // hay que volver atrás: data/payments-antes-del-cerebro.db.
@@ -550,51 +597,33 @@ export function runBrainMigration(): string[] {
 
     const platforms = brainPlatforms();
     const accounts = (db.prepare(`SELECT * FROM access_accounts`).all() as any[]).filter(a => platforms.has(String(a.platform).trim().toUpperCase()));
-    let fixed = 0, providerMoved = 0, paidRenewals = 0;
-    for (const a of accounts) {
-      // Cuenta con el ciclo ya confirmado: quien no pagó vence en la fecha vieja.
-      if (a.renewal_cleanup_due_at) {
-        db.prepare(`
-          UPDATE access_profiles SET expires_override = ?
-          WHERE account_id = ? AND client_phone != '' AND expires_override IS NULL AND COALESCE(renewal_status, '') != 'yes'
-        `).run(a.renewal_cleanup_due_at, a.id);
-      } else {
-        // Pagaron la renovación y esperaban la confirmación: se les suman sus 30 días.
-        const yes = db.prepare(`SELECT id FROM access_profiles WHERE account_id = ? AND client_phone != '' AND renewal_status = 'yes'`).all(a.id) as { id: number }[];
-        for (const p of yes) {
-          const cur = (db.prepare(`SELECT COALESCE(expires_override, ?) AS d FROM access_profiles WHERE id = ?`).get(a.expires_at, p.id) as { d: string | null }).d;
-          const base = cur && cur >= today ? cur : today;
-          db.prepare(`UPDATE access_profiles SET expires_override = ? WHERE id = ?`).run(addDays(base, 30), p.id);
-          paidRenewals++;
-        }
-      }
-      if (a.expires_at) {
-        fixed += db.prepare(`
-          UPDATE access_profiles SET expires_override = ?
-          WHERE account_id = ? AND client_phone != '' AND expires_override IS NULL
-        `).run(a.expires_at, a.id).changes;
-      }
-      db.prepare(`UPDATE access_profiles SET renewal_status = '' WHERE account_id = ?`).run(a.id);
-      // Las que se pagaban mes a mes en «Renovaciones con proveedor» (anuales):
-      // la cuenta queda con la fecha pagada al proveedor; el cerebro pide renovarla.
-      let expires = a.expires_at;
-      if (a.provider_renewal_enabled === 1 && a.provider_renewal_next_date && (!expires || a.provider_renewal_next_date < expires)) {
-        // Si la próxima fecha ya pasó sin marcarla, vence hoy: el cerebro la
-        // pide renovar esta noche (nunca mueve a los anuales por eso).
-        expires = a.provider_renewal_next_date < today ? today : a.provider_renewal_next_date;
-        providerMoved++;
-      }
-      db.prepare(`
-        UPDATE access_accounts SET expires_at = ?, renewal_cleanup_due_at = NULL, renewal_pending_at = NULL,
-          provider_renewal_enabled = CASE WHEN ? = 1 THEN 0 ELSE provider_renewal_enabled END
-        WHERE id = ?
-      `).run(expires, a.provider_renewal_enabled === 1 && a.provider_renewal_next_date ? 1 : 0, a.id);
-    }
+    const c = migrateAccountsToBrain(accounts, today);
+    const { fixed, providerMoved, paidRenewals } = c;
     for (const [platform, cost] of Object.entries(DEFAULT_PROVIDER_COST)) {
       db.prepare(`UPDATE catalog_products SET provider_cost = ? WHERE UPPER(TRIM(platform)) = ? AND provider_cost = ''`).run(cost, platform);
     }
     log.push(`Clientes con fecha propia: ${fixed}`, `Renovaciones pagadas aplicadas: ${paidRenewals}`, `Cuentas con fecha de proveedor: ${providerMoved}`);
     db.prepare(`INSERT INTO app_migrations (name) VALUES ('brain-v1')`).run();
+    // Con todo ya en el cerebro, la v2 no tiene nada que hacer.
+    db.prepare(`INSERT OR IGNORE INTO app_migrations (name) VALUES ('brain-v2-spotify')`).run();
   })();
   return log;
+}
+
+/** brain-v2 (nov-2026): Spotify entra al cerebro como cuenta individual con
+ *  planes por meses. Sus clientes conservan su fecha; la cuenta queda como lo
+ *  pagado al proveedor (2 USDT al mes). Una sola vez. */
+function runBrainMigrationV2(): string[] {
+  if (db.prepare(`SELECT 1 FROM app_migrations WHERE name = 'brain-v2-spotify'`).get()) return [];
+  const today = limaToday();
+  let out: string[] = [];
+  invalidateBrainPlatforms();
+  db.transaction(() => {
+    const accounts = (db.prepare(`SELECT * FROM access_accounts WHERE UPPER(platform) LIKE '%SPOTIFY%'`).all() as any[]);
+    const c = migrateAccountsToBrain(accounts, today);
+    db.prepare(`UPDATE catalog_products SET provider_cost = '2' WHERE UPPER(platform) LIKE '%SPOTIFY%' AND provider_cost = ''`).run();
+    out = [`Spotify al cerebro: ${accounts.length} cuentas · ${c.fixed} clientes con fecha propia · ${c.paidRenewals} renovaciones pagadas aplicadas`];
+    db.prepare(`INSERT INTO app_migrations (name) VALUES ('brain-v2-spotify')`).run();
+  })();
+  return out;
 }

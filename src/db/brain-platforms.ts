@@ -16,6 +16,10 @@ import { db } from "./db";
 
 export const ROTATE_PLATFORMS = new Set(["CHATGPT", "CAPCUT PRO"]);
 const MANUAL_ACTIVATION_RE = /canva|gemini|youtube/i;
+// Cuentas individuales (1 cliente por cuenta, sin perfiles) con planes por
+// meses: el cliente tiene su fecha y la cuenta se le paga al proveedor mes a
+// mes mientras siga (el cerebro la pide en «Pagos al proveedor»).
+const SINGLE_RE = /spotify/i;
 
 let cache: { at: number; set: Set<string> } | null = null;
 
@@ -23,7 +27,7 @@ export function brainPlatforms(): Set<string> {
   if (cache && Date.now() - cache.at < 60_000) return cache.set;
   const rows = db.prepare(`SELECT UPPER(TRIM(platform)) AS p, has_profiles AS hp FROM catalog_products`).all() as { p: string; hp: number }[];
   const set = new Set<string>(ROTATE_PLATFORMS);
-  for (const r of rows) if (r.hp === 1 && !MANUAL_ACTIVATION_RE.test(r.p)) set.add(r.p);
+  for (const r of rows) if ((r.hp === 1 && !MANUAL_ACTIVATION_RE.test(r.p)) || SINGLE_RE.test(r.p)) set.add(r.p);
   cache = { at: Date.now(), set };
   return set;
 }
@@ -32,6 +36,11 @@ export function invalidateBrainPlatforms(): void { cache = null; }
 
 export function isBrainPlatform(platform: string | null | undefined): boolean {
   return brainPlatforms().has(String(platform ?? "").trim().toUpperCase());
+}
+
+/** Plataforma del cerebro de cuentas individuales (Spotify). */
+export function isSingleBrainPlatform(platform: string | null | undefined): boolean {
+  return SINGLE_RE.test(String(platform ?? "")) && isBrainPlatform(platform);
 }
 
 export function isRotatePlatform(platform: string | null | undefined): boolean {

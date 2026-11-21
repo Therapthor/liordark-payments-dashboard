@@ -4,7 +4,7 @@ import { normalizePeruPhone } from "../utils/phone.util";
 import { createCustomerNotification } from "./customer-notifications.repository";
 import { createWholesalerNotification } from "./wholesaler-notifications.repository";
 import { createManualOverride, deleteManualOverride, findManualOverride, listManualOverridesForClient } from "./manual-overrides.repository";
-import { isBrainPlatform, isRotatePlatform, setNewClientDate, recordBrainSale, brainPlatforms } from "./brain-platforms";
+import { isBrainPlatform, isRotatePlatform, isSingleBrainPlatform, setNewClientDate, recordBrainSale, brainPlatforms } from "./brain-platforms";
 
 // ─────────────────────────────────────────────────────────────
 // TIPOS
@@ -331,7 +331,7 @@ export function listPlatforms(): PlatformSummary[] {
   `).all({ floor, tomorrow }) as (PlatformSummary & { brainSellable: number; rotateSellable: number })[];
   return rows.map(({ brainSellable, rotateSellable, ...r }) => ({
     ...r,
-    sellableCount: isRotatePlatform(r.platform) ? (rotateSellable ?? 0)
+    sellableCount: isRotatePlatform(r.platform) || isSingleBrainPlatform(r.platform) ? (rotateSellable ?? 0)
       : isBrainPlatform(r.platform) ? (brainSellable ?? 0) : (r.sellableCount ?? 0),
   }));
 }
@@ -709,7 +709,7 @@ function pickFreeProfile(platform: string, wholesalerId: number | null, preferAc
       : wholesalerId === null ? "ORDER BY (a.id = @prefer) DESC, a.expires_at ASC" : "ORDER BY (p.wholesaler_id IS NULL) ASC, a.expires_at ASC";
   // Cuenta completa ya vendida a alguien (sin perfiles) en una plataforma de
   // perfiles: no se revende como si fuera un perfil.
-  const shape = brain ? "AND a.has_profiles = 1" : "";
+  const shape = brain && !isSingleBrainPlatform(plat) ? "AND a.has_profiles = 1" : "";
   return db.prepare(`
     SELECT p.id AS profileId, p.profile_name AS profileName, CASE WHEN a.pin_mode = 1 THEN p.pin ELSE '' END AS pin,
            a.id AS accountId, a.platform AS platform, a.email AS email,
@@ -957,7 +957,7 @@ export function listWholesalerAvailability(wholesalerId: number): { platform: st
   `).all({ wholesalerId, floor, tomorrow }) as { platform: string; free: number; brainFree: number; rotateFree: number }[];
   return rows.map(r => ({
     platform: r.platform,
-    free: isRotatePlatform(r.platform) ? (r.rotateFree ?? 0)
+    free: isRotatePlatform(r.platform) || isSingleBrainPlatform(r.platform) ? (r.rotateFree ?? 0)
       : isBrainPlatform(r.platform) ? (r.brainFree ?? 0) : (r.free ?? 0),
   }));
 }
