@@ -502,7 +502,7 @@
     const wholesaleOwned = p.wholesalerId != null;
     const ctx = JSON.stringify(profileCtx(account, p)).replace(/"/g, "&quot;");
 
-    const pinBtn = account.pinMode ? `<button class="row-action" data-act="pin" data-ctx="${ctx}" title="Cambiar PIN de este perfil">🔐</button>` : "";
+    const pinBtn = account.pinMode ? `<button class="row-action" data-act="pin" data-ctx="${ctx}" title="Poner o cambiar el PIN de este perfil">🔐${p.pin ? "" : " PIN"}</button>` : "";
     let actions;
     if (!occupied && !wholesaleOwned && p.pinResetPending) {
       // Aviso opcional: el cliente anterior conoce el PIN. El admin decide.
@@ -521,9 +521,10 @@
         <button class="row-action" data-act="release" data-ctx="${ctx}" title="Liberar perfil">🗑</button>
       `;
     } else if (wholesaleOwned) {
-      actions = `<span class="profile-wholesale-tag">🏪 Stock mayorista</span>`;
+      actions = `${pinBtn}<span class="profile-wholesale-tag">🏪 Stock mayorista</span>`;
     } else {
-      actions = `<button class="row-action" data-act="edit" data-ctx="${ctx}" title="Asignar cliente">➕ Asignar</button>`;
+      // Libre: también se le puede poner el PIN antes de venderlo.
+      actions = `${pinBtn}<button class="row-action" data-act="edit" data-ctx="${ctx}" title="Asignar cliente">➕ Asignar</button>`;
     }
 
     const cells = [];
@@ -711,10 +712,13 @@
     target.querySelectorAll(".access-pin-mode").forEach(btn => {
       btn.addEventListener("click", async () => {
         const on = btn.dataset.on !== "1";
-        if (on && !confirm("Perfiles con PIN: cada cliente recibe el PIN de su perfil.\nDespués pon el PIN de cada perfil con el botón 🔐 de su fila.")) return;
+        const accountId = Number(btn.dataset.accountId);
+        if (on && !confirm("Perfiles con PIN: cada cliente recibe el PIN de su perfil.\n\nA continuación te pide el PIN de cada perfil (déjalo vacío para saltar uno). Después puedes cambiarlo con el botón 🔐 de su fila.")) return;
+        if (!on && !confirm("¿Quitar los PIN de esta cuenta? Los clientes dejan de ver su PIN.")) return;
         try {
-          await api("/accounts/" + btn.dataset.accountId + "/pin-mode", { method: "POST", body: JSON.stringify({ on }) });
-          refreshAccountInPlace(Number(btn.dataset.accountId));
+          await api("/accounts/" + accountId + "/pin-mode", { method: "POST", body: JSON.stringify({ on }) });
+          if (on) await askAllPins(accountId);
+          refreshAccountInPlace(accountId);
         } catch (err) { alert(err.message); }
       });
     });
@@ -780,6 +784,26 @@
       await api("/profiles/" + ctx.id + "/pin", { method: "POST", body: JSON.stringify({ pin: pin.trim() }) });
       refreshAccountInPlace(ctx.accountId);
     } catch (err) { alert(err.message); }
+  }
+
+  // Al activar «Perfiles con PIN»: pide el PIN de cada perfil, uno tras otro.
+  // Vacío = saltar ese perfil; Cancelar = terminar.
+  async function askAllPins(accountId) {
+    const { account } = await api("/accounts/" + accountId);
+    for (const p of account.profiles || []) {
+      const name = p.profileName || ("Perfil " + p.slotNumber);
+      let pin;
+      for (;;) {
+        pin = prompt(`PIN de «${name}» (4 a 6 números).\nVacío = saltar · Cancelar = terminar`, p.pin || "");
+        if (pin === null) return;
+        pin = pin.trim();
+        if (!pin || /^\d{4,6}$/.test(pin)) break;
+        alert("El PIN debe tener de 4 a 6 números.");
+      }
+      if (!pin || pin === p.pin) continue;
+      await api("/profiles/" + p.id + "/pin", { method: "POST", body: JSON.stringify({ pin }) });
+    }
+    if (window.MP && MP.toast) MP.toast("🔐 PIN guardados");
   }
 
   async function keepProfilePin(ctx) {
