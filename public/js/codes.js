@@ -452,7 +452,8 @@
           }
         } else {
           const value = result.approval && safeUrl(result.approval.approveUrl) ? approvalHtml(result.approval) : resultHtml(result.kind, result.value);
-          setRowStatus(id, "found", `<strong>¡Llegó!</strong>${value}${result.adminOnly ? ADMIN_ONLY_PILL : ""}`);
+          const head = result.repeated ? "<strong>No llegó uno nuevo · este es el último (ya entregado)</strong>" : "<strong>¡Llegó!</strong>";
+          setRowStatus(id, "found", `${head}${value}${result.adminOnly ? ADMIN_ONLY_PILL : ""}`);
         }
         await load();
       } catch (err) {
@@ -886,6 +887,27 @@
   }
 
   // Otras cuentas guardadas con el mismo correo (otra plataforma o fuente).
+  // Los últimos correos de la bandeja en fila (el nuevo arriba + los 3 de
+  // antes): cada uno con su hora, asunto y código o enlace para copiar.
+  function recentHtml(res) {
+    const list = (res && res.recent) || [];
+    if (list.length < 2) return "";
+    return `<div class="cx-q-recent"><p class="cx-q-recent-title">Últimos mensajes de la bandeja</p><ol>${list.map((m, i) => {
+      const d = m.receivedIso ? new Date(m.receivedIso) : null;
+      const when = d ? `${agoText(Date.now() - d.getTime())} · ${d.toLocaleTimeString("es-PE", { timeZone: "America/Lima", hour: "numeric", minute: "2-digit" })}` : "sin hora";
+      const url = m.kind === "link" ? safeUrl(m.value) : null;
+      const val = url
+        ? `<a class="cx-linkbtn" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir enlace</a><button type="button" class="cx-ghost-btn" data-q-copy="${escapeHtml(url)}">Copiar</button>`
+        : m.value ? `<button type="button" class="cx-code cx-q-code" data-q-copy="${escapeHtml(m.value)}" title="Toca para copiar">${escapeHtml(m.value)}</button>`
+        : `<span class="cx-q-recent-none">sin código</span>`;
+      const tag = i === 0 ? `<span class="cx-pill new">Más nuevo</span>` : "";
+      return `<li class="${m.current ? "is-current" : ""}">
+          <div class="cx-q-recent-main"><span class="cx-q-recent-when">${escapeHtml(when)}</span>${tag}<span class="cx-q-recent-subj">${escapeHtml(m.subject || "")}</span></div>
+          <div class="cx-q-recent-val">${val}${m.adminOnly ? ADMIN_ONLY_PILL : ""}</div>
+        </li>`;
+    }).join("")}</ol></div>`;
+  }
+
   function othersHtml(t) {
     if (!t.account) return "";
     const others = accountsByEmail(t.email).filter(o => o.id !== t.account.id);
@@ -945,10 +967,11 @@
     } else if (q.state === "found") {
       const d = receivedDate(res);
       const age = d ? Date.now() - d.getTime() : null;
-      pill = age == null ? "" : age > CODE_STALE_MS
+      pill = res.repeated ? `<span class="cx-pill muted">Ya entregado</span>` : age == null ? "" : age > CODE_STALE_MS
         ? `<span class="cx-pill muted">Viejo</span>` : age < 10 * 60 * 1000 ? `<span class="cx-pill new">Nuevo</span>` : "";
       body = `<div class="cx-q-value">${catHtml("found", "cx-q-cat")}${foundValueHtml(res)}${res.adminOnly ? ADMIN_ONLY_PILL : ""}</div>`;
-      meta = `${escapeHtml(res.sourceLabel || (a && a.codeSourceLabel) || "")} · ${ageHtml(res)}`;
+      meta = `${escapeHtml(res.sourceLabel || (a && a.codeSourceLabel) || "")} · ${ageHtml(res)}` +
+        (res.repeated ? ` · <b>no llegó uno más nuevo: este es el último (ya se había entregado)</b>` : "");
       const link = res.approval ? safeUrl(res.approval.approveUrl) : res.kind === "link" ? safeUrl(res.value) : null;
       actions = retry +
         (link ? `<button type="button" class="cx-ghost-btn" data-q-copy="${escapeHtml(link)}">${res.approval ? "Copiar link de Aprobar" : "Copiar enlace"}</button>` : "") +
@@ -973,6 +996,7 @@
         </header>
         ${body}
         ${meta ? `<p class="cx-q-meta">${meta}</p>` : ""}
+        ${q.state === "found" ? recentHtml(res) : ""}
         ${actions ? `<div class="cx-q-actions">${actions}</div>` : ""}
         ${q.state === "searching" || q.state === "choose" ? "" : othersHtml(t)}
       </article>`;

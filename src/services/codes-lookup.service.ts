@@ -44,6 +44,10 @@ export type CodeLookupResult = {
   // es el que se eligió para el cliente. El admin (panel, buscador,
   // vigilante) ve este; el cliente, el elegido (ver observedNow).
   adminNewest?: CodeLookupResult;
+  // Panel: no llegó uno más nuevo y este es el mismo que ya se había
+  // entregado/visto. Antes se respondía «no hay código» aunque estuviera en
+  // la bandeja; ahora el admin lo ve, marcado «Ya entregado».
+  repeated?: boolean;
   // Fuentes que listan TODOS los correos recientes (latinocol): la lista
   // completa, para la bandeja del panel. ref = id del correo en el proveedor.
   items?: ListedEmail[];
@@ -1609,6 +1613,33 @@ export async function fetchListedEmail(sourceId: string, email: string, item: Li
   return null;
 }
 
+/** Panel (solo admin): los últimos `n` correos de la bandeja, el más nuevo
+ *  primero, con lo que trae cada uno — para verlos en fila, no solo el
+ *  elegido. Solo bandejas con link (Juanpa): sus correos ya están en memoria
+ *  desde la consulta, no se vuelve a pedir nada al proveedor. */
+export type RecentMail = {
+  subject: string; kind: "code" | "link" | null; value: string | null; receivedIso: string | null;
+  adminOnly: boolean; current: boolean;
+};
+export function recentInboxMails(sourceId: string, email: string, result: CodeLookupResult, n = 4): RecentMail[] {
+  if (!INBOX_LINK_SOURCES.includes(sourceId) || !result.items?.length) return [];
+  return result.items.slice(0, n).map(item => {
+    const body = lcBodyCache.get("juanpa|" + email.toLowerCase() + "|" + item.ref);
+    const r = body !== undefined ? listedEmailResult(item, body, []) : null;
+    const approval = r ? loginApprovalOf(r) : null;
+    const value = r && r.found ? (approval?.approveUrl ?? loginLinkOf(r) ?? r.value) : null;
+    const when = parseProviderDate(item.receivedAt);
+    return {
+      subject: item.subject,
+      kind: r && r.found ? (approval || /^https?:\/\//i.test(value ?? "") ? "link" : r.kind) : null,
+      value,
+      receivedIso: when && !Number.isNaN(when.getTime()) ? when.toISOString() : null,
+      adminOnly: !!r && r.found && (isAdminOnlyResult(sourceId, r) || (!deliversEverything(sourceId) && isAccountChangeResult(r))),
+      current: item.ref === result.providerRef,
+    };
+  });
+}
+
 /** Fuentes que leen la bandeja privada del proveedor: cada cuenta lleva su link. */
 export const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"];
 
@@ -1752,15 +1783,18 @@ async function retryUntilNewCode(
   attempts: number,
   delayMs: number
 ): Promise<CodeLookupResult> {
+  let lastRepeat: CodeLookupResult | null = null;
   for (let i = 0; i < attempts; i++) {
     let result = NOT_FOUND;
     try {
       result = await attemptLookup();
     } catch { /* se reintenta igual */ }
     if (result.found && !isSameCode(result, exclude)) return result;
+    if (result.found) lastRepeat = result;
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
-  return NOT_FOUND;
+  // No llegó uno nuevo: se muestra el último que hay (ya entregado), no «nada».
+  return lastRepeat ? { ...lastRepeat, repeated: true } : NOT_FOUND;
 }
 
 /** `exclude`: último código ya entregado — si vuelve a salir el mismo, se
@@ -1797,12 +1831,14 @@ export async function lookupAnySourceWithRetries(
   attempts = RETRY_ATTEMPTS,
   delayMs = RETRY_DELAY_MS
 ): Promise<{ sourceId: string; label: string; result: CodeLookupResult } | null> {
+  let lastRepeat: { sourceId: string; label: string; result: CodeLookupResult } | null = null;
   for (let i = 0; i < attempts; i++) {
     const found = await lookupAnySource(email);
     if (found && !(skipsRepeatedCodes(found.sourceId) && isSameCode(found.result, exclude))) return found;
+    if (found) lastRepeat = found;
     if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
-  return null;
+  return lastRepeat ? { ...lastRepeat, result: { ...lastRepeat.result, repeated: true } } : null;
 }
 
 

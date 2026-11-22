@@ -64,7 +64,7 @@ import {
   inheritCodeConfigFromSiblings,
   countCodeSiblings,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isAdminOnlyResult, isAccountChangeResult, deliversEverything, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES, loginApprovalOf, parseProviderDate, type CodeLookupResult } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isAdminOnlyResult, isAccountChangeResult, deliversEverything, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES, loginApprovalOf, parseProviderDate, recentInboxMails, type CodeLookupResult } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo, inboxInfoFor } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
@@ -755,6 +755,9 @@ function lookupExtras(sourceId: string, email: string, result: CodeLookupResult)
     receivedIso: received && !Number.isNaN(received.getTime()) ? received.toISOString() : inbox.seenIso,
     inboxId: inbox.inboxId,
     adminOnly,
+    repeated: !!result.repeated,
+    // Los últimos 4 correos de la bandeja en fila (el nuevo + los 3 de antes).
+    recent: recentInboxMails(sourceId, email, result),
   };
 }
 
@@ -791,7 +794,7 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
     () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude, attempts));
   // El admin ve TODO lo que llega (6 dígitos, cambio de datos…); en la
   // respuesta va marcado «adminOnly» si al cliente no se le entrega.
-  if (result.found && result.value) {
+  if (result.found && result.value && !result.repeated) {
     const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
     saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });
   }

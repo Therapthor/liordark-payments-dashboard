@@ -2317,3 +2317,16 @@ button.mp-kpi:active { transform: scale(0.98); }
 .access-client-expired:hover, .access-expired-section .access-history-item:hover, .access-expired-section .access-history-item[open] { opacity: .9; }
 .access-archived-tag { display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px; background: #ece7de; color: #6b5f4d; font-size: 12px; font-weight: 700; }
 .access-expired-section { margin-top: 6px; }
+
+/* Códigos › búsqueda: los últimos mensajes de la bandeja en fila. */
+.cx-q-recent { margin: 10px 0 4px; }
+.cx-q-recent-title { margin: 0 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; opacity: .7; }
+.cx-q-recent ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cx-q-recent li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(127,127,127,.18); }
+.cx-q-recent li.is-current { border-color: rgba(255,196,0,.6); }
+.cx-q-recent-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; flex: 1 1 220px; }
+.cx-q-recent-when { font-weight: 700; font-size: 12.5px; white-space: nowrap; }
+.cx-q-recent-subj { font-size: 12.5px; opacity: .75; overflow-wrap: anywhere; }
+.cx-q-recent-val { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cx-q-recent-val .cx-q-code { font-size: 18px; padding: 4px 10px; }
+.cx-q-recent-none { font-size: 12px; opacity: .6; }
