@@ -778,6 +778,7 @@
 
   let evtSource = null;
   let lastCodeChimeAt = 0;
+  const ADMIN_CODE_ORIGINS = new Set(["panel", "busqueda"]);
   function connectLive() {
     if (evtSource) evtSource.close();
     evtSource = new EventSource("/api/live/stream");
@@ -841,9 +842,12 @@
         if (window.LiordarkSoportes) window.LiordarkSoportes.load();
       }
 
-      // Códigos: llegó un correo nuevo a la bandeja.
+      // Códigos: llegó un correo nuevo a la bandeja. Suena SOLO si lo trajo
+      // una búsqueda del admin (Consultar / buscador del panel); lo que piden
+      // los clientes, el asistente o el vigilante llega en silencio.
       if (evt.type === "code_inbox") {
-        if (evt.item && evt.item.value && Date.now() - lastCodeChimeAt > 20_000) {
+        const mine = evt.item && ADMIN_CODE_ORIGINS.has(evt.item.origin);
+        if (mine && evt.item.value && Date.now() - lastCodeChimeAt > 5_000) {
           lastCodeChimeAt = Date.now();
           playCustomerChime();
         }
