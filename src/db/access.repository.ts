@@ -679,8 +679,13 @@ export type SellOptions = { days?: number; months?: number | null };
 // primero (así no quedan perfiles muertos repartidos), y la que más dura.
 // Nunca una cuenta que el cerebro decidió dejar vencer. Dentro de la cuenta,
 // primero los perfiles sin el aviso «¿cambiar PIN?» (el aviso no bloquea).
+// Regla del negocio: una cuenta se vende con 28 días o más (una nueva se
+// llena en sus primeros 2 días). Primero esas — o las que ya se van a
+// renovar —, así nadie tiene que saltar de cuenta; las más cortas quedan
+// de último recurso (el cerebro movería al cliente después).
 const BRAIN_SELL_ORDER = `
   ORDER BY (a.id = @prefer) DESC,
+    (a.expires_at >= @floor28 OR (a.brain_action = 'renew' AND a.brain_action_for = a.expires_at)) DESC,
     (a.brain_action = 'renew') DESC,
     (a.expires_at > @tomorrow AND EXISTS (SELECT 1 FROM access_profiles q WHERE q.account_id = a.id AND (q.client_phone != '' OR q.wholesaler_id IS NOT NULL)
             AND COALESCE(q.expires_override, a.expires_at) > a.expires_at)) DESC,

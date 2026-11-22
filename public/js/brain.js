@@ -106,10 +106,11 @@
       <div class="brain-card">
         <div class="brain-card-head"><h3 class="brain-card-title">📦 Stock por comprar</h3></div>
         ${stock.length
-          ? `<ul class="brain-list">${stock.map(s => `
+          ? `<p class="brain-note">Lo que vendes en 2 días (según la última semana) menos los lugares libres en cuentas con 28 días o más. Una cuenta nueva solo se vende sus primeros 2 días: compra justo eso.</p>
+             <ul class="brain-list">${stock.map(s => `
               <li class="brain-row${s.urgent ? " is-overdue" : ""}"><div class="brain-row-main"><b>${esc(s.platform)}</b>
-                <div class="brain-row-sub">${esc(s.note)} · libres mañana: ${s.freeTomorrow} · margen para ventas: ${s.reserve}</div></div></li>`).join("")}</ul>`
-          : `<p class="brain-note brain-empty">Hay stock suficiente para las ventas de los próximos días.</p>`}
+                <div class="brain-row-sub">${esc(s.note)} · libres con 28+ días: ${s.freeTomorrow} · ventas de 2 días: ${s.reserve}</div></div></li>`).join("")}</ul>`
+          : `<p class="brain-note brain-empty">Hay stock suficiente para las ventas de los próximos 2 días.</p>`}
       </div>`;
 
     // ── 🕘 Última corrida ──

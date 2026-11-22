@@ -28,7 +28,8 @@ import { sendEmail } from "./email.service";
 // sigue pasa a una cuenta nueva con los días que le quedan.
 // ─────────────────────────────────────────────────────────────
 
-const GRACE_DAYS = 2;            // días que se espera un «Ya la renové» antes de mover a todos
+const GRACE_DAYS = 2;
+const MIN_SELL_DAYS = 28;          // una cuenta se vende con 28 días o más (regla del negocio)            // días que se espera un «Ya la renové» antes de mover a todos
 const RESERVE_MIN = 2;           // perfiles libres mínimos por plataforma para ventas nuevas
 const PROVIDER_PERIOD_DAYS = 30;
 const RECENT_MOVE_DAYS = 25;     // no mover dos veces en el mes a la misma persona si se puede evitar
@@ -373,8 +374,14 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
     // 4) Stock para mañana: lugares libres (o que se liberan) en cuentas que siguen.
     // Cuentas individuales (Spotify): cada cuenta libre es 1 lugar.
     const single = isSingleBrainPlatform(platform);
+    // Regla del negocio: solo se vende una cuenta con 28 días o más (o que ya
+    // se va a renovar): los lugares de cuentas más cortas no cuentan como
+    // stock (venderlos obligaría al cliente a saltar de cuenta después).
+    // Spotify (individual): se renueva mientras el cliente siga, no salta.
+    const floor28 = addDays(today, MIN_SELL_DAYS);
     const kept = units.filter(u => !dropList.has(u) && (renewList.has(u) || !due(u))
-      && (single ? u.policy === "renewOnly" : u.policy !== "renewOnly") && !u.paused);
+      && (single ? u.policy === "renewOnly" : u.policy !== "renewOnly") && !u.paused
+      && (single || renewList.has(u) || (!!u.providerDate && u.providerDate >= floor28)));
     const freeTomorrow = kept.reduce((s, u) => s + u.profiles.filter(p => !occupied(p) || !p.date || p.date <= tomorrow).length, 0);
     // Esperan lugar: los que no se pudieron mover todavía + los que quedaron
     // en «Pendientes de cuenta nueva» en esta corrida.
