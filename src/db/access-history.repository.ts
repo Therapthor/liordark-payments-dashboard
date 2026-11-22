@@ -139,6 +139,15 @@ export function searchArchivedAccounts(term: string): ArchivedAccount[] {
   `).all(like, like, like) as any[]).map(toArchived);
 }
 
+/** Buscador de Accesos (por correo): las vencidas van debajo de las activas. */
+export function searchArchivedByEmail(term: string): ArchivedAccount[] {
+  const t = term.trim();
+  if (!t) return [];
+  return (db.prepare(`
+    SELECT * FROM access_accounts_history WHERE email LIKE ? ORDER BY archived_at DESC LIMIT 30
+  `).all("%" + t + "%") as any[]).map(toArchived);
+}
+
 /**
  * Archiva toda cuenta con expires_at < todayISO: copia cuenta + perfiles a
  * access_accounts_history (como snapshot JSON) y la borra de las tablas

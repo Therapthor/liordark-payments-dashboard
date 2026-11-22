@@ -1692,7 +1692,7 @@
     if (result.mode === "phone") {
       lastClientProfiles = result.profiles.filter(p => p.clientPhone);
       lastClientOverrides = result.overrides || [];
-      renderClientSummary(lastClientProfiles, lastClientOverrides);
+      renderClientSummary(lastClientProfiles, lastClientOverrides, result.archived || []);
       summaryBox.hidden = false;
       resultsBox.hidden = true;
       platformsBox.hidden = true;
@@ -1705,29 +1705,24 @@
     platformsBox.hidden = true;
     resultsBox.hidden = false;
 
-    if (result.accounts.length === 0) {
+    const archived = result.archived || [];
+    if (result.accounts.length === 0 && archived.length === 0) {
       resultsBox.innerHTML = `<p class="feed-empty">No se encontraron cuentas con ese correo.</p>`;
       return;
     }
+    // Activas arriba; debajo, más opacas, las vencidas del historial.
     resultsBox.innerHTML = result.accounts.map(a =>
       `<div class="access-search-platform-label">${escapeHtml(a.platform)}</div>${renderAccountCard(a, { open: true })}`
-    ).join("");
+    ).join("") + (archived.length ? `
+      <div class="access-expired-section">
+        <div class="access-expired-divider">🗄 Vencidas <span class="badge">${archived.length}</span></div>
+        ${archived.map(renderArchivedAccount).join("")}
+      </div>` : "");
     wireAccountCardEvents(resultsBox);
   }
 
-  function renderClientSummary(profiles, overrides) {
-    const box = document.getElementById("access-client-summary");
-    const list = document.getElementById("access-client-list");
-    box.hidden = false;
-    overrides = overrides || [];
-
-    if (profiles.length === 0 && overrides.length === 0) {
-      list.innerHTML = `<li class="access-client-empty">No se encontraron cuentas para ese número.</li>`;
-      return;
-    }
-
-    list.innerHTML = profiles.map((p, idx) => `
-      <li class="access-client-item">
+  const profileItemHtml = (p, idx, cls) => `
+      <li class="access-client-item${cls}">
         <div>
           <b>${escapeHtml(p.platform)}</b>${p.profileName ? " — " + escapeHtml(p.profileName) : ""}
           <div class="text-muted">📧 ${escapeHtml(p.email)}</div>
@@ -1746,9 +1741,10 @@
             <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
           </div>
         </div>
-      </li>
-    `).join("") + overrides.map((o, idx) => `
-      <li class="access-client-item access-client-temp">
+      </li>`;
+
+  const overrideItemHtml = (o, idx, cls) => `
+      <li class="access-client-item access-client-temp${cls}">
         <div>
           <span class="access-temp-tag">🔄 Temporal · cuenta en uso</span>
           <b>${escapeHtml(o.platform)}</b>${o.profileName ? " — " + escapeHtml(o.profileName) : ""}
@@ -1767,8 +1763,47 @@
             <button class="btn-secondary btn-sm client-ov-replace" data-idx="${idx}">🔄 Cambiar cuenta</button>
           </div>
         </div>
-      </li>
-    `).join("");
+      </li>`;
+
+  // Cuenta ya archivada (venció y salió de Accesos): solo lectura.
+  const archivedItemHtml = (a) => {
+    const names = (a.profiles || []).map(p => p.profileName).filter(Boolean).join(", ");
+    return `
+      <li class="access-client-item access-client-expired">
+        <div>
+          <span class="access-archived-tag">🗄 Historial</span>
+          <b>${escapeHtml(a.platform)}</b>${names ? " — " + escapeHtml(names) : ""}
+          <div class="text-muted">📧 ${escapeHtml(a.email)}</div>
+          <div class="text-muted">🔑 ${escapeHtml(a.password)}${a.provider ? " · " + escapeHtml(a.provider) : ""}</div>
+        </div>
+        <div class="access-client-item-right">
+          <span class="badge access-badge-expired">Vencida</span>
+          <span>Venció: ${fmtDateLong(a.expiresAt)}${a.archivedAt ? " · archivada " + ddmmFromSql(a.archivedAt) : ""}</span>
+        </div>
+      </li>`;
+  };
+
+  // Una sola búsqueda: arriba lo vigente; debajo, más opaco, lo vencido
+  // (perfiles con fecha pasada y cuentas ya archivadas en el historial).
+  function renderClientSummary(profiles, overrides, archived) {
+    const box = document.getElementById("access-client-summary");
+    const list = document.getElementById("access-client-list");
+    box.hidden = false;
+    overrides = overrides || [];
+    archived = archived || [];
+
+    if (profiles.length === 0 && overrides.length === 0 && archived.length === 0) {
+      list.innerHTML = `<li class="access-client-empty">No se encontraron cuentas para ese número.</li>`;
+      return;
+    }
+
+    const live = [], dead = [];
+    profiles.forEach((p, idx) => (p.status === "vencido" ? dead : live).push(profileItemHtml(p, idx, p.status === "vencido" ? " access-client-expired" : "")));
+    overrides.forEach((o, idx) => (o.status === "vencido" ? dead : live).push(overrideItemHtml(o, idx, o.status === "vencido" ? " access-client-expired" : "")));
+    archived.forEach(a => dead.push(archivedItemHtml(a)));
+
+    list.innerHTML = (live.length ? live.join("") : `<li class="access-client-empty">Sin cuentas vigentes.</li>`) +
+      (dead.length ? `<li class="access-expired-divider">🗄 Vencidas <span class="badge">${dead.length}</span></li>` + dead.join("") : "");
   }
 
   // 👁 Ver cuenta de un reemplazo temporal: abre la plataforma y resalta la
@@ -1888,7 +1923,8 @@
   // ─────────────────────────────────────────────────────────────
 
   // ─────────────────────────────────────────────────────────────
-  // MODAL — historial de cuentas vencidas (solo lectura)
+  // VENCIDAS (historial) — salen en la misma búsqueda, debajo de las
+  // activas y más opacas. Solo lectura: ya se archivaron al vencer.
   // ─────────────────────────────────────────────────────────────
 
   function renderArchivedAccount(a) {
@@ -1917,261 +1953,6 @@
     `;
   }
 
-  function renderHistoryList(accounts) {
-    const body  = document.getElementById("access-history-body");
-    const empty = document.getElementById("access-history-empty");
-    body.innerHTML = accounts.map(renderArchivedAccount).join("");
-    empty.hidden = accounts.length > 0;
-    empty.textContent = "No hay cuentas archivadas todavía.";
-  }
-
-  async function loadHistory(query) {
-    const body  = document.getElementById("access-history-body");
-    const empty = document.getElementById("access-history-empty");
-    try {
-      const { accounts } = await api("/history" + (query ? "?q=" + encodeURIComponent(query) : ""));
-      renderHistoryList(accounts);
-    } catch (err) {
-      body.innerHTML = "";
-      empty.hidden = false;
-      empty.textContent = "⚠️ No se pudo cargar el historial: " + (err?.message || "error desconocido");
-    }
-  }
-
-  let historyDebounce = null;
-
-  function initHistoryModal() {
-    document.getElementById("access-history-btn").addEventListener("click", () => {
-      document.getElementById("access-history-search").value = "";
-      document.getElementById("access-history-search-clear").hidden = true;
-      document.getElementById("access-history-modal").hidden = false;
-      loadHistory("");
-    });
-
-    const input    = document.getElementById("access-history-search");
-    const clearBtn = document.getElementById("access-history-search-clear");
-
-    input.addEventListener("input", () => {
-      clearTimeout(historyDebounce);
-      clearBtn.hidden = !input.value;
-      historyDebounce = setTimeout(() => loadHistory(input.value.trim()), 300);
-    });
-
-    clearBtn.addEventListener("click", () => {
-      input.value = "";
-      clearBtn.hidden = true;
-      loadHistory("");
-    });
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // RENOVADOS — todos los clientes marcados "✅ Renueva", de cualquier
-  // cuenta, para ver de un vistazo a quién hay que pasarle a la cuenta
-  // nueva sin abrir cada plataforma por separado.
-  // ─────────────────────────────────────────────────────────────
-
-  // Lista cuentas (no perfiles sueltos — esos ya se autogestionan solos,
-  // ver confirmRenewalLog). "x/y renovaron" muestra cuántos de los
-  // clientes ocupados ya marcaron renueva en este ciclo.
-  let cachedRenewingAccounts = [];
-
-  function renderRenewingItem(a, idx) {
-    return `
-      <div class="access-history-item access-renewing-item">
-        <span class="access-history-platform">${escapeHtml(a.platform)}</span>
-        <span class="text-muted">${escapeHtml(a.email)}</span>
-        <span class="text-muted">${a.renewingCount}/${a.totalProfiles} renovaron · Vence: ${fmtDateLong(a.expiresAt)}</span>
-        <button class="btn-secondary btn-sm renewing-view-btn" data-idx="${idx}" type="button">👁 Ver</button>
-      </div>
-    `;
-  }
-
-  async function loadRenewing() {
-    const body  = document.getElementById("access-renewing-body");
-    const empty = document.getElementById("access-renewing-empty");
-    try {
-      const { accounts } = await api("/accounts/renewing");
-      cachedRenewingAccounts = accounts;
-      body.innerHTML = accounts.map(renderRenewingItem).join("");
-      empty.hidden = accounts.length > 0;
-    } catch (err) {
-      body.innerHTML = "";
-      empty.hidden = false;
-      empty.textContent = "⚠️ No se pudo cargar: " + (err?.message || "error desconocido");
-    }
-  }
-
-  // Cierra el modal, abre el detalle de la plataforma (todas sus cuentas
-  // ya expandidas, como en la vista normal de Accesos) y resalta/lleva la
-  // vista hasta esta cuenta puntual.
-  async function viewRenewingAccount(a) {
-    document.getElementById("access-renewing-modal").hidden = true;
-    document.getElementById("access-search-input").value = "";
-    document.getElementById("access-search-clear").hidden = true;
-    resetSearch();
-    await openPlatformDetail(a.platform);
-
-    const el = document.querySelector(
-      `#access-platform-detail-accounts .access-account[data-account-id="${a.id}"]`
-    );
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("access-account-highlight");
-      setTimeout(() => el.classList.remove("access-account-highlight"), 2000);
-    }
-  }
-
-  function initRenewingModal() {
-    document.getElementById("access-renewing-btn").addEventListener("click", () => {
-      document.getElementById("access-renewing-modal").hidden = false;
-      loadRenewing();
-    });
-    document.getElementById("access-renewing-body").addEventListener("click", (e) => {
-      const btn = e.target.closest(".renewing-view-btn");
-      if (!btn) return;
-      const a = cachedRenewingAccounts[Number(btn.dataset.idx)];
-      if (a) viewRenewingAccount(a);
-    });
-    document.getElementById("access-renewing-export-txt").addEventListener("click", exportRenewingTxt);
-    document.getElementById("access-renewing-export-pdf").addEventListener("click", exportRenewingPdf);
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // EXPORTAR — resúmenes en .txt o PDF. El PDF no usa ninguna librería:
-  // abre una pestaña imprimible y dispara el diálogo de impresión del
-  // navegador, donde "Guardar como PDF" es una opción nativa.
-  // ─────────────────────────────────────────────────────────────
-
-  function downloadTextFile(filename, text) {
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  function openPrintableSummary(title, tableHtml) {
-    const win = window.open("", "_blank");
-    if (!win) {
-      alert("El navegador bloqueó la ventana — habilita los popups para generar el PDF.");
-      return;
-    }
-    win.document.write(`
-      <!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
-      <style>
-        body { font-family: -apple-system, Arial, sans-serif; padding: 24px; color: #222; }
-        h1 { font-size: 18px; margin-bottom: 4px; }
-        .muted { color: #777; font-size: 12px; margin-bottom: 18px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #ddd; }
-        th { color: #777; font-weight: 600; text-transform: uppercase; font-size: 11px; }
-      </style></head><body>
-        <h1>${title}</h1>
-        <p class="muted">Generado el ${new Date().toLocaleString("es-PE")}</p>
-        <table>${tableHtml}</table>
-      </body></html>
-    `);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 300);
-  }
-
-  function fmtDateTime(sqliteTs) {
-    try {
-      const iso = /[Zz]|[+-]\d\d:?\d\d$/.test(sqliteTs) ? sqliteTs : sqliteTs.replace(" ", "T") + "Z";
-      return new Date(iso).toLocaleString("es-PE", { dateStyle: "medium", timeStyle: "short" });
-    } catch {
-      return sqliteTs;
-    }
-  }
-
-  function exportRenewingTxt() {
-    const lines = [
-      "RESUMEN — Cuentas con clientes marcados para renovar",
-      "Generado: " + new Date().toLocaleString("es-PE"),
-      "Total: " + cachedRenewingAccounts.length,
-      "",
-      ...cachedRenewingAccounts.map(a =>
-        `${a.platform} · ${a.email} · ${a.renewingCount}/${a.totalProfiles} renovaron · Vence: ${fmtDateLong(a.expiresAt)}`
-      ),
-    ];
-    downloadTextFile("cuentas-a-renovar.txt", lines.join("\n"));
-  }
-
-  function exportRenewingPdf() {
-    const rows = cachedRenewingAccounts.map(a => `
-      <tr><td>${escapeHtml(a.platform)}</td><td>${escapeHtml(a.email)}</td><td>${a.renewingCount}/${a.totalProfiles}</td><td>${escapeHtml(fmtDateLong(a.expiresAt))}</td></tr>
-    `).join("");
-    openPrintableSummary("Cuentas con clientes marcados para renovar",
-      `<thead><tr><th>Plataforma</th><th>Correo</th><th>Renovaron</th><th>Vence</th></tr></thead><tbody>${rows}</tbody>`);
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // REGISTRO DE RENOVADOS — historial permanente de renovaciones ya
-  // hechas (distinto de "marcado para renovar", que se borra apenas se
-  // renueva de verdad). Para llevar un control de quién renovó qué.
-  // ─────────────────────────────────────────────────────────────
-
-  let cachedRenewalHistory = [];
-
-  function renderRenewalHistoryItem(e) {
-    return `
-      <div class="access-history-item access-renewing-item">
-        <span class="access-history-platform">${escapeHtml(e.platformTag || e.platform)}</span>
-        <span class="text-muted">${escapeHtml(e.clientPhone)}</span>
-        <span class="text-muted">Renovado: ${fmtDateTime(e.renewedAt)}</span>
-      </div>
-    `;
-  }
-
-  async function loadRenewalHistory() {
-    const body  = document.getElementById("access-renewal-history-body");
-    const empty = document.getElementById("access-renewal-history-empty");
-    try {
-      const { entries } = await api("/renewal-history");
-      cachedRenewalHistory = entries;
-      body.innerHTML = entries.map(renderRenewalHistoryItem).join("");
-      empty.hidden = entries.length > 0;
-    } catch (err) {
-      body.innerHTML = "";
-      empty.hidden = false;
-      empty.textContent = "⚠️ No se pudo cargar: " + (err?.message || "error desconocido");
-    }
-  }
-
-  function exportRenewalHistoryTxt() {
-    const lines = [
-      "REGISTRO — Clientes que ya renovaron",
-      "Generado: " + new Date().toLocaleString("es-PE"),
-      "Total: " + cachedRenewalHistory.length,
-      "",
-      ...cachedRenewalHistory.map(e =>
-        `${e.platformTag || e.platform} · ${e.clientPhone} · Renovado: ${fmtDateTime(e.renewedAt)}`
-      ),
-    ];
-    downloadTextFile("renovados-registro.txt", lines.join("\n"));
-  }
-
-  function exportRenewalHistoryPdf() {
-    const rows = cachedRenewalHistory.map(e => `
-      <tr><td>${escapeHtml(e.platformTag || e.platform)}</td><td>${escapeHtml(e.clientPhone)}</td><td>${escapeHtml(fmtDateTime(e.renewedAt))}</td></tr>
-    `).join("");
-    openPrintableSummary("Clientes que ya renovaron",
-      `<thead><tr><th>Plataforma</th><th>Celular</th><th>Renovado</th></tr></thead><tbody>${rows}</tbody>`);
-  }
-
-  function initRenewalHistoryModal() {
-    document.getElementById("access-renewal-history-btn").addEventListener("click", () => {
-      document.getElementById("access-renewal-history-modal").hidden = false;
-      loadRenewalHistory();
-    });
-    document.getElementById("access-renewal-history-export-txt").addEventListener("click", exportRenewalHistoryTxt);
-    document.getElementById("access-renewal-history-export-pdf").addEventListener("click", exportRenewalHistoryPdf);
-  }
 
   // ─────────────────────────────────────────────────────────────
   // PEDIDO (combo) — vender varias plataformas de una vez al mismo
@@ -2225,7 +2006,6 @@
   }
 
   function initComboOrderModal() {
-    document.getElementById("access-combo-order-btn").addEventListener("click", openComboOrderModal);
     document.getElementById("combo-order-cancel").addEventListener("click", () => {
       document.getElementById("combo-order-modal").hidden = true;
     });
@@ -2483,9 +2263,6 @@
     initEditModal();
     initProfileModal();
     initFullClientModal();
-    initHistoryModal();
-    initRenewingModal();
-    initRenewalHistoryModal();
     initSearch();
     initClientSummarySend();
     initPayLinkModal();

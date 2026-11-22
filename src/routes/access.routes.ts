@@ -49,7 +49,7 @@ import { listPayLinkCandidates, createPayLink, cleanOldPayLinks, priceSelection 
 import { listCatalogProducts, getCatalogProductByPlatform } from "../db/catalog.repository";
 import { plansFor } from "../services/plans.service";
 import { listProviders } from "../db/provider.repository";
-import { listArchivedAccounts, searchArchivedAccounts } from "../db/access-history.repository";
+import { listArchivedAccounts, searchArchivedAccounts, searchArchivedByEmail } from "../db/access-history.repository";
 import { listRenewalHistory } from "../db/renewal-history.repository";
 import {
   setAccountCodesEnabled,
@@ -1133,12 +1133,17 @@ router.get("/search", (req, res) => {
     // Antes solo perfiles: al cambiar a un cliente a una cuenta «en uso»
     // (temporal) dejaba de salir aquí — la búsqueda decía que no tenía cuentas.
     const overrides = listManualOverridesByPhone(q).map(overrideWithStatus);
-    res.json({ mode: "phone", profiles, overrides });
+    // Vencidas (historial): solo los perfiles de ESTE cliente, debajo de las activas.
+    const d9 = q.replace(/\D/g, "").slice(-9);
+    const archived = searchArchivedAccounts(q).slice(0, 30).map(a => ({
+      ...a, profiles: a.profiles.filter(p => String(p.clientPhone || "").replace(/\D/g, "").slice(-9) === d9),
+    }));
+    res.json({ mode: "phone", profiles, overrides, archived });
     return;
   }
 
   const accounts = searchAccountsByEmail(q).map(withStatus);
-  res.json({ mode: "email", accounts });
+  res.json({ mode: "email", accounts, archived: searchArchivedByEmail(q) });
 });
 
 export default router;

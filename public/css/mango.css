@@ -2310,3 +2310,10 @@ button.mp-kpi:active { transform: scale(0.98); }
 /* Búsqueda por celular: reemplazo temporal (cuenta en uso, sin perfil propio). */
 .access-client-temp { background: #eef2ff; }
 .access-temp-tag { display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px; background: #dfe6ff; color: #2d4fb3; font-size: 12px; font-weight: 700; }
+
+/* Búsqueda única: vencidas debajo de las activas, más opacas. */
+.access-expired-divider { list-style: none; display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; padding-top: 12px; border-top: 1px dashed var(--mp-line, #e6dcc8); font-weight: 700; color: var(--mp-muted, #8a7a62); font-size: 13px; }
+.access-client-expired, .access-expired-section .access-history-item { opacity: .55; transition: opacity .2s; }
+.access-client-expired:hover, .access-expired-section .access-history-item:hover, .access-expired-section .access-history-item[open] { opacity: .9; }
+.access-archived-tag { display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px; background: #ece7de; color: #6b5f4d; font-size: 12px; font-weight: 700; }
+.access-expired-section { margin-top: 6px; }

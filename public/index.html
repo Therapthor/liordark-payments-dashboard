@@ -216,18 +216,11 @@
       <!-- ═══════════ VISTA: ACCESOS ═══════════ -->
       <section id="view-access" class="view" hidden>
 
-        <!-- Barra de herramientas: búsqueda, 3 herramientas y «⋯» -->
+        <!-- Barra: búsqueda única (cuentas activas + vencidas del historial) -->
         <div class="mp-toolbar">
           <div class="access-search mp-search">
             <input id="access-search-input" type="search" placeholder="Buscar correo o teléfono…" aria-label="Buscar cuenta por correo, o cliente por teléfono" />
             <button id="access-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
-          </div>
-          <div class="mp-toolbar-tools">
-            <button id="access-renewing-btn" class="btn-secondary">🔁 Renovados</button>
-            <button id="access-combo-order-btn" class="btn-secondary">📦 Pedido</button>
-            <button id="access-history-btn" class="btn-secondary">🗄 Historial</button>
-            <button id="access-renewal-history-btn" class="btn-secondary mp-in-menu" data-mp-label="📋 Registro de renovados">📋 Registro</button>
-            <button type="button" class="mp-dots" data-mp-proxy="access-renewal-history-btn" data-mp-title="Más herramientas" aria-label="Más herramientas" aria-haspopup="menu" aria-expanded="false"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
           </div>
           <button id="access-new-account-btn" class="btn-primary" data-mp-primary>+ Agregar cuentas</button>
         </div>
@@ -1534,57 +1527,6 @@
         <button type="button" class="modal-x" data-close-modal="months-modal">✕</button>
       </div>
       <div id="months-modal-body" class="modal-scroll-body"></div>
-    </div>
-  </div>
-
-  <!-- ───────────── MODAL: historial de cuentas vencidas ───────────── -->
-  <div id="access-history-modal" class="modal-backdrop" hidden>
-    <div class="modal-card modal-card--wide">
-      <div class="modal-head">
-        <h3>Historial de cuentas vencidas</h3>
-        <button type="button" class="modal-x" data-close-modal="access-history-modal">✕</button>
-      </div>
-      <div class="feed-search">
-        <input id="access-history-search" type="text" placeholder="Buscar por correo, plataforma o celular…" />
-        <button id="access-history-search-clear" class="icon-btn-sm" title="Limpiar búsqueda" hidden>✕</button>
-      </div>
-      <p class="panel-hint">Se archivan solas cuando vencen — de solo lectura, para resolver reclamos futuros.</p>
-      <div id="access-history-body" class="modal-scroll-body"></div>
-      <p id="access-history-empty" class="feed-empty" hidden>No hay cuentas archivadas todavía.</p>
-    </div>
-  </div>
-
-  <!-- ───────────── MODAL: clientes marcados "✅ Renueva" ───────────── -->
-  <div id="access-renewing-modal" class="modal-backdrop" hidden>
-    <div class="modal-card modal-card--wide">
-      <div class="modal-head">
-        <h3>Cuentas con clientes marcados "✅ Renueva"</h3>
-        <button type="button" class="modal-x" data-close-modal="access-renewing-modal">✕</button>
-      </div>
-      <p class="panel-hint">La cuenta completa es lo que se renueva — los perfiles sueltos ya se autogestionan solos.</p>
-      <div class="modal-export-actions">
-        <button type="button" class="btn-secondary btn-sm" id="access-renewing-export-txt">⬇️ Guardar .txt</button>
-        <button type="button" class="btn-secondary btn-sm" id="access-renewing-export-pdf">🖨️ Guardar PDF</button>
-      </div>
-      <div id="access-renewing-body" class="modal-scroll-body"></div>
-      <p id="access-renewing-empty" class="feed-empty" hidden>Ninguna cuenta con clientes marcados "Renueva" todavía.</p>
-    </div>
-  </div>
-
-  <!-- ───────────── MODAL: registro de renovados (ya hechas) ───────────── -->
-  <div id="access-renewal-history-modal" class="modal-backdrop" hidden>
-    <div class="modal-card modal-card--wide">
-      <div class="modal-head">
-        <h3>Renovados — registro</h3>
-        <button type="button" class="modal-x" data-close-modal="access-renewal-history-modal">✕</button>
-      </div>
-      <p class="panel-hint">Clientes que ya renovaron, con qué servicio y cuándo — queda guardado para siempre, aunque la cuenta vuelva a vencer.</p>
-      <div class="modal-export-actions">
-        <button type="button" class="btn-secondary btn-sm" id="access-renewal-history-export-txt">⬇️ Guardar .txt</button>
-        <button type="button" class="btn-secondary btn-sm" id="access-renewal-history-export-pdf">🖨️ Guardar PDF</button>
-      </div>
-      <div id="access-renewal-history-body" class="modal-scroll-body"></div>
-      <p id="access-renewal-history-empty" class="feed-empty" hidden>Todavía no se renovó ninguna cuenta.</p>
     </div>
   </div>
 
