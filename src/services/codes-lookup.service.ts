@@ -40,6 +40,10 @@ export type CodeLookupResult = {
   relogged?: boolean;
   // El proveedor marca el correo como vencido (latinocol: «Caducado»).
   expired?: boolean;
+  // Bandejas (Juanpa): el correo más NUEVO, sea del tipo que sea, cuando no
+  // es el que se eligió para el cliente. El admin (panel, buscador,
+  // vigilante) ve este; el cliente, el elegido (ver observedNow).
+  adminNewest?: CodeLookupResult;
   // Fuentes que listan TODOS los correos recientes (latinocol): la lista
   // completa, para la bandeja del panel. ref = id del correo en el proveedor.
   items?: ListedEmail[];
@@ -120,7 +124,23 @@ async function observed(sourceId: string, email: string, run: () => Promise<Code
   // Fila del proveedor: una consulta a la vez (ver codes-lanes.ts).
   const key = `${sourceId}|${email.trim().toLowerCase()}|${actionKey}`;
   const priority = ctx.origin === "vigilante" || ctx.origin === "busqueda" ? 1 : 0;
-  return laneFor(sourceId).run(key, priority, () => observedNow(sourceId, email, run, ctx));
+  // La fila puede reusar una respuesta de hace segundos de OTRA consulta
+  // (admin o cliente): se guarda cruda y cada uno elige lo suyo al final.
+  const raw = await laneFor(sourceId).run(key, priority, () => observedNow(sourceId, email, run, ctx));
+  return selectForOrigin(ctx, raw);
+}
+
+/** Admin (panel, buscador, vigilante): el correo más nuevo, sea cual sea.
+ *  Cliente / asistente: solo el elegido para el cliente. */
+function selectForOrigin(ctx: LookupContext, raw: CodeLookupResult): CodeLookupResult {
+  const admin = ctx.origin === "panel" || ctx.origin === "busqueda" || ctx.origin === "vigilante";
+  let r = raw;
+  if (raw.adminNewest) {
+    const { adminNewest, ...picked } = raw;
+    r = admin ? adminNewest : picked;
+  }
+  const loginLink = loginLinkOf(r);
+  return loginLink && loginLink !== r.value ? { ...r, value: loginLink } : r;
 }
 
 async function observedNow(sourceId: string, email: string, run: () => Promise<CodeLookupResult>, ctx: LookupContext): Promise<CodeLookupResult> {
@@ -132,10 +152,8 @@ async function observedNow(sourceId: string, email: string, run: () => Promise<C
   };
   try {
     const raw = await run();
-    const loginLink = loginLinkOf(raw);
-    const result = loginLink && loginLink !== raw.value ? { ...raw, value: loginLink } : raw;
-    notify({ result });
-    return result;
+    notify({ result: selectForOrigin(ctx, raw) });
+    return raw;
   } catch (err) {
     notify({ error: describeLookupError(err) });
     throw err;
@@ -1504,7 +1522,7 @@ export function juanpaPrimeResult(mails: JuanpaMail[]): CodeLookupResult {
   }
   const items = mails.map(m => m.item);
   const results = mails.map(m => listedEmailResult(m.item, m.body, items));
-  return results.find(r => r.found && (r.kind === "code" || r.kind === "link") && !isAccountChangeResult(r)) ?? results[0]!;
+  return withAdminNewest(results.find(r => r.found && (r.kind === "code" || r.kind === "link") && !isAccountChangeResult(r)) ?? results[0]!, results[0]!);
 }
 
 /** Código de acceso único de Disney+ (6 dígitos). */
@@ -1521,7 +1539,12 @@ export function juanpaDisneyResult(mails: JuanpaMail[]): CodeLookupResult {
   }
   const items = mails.map(m => m.item);
   const results = mails.map(m => listedEmailResult(m.item, m.body, items));
-  return results.find(r => isDisneyAccessCode(r) && !isAccountChangeResult(r)) ?? results[0]!;
+  return withAdminNewest(results.find(r => isDisneyAccessCode(r) && !isAccountChangeResult(r)) ?? results[0]!, results[0]!);
+}
+
+/** El elegido para el cliente + el más nuevo de todos para el admin (si son distintos). */
+function withAdminNewest(picked: CodeLookupResult, newest: CodeLookupResult): CodeLookupResult {
+  return newest === picked ? picked : { ...picked, adminNewest: newest };
 }
 
 /** Correos de la bandeja → lo que se entrega. Exportado para pruebas. */
@@ -1534,7 +1557,7 @@ export function juanpaResult(mails: JuanpaMail[]): CodeLookupResult {
   // El más nuevo que sea de inicio de sesión (código de 4 dígitos o link);
   // si no hay ninguno, el más nuevo (para que el panel lo vea).
   const login = results.find(r => !isAccountChangeResult(r) && (isLoginCode(r) || !!loginLinkOf(r) || !!householdLinkOf(r)));
-  return login ?? results[0]!;
+  return withAdminNewest(login ?? results[0]!, results[0]!);
 }
 
 // Correo conectado (Configuración › Correos): buzones propios de Outlook /

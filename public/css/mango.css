@@ -770,6 +770,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
 .cx-card { border: none; border-radius: 20px; box-shadow: var(--mp-shadow-sm); }
 .cx-pill.ok { background: var(--mp-warn-bg); color: var(--mp-warn-ink); }
 .cx-pill.new { background: var(--mp-green-bg); color: var(--mp-green-ink); }
+.cx-pill.admin-only { background: #fde2dd; color: #b42318; margin-left: 6px; vertical-align: middle; text-transform: none; }
 .cx-chip { background: var(--mp-soft); color: var(--mp-ink-2); }
 .cx-act.bad { border-color: var(--mp-danger-line); }
 .cx-lane.warn { border-color: #F1D79A; }

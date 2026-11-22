@@ -64,7 +64,7 @@ import {
   inheritCodeConfigFromSiblings,
   countCodeSiblings,
 } from "../db/codes.repository";
-import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isLoginCodeOnlySource, isLoginCode, loginLinkOf, isLoginLinkUrl, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES, loginApprovalOf, parseProviderDate, type CodeLookupResult } from "../services/codes-lookup.service";
+import { lookupCodeActionWithRetries, lookupAnySourceWithRetries, listCodeSources, listSourceActions, codeSourceLabel, skipsRepeatedCodes, TOTP_SOURCE_ID, isAdminOnlyResult, isAccountChangeResult, deliversEverything, withLookupContext, LIST_SOURCES, normalizeInboxUrl, INBOX_LINK_SOURCES, loginApprovalOf, parseProviderDate, type CodeLookupResult } from "../services/codes-lookup.service";
 import { listInbox, getInboxHtml, listActivity, sourcesHealth, runCodeWatch, watcherInfo, inboxInfoFor } from "../services/codes-brain.service";
 import { listCodeRequests, rushRequest, typicalArrivalSeconds } from "../services/code-requests.service";
 import { lanesStatus, laneIdOf } from "../services/codes-lanes";
@@ -658,8 +658,8 @@ router.get("/codes", (_req, res) => {
       .map(g => getLatestCodeForAccount(g.id))
       .filter(c => c !== null)
       .sort((x, y) => y.receivedAt.localeCompare(x.receivedAt))[0] ?? null;
-    // Netflix por Pally / José: de los enlaces, solo el de inicio de sesión.
-    const latestCode = isLoginCodeOnlySource(a.codeSource) && latestCodeRaw?.code.startsWith("http") && !isLoginLinkUrl(latestCodeRaw.code) ? null : latestCodeRaw;
+    // El admin ve todo lo que llega; se marca lo que el cliente NO recibe.
+    const latestCode = latestCodeRaw ? { ...latestCodeRaw, adminOnly: adminOnlyValue(a.codeSource, latestCodeRaw.code) } : null;
     return {
       ...rest,
       accountCount: group.length,
@@ -701,13 +701,24 @@ router.post("/codes/lookup", async (req, res) => {
 // llegó el correo y su id en la bandeja (para «Ver correo»).
 function lookupExtras(sourceId: string, email: string, result: CodeLookupResult) {
   const inbox = inboxInfoFor(sourceId, email, result);
+  // «🔒 Solo admin»: llegó y lo ves tú, pero al cliente no se le entrega
+  // (ej. Netflix 6 dígitos o cambio de datos).
+  const adminOnly = result.found && (isAdminOnlyResult(sourceId, result) || (!deliversEverything(sourceId) && isAccountChangeResult(result)));
   const received = parseProviderDate(result.providerReceivedAt);
   return {
     approval: loginApprovalOf(result),
     receivedAt: result.providerReceivedAt ?? null,
     receivedIso: received && !Number.isNaN(received.getTime()) ? received.toISOString() : inbox.seenIso,
     inboxId: inbox.inboxId,
+    adminOnly,
   };
+}
+
+/** Un código guardado (solo su valor): ¿lo recibiría el cliente? */
+function adminOnlyValue(sourceId: string | null, value: string): boolean {
+  if (!sourceId || !value) return false;
+  const isLink = /^https?:\/\//i.test(value);
+  return isAdminOnlyResult(sourceId, { found: true, kind: isLink ? "link" : "code", value });
 }
 
 // "Consultar" de una cuenta puntual (lista de abajo del tab Códigos) —
@@ -723,7 +734,6 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   if (!account.codeSource) { res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." }); return; }
   if (account.codeSource === TOTP_SOURCE_ID) { res.status(409).json({ message: "Esta cuenta usa 2FA: falta pegar la clave secreta en Accesos > Editar cuenta." }); return; }
 
-  const codeOnly = isLoginCodeOnlySource(account.codeSource);
   // Netflix por Pally con opciones: UNA opción por consulta (código o link).
   const actionId = account.codeSource === "netflix_con_opciones"
     ? (req.body?.actionId === "link_login" ? "link_login" : "codigo_login")
@@ -735,9 +745,8 @@ router.post("/codes/:accountId/lookup-now", async (req, res) => {
   const attempts = laneIdOf(account.codeSource) === "pally" ? 1 : LIST_SOURCES.includes(account.codeSource) ? 4 : undefined;
   let result = await withLookupContext({ origin: "panel", accountId },
     () => lookupCodeActionWithRetries(account.codeSource!, account.email, actionId, exclude, attempts));
-  if (codeOnly && result.found && !isLoginCode(result) && !loginLinkOf(result)) {
-    result = { found: false, kind: null, value: null };
-  }
+  // El admin ve TODO lo que llega (6 dígitos, cambio de datos…); en la
+  // respuesta va marcado «adminOnly» si al cliente no se le entrega.
   if (result.found && result.value) {
     const snippet = result.providerReceivedAt ? `Recibido: ${result.providerReceivedAt}` : "";
     saveIncomingCode({ accountId, code: result.value, snippet, source: "external" });

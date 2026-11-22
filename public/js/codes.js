@@ -66,6 +66,9 @@
     return h < 24 ? "hace " + h + " h" : "hace " + Math.floor(h / 24) + " d";
   }
 
+  // Llegó y lo ves tú, pero al cliente no se le entrega (ej. Netflix 6 dígitos).
+  const ADMIN_ONLY_PILL = `<span class="cx-pill admin-only" title="El cliente no lo recibe: es solo para ti (ej. 6 dígitos o cambio de datos)">🔒 Solo admin</span>`;
+
   function latestCodeHtml(lc) {
     const isLink = lc.code.startsWith("http");
     const when = emailDateFromSnippet(lc.snippet)
@@ -76,7 +79,7 @@
     const label = when
       ? `Correo de las ${escapeHtml(hora)} · ${agoText(age)}${stale ? " · ⚠️ puede estar vencido, dale a Consultar" : ""}`
       : escapeHtml(lc.snippet || fmtDateTime(lc.receivedAt));
-    return `<span class="${stale ? "codes-stale" : ""}">${resultHtml(isLink ? "link" : "code", lc.code)}</span>` +
+    return `<span class="${stale ? "codes-stale" : ""}">${resultHtml(isLink ? "link" : "code", lc.code)}</span>${lc.adminOnly ? ADMIN_ONLY_PILL : ""}` +
       `<span class="codes-account-received${stale ? " codes-received-stale" : ""}">${label}</span>`;
   }
 
@@ -449,7 +452,7 @@
           }
         } else {
           const value = result.approval && safeUrl(result.approval.approveUrl) ? approvalHtml(result.approval) : resultHtml(result.kind, result.value);
-          setRowStatus(id, "found", `<strong>¡Llegó!</strong>${value}`);
+          setRowStatus(id, "found", `<strong>¡Llegó!</strong>${value}${result.adminOnly ? ADMIN_ONLY_PILL : ""}`);
         }
         await load();
       } catch (err) {
@@ -944,7 +947,7 @@
       const age = d ? Date.now() - d.getTime() : null;
       pill = age == null ? "" : age > CODE_STALE_MS
         ? `<span class="cx-pill muted">Viejo</span>` : age < 10 * 60 * 1000 ? `<span class="cx-pill new">Nuevo</span>` : "";
-      body = `<div class="cx-q-value">${catHtml("found", "cx-q-cat")}${foundValueHtml(res)}</div>`;
+      body = `<div class="cx-q-value">${catHtml("found", "cx-q-cat")}${foundValueHtml(res)}${res.adminOnly ? ADMIN_ONLY_PILL : ""}</div>`;
       meta = `${escapeHtml(res.sourceLabel || (a && a.codeSourceLabel) || "")} · ${ageHtml(res)}`;
       const link = res.approval ? safeUrl(res.approval.approveUrl) : res.kind === "link" ? safeUrl(res.value) : null;
       actions = retry +
