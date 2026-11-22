@@ -2306,3 +2306,7 @@ button.mp-kpi:active { transform: scale(0.98); }
   .brain-row-actions { width: 100%; }
   .brain-row-actions .btn-sm { flex: 1; }
 }
+
+/* Búsqueda por celular: reemplazo temporal (cuenta en uso, sin perfil propio). */
+.access-client-temp { background: #eef2ff; }
+.access-temp-tag { display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px; background: #dfe6ff; color: #2d4fb3; font-size: 12px; font-weight: 700; }

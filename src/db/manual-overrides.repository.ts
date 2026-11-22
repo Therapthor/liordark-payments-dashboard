@@ -70,6 +70,26 @@ export function listManualOverridesForAccount(platform: string, email: string): 
   `).all(platform.trim().toUpperCase(), email) as any[]).map(toOverride);
 }
 
+/** Buscar por celular en Accesos: un reemplazo «en uso» no ocupa perfil, así
+ *  que sin esto el cliente «desaparecía» de la búsqueda tras cambiarlo a una
+ *  cuenta temporal. Mismo criterio de dígitos que searchProfilesByPhone. Los
+ *  vencidos hace más de 30 días ya no se muestran. */
+export function listManualOverridesByPhone(term: string): ManualAccountOverride[] {
+  const digits = term.replace(/\D/g, "");
+  if (!digits) return [];
+  return (db.prepare(`
+    SELECT * FROM manual_account_overrides
+    WHERE substr(client_phone, -9) LIKE '%' || substr(?, -9) || '%'
+      AND (expires_at IS NULL OR expires_at >= date('now', '-5 hours', '-30 days'))
+    ORDER BY expires_at ASC
+  `).all(digits) as any[]).map(toOverride);
+}
+
+export function getManualOverrideById(id: number): ManualAccountOverride | null {
+  const row = db.prepare(`SELECT * FROM manual_account_overrides WHERE id = ?`).get(id) as any;
+  return row ? toOverride(row) : null;
+}
+
 /** Para "Mis cuentas" de liordark.com — solo overrides de clientes retail. */
 export function listManualOverridesForClient(clientPhone: string): ManualAccountOverride[] {
   return (db.prepare(`

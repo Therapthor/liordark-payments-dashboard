@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listManualOverridesForAccount } from "../db/manual-overrides.repository";
+import { listManualOverridesForAccount, listManualOverridesByPhone, getManualOverrideById, type ManualAccountOverride } from "../db/manual-overrides.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { db } from "../db/db";
 import { replaceOptionsFor, replaceClientTo, type ReplaceSubject } from "../services/support-reports.service";
@@ -130,6 +130,24 @@ function withStatus(account: AccessAccountWithProfiles) {
 
 function profileWithStatus(p: ProfileWithAccount) {
   return { ...p, status: accountStatus(p.expiresAt), daysLeft: daysLeft(p.expiresAt) };
+}
+
+// Reemplazo «en uso» (temporal) para la búsqueda por celular: no ocupa
+// perfil, así que va aparte de los perfiles. accountId = la cuenta de
+// Accesos a la que apunta (si sigue existiendo), para «👁 Ver cuenta».
+function overrideWithStatus(o: ManualAccountOverride) {
+  const acc = db.prepare(`
+    SELECT id, password, provider, expires_at AS expiresAt FROM access_accounts
+    WHERE upper(trim(platform)) = upper(trim(?)) AND lower(trim(email)) = lower(trim(?)) LIMIT 1
+  `).get(o.platform, o.email) as { id: number; password: string; provider: string; expiresAt: string | null } | undefined;
+  return {
+    id: o.id, clientPhone: o.clientPhone, wholesalerId: o.wholesalerId, platform: o.platform,
+    email: o.email, password: o.password || acc?.password || "", profileName: o.profileName,
+    provider: o.provider || acc?.provider || "", expiresAt: o.expiresAt, createdAt: o.createdAt,
+    replacedFrom: o.replacedFrom, accountId: acc?.id ?? null, providerExpiresAt: acc?.expiresAt ?? null,
+    status: accountStatus(o.expiresAt), daysLeft: daysLeft(o.expiresAt),
+    seen: replacementSeen(o.clientPhone, o.wholesalerId, o.platform, o.email),
+  };
 }
 
 // ── CATÁLOGO (para el desplegable de plataforma) ──
@@ -524,6 +542,32 @@ router.get("/profiles/:id/replace-options", (req, res) => {
 router.post("/profiles/:id/replace", (req, res) => {
   const subject = profileReplaceSubject(Number(req.params.id));
   if (!subject) return res.status(404).json({ message: "Ese perfil ya no tiene cliente." });
+  const mode = req.body?.mode === "shared" ? "shared" : "fresh";
+  const targetAccountId = Number(req.body?.targetAccountId);
+  if (!targetAccountId) return res.status(400).json({ message: "Elige la cuenta nueva." });
+  const result = replaceClientTo(subject, mode, targetAccountId, String(req.body?.profileName ?? ""));
+  if (!result.ok) return res.status(400).json({ message: result.message });
+  res.json(result);
+});
+
+// Cambiar de nuevo a un cliente que está en una cuenta «en uso» (temporal):
+// a un perfil libre (queda fijo) o a otra cuenta en uso. Mismo flujo que
+// /profiles/:id/replace; el origen es el reemplazo temporal.
+function overrideReplaceSubject(id: number): ReplaceSubject | null {
+  const o = getManualOverrideById(id);
+  if (!o || !o.clientPhone) return null;
+  return { clientPhone: o.clientPhone, platform: o.platform, accountEmail: o.email, wholesalerId: o.wholesalerId ?? null };
+}
+
+router.get("/overrides/:id/replace-options", (req, res) => {
+  const subject = overrideReplaceSubject(Number(req.params.id));
+  if (!subject) return res.status(404).json({ message: "Ese reemplazo ya no existe." });
+  res.json(replaceOptionsFor(subject));
+});
+
+router.post("/overrides/:id/replace", (req, res) => {
+  const subject = overrideReplaceSubject(Number(req.params.id));
+  if (!subject) return res.status(404).json({ message: "Ese reemplazo ya no existe." });
   const mode = req.body?.mode === "shared" ? "shared" : "fresh";
   const targetAccountId = Number(req.body?.targetAccountId);
   if (!targetAccountId) return res.status(400).json({ message: "Elige la cuenta nueva." });
@@ -1086,7 +1130,10 @@ router.get("/search", (req, res) => {
 
   if (looksLikePhone) {
     const profiles = searchProfilesByPhone(q).map(profileWithStatus);
-    res.json({ mode: "phone", profiles });
+    // Antes solo perfiles: al cambiar a un cliente a una cuenta «en uso»
+    // (temporal) dejaba de salir aquí — la búsqueda decía que no tenía cuentas.
+    const overrides = listManualOverridesByPhone(q).map(overrideWithStatus);
+    res.json({ mode: "phone", profiles, overrides });
     return;
   }
 

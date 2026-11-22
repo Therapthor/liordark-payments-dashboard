@@ -1643,6 +1643,8 @@
 
   let searchDebounce = null;
   let lastClientProfiles = [];
+  // Reemplazos «en uso» (temporales) del cliente: no ocupan perfil.
+  let lastClientOverrides = [];
   let activeQuery = "";
 
   /** Refresca la vista actual (búsqueda activa, o el acordeón completo). */
@@ -1689,7 +1691,8 @@
 
     if (result.mode === "phone") {
       lastClientProfiles = result.profiles.filter(p => p.clientPhone);
-      renderClientSummary(lastClientProfiles);
+      lastClientOverrides = result.overrides || [];
+      renderClientSummary(lastClientProfiles, lastClientOverrides);
       summaryBox.hidden = false;
       resultsBox.hidden = true;
       platformsBox.hidden = true;
@@ -1712,12 +1715,13 @@
     wireAccountCardEvents(resultsBox);
   }
 
-  function renderClientSummary(profiles) {
+  function renderClientSummary(profiles, overrides) {
     const box = document.getElementById("access-client-summary");
     const list = document.getElementById("access-client-list");
     box.hidden = false;
+    overrides = overrides || [];
 
-    if (profiles.length === 0) {
+    if (profiles.length === 0 && overrides.length === 0) {
       list.innerHTML = `<li class="access-client-empty">No se encontraron cuentas para ese número.</li>`;
       return;
     }
@@ -1743,7 +1747,55 @@
           </div>
         </div>
       </li>
+    `).join("") + overrides.map((o, idx) => `
+      <li class="access-client-item access-client-temp">
+        <div>
+          <span class="access-temp-tag">🔄 Temporal · cuenta en uso</span>
+          <b>${escapeHtml(o.platform)}</b>${o.profileName ? " — " + escapeHtml(o.profileName) : ""}
+          <div class="text-muted">📧 ${escapeHtml(o.email)}</div>
+          <div class="text-muted">${escapeHtml(o.clientPhone)}${o.wholesalerId != null ? " 🏪" : ""}${o.provider ? " · " + escapeHtml(o.provider) : ""}</div>
+          ${o.replacedFrom ? `<div class="access-replaced-main">antes: <b>${escapeHtml(o.replacedFrom)}</b>${o.createdAt ? " · " + ddmmFromSql(o.createdAt) : ""}</div>` : ""}
+          <div>${seenText(o.seen)}</div>
+        </div>
+        <div class="access-client-item-right">
+          <span class="badge access-badge-${STATUS_CLASS[o.status]}">${STATUS_LABEL[o.status]}</span>
+          <span>${fmtDateLong(o.expiresAt)} · ${daysLabel(o.status, o.daysLeft)}</span>
+          ${o.accountId ? "" : `<span class="text-muted">La cuenta ya no está en Accesos</span>`}
+          <div class="access-client-item-actions">
+            ${o.accountId ? `<button class="btn-secondary btn-sm client-ov-view" data-idx="${idx}">👁 Ver cuenta</button>` : ""}
+            <button class="btn-secondary btn-sm client-ov-send" data-idx="${idx}">📧 Enviar cuenta</button>
+            <button class="btn-secondary btn-sm client-ov-replace" data-idx="${idx}">🔄 Cambiar cuenta</button>
+          </div>
+        </div>
+      </li>
     `).join("");
+  }
+
+  // 👁 Ver cuenta de un reemplazo temporal: abre la plataforma y resalta la
+  // tarjeta de la cuenta (con su recuadro «Reemplazos en uso»).
+  async function viewOverrideAccount(o) {
+    document.getElementById("access-search-input").value = "";
+    document.getElementById("access-search-clear").hidden = true;
+    resetSearch();
+    await openPlatformDetail(o.platform);
+    const card = document.querySelector(`#access-platform-detail-accounts details.access-account[data-account-id="${o.accountId}"]`);
+    if (!card) return;
+    card.open = true;
+    const spot = card.querySelector(".access-overrides") || card;
+    spot.scrollIntoView({ behavior: "smooth", block: "center" });
+    spot.classList.add("row-highlight-yellow");
+    setTimeout(() => spot.classList.remove("row-highlight-yellow"), 4000);
+  }
+
+  function openReplaceFromOverride(o) {
+    if (!window.LiordarkReplace) { alert("No se pudo abrir el cambio de cuenta. Recarga la página."); return; }
+    window.LiordarkReplace.open({
+      info: `${o.platform} · ${o.email} (temporal) · cliente ${String(o.clientPhone || "").replace(/\D/g, "").slice(-9)}`,
+      phone: o.clientPhone,
+      optionsUrl: `/api/access/overrides/${o.id}/replace-options`,
+      replaceUrl: `/api/access/overrides/${o.id}/replace`,
+      after: () => { runSearch(activeQuery); },
+    });
   }
 
   // Abre el detalle de la plataforma (todas sus cuentas ya expandidas) y
@@ -1776,6 +1828,15 @@
       const renewalBtn = e.target.closest(".row-renewal");
       const releaseBtn = e.target.closest(".client-release-profile");
       const replaceBtn = e.target.closest(".client-replace-account");
+      const ovBtn = e.target.closest(".client-ov-view, .client-ov-send, .client-ov-replace");
+      if (ovBtn) {
+        const o = lastClientOverrides[Number(ovBtn.dataset.idx)];
+        if (!o) return;
+        if (ovBtn.classList.contains("client-ov-view")) viewOverrideAccount(o);
+        else if (ovBtn.classList.contains("client-ov-send")) window.open(waLink(o.clientPhone, msgEntrega({ ...o, pin: "" })), "_blank");
+        else openReplaceFromOverride(o);
+        return;
+      }
       if (replaceBtn) {
         const p = lastClientProfiles[Number(replaceBtn.dataset.idx)];
         if (p) openReplaceAccount(p.id, p.platform, p.email, p.clientPhone);
@@ -1815,9 +1876,10 @@
 
   function initClientSummarySend() {
     document.getElementById("access-summary-send-btn").addEventListener("click", () => {
-      if (lastClientProfiles.length === 0) return;
-      const phone = lastClientProfiles[0].clientPhone;
-      window.open(waLink(phone, msgResumen(lastClientProfiles)), "_blank");
+      const all = lastClientProfiles.concat(lastClientOverrides.map(o => ({ ...o, pin: "" })));
+      if (all.length === 0) return;
+      const phone = all[0].clientPhone;
+      window.open(waLink(phone, msgResumen(all)), "_blank");
     });
   }
 
