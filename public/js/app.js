@@ -113,70 +113,68 @@
   // SONIDO — beep generado en el navegador, sin archivo de audio
   // ─────────────────────────────────────────────────────────────
 
+  // Una nota por aviso, cada uno con su tono, para reconocerlos de oído:
+  //   pago      → «ding» agudo y suave
+  //   cliente   → nota grave y redonda
+  //   código    → «tic» corto y muy agudo (solo tus búsquedas)
+  //   manual    → alarma corta (Canva/Gemini por activar, pedido sin stock)
+  //   soporte   → nota que baja (reporte de cliente o mayorista)
+  // Nunca suenan encima: si llegan juntos, van uno tras otro (1,5 s), y si
+  // el mismo aviso se repite en ese rato, suena una sola vez.
   let audioCtx = null;
-  function playChime() {
-    if (localStorage.getItem("ldp_muted") === "1") return;
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const now = audioCtx.currentTime;
-      [880, 1320].forEach((freq, i) => {
-        const osc  = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, now + i * 0.09);
-        gain.gain.exponentialRampToValueAtTime(0.18, now + i * 0.09 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.09 + 0.35);
-        osc.connect(gain).connect(audioCtx.destination);
-        osc.start(now + i * 0.09);
-        osc.stop(now + i * 0.09 + 0.4);
-      });
-    } catch { /* navegador sin soporte de audio — no crítico */ }
+  function tone(freq, opts) {
+    const o = Object.assign({ type: "sine", dur: 0.35, vol: 0.18, at: 0, glideTo: null }, opts || {});
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = audioCtx.currentTime + o.at;
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = o.type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (o.glideTo) osc.frequency.exponentialRampToValueAtTime(o.glideTo, t0 + o.dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(o.vol, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + o.dur + 0.05);
   }
-
-  // Aviso de "nuevo cliente registrado en liordark.com" — distinto del
-  // beep de pagos (onda triangular, 3 notas en vez de 2, más largo).
-  function playCustomerChime() {
-    if (localStorage.getItem("ldp_muted") === "1") return;
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const now = audioCtx.currentTime;
-      [660, 880, 1100].forEach((freq, i) => {
-        const osc  = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "triangle";
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.0001, now + i * 0.12);
-        gain.gain.exponentialRampToValueAtTime(0.16, now + i * 0.12 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.4);
-        osc.connect(gain).connect(audioCtx.destination);
-        osc.start(now + i * 0.12);
-        osc.stop(now + i * 0.12 + 0.45);
-      });
-    } catch { /* navegador sin soporte de audio — no crítico */ }
+  const SOUNDS = {
+    payment:  () => tone(1046, { dur: 0.45 }),
+    customer: () => tone(523, { type: "triangle", dur: 0.4, vol: 0.2 }),
+    code:     () => tone(1760, { dur: 0.18, vol: 0.14 }),
+    manual:   () => { tone(740, { type: "square", dur: 0.16, vol: 0.09 }); tone(740, { type: "square", dur: 0.16, vol: 0.09, at: 0.22 }); },
+    support:  () => tone(880, { type: "triangle", dur: 0.5, vol: 0.2, glideTo: 440 }),
+  };
+  const SOUND_GAP_MS = 1500;
+  let lastSoundAt = 0;
+  let lastSoundName = "";
+  let soundTimer = null;
+  const soundQueue = [];
+  function soundMuted() {
+    try { return localStorage.getItem("ldp_muted") === "1"; } catch { return false; }
   }
-
-  // Aviso de "pedido cayó a revisión manual" — necesita atención porque
-  // el cliente ya pagó pero no se detectó solo. Onda cuadrada, alarmante
-  // a propósito (distinto de los otros dos, que son "buenas noticias").
-  function playReviewAlertChime() {
-    if (localStorage.getItem("ldp_muted") === "1") return;
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const now = audioCtx.currentTime;
-      [0, 0.22].forEach((offset) => {
-        const osc  = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "square";
-        osc.frequency.value = 740;
-        gain.gain.setValueAtTime(0.0001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.09, now + offset + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.16);
-        osc.connect(gain).connect(audioCtx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.18);
-      });
-    } catch { /* navegador sin soporte de audio — no crítico */ }
+  function playNow(name) {
+    lastSoundAt = Date.now();
+    lastSoundName = name;
+    try { SOUNDS[name](); } catch { /* navegador sin soporte de audio — no crítico */ }
+  }
+  function drainSounds() {
+    if (soundTimer || !soundQueue.length) return;
+    soundTimer = setTimeout(() => {
+      soundTimer = null;
+      const next = soundQueue.shift();
+      if (next && !soundMuted()) playNow(next);
+      drainSounds();
+    }, Math.max(0, lastSoundAt + SOUND_GAP_MS - Date.now()));
+  }
+  function playSound(name) {
+    if (!SOUNDS[name] || soundMuted()) return;
+    const recent = Date.now() - lastSoundAt < SOUND_GAP_MS;
+    if (recent && lastSoundName === name) return;  // el mismo aviso repetido
+    if (soundQueue.includes(name)) return;
+    if (!recent && !soundTimer) { playNow(name); return; }
+    soundQueue.push(name);
+    drainSounds();
   }
 
   function initSoundToggle() {
@@ -187,7 +185,7 @@
       const nowMuted = localStorage.getItem("ldp_muted") === "1";
       localStorage.setItem("ldp_muted", nowMuted ? "0" : "1");
       updateSoundBtn(btn, !nowMuted);
-      if (nowMuted) playChime(); // feedback al reactivar
+      if (nowMuted) playSound("payment"); // feedback al reactivar
     });
   }
   function updateSoundBtn(btn, muted) {
@@ -777,7 +775,6 @@
   }
 
   let evtSource = null;
-  let lastCodeChimeAt = 0;
   const ADMIN_CODE_ORIGINS = new Set(["panel", "busqueda"]);
   function connectLive() {
     if (evtSource) evtSource.close();
@@ -797,7 +794,7 @@
         // Sin sonido si todavía no se confirmó (ahí es cuando el pedido
         // cae a "Pedidos pendientes"/"Renovaciones pendientes" — mucha
         // gente solo le da a comprar para ver el proceso y no paga).
-        if (evt.payment.status === "matched") playChime();
+        if (evt.payment.status === "matched") playSound("payment");
       }
 
       if (evt.type === "status_update") {
@@ -828,17 +825,19 @@
       if (evt.type === "review_pending" && window.LiordarkReviews) window.LiordarkReviews.refresh();
 
       if (evt.type === "customer_registered") {
-        playCustomerChime();
+        playSound("customer");
         if (window.LiordarkWebCustomers) window.LiordarkWebCustomers.load();
       }
 
+      // Pago que no se detectó solo: sin sonido (queda en Pedidos
+      // pendientes). La alarma es para lo que hay que hacer a mano: Canva/
+      // Gemini por activar o pedido sin stock (ver loadPendingOrders).
       if (evt.type === "order_needs_review") {
-        playReviewAlertChime();
         loadPendingOrders();
       }
 
       if (evt.type === "support_report") {
-        playReviewAlertChime();
+        playSound("support");
         if (window.LiordarkSoportes) window.LiordarkSoportes.load();
       }
 
@@ -847,10 +846,7 @@
       // los clientes, el asistente o el vigilante llega en silencio.
       if (evt.type === "code_inbox") {
         const mine = evt.item && ADMIN_CODE_ORIGINS.has(evt.item.origin);
-        if (mine && evt.item.value && Date.now() - lastCodeChimeAt > 5_000) {
-          lastCodeChimeAt = Date.now();
-          playCustomerChime();
-        }
+        if (mine && evt.item.value) playSound("code");
         if (window.LiordarkCodesInbox) window.LiordarkCodesInbox.onLive(evt);
       }
     };
@@ -995,6 +991,19 @@
     for (const o of orders) list.appendChild(renderRenewalOrder(o));
   }
 
+  // Alarma corta cuando aparece trabajo a mano NUEVO: una cuenta de Canva/
+  // Gemini/YouTube por activar o un pedido que quedó sin stock. La primera
+  // carga solo memoriza lo que ya había (no suena al abrir el panel).
+  let manualWorkSeen = null;
+  function alarmOnNewManualWork(orders, activations) {
+    const keys = [
+      ...orders.filter(o => o.status === "NO_STOCK").map(o => "o:" + o.orderName),
+      ...activations.map(a => "a:" + a.accountId),
+    ];
+    if (manualWorkSeen && keys.some(k => !manualWorkSeen.has(k))) playSound("manual");
+    manualWorkSeen = new Set(keys);
+  }
+
   async function loadPendingOrders() {
     try {
       const [{ orders }, activationResult] = await Promise.all([
@@ -1003,6 +1012,7 @@
       ]);
       cachedPendingOrders = orders.filter(o => !o.isRenewal);
       cachedPendingActivations = activationResult.pending || [];
+      alarmOnNewManualWork(orders, cachedPendingActivations);
       applyPendingSearch();
       renderRenewalList(orders.filter(o => o.isRenewal));
     } catch {

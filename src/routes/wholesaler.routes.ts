@@ -754,6 +754,9 @@ router.post("/support/tickets", (req, res) => {
   });
   if (!result.ok) return res.status(result.status).json({ message: result.message });
   touchWholesalerActivity(wholesalerId);
+  // Mismo aviso en vivo que un reporte de cliente: suena en el panel y
+  // refresca Soportes (antes el del mayorista llegaba en silencio).
+  emitDashboardEvent({ type: "support_report", id: result.ticket.id, platform: result.ticket.platform });
   res.status(201).json({ ticket: ticketForWholesaler(result.ticket) });
 });
 
