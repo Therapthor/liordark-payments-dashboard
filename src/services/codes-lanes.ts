@@ -34,7 +34,7 @@ export function laneIdOf(sourceId: string): string {
   if (sourceId === "streaming_market_web") return "streaming_market";
   if (sourceId === "vegamig_web") return "vegamig";
   if (sourceId === "latinocol_outlook" || sourceId === "latinocol_yurama") return sourceId;
-  if (sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney" || sourceId === "juanpa_prime") return "juanpa";
+  if (sourceId === "juanpa_bandeja" || sourceId === "juanpa_disney" || sourceId === "juanpa_prime" || sourceId === "juanpa_hbo") return "juanpa";
   if (sourceId === "correo_conectado") return "correo";
   return "otro";
 }

@@ -506,6 +506,8 @@ export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): b
   if (deliversEverything(sourceId)) return false;
   // Disney+ por Pally y bandeja de Juanpa: solo el código de acceso único (6 dígitos).
   if (sourceId === "juanpa_disney" || sourceId === "disney_sin_opciones") return !isDisneyAccessCode(result);
+  // HBO por bandeja de Juanpa: solo para el admin (nunca al cliente).
+  if (ADMIN_ONLY_SOURCES.includes(sourceId)) return true;
   // Prime Video por bandeja de Juanpa: el código (o enlace) de inicio de
   // sesión, nunca los de cambio de datos (contraseña, correo, teléfono).
   if (sourceId === "juanpa_prime") return isAccountChangeResult(result) || (result.kind !== "code" && result.kind !== "link");
@@ -1462,7 +1464,7 @@ function juanpaInboxUrl(email: string, sourceId: string): string | null {
   const row = db.prepare(`
     SELECT code_inbox_url AS url FROM access_accounts
     WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND code_inbox_url != ''
-      AND (code_source IS NULL OR code_source = ? OR code_source NOT IN ('juanpa_bandeja', 'juanpa_disney', 'juanpa_prime'))
+      AND (code_source IS NULL OR code_source = ? OR code_source NOT IN ('juanpa_bandeja', 'juanpa_disney', 'juanpa_prime', 'juanpa_hbo'))
     ORDER BY (code_source = ?) DESC, id DESC LIMIT 1
   `).get(email, sourceId, sourceId) as { url: string } | undefined;
   return row?.url ? normalizeInboxUrl(row.url) : null;
@@ -1512,6 +1514,22 @@ async function lookupJuanpaDisney(email: string): Promise<CodeLookupResult> {
 async function lookupJuanpaPrime(email: string): Promise<CodeLookupResult> {
   return juanpaPrimeResult(await juanpaFetch(email, "juanpa_prime"));
 }
+
+// Juanpa — bandeja de HBO: SOLO PARA EL ADMIN, sin filtros: el correo más
+// nuevo que llegue, sea lo que sea. Al cliente nunca se le entrega (ver
+// ADMIN_ONLY_SOURCES).
+async function lookupJuanpaHbo(email: string): Promise<CodeLookupResult> {
+  const mails = await juanpaFetch(email, "juanpa_hbo");
+  if (!mails.length) {
+    return { found: false, kind: null, value: null, items: [], providerMessage: "Juanpa: la bandeja está vacía (todavía no llegó ningún correo)." };
+  }
+  const items = mails.map(m => m.item);
+  return listedEmailResult(mails[0]!.item, mails[0]!.body, items);
+}
+
+/** Fuentes que ve SOLO el admin: el cliente no las tiene en «Códigos», ni el
+ *  mayorista, ni el asistente, ni por link compartido. */
+export const ADMIN_ONLY_SOURCES = ["juanpa_hbo"];
 
 /** Correos de la bandeja de Prime Video → el código o enlace más nuevo que
  *  no sea de cambio de datos; si no hay, el más nuevo (solo lo ve el panel,
@@ -1592,10 +1610,10 @@ export async function fetchListedEmail(sourceId: string, email: string, item: Li
 }
 
 /** Fuentes que leen la bandeja privada del proveedor: cada cuenta lleva su link. */
-export const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney", "juanpa_prime"];
+export const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"];
 
 /** Fuentes que listan todos los correos recientes (las vigila el panel solo). */
-export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja", "juanpa_disney", "juanpa_prime"];
+export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"];
 
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 
@@ -1613,6 +1631,7 @@ const SOURCES: Record<string, Source> = {
   juanpa_bandeja:       { label: "Juanpa — bandeja (Netflix)", lookup: lookupJuanpaBandeja },
   juanpa_disney:        { label: "Juanpa — bandeja (Disney+)", lookup: lookupJuanpaDisney },
   juanpa_prime:         { label: "Juanpa — bandeja (Prime Video)", lookup: lookupJuanpaPrime },
+  juanpa_hbo:           { label: "Juanpa — bandeja (HBO · solo admin)", lookup: lookupJuanpaHbo },
   correo_conectado:     { label: "Correo conectado (Outlook / Gmail)", lookup: lookupConnectedMail },
 };
 

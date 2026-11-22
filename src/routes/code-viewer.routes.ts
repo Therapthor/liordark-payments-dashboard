@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getAccountById } from "../db/access.repository";
-import { getAccountCodeSource, getAccountTotpSecret, saveIncomingCode } from "../db/codes.repository";
+import { getAccountCodeSource, getAccountTotpSecret, saveIncomingCode, ADMIN_ONLY_CODE_SOURCES } from "../db/codes.repository";
 import {
   createCodeLink, findCodeLink, markCodeLinkOpened, closeCodeLink, codeLinkState, sqliteDate,
   type CodeLink,
@@ -109,6 +109,9 @@ codeViewerAdminRoutes.post("/:accountId/link", (req, res) => {
   const sourceId = getAccountCodeSource(accountId);
   if (!sourceId) {
     return res.status(409).json({ message: "Esta cuenta no tiene fuente de códigos configurada." });
+  }
+  if (ADMIN_ONLY_CODE_SOURCES.includes(sourceId)) {
+    return res.status(409).json({ message: "Los códigos de esta cuenta (HBO por Juanpa) son solo para ti: no se comparten con el cliente." });
   }
   const isTotp = sourceId === TOTP_SOURCE_ID;
   if (isTotp && !getAccountTotpSecret(accountId)) {

@@ -41,11 +41,18 @@ export function setAccountCodeSource(accountId: number, sourceId: string | null)
   db.prepare(`UPDATE access_accounts SET code_source = ? WHERE id IN (${SAME_EMAIL_GROUP})`).run(sourceId, accountId);
 }
 
+/** Fuentes que ve SOLO el admin (mismo listado que ADMIN_ONLY_SOURCES de
+ *  codes-lookup.service.ts): nunca se le ofrecen al cliente ni al mayorista. */
+export const ADMIN_ONLY_CODE_SOURCES = ["juanpa_hbo"];
+const ADMIN_ONLY_SQL = ADMIN_ONLY_CODE_SOURCES.map(s => `'${s}'`).join(", ");
+
 /** ¿Esta cuenta entrega códigos? (código habilitado + fuente configurada). */
 export function getAccountCodesConfig(accountId: number): { enabled: boolean; sourceId: string | null } {
   const row = db.prepare(`SELECT codes_enabled, code_source FROM access_accounts WHERE id = ?`).get(accountId) as
     { codes_enabled: number; code_source: string | null } | undefined;
-  return { enabled: !!row && row.codes_enabled === 1 && !!row.code_source, sourceId: row?.code_source ?? null };
+  // Fuentes solo-admin (HBO por Juanpa): para el mayorista no entrega códigos.
+  const adminOnly = !!row?.code_source && ADMIN_ONLY_CODE_SOURCES.includes(row.code_source);
+  return { enabled: !!row && row.codes_enabled === 1 && !!row.code_source && !adminOnly, sourceId: row?.code_source ?? null };
 }
 
 export function getAccountCodeSource(accountId: number): string | null {
@@ -161,7 +168,7 @@ export function listClientCodesAccounts(clientPhone: string): ClientCodesAccount
            p.profile_name AS profileName, COALESCE(p.expires_override, a.expires_at) AS expiresAt, a.totp_secret AS totpSecret
     FROM access_profiles p
     JOIN access_accounts a ON a.id = p.account_id
-    WHERE a.codes_enabled = 1
+    WHERE a.codes_enabled = 1 AND COALESCE(a.code_source, '') NOT IN (${ADMIN_ONLY_SQL})
       AND substr(p.client_phone, -9) = substr(?, -9)
       AND COALESCE(p.expires_override, a.expires_at) IS NOT NULL AND COALESCE(p.expires_override, a.expires_at) >= ?
     ORDER BY a.platform ASC

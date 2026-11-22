@@ -68,7 +68,7 @@ const CHECK_EVERY_MS = 8_000;
 // pedido (o desde «Buscar ahora» / «Buscar otro») se mira cada 5 s para
 // entregar el código apenas llega. Si la página tarda (>3 s) o falla, se
 // frena sola: cada 20 s (ver laneIsSlow).
-const FAST_SOURCES = new Set(["juanpa_bandeja", "juanpa_disney", "juanpa_prime"]);
+const FAST_SOURCES = new Set(["juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"]);
 const FAST_CHECK_EVERY_MS = 5_000;
 const FAST_WINDOW_MS = 60_000;
 const BRAKED_CHECK_EVERY_MS = 20_000;

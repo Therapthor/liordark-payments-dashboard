@@ -1156,6 +1156,7 @@
     } catch { /* sin almacenamiento */ }
     const pl = String(platform || ""), pr = String(provider || "");
     if (/juanpa/i.test(pr) && /prime|amazon/i.test(pl)) return "juanpa_prime";
+    if (/juanpa/i.test(pr) && /hbo|max/i.test(pl)) return "juanpa_hbo";
     if (/vega/i.test(pr) || /crunchy|prime|amazon/i.test(pl)) return "vegamig_web";
     if (/juanpa/i.test(pr) && /netflix/i.test(pl)) return "juanpa_bandeja";
     if (/juanpa/i.test(pr) && /disney/i.test(pl)) return "juanpa_disney";
@@ -1418,7 +1419,7 @@
   const TOTP_INVALID_MSG = "La clave 2FA no es válida: debe tener al menos 16 caracteres, solo letras A–Z y números 2–7 (los espacios y guiones se quitan solos). Revisa que la copiaste completa.";
 
   // Fuentes que leen la bandeja privada que da el proveedor (link por cuenta).
-  const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney", "juanpa_prime"];
+  const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"];
 
   function syncTotpField() {
     const source = document.getElementById("account-edit-code-source").value;
