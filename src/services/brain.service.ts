@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
 import {
-  brainPlatforms, isRotatePlatform, isBrainPlatform, limaToday, addDays, invalidateBrainPlatforms,
+  brainPlatforms, isRotatePlatform, isBrainPlatform, isSingleBrainPlatform, limaToday, addDays, invalidateBrainPlatforms,
 } from "../db/brain-platforms";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -371,7 +371,10 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
     }
 
     // 4) Stock para mañana: lugares libres (o que se liberan) en cuentas que siguen.
-    const kept = units.filter(u => !dropList.has(u) && (renewList.has(u) || !due(u)) && u.policy !== "renewOnly" && !u.paused);
+    // Cuentas individuales (Spotify): cada cuenta libre es 1 lugar.
+    const single = isSingleBrainPlatform(platform);
+    const kept = units.filter(u => !dropList.has(u) && (renewList.has(u) || !due(u))
+      && (single ? u.policy === "renewOnly" : u.policy !== "renewOnly") && !u.paused);
     const freeTomorrow = kept.reduce((s, u) => s + u.profiles.filter(p => !occupied(p) || !p.date || p.date <= tomorrow).length, 0);
     // Esperan lugar: los que no se pudieron mover todavía + los que quedaron
     // en «Pendientes de cuenta nueva» en esta corrida.
@@ -380,8 +383,8 @@ export function runBrain(origin: "auto" | "manual" = "auto"): BrainPlan {
     const missing = reserve + waiting - freeTomorrow;
     if (missing > 0) {
       const caps = units.filter(u => u.policy === "normal").map(u => u.profiles.length).sort((a, b) => a - b);
-      const cap = isRotatePlatform(platform) ? 1 : (caps[Math.floor(caps.length / 2)] ?? 5) || 5;
-      const accountsToBuy = isRotatePlatform(platform) ? missing : Math.ceil(missing / cap);
+      const cap = isRotatePlatform(platform) || single ? 1 : (caps[Math.floor(caps.length / 2)] ?? 5) || 5;
+      const accountsToBuy = isRotatePlatform(platform) || single ? missing : Math.ceil(missing / cap);
       plan.stock.push({
         platform, freeTomorrow, reserve, missing, accountsToBuy, urgent: waiting > 0,
         note: isRotatePlatform(platform)
