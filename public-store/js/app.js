@@ -148,6 +148,7 @@
       setFormError("forgot-error", "");
       document.getElementById("forgot-ok").hidden = true;
       document.getElementById("forgot-submit").hidden = false;
+      document.getElementById("forgot-wa-box").hidden = true;
       const typed = document.getElementById("login-phone").value.trim() || document.getElementById("quick-email").value.trim() || document.getElementById("quick-phone").value.trim();
       document.getElementById("forgot-login").value = typed;
       showAuthCard("forgot-card");
@@ -234,6 +235,11 @@
         ok.textContent = "✉️ " + (r.message || "Revisa tu correo.");
         ok.hidden = false;
         btn.hidden = true;
+        // Sin correo registrado no le llega nada: que pueda pedirlo por WhatsApp.
+        const digits = login.includes("@") ? "" : login.replace(/\D/g, "").slice(-9);
+        document.getElementById("forgot-wa").href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(
+          "Hola 👋, olvidé mi PIN de la tienda y mi cuenta no tiene correo registrado." + (digits ? " Mi número: " + digits : ""));
+        document.getElementById("forgot-wa-box").hidden = false;
       } catch (err) {
         setFormError("forgot-error", err.message);
       } finally {

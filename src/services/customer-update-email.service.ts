@@ -1,5 +1,5 @@
 import { db } from "../db/db";
-import { findCustomerByPhone, type Customer } from "../db/customer.repository";
+import { findCustomerByPhone, welcomePending, markWelcomeSent, type Customer } from "../db/customer.repository";
 import { getCatalogProductByPlatform } from "../db/catalog.repository";
 import { sendEmail } from "./email.service";
 import { mangoEmail, infoBox, infoRows, para, note, esc, STORE_URL } from "./mango-email";
@@ -117,10 +117,14 @@ function deliveredAccount(phone: string, platform: string, accountEmail: string)
   };
 }
 
-export function purchaseEmail(accounts: DeliveredAccount[]): { subject: string; html: string } {
+/** welcome: primera compra de alguien que todavía no recibió la bienvenida
+ *  (ej. entró por un link de venta): el mismo correo la incluye. */
+export function purchaseEmail(accounts: DeliveredAccount[], welcome?: { phone: string }): { subject: string; html: string } {
   const many = accounts.length > 1;
   const names = accounts.map(a => platformTitle(a.platform));
-  const subject = many ? `🎉 ¡Tus cuentas están listas! (${names.join(", ")})` : `🎉 ¡Tu cuenta de ${names[0]} está lista!`;
+  const subject = welcome
+    ? `🥭 ¡Bienvenido a Manguitope! ${many ? "Tus cuentas están listas" : `Tu cuenta de ${names[0]} está lista`}`
+    : many ? `🎉 ¡Tus cuentas están listas! (${names.join(", ")})` : `🎉 ¡Tu cuenta de ${names[0]} está lista!`;
   const boxes = accounts.map(a => infoBox(infoRows([
     { label: "Correo", value: a.email },
     { label: "Contraseña", value: a.password },
@@ -128,13 +132,20 @@ export function purchaseEmail(accounts: DeliveredAccount[]): { subject: string; 
     { label: "PIN del perfil", value: a.pin, mono: true },
   ]), { title: platformTitle(a.platform), tag: a.expiresAt ? `Vence ${ddmmyyyy(a.expiresAt)}` : "" })).join("");
   const html = mangoEmail({
-    preheader: `Tus datos de acceso de ${names.join(", ")}`,
-    kicker: "Compra confirmada",
-    title: many ? "¡Tus cuentas están listas! 🎉" : "¡Tu cuenta está lista! 🎉",
-    intro: "Gracias por tu compra. Estos son tus datos de acceso; también los tienes siempre en «Mis cuentas».",
+    preheader: welcome ? "Gracias por tu primera compra: aquí están tus datos de acceso." : `Tus datos de acceso de ${names.join(", ")}`,
+    kicker: welcome ? "Bienvenido · Compra confirmada" : "Compra confirmada",
+    title: welcome ? "¡Bienvenido a Manguitope! 🎉" : many ? "¡Tus cuentas están listas! 🎉" : "¡Tu cuenta está lista! 🎉",
+    intro: welcome
+      ? "Gracias por tu primera compra. Estos son tus datos de acceso; también los tienes siempre en «Mis cuentas»."
+      : "Gracias por tu compra. Estos son tus datos de acceso; también los tienes siempre en «Mis cuentas».",
     body: boxes +
       (accounts.some(a => a.pin) ? note("🔐 El <b>PIN del perfil</b> es para entrar a tu perfil. No lo compartas con nadie.") : "") +
-      note("💡 Usa solo tu perfil y no cambies la contraseña de la cuenta. Si algo no funciona, repórtalo en <b>Soporte</b> dentro de la tienda y lo resolvemos."),
+      note("💡 Usa solo tu perfil y no cambies la contraseña de la cuenta. Si algo no funciona, repórtalo en <b>Soporte</b> dentro de la tienda y lo resolvemos.") +
+      (welcome ? infoBox(infoRows([
+        { label: "Entras con", value: `Tu celular ${maskPhone(welcome.phone)} o este correo` },
+        { label: "Y tu PIN", value: "El de tu cuenta en la tienda" },
+      ]), { title: "Tu acceso a la tienda" }) +
+        note("¿Olvidaste tu PIN? En la tienda toca <b>«¿Olvidaste tu PIN?»</b> y te llega aquí un enlace para crear uno nuevo.") : ""),
     cta: { label: "Ver mis cuentas", url: STORE_URL },
   });
   return { subject, html };
@@ -171,8 +182,11 @@ async function flushPurchase(key: string): Promise<void> {
       .map(i => deliveredAccount(entry.phone, i.platform, i.email))
       .filter((a): a is DeliveredAccount => !!a);
     if (!accounts.length) return;
-    const { subject, html } = purchaseEmail(accounts);
-    await sendEmail(to, subject, html);
+    // Primera compra sin bienvenida todavía: va dentro de este correo.
+    const welcome = customer && welcomePending(customer.id) ? { phone: customer.phone } : undefined;
+    const { subject, html } = purchaseEmail(accounts, welcome);
+    const sent = await sendEmail(to, subject, html);
+    if (sent && welcome && customer) markWelcomeSent(customer.id);
   } catch (err: any) {
     console.error("⚠️ correo de compra:", err?.message);
   }
@@ -198,11 +212,11 @@ export function welcomeEmail(customer: Pick<Customer, "phone" | "email">): { sub
   };
 }
 
-export async function sendWelcomeEmail(customer: Pick<Customer, "phone" | "email">): Promise<void> {
+export async function sendWelcomeEmail(customer: Pick<Customer, "id" | "phone" | "email">): Promise<void> {
   try {
-    if (!customer.email) return;
+    if (!customer.email || !welcomePending(customer.id)) return;
     const { subject, html } = welcomeEmail(customer);
-    await sendEmail(customer.email, subject, html);
+    if (await sendEmail(customer.email, subject, html)) markWelcomeSent(customer.id);
   } catch (err: any) {
     console.error("⚠️ correo de bienvenida:", err?.message);
   }

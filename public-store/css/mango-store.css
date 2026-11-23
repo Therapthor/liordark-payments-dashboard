@@ -1154,3 +1154,6 @@ body[data-nav-dir="back"] .page { --pg-x: -22px; --pg-y: 0px; }
 /* ¿Olvidaste tu PIN? — confirmación */
 .forgot-ok { margin: 4px 0 12px; padding: 12px 14px; border-radius: 14px; background: var(--leaf-soft); color: var(--leaf-ink); font-size: 14px; font-weight: 700; line-height: 1.45; }
 .forgot-ok[hidden] { display: none; }
+.forgot-wa { margin-top: 10px; }
+.forgot-wa[hidden] { display: none; }
+.forgot-wa p { margin: 0 0 8px; text-align: center; }

@@ -22,6 +22,7 @@ export type Customer = {
   suspendedUntil:  string | null;
   lockedUntil:     string | null;
   pinRecovery:     string;
+  welcomeSentAt:   string | null;
   createdAt:       string;
 };
 
@@ -36,8 +37,45 @@ function toCustomer(row: any): Customer {
     suspendedUntil:  row.suspended_until,
     lockedUntil:     row.locked_until,
     pinRecovery:     row.pin_recovery || "",
+    welcomeSentAt:   row.welcome_sent_at ?? null,
     createdAt:       row.created_at,
   };
+}
+
+// ── Correo de bienvenida: se manda una sola vez (al registrarse con correo
+// o en su primera compra). La columna se crea la primera vez que se usa;
+// los que ya eran clientes con compras quedan marcados para no recibirla. ──
+let welcomeReady = false;
+/** Se llama al arrancar el panel (index.ts), con todas las tablas ya creadas. */
+export function ensureWelcomeColumn(): void {
+  if (welcomeReady) return;
+  welcomeReady = true;
+  const has = (db.prepare(`PRAGMA table_info(customers)`).all() as { name: string }[]).some(c => c.name === "welcome_sent_at");
+  if (has) return;
+  db.exec(`ALTER TABLE customers ADD COLUMN welcome_sent_at TEXT`);
+  const already = [
+    `EXISTS (SELECT 1 FROM access_profiles p WHERE p.client_phone != '' AND substr(p.client_phone, -9) = substr(customers.phone, -9))`,
+    `EXISTS (SELECT 1 FROM access_accounts_history h WHERE h.profiles_json LIKE '%' || substr(customers.phone, -9) || '%')`,
+    `EXISTS (SELECT 1 FROM manual_account_overrides o WHERE substr(o.client_phone, -9) = substr(customers.phone, -9))`,
+    // Se registraron con correo en las últimas horas: ya les llegó al registrarse.
+    `email != '' AND created_at >= datetime('now', '-6 hours')`,
+  ];
+  for (const cond of already) {
+    try { db.exec(`UPDATE customers SET welcome_sent_at = created_at WHERE welcome_sent_at IS NULL AND ${cond}`); }
+    catch { /* esa tabla todavía no existe: no hay nada que marcar ahí */ }
+  }
+}
+
+/** ¿Todavía no le llegó la bienvenida? */
+export function welcomePending(customerId: number): boolean {
+  ensureWelcomeColumn();
+  const r = db.prepare(`SELECT welcome_sent_at AS w FROM customers WHERE id = ?`).get(customerId) as { w: string | null } | undefined;
+  return !!r && !r.w;
+}
+
+export function markWelcomeSent(customerId: number): void {
+  ensureWelcomeColumn();
+  db.prepare(`UPDATE customers SET welcome_sent_at = datetime('now') WHERE id = ?`).run(customerId);
 }
 
 export function normalizeCustomerPhone(phone: string): string {

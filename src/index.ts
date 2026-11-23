@@ -45,7 +45,7 @@ import { cleanOldCodeLinks } from "./db/code-links.repository";
 import { pinLinkAdminRoutes, pinLinkRoutes } from "./routes/pin-link.routes";
 import { saleLinksAdminRoutes, openSaleLinkPage } from "./routes/sale-links.routes";
 import { cleanPinLinks } from "./db/pin-links.repository";
-import { mergeDuplicateCustomers } from "./db/customer.repository";
+import { ensureWelcomeColumn, mergeDuplicateCustomers } from "./db/customer.repository";
 import { runPinRecovery } from "./services/pin-recovery.service";
 import { ensureWebAccessForAccountHolders } from "./services/web-access.service";
 import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
@@ -370,6 +370,7 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   scheduleEmailRemindersDaily();
   scheduleRenewalCutoverDaily();
   scheduleBackupDaily();
+  ensureWelcomeColumn(); // correo de bienvenida: quién ya la recibió
 
   runExpireChatMediaJob();
   setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);
