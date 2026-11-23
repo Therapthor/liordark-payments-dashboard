@@ -757,6 +757,50 @@
           <button class="config-subnav-item" data-config-section="reviews">⭐ Reseñas <span class="rvw-badge" id="reviews-pending-badge" hidden></span></button>
           <button class="config-subnav-item" data-config-section="mail">📧 Correos</button>
           <button class="config-subnav-item" data-config-section="security">🔒 Seguridad</button>
+          <button class="config-subnav-item" data-config-section="backup">💾 Copias</button>
+        </div>
+
+        <!-- COPIAS DE SEGURIDAD — ver public/js/backup.js y services/backup.service.ts -->
+        <div id="config-section-backup" class="config-section" hidden>
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-header"><h2>💾 Copias de seguridad</h2>
+              <button class="btn-primary btn-sm" id="bk-run" type="button">Hacer copia ahora</button>
+            </div>
+            <p class="panel-hint">Todos los días a las 3:20 a. m. se guarda una copia de lo que no está en GitHub: la base del panel, la del bot, la configuración (.env) y los videos del curso (estos solo cuando cambian). Queda <b>cerrada con tu llave</b>: sin tu llave privada nadie la puede abrir, ni aunque la robe.</p>
+            <div id="bk-status"></div>
+          </div>
+
+          <div class="panel" style="margin-bottom:16px">
+            <div class="panel-header"><h2>1. Tu llave</h2></div>
+            <p class="bk-text">Descarga la herramienta, ábrela en tu computadora y toca «Crear llave». Pega aquí la <b>llave pública</b> (empieza con <code>age1</code>). La privada guárdala tú: nunca la pegues en el panel.</p>
+            <div class="sec-pw-row">
+              <a class="btn-secondary btn-sm" href="tools/copias.html" download="copias-liordark.html">⬇️ Descargar herramienta</a>
+              <a class="btn-secondary btn-sm" href="tools/copias.html" target="_blank" rel="noopener">Abrir aquí</a>
+            </div>
+            <div class="sec-pw-row">
+              <input type="text" id="bk-recipient" placeholder="age1…" spellcheck="false" autocomplete="off">
+              <button class="btn-primary btn-sm" id="bk-recipient-save" type="button">Guardar llave pública</button>
+            </div>
+            <p class="form-error" id="bk-recipient-msg" hidden></p>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header"><h2>2. Google Drive</h2></div>
+            <ol class="bk-steps">
+              <li>Entra a <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> con tu cuenta de Google (se abre un proyecto nuevo).</li>
+              <li>Borra lo que haya y pega este código: <button class="btn-secondary btn-sm" id="bk-copy-code" type="button">📋 Copiar código</button></li>
+              <li>Guarda (💾). Arriba a la derecha: <b>Implementar › Nueva implementación</b> › tipo <b>Aplicación web</b> · Ejecutar como: <b>Yo</b> · Quién tiene acceso: <b>Cualquier usuario</b> › <b>Implementar</b>.</li>
+              <li>Autoriza con tu cuenta (si dice «Google no verificó esta app»: <b>Configuración avanzada › Ir a… (no seguro)</b>; es tu propio script).</li>
+              <li>Copia la <b>URL de la aplicación web</b> (termina en <code>/exec</code>) y pégala aquí:</li>
+            </ol>
+            <div class="sec-pw-row">
+              <input type="text" id="bk-drive-url" placeholder="https://script.google.com/macros/s/…/exec" spellcheck="false" autocomplete="off">
+              <button class="btn-primary btn-sm" id="bk-drive-save" type="button">Guardar y probar</button>
+            </div>
+            <p class="form-error" id="bk-drive-msg" hidden></p>
+            <p class="panel-hint">Las copias quedan en la carpeta <b>Copias Liordark</b> de tu Drive (30 días; los videos, 6 meses). El script solo recibe y guarda: no entrega nada. <button class="btn-secondary btn-sm" id="bk-rotate" type="button">♻️ Cambiar clave del script</button></p>
+            <textarea id="bk-code" hidden readonly></textarea>
+          </div>
         </div>
 
         <div id="config-section-security" class="config-section" hidden>
@@ -1923,6 +1967,7 @@
   <script src="js/game-over.js"></script>
   <script src="js/passkey.js"></script>
   <script src="js/security.js"></script>
+  <script src="js/backup.js"></script>
   <script src="js/wholesalers.js"></script>
   <script src="js/soportes.js"></script>
   <script src="js/full-renewals.js"></script>

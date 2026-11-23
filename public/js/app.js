@@ -392,7 +392,7 @@
   // "Configuración" tiene su propio sub-menú (Catálogo / Métodos de pago /
   // Proveedores) — se maneja aparte del menú principal de arriba.
   const ADMIN_CONFIG_SECTION_KEY = "ldp_admin_config_section";
-  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers", "security", "avisos", "reviews", "mail"];
+  const VALID_CONFIG_SECTIONS = ["catalog", "payment-methods", "providers", "security", "avisos", "reviews", "mail", "backup"];
 
   function switchConfigSection(section) {
     try { localStorage.setItem(ADMIN_CONFIG_SECTION_KEY, section); } catch { /* localStorage bloqueado */ }
@@ -404,6 +404,7 @@
     document.getElementById("config-section-avisos").hidden          = section !== "avisos";
     document.getElementById("config-section-reviews").hidden         = section !== "reviews";
     document.getElementById("config-section-mail").hidden            = section !== "mail";
+    document.getElementById("config-section-backup").hidden          = section !== "backup";
     document.querySelectorAll(".config-subnav-item[data-config-section]").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.configSection === section);
     });
@@ -415,6 +416,7 @@
     if (section === "avisos" && window.LiordarkAvisos) window.LiordarkAvisos.load();
     if (section === "reviews" && window.LiordarkReviews) window.LiordarkReviews.load();
     if (section === "mail" && window.LiordarkMail) window.LiordarkMail.load();
+    if (section === "backup" && window.LiordarkBackup) window.LiordarkBackup.load();
   }
 
   function initConfigSubnav() {

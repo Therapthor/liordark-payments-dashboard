@@ -2330,3 +2330,15 @@ button.mp-kpi:active { transform: scale(0.98); }
 .cx-q-recent-val { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cx-q-recent-val .cx-q-code { font-size: 18px; padding: 4px 10px; }
 .cx-q-recent-none { font-size: 12px; opacity: .6; }
+
+/* Configuración › 💾 Copias */
+.bk-state { margin: 6px 0; padding: 10px 12px; border-radius: 12px; background: var(--mp-soft, #f6eedd); font-size: 14px; }
+.bk-state.ok { background: #e5f5eb; color: #1f6b3d; }
+.bk-state.warn { background: #fff3d6; color: #8a5200; }
+.bk-runs { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.bk-run { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px; border-radius: 10px; background: var(--mp-page, #fff8ec); font-size: 13px; }
+.bk-run.bad { color: #b3261e; }
+.bk-run-when { font-weight: 700; min-width: 150px; }
+.bk-steps { margin: 6px 0 10px; padding-left: 20px; font-size: 14px; display: grid; gap: 6px; }
+#config-section-backup input[type=text] { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.bk-text { margin: 4px 0 10px; font-size: 14px; }

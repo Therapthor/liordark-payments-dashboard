@@ -26,6 +26,8 @@ import botFlowRoutes from "./routes/bot-flow.routes";
 import avisosRoutes, { storeAvisoHandler, wholesaleAvisoHandler, avisoImageHandler } from "./routes/avisos.routes";
 import reviewsRoutes from "./routes/reviews.routes";
 import mailConnectionsRoutes from "./routes/mail-connections.routes";
+import backupRoutes from "./routes/backup.routes";
+import { runBackup } from "./services/backup.service";
 import customerAuthRoutes from "./routes/customer-auth.routes";
 import storeRoutes, { generateExpiryNotificationsForAllCustomers } from "./routes/store.routes";
 import customersRoutes from "./routes/customers.routes";
@@ -114,6 +116,7 @@ apiRouter.use("/auth", authRoutes);
 apiRouter.use("/avisos", requireAuth, avisosRoutes);
 apiRouter.use("/reviews", requireAuth, reviewsRoutes);
 apiRouter.use("/mail", requireAuth, mailConnectionsRoutes);
+apiRouter.use("/backup", requireAuth, backupRoutes);
 apiRouter.get("/store/aviso", storeAvisoHandler);
 apiRouter.get("/wholesaler/aviso", requireWholesalerSession, wholesaleAvisoHandler);
 apiRouter.get("/aviso-img/:file", avisoImageHandler);
@@ -366,6 +369,7 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
 
   scheduleEmailRemindersDaily();
   scheduleRenewalCutoverDaily();
+  scheduleBackupDaily();
 
   runExpireChatMediaJob();
   setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);
@@ -469,6 +473,25 @@ function runRenewalCutoverJob(): void {
   } catch (err: any) {
     console.error("⚠️ Error en el corte automático de renovación:", err?.message);
   }
+}
+
+// Copia de seguridad cifrada — 1 vez al día, 3:20am Lima (poco movimiento).
+// Ver services/backup.service.ts. Sin llave pública configurada no hace nada.
+const BACKUP_HOUR_LIMA = 3;
+const BACKUP_MINUTE_LIMA = 20;
+
+function runBackupJob(): void {
+  runBackup("auto").then(r => { if (!r.ok) console.warn("⚠️ Copia de seguridad: " + r.message); })
+    .catch((err: any) => console.error("⚠️ Error en la copia de seguridad:", err?.message));
+}
+
+function scheduleBackupDaily(): void {
+  const delay = msUntilNextLimaTime(BACKUP_HOUR_LIMA, BACKUP_MINUTE_LIMA);
+  console.log(`💾 Copia de seguridad: próxima corrida en ${Math.round(delay / 60000)} min (3:20am Lima)`);
+  setTimeout(() => {
+    runBackupJob();
+    setInterval(runBackupJob, ONE_DAY_MS);
+  }, delay);
 }
 
 function scheduleRenewalCutoverDaily(): void {

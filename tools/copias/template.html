@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Llave de copias · Liordark</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg: #fbf6ec; --card: #ffffff; --ink: #2a1d0e; --muted: #7a6a55; --line: #eadfca;
+    --accent: #f5b301; --accent-ink: #2a1d0e; --ok: #1f8a4c; --ok-bg: #e5f5eb; --warn: #9a5b00; --warn-bg: #fff3d6;
+    --bad: #b3261e; --bad-bg: #fde7e5; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17120b; --card: #221a10; --ink: #f6ecdc; --muted: #b29b85; --line: #3a2d1c;
+      --ok: #5fd193; --ok-bg: #12301f; --warn: #ffcf70; --warn-bg: #3a2a08; --bad: #ff8a80; --bad-bg: #3a1512;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 10px 16px; border-radius: 999px; font-weight: 700; cursor: pointer; font-size: 15px; }
+  .tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; }
+  section[hidden] { display: none; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  p { margin: 8px 0; }
+  ol { padding-left: 20px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 12px; padding: 11px 16px; font-weight: 800; font-size: 15px; cursor: pointer; background: var(--accent); color: var(--accent-ink); }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  .keybox { font-family: var(--mono); font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; overflow-wrap: anywhere; user-select: all; flex: 1 1 280px; }
+  .label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 16px; }
+  .note { border-radius: 12px; padding: 10px 12px; margin: 12px 0; font-size: 14px; }
+  .note.warn { background: var(--warn-bg); color: var(--warn); }
+  .note.ok { background: var(--ok-bg); color: var(--ok); }
+  .note.bad { background: var(--bad-bg); color: var(--bad); }
+  textarea, input[type=file] { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  textarea { font-family: var(--mono); font-size: 13px; min-height: 64px; resize: vertical; }
+  .files { font-size: 13px; color: var(--muted); margin: 6px 0; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔐 Copias de seguridad · Liordark</h1>
+  <p class="sub">Funciona sin internet y nada sale de tu equipo. Guarda este archivo junto a tu llave.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="crear">1. Crear mi llave</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="abrir">2. Abrir una copia</button>
+  </div>
+
+  <section id="tab-crear">
+    <h2>Crear mi llave</h2>
+    <p>Se crean dos cosas:</p>
+    <ol>
+      <li><b>La llave pública</b> («candado»): va al panel. Solo sirve para <i>cerrar</i> las copias.</li>
+      <li><b>Tu llave privada</b>: la única que <i>abre</i> las copias. Solo la tienes tú.</li>
+    </ol>
+    <div class="row"><button class="btn" id="gen">🔑 Crear llave</button></div>
+
+    <div id="gen-out" hidden>
+      <div class="label">Llave pública — cópiala al panel (Configuración › 💾 Copias)</div>
+      <div class="row"><div class="keybox" id="pub"></div><button class="btn ghost" data-copy="pub">Copiar</button></div>
+
+      <div class="label">Tu llave privada — descárgala y guárdala</div>
+      <div class="row">
+        <button class="btn" id="dl-key">⬇️ Descargar llave</button>
+        <button class="btn ghost" id="show-key">Mostrar</button>
+        <button class="btn ghost" data-copy="sec">Copiar</button>
+      </div>
+      <div class="row" id="sec-row" hidden><div class="keybox" id="sec"></div></div>
+
+      <div class="note warn">
+        <b>Guárdala en 2 lugares seguros</b>, por ejemplo una USB y tu gestor de contraseñas.<br>
+        <b>No</b> la pongas en la misma carpeta de Drive que las copias, <b>no</b> la pegues en el panel y <b>no</b> la mandes por WhatsApp.<br>
+        Si la pierdes, las copias no se pueden abrir: nadie puede recuperarla, ni siquiera nosotros.
+      </div>
+      <p class="files">Si creas otra llave después, las copias viejas se siguen abriendo solo con la llave anterior.</p>
+    </div>
+  </section>
+
+  <section id="tab-abrir" hidden>
+    <h2>Abrir una copia</h2>
+    <ol>
+      <li>Elige el archivo de la copia (termina en <code>.age</code>). Si viene en partes (<code>part01of03</code>…), elige todas juntas.</li>
+      <li>Carga o pega tu llave privada.</li>
+      <li>Toca «Abrir copia»: se descarga un <code>.tar.gz</code> con todo adentro (en Windows 11 se abre con doble clic; si no, con 7-Zip).</li>
+    </ol>
+    <div class="label">Copia</div>
+    <input type="file" id="files" multiple>
+    <div class="files" id="files-info"></div>
+
+    <div class="label">Tu llave privada</div>
+    <input type="file" id="keyfile" accept=".txt,text/plain">
+    <p class="files">o pégala aquí:</p>
+    <textarea id="keytext" placeholder="AGE-SECRET-KEY-1…" spellcheck="false" autocomplete="off"></textarea>
+    <div class="files" id="key-info"></div>
+
+    <div class="row"><button class="btn" id="open">🔓 Abrir copia</button></div>
+    <div id="open-msg"></div>
+  </section>
+
+  <footer>Cifrado con <b>age</b> (X25519 + ChaCha20-Poly1305). Las copias también se abren con la herramienta oficial: <code>age -d -i llave.txt copia.age &gt; copia.tar.gz</code></footer>
+</main>
+
+<script>/*AGE_LIB*/</script>
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const age = window.ageLib;
+  let secretKey = "", publicKey = "";
+
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", String(x === t)));
+    $("tab-crear").hidden = t.dataset.tab !== "crear";
+    $("tab-abrir").hidden = t.dataset.tab !== "abrir";
+  }));
+
+  function download(blob, name) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+  }
+
+  async function copyText(text, btn) {
+    try { await navigator.clipboard.writeText(text); }
+    catch { window.prompt("Copia:", text); return; }
+    const prev = btn.textContent;
+    btn.textContent = "Copiado ✓";
+    setTimeout(() => { btn.textContent = prev; }, 1500);
+  }
+
+  document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", () => {
+    copyText(b.dataset.copy === "pub" ? publicKey : secretKey, b);
+  }));
+
+  $("gen").addEventListener("click", async () => {
+    if (secretKey && !confirm("Ya creaste una llave. ¿Crear otra nueva? (La anterior deja de mostrarse aquí.)")) return;
+    secretKey = await age.generateIdentity();
+    publicKey = await age.identityToRecipient(secretKey);
+    $("pub").textContent = publicKey;
+    $("sec").textContent = secretKey;
+    $("sec-row").hidden = true;
+    $("show-key").textContent = "Mostrar";
+    $("gen-out").hidden = false;
+  });
+
+  $("show-key").addEventListener("click", () => {
+    $("sec-row").hidden = !$("sec-row").hidden;
+    $("show-key").textContent = $("sec-row").hidden ? "Mostrar" : "Ocultar";
+  });
+
+  $("dl-key").addEventListener("click", () => {
+    const text = [
+      "# Llave PRIVADA de las copias de seguridad de Liordark — NO la compartas.",
+      "# Creada: " + new Date().toISOString(),
+      "# public key: " + publicKey,
+      secretKey, "",
+    ].join("\n");
+    download(new Blob([text], { type: "text/plain" }), "llave-copias-liordark.txt");
+  });
+
+  // ── Abrir ──
+  function keyFrom(text) {
+    const m = String(text || "").match(/AGE-SECRET-KEY-1[0-9A-Z]+/);
+    return m ? m[0] : "";
+  }
+  async function showKeyInfo() {
+    const k = keyFrom($("keytext").value);
+    const info = $("key-info");
+    if (!k) { info.textContent = ""; return; }
+    try { info.textContent = "Llave cargada · su llave pública es: " + await age.identityToRecipient(k); }
+    catch { info.textContent = "⚠️ Esa llave no es válida."; }
+  }
+  $("keytext").addEventListener("input", showKeyInfo);
+  $("keyfile").addEventListener("change", async () => {
+    const f = $("keyfile").files[0];
+    if (!f) return;
+    $("keytext").value = keyFrom(await f.text());
+    showKeyInfo();
+  });
+
+  function sortedFiles() {
+    return [...$("files").files].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  $("files").addEventListener("change", () => {
+    const fs = sortedFiles();
+    const mb = fs.reduce((s, f) => s + f.size, 0) / 1048576;
+    $("files-info").textContent = fs.length ? `${fs.length} archivo(s) · ${mb.toFixed(1)} MB` : "";
+  });
+
+  function msg(kind, html) { $("open-msg").innerHTML = `<div class="note ${kind}">${html}</div>`; }
+
+  $("open").addEventListener("click", async () => {
+    const files = sortedFiles();
+    const key = keyFrom($("keytext").value);
+    if (!files.length) return msg("bad", "Elige el archivo de la copia.");
+    if (!key) return msg("bad", "Carga o pega tu llave privada (empieza con AGE-SECRET-KEY-1).");
+    const parts = files.filter(f => /\.part\d+of\d+$/.test(f.name));
+    if (parts.length) {
+      const total = Number(parts[0].name.match(/of(\d+)$/)[1]);
+      if (parts.length !== files.length || parts.length !== total) return msg("bad", `Esta copia viene en ${total} partes: elige todas juntas (y solo esas).`);
+    } else if (files.length > 1) {
+      return msg("bad", "Elige una sola copia (o todas las partes de la misma).");
+    }
+    $("open").disabled = true;
+    msg("warn", "Abriendo… (las copias grandes pueden tardar un poco)");
+    try {
+      const d = new age.Decrypter();
+      d.addIdentity(key);
+      const joined = new Blob(files);
+      const out = await d.decrypt(joined.stream());
+      const blob = await new Response(out).blob();
+      const name = files[0].name.replace(/\.part\d+of\d+$/, "").replace(/\.age$/, "") || "copia.tar.gz";
+      download(blob, name);
+      msg("ok", `✅ Listo: se descargó <b>${name.replace(/[<>&]/g, "")}</b> (${(blob.size / 1048576).toFixed(1)} MB).`);
+    } catch (err) {
+      const t = String(err && err.message || err);
+      msg("bad", /no identity matched|identity/i.test(t)
+        ? "Esta llave no abre esta copia. ¿Es la llave correcta (la de esa fecha)?"
+        : "No se pudo abrir: el archivo está incompleto o dañado. (" + t.replace(/[<>&]/g, "") + ")");
+    } finally {
+      $("open").disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>
