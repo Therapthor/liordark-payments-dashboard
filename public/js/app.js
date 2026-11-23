@@ -1555,6 +1555,44 @@
     setTimeout(() => { b.textContent = old; }, 1500);
   });
 
+  // Banda: «📋 Códigos» y «📋 Soporte» copian un mensaje listo para pegar en
+  // WhatsApp que lleva al cliente a esa sección de la tienda.
+  const CLIENT_MSGS = {
+    codes: "🔑 *Tus códigos, al toque y sin esperar* 🥭\n\n"
+      + "1️⃣ Entra aquí 👉 https://liordark.com/codigos\n"
+      + "2️⃣ Ingresa con tu celular y tu PIN\n"
+      + "3️⃣ Toca «Ver código» en tu cuenta\n\n"
+      + "¿Primera vez? Pon tu correo y crea tu PIN ahí mismo. ¿Olvidaste tu PIN? Toca «¿Olvidaste tu PIN?».",
+    support: "🛟 *Soporte Manguitope* 🥭\n\n"
+      + "Para atenderte más rápido, repórtalo desde la web:\n"
+      + "1️⃣ Entra aquí 👉 https://liordark.com/soporte\n"
+      + "2️⃣ Ingresa con tu celular y tu PIN\n"
+      + "3️⃣ Elige tu cuenta y el problema\n\n"
+      + "Te avisamos por la campanita 🔔 y por correo apenas esté resuelto.",
+  };
+  async function copyPlainText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch { /* sin permiso: plan B */ }
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-copy-client-msg]");
+    if (!b) return;
+    const text = CLIENT_MSGS[b.dataset.copyClientMsg];
+    if (!text) return;
+    if (!(await copyPlainText(text))) { window.prompt("Copia el texto:", text); return; }
+    if (!b.dataset.label) b.dataset.label = b.textContent;
+    b.textContent = "✓ Copiado";
+    b.classList.add("is-copied");
+    clearTimeout(b._copyTimer);
+    b._copyTimer = setTimeout(() => { b.textContent = b.dataset.label; b.classList.remove("is-copied"); }, 1500);
+  });
+
   async function loadSmsDays() {
     try {
       const { days } = await api("/renewals/sms/days");

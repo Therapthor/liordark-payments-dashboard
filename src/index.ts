@@ -244,6 +244,16 @@ app.get(/^\/renovar\/?$/, (req, res, next) => {
   res.sendFile(RENEW_PAGE);
 });
 
+// liordark.com/codigos y liordark.com/soporte — links cortos que el admin
+// manda por WhatsApp: abren la tienda en Códigos / Soporte (si no tiene
+// sesión, primero le pide entrar).
+app.get(/^\/(codigos|soporte)\/?$/i, (req, res, next) => {
+  if (req.hostname === "mayorista.liordark.com" || req.hostname === "panel.liordark.com") return next();
+  const page = req.path.replace(/\//g, "").toLowerCase();
+  res.setHeader("Cache-Control", "no-cache");
+  res.redirect(302, "/#" + page);
+});
+
 // liordark.com/v/<código> — link de venta: entra a su cuenta y abre el pedido.
 app.get(/^\/v\/[A-Za-z0-9]{8,20}\/?$/, (req, res, next) => {
   if (req.hostname !== "liordark.com" && req.hostname !== "www.liordark.com" && env.NODE_ENV === "production") return next();

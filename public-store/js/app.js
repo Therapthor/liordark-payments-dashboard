@@ -77,9 +77,30 @@
   // termina el registro rápido, sin que tenga que buscar el producto otra vez.
   let pendingAfterAuth = null;
 
+  // liordark.com/codigos y liordark.com/soporte (los links que el admin
+  // copia para WhatsApp) llegan como #codigos / #soporte.
+  const LINK_PAGES = { "#codigos": "codes", "#soporte": "support" };
+  const LINK_LOGIN_TEXTS = {
+    codes: {
+      title: "🔑 Tus códigos",
+      subtitle: "Ingresa con tu celular y tu PIN para ver los códigos de tus cuentas. ¿Primera vez? Pon tu correo y crea tu PIN aquí mismo.",
+      button: "Ver mis códigos",
+    },
+    support: {
+      title: "🛟 Soporte",
+      subtitle: "Ingresa con tu celular y tu PIN para reportar un problema con tu cuenta. ¿Primera vez? Pon tu correo y crea tu PIN aquí mismo.",
+      button: "Ir a Soporte",
+    },
+  };
+
   function openAuthModal(context) {
     const sub = document.getElementById("quick-subtitle");
-    sub.textContent = context && context.label
+    // Links de Códigos/Soporte traen su propio título y botón; la compra usa
+    // los de siempre.
+    document.getElementById("start-title").textContent = (context && context.title) || "Para entregarte tu cuenta";
+    document.getElementById("quick-submit").textContent = (context && context.button) || "Continuar al pago";
+    sub.textContent = context && context.subtitle ? context.subtitle
+      : context && context.label
       ? `${context.label}${context.price ? " · S/ " + context.price : ""} — déjanos tu celular y un PIN y pasas directo al pago.`
       : "Déjanos tu celular y tu PIN para continuar.";
     setFormError("quick-error", "");
@@ -316,10 +337,12 @@
     // actualizar, en vez de volver siempre al catálogo — los datos se
     // recargan igual (loadDashboardAccounts/loadCodesAccounts arriba),
     // solo no se pierde dónde estaba parado.
-    // liordark.com/#codigos (botón «Volver a Códigos» del visor).
-    if (location.hash === "#codigos" && hasCodesAccounts) {
+    // liordark.com/#codigos (botón «Volver a Códigos» del visor) y los links
+    // liordark.com/codigos y /soporte que el admin manda por WhatsApp.
+    const linkPage = LINK_PAGES[location.hash];
+    if (linkPage) {
       history.replaceState(null, "", location.pathname + location.search);
-      switchPage("codes");
+      switchPage(linkPage);
       return;
     }
     try {
@@ -355,6 +378,15 @@
     updateEmailBanner();
     switchPage("catalog");
     await loadCatalog();
+    // Llegó por liordark.com/codigos o /soporte sin sesión: primero inicia
+    // sesión y después cae directo en esa sección.
+    const linkPage = LINK_PAGES[location.hash];
+    if (linkPage) {
+      history.replaceState(null, "", location.pathname + location.search);
+      pendingAfterAuth = () => switchPage(linkPage);
+      openAuthModal(LINK_LOGIN_TEXTS[linkPage]);
+      return;
+    }
     if (pendingSaleCode) {
       const code = pendingSaleCode;
       pendingSaleCode = null;
@@ -1939,11 +1971,12 @@
     }
   }
 
-  // Si el hash cambia a #codigos sin recargar la página.
+  // Si el hash cambia a #codigos o #soporte sin recargar la página.
   window.addEventListener("hashchange", () => {
-    if (location.hash !== "#codigos" || !isAuthenticated || !hasCodesAccounts) return;
+    const linkPage = LINK_PAGES[location.hash];
+    if (!linkPage || !isAuthenticated) return;
     history.replaceState(null, "", location.pathname + location.search);
-    switchPage("codes");
+    switchPage(linkPage);
   });
 
   function initCodesView() {

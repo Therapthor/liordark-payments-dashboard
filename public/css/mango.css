@@ -1997,6 +1997,24 @@ button.mp-kpi:active { transform: scale(0.98); }
   .mp-hero-actions > .btn-secondary { flex: 1 1 0; min-width: 0; padding: 0 10px; }
 }
 
+/* Banda: «📋 Códigos» / «📋 Soporte» — copian el mensaje para WhatsApp.
+   Pequeños y discretos, en todas las vistas. */
+.mp-band-copy {
+  position: relative;
+  display: flex; justify-content: flex-end; align-items: center; gap: 6px;
+  max-width: calc(var(--mp-content-max) - 2 * var(--mp-gutter));
+  margin: 10px auto -8px;
+}
+.mp-band-copy-btn {
+  height: 28px; padding: 0 11px;
+  border: 1px solid rgba(43, 27, 14, 0.12); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45); color: var(--mp-ink);
+  font-family: var(--mp-display); font-size: 12.5px; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+}
+.mp-band-copy-btn:hover { background: rgba(255, 255, 255, 0.8); }
+.mp-band-copy-btn.is-copied { background: #fff; color: var(--mp-leaf, #1F6B44); }
+
 /* Pedido: cantidad de perfiles por plataforma */
 .combo-qty { min-width: 64px; min-height: 36px; border-radius: 10px; font: inherit; font-weight: 700; }
 .combo-qty:disabled { opacity: 0.45; }
