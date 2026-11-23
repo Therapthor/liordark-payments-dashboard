@@ -2,7 +2,7 @@ import { Router } from "express";
 import axios from "axios";
 import { env } from "../config/env";
 import { requireCustomerSession, type RequestWithCustomer } from "../services/customer-auth.service";
-import { findCustomerById, setCustomerEmail } from "../db/customer.repository";
+import { findCustomerById, setCustomerEmail, findCustomerByEmail } from "../db/customer.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
 import { listCombos } from "../db/combo.repository";
 import { listPaymentMethods } from "../db/payment-method.repository";
@@ -156,6 +156,10 @@ router.post("/renewals/checkout", requireCustomerSession, async (req, res) => {
 
   if (phone.length < 9 || !platform) {
     return res.status(400).json({ message: "Falta 'phone' o 'platform'." });
+  }
+  const renewer = findCustomerById((req as RequestWithCustomer).customerId);
+  if (renewer && !renewer.email) {
+    return res.status(409).json({ message: "Agrega tu correo para continuar: ahí te llegan tus datos de acceso y los avisos.", needEmail: true });
   }
 
   if (isNonRenewablePlatform(platform)) {
@@ -781,6 +785,10 @@ router.post("/account/email", (req, res) => {
     return res.status(400).json({ message: "Ingresa un correo válido." });
   }
 
+  const owner = findCustomerByEmail(email);
+  if (owner && owner.id !== customer.id) {
+    return res.status(409).json({ message: "Ese correo ya está en otra cuenta. Usa otro correo." });
+  }
   const updated = setCustomerEmail(customer.id, email);
   res.json({ email: updated?.email || email });
 });
@@ -858,6 +866,10 @@ router.post("/checkout", async (req, res) => {
   const customer   = findCustomerById(customerId);
   if (!customer) {
     return res.status(401).json({ message: "Sesión inválida." });
+  }
+  // Desde ahora el correo es obligatorio para comprar.
+  if (!customer.email) {
+    return res.status(409).json({ message: "Agrega tu correo para continuar: ahí te llegan tus datos de acceso y los avisos.", needEmail: true });
   }
 
   const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;

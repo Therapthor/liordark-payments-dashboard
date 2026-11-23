@@ -72,6 +72,15 @@ export function findCustomerByPhone(phone: string): Customer | null {
   return row ? toCustomer(row) : null;
 }
 
+/** Cliente por su correo (en minúsculas). Para entrar con correo y para que
+ *  el admin encuentre a alguien que le escribe por WhatsApp con su correo. */
+export function findCustomerByEmail(email: string): Customer | null {
+  const e = String(email || "").trim().toLowerCase();
+  if (!e) return null;
+  const row = db.prepare(`SELECT * FROM customers WHERE email = ? ORDER BY id LIMIT 1`).get(e);
+  return row ? toCustomer(row) : null;
+}
+
 export function findCustomerById(id: number): Customer | null {
   const row = db.prepare(`SELECT * FROM customers WHERE id = ?`).get(id);
   return row ? toCustomer(row) : null;

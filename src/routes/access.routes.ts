@@ -1,3 +1,4 @@
+import { findCustomerByEmail } from "../db/customer.repository";
 import { Router } from "express";
 import { listManualOverridesForAccount, listManualOverridesByPhone, getManualOverrideById, type ManualAccountOverride } from "../db/manual-overrides.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
@@ -1142,6 +1143,21 @@ router.get("/search", (req, res) => {
       ...a, profiles: a.profiles.filter(p => String(p.clientPhone || "").replace(/\D/g, "").slice(-9) === d9),
     }));
     res.json({ mode: "phone", profiles, overrides, archived });
+    return;
+  }
+
+  // Correo de un CLIENTE (el que registró en la tienda): se muestran sus
+  // cuentas como si se hubiera buscado su celular. Sirve cuando alguien
+  // escribe por WhatsApp y solo da su correo.
+  const customer = q.includes("@") ? findCustomerByEmail(q) : null;
+  if (customer) {
+    const d9 = customer.phone.replace(/\D/g, "").slice(-9);
+    const profiles = searchProfilesByPhone(customer.phone).map(profileWithStatus);
+    const overrides = listManualOverridesByPhone(customer.phone).map(overrideWithStatus);
+    const archived = searchArchivedAccounts(customer.phone).slice(0, 30).map(a => ({
+      ...a, profiles: a.profiles.filter(p => String(p.clientPhone || "").replace(/\D/g, "").slice(-9) === d9),
+    }));
+    res.json({ mode: "phone", profiles, overrides, archived, customer: { email: customer.email, phone: customer.phone } });
     return;
   }
 

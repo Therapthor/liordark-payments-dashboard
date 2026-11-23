@@ -331,6 +331,7 @@
   // "Registro" (sin cuenta real, solo existe en Accesos — id: null).
   let cachedCustomers = [];
   let webSearchDigits = "";
+  let webSearchText = ""; // si escribe letras o @: busca por correo
   let registroSearchDigits = "";
   let webSort = "recent";
 
@@ -344,7 +345,9 @@
     const list  = document.getElementById("web-customers-list");
     const empty = document.getElementById("web-customers-empty");
     const webCustomers = cachedCustomers.filter(c => c.id !== null);
-    const filtered = webSearchDigits
+    const filtered = webSearchText
+      ? webCustomers.filter(c => String(c.email || "").toLowerCase().includes(webSearchText))
+      : webSearchDigits
       ? webCustomers.filter(c => c.phone.replace(/\D/g, "").includes(webSearchDigits))
       : webCustomers;
 
@@ -384,13 +387,16 @@
     const webInput    = document.getElementById("web-customers-search");
     const webClearBtn = document.getElementById("web-customers-search-clear");
     webInput.addEventListener("input", () => {
-      webSearchDigits = webInput.value.replace(/\D/g, "");
-      webClearBtn.hidden = !webSearchDigits;
+      const raw = webInput.value.trim().toLowerCase();
+      webSearchText = /[a-z@]/.test(raw) ? raw : "";
+      webSearchDigits = webSearchText ? "" : raw.replace(/\D/g, "");
+      webClearBtn.hidden = !raw;
       renderWebList();
     });
     webClearBtn.addEventListener("click", () => {
       webInput.value = "";
       webSearchDigits = "";
+      webSearchText = "";
       webClearBtn.hidden = true;
       renderWebList();
     });

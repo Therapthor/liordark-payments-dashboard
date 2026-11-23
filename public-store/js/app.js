@@ -164,14 +164,16 @@
       e.preventDefault();
       setFormError("quick-error", "");
       const phone = document.getElementById("quick-phone").value.trim();
+      const email = document.getElementById("quick-email").value.trim();
       const pin   = document.getElementById("quick-pin").value;
       const btn   = document.getElementById("quick-submit");
       btn.disabled = true;
       try {
-        await api("/auth/quick", { method: "POST", body: { phone, password: pin } });
+        await api("/auth/quick", { method: "POST", body: { phone, email, password: pin } });
         await onAuthenticated();
       } catch (err) {
         setFormError("quick-error", err.message);
+        if (/correo/i.test(err.message || "")) document.getElementById("quick-email").focus();
       } finally {
         btn.disabled = false;
       }
@@ -194,13 +196,14 @@
       e.preventDefault();
       setFormError("guest-error", "");
       const phone = document.getElementById("guest-phone").value.trim();
+      const email = document.getElementById("guest-email").value.trim();
       const pin   = document.getElementById("guest-pin").value;
       if (!/^\d{4}$/.test(pin)) {
         setFormError("guest-error", "El PIN debe ser de 4 dígitos.");
         return;
       }
       try {
-        await api("/auth/guest", { method: "POST", body: { phone, password: pin } });
+        await api("/auth/guest", { method: "POST", body: { phone, email, password: pin } });
         await onAuthenticated();
       } catch (err) {
         setFormError("guest-error", err.message);
@@ -268,6 +271,9 @@
       action();
       return;
     }
+
+    // Sin correo todavía: se le pide al entrar (una vez por visita).
+    if (!customerHasEmail) askEmailOnEntry();
 
     // Se queda en la página donde estaba (Catálogo/Mis cuentas) al
     // actualizar, en vez de volver siempre al catálogo — los datos se
@@ -1125,7 +1131,7 @@
 
       const platforms = [...comboBuilderCart];
       closeComboBuilder();
-      requireAuth(() => startCustomComboCheckout(platforms, clientEmail, clientPassword), { label: "tu combo" });
+      requireAuth(() => withEmail(() => startCustomComboCheckout(platforms, clientEmail, clientPassword)), { label: "tu combo" });
     });
   }
 
@@ -1213,7 +1219,7 @@
       closeProductDetail();
       const months = selectedPlan ? selectedPlan.months : undefined;
       const label = selectedPlan ? title + " · " + selectedPlan.label : title;
-      requireAuth(() => startCheckout({ kind, id, clientEmail, clientPassword, months, isReserve: outOfStock, platformLabel: label }),
+      requireAuth(() => withEmail(() => startCheckout({ kind, id, clientEmail, clientPassword, months, isReserve: outOfStock, platformLabel: label })),
         { label, price: selectedPlan ? selectedPlan.price : item.price });
     };
 
@@ -1277,11 +1283,49 @@
     emailToastTimer = setTimeout(() => { toast.hidden = true; }, 4000);
   }
 
-  function closeEmailReminderModal() {
+  function closeEmailReminderModal(saved) {
     document.getElementById("email-reminder-modal").hidden = true;
+    if (saved !== true) afterEmailSaved = null; // cerró sin guardar: no se sigue con la compra
   }
 
-  async function openEmailReminderModal() {
+  // El mismo cuadro sirve para 3 cosas: recordatorios (desde Mis cuentas),
+  // «antes de pagar» (el correo es obligatorio para comprar o renovar) y el
+  // aviso al entrar a quien todavía no lo puso.
+  const EMAIL_MODAL_TEXT = {
+    reminder: { icon: "🔔", title: "Recordatorio de vencimiento", text: "Te avisamos a tu correo cuando tus cuentas estén por vencer." },
+    required: { icon: "✉️", title: "Antes de pagar: tu correo", text: "Es obligatorio. Ahí te llegan tus datos de acceso, los cambios de tu cuenta y los recordatorios de vencimiento." },
+    welcome:  { icon: "✉️", title: "Agrega tu correo", text: "Desde ahora lo pedimos a todos: ahí te llegan tus datos, los cambios de tu cuenta y los recordatorios. Lo necesitarás para tu próxima compra o renovación." },
+  };
+  let afterEmailSaved = null;
+
+  function askEmailOnEntry() {
+    try {
+      if (sessionStorage.getItem("ldp_email_asked") === "1") return;
+      sessionStorage.setItem("ldp_email_asked", "1");
+    } catch { /* sin sessionStorage: se pide igual */ }
+    setTimeout(() => { if (!customerHasEmail) openEmailReminderModal("welcome"); }, 900);
+  }
+
+  /** Corre la compra solo si el cliente ya tiene correo; si no, lo pide primero. */
+  async function withEmail(action) {
+    if (!customerHasEmail) {
+      try {
+        const { email } = await api("/account/email");
+        if (email) { customerHasEmail = true; markEmailConfirmedLocally(currentPhone); }
+      } catch { /* sin red: se le pide igual */ }
+    }
+    if (customerHasEmail) return action();
+    afterEmailSaved = action;
+    openEmailReminderModal("required");
+  }
+
+  async function openEmailReminderModal(mode) {
+    const t = EMAIL_MODAL_TEXT[typeof mode === "string" ? mode : "reminder"] || EMAIL_MODAL_TEXT.reminder;
+    if (typeof mode !== "string" || mode === "reminder") afterEmailSaved = null;
+    document.getElementById("email-reminder-icon").textContent = t.icon;
+    document.getElementById("email-reminder-title").textContent = t.title;
+    document.getElementById("email-reminder-text").textContent = t.text;
+    document.getElementById("email-reminder-save").textContent = mode === "required" ? "Guardar y continuar al pago" : "Guardar";
     setFormError("email-reminder-error", "");
     const input = document.getElementById("email-reminder-input");
     input.value = "";
@@ -1318,9 +1362,12 @@
         markEmailConfirmedLocally(currentPhone);
         customerHasEmail = true;
         updateDashboardNotifyBtn();
-        closeEmailReminderModal();
+        closeEmailReminderModal(true);
         updateEmailBanner();
-        showEmailToast("Te avisaremos a " + email + " antes de que venzan.");
+        showEmailToast("Listo: tus datos y avisos llegarán a " + email + ".");
+        const next = afterEmailSaved;
+        afterEmailSaved = null;
+        if (next) next();
       } catch (err) {
         setFormError("email-reminder-error", err.message);
       }
@@ -1734,7 +1781,7 @@
         errorEl.hidden = true;
       }
 
-      startRenewalCheckout(acc.platform, clientEmail, clientPassword);
+      withEmail(() => startRenewalCheckout(acc.platform, clientEmail, clientPassword));
     });
   }
 

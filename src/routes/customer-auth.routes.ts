@@ -5,6 +5,8 @@ import {
   createCustomer,
   findCustomerByPhone,
   findCustomerById,
+  findCustomerByEmail,
+  setCustomerEmail,
   isCustomerSuspended,
   normalizeCustomerPhone,
   customerLockoutStatus,
@@ -23,6 +25,7 @@ import { isPhoneBlocked, isIpBlocked, countRegistrationsFromIp, logRegistration,
 import { checkLockout, nextCustomerLockoutState, lockoutDurationText } from "../services/login-lockout.service";
 import { clientIp, isPublicIp } from "../services/security.service";
 import { oneAtATime, phoneKey } from "../utils/one-at-a-time.util";
+import { isSafeEmail } from "../utils/email.util";
 
 const router = Router();
 const pinLock = oneAtATime(phoneKey);
@@ -78,6 +81,17 @@ function lockAfterFailure(req: import("express").Request, phone: string, pass: b
   return null;
 }
 
+// Desde ahora toda cuenta nueva se crea con correo: ahí le llegan sus
+// datos, los cambios de su cuenta y los recordatorios, y el admin lo puede
+// encontrar por su correo. Un correo, una cuenta.
+function newAccountEmailError(raw: unknown): string | null {
+  const email = String(raw ?? "").trim();
+  if (!email) return "Pon tu correo: ahí te llegan tus cuentas, los cambios y los recordatorios.";
+  if (!isSafeEmail(email)) return "Ese correo no es válido. Revísalo.";
+  if (findCustomerByEmail(email)) return "Ese correo ya tiene una cuenta. Ingresa con tu celular o con ese correo.";
+  return null;
+}
+
 function registrationDenied(req: import("express").Request, phone: string): string | null {
   // Un número que ya tiene cuentas con nosotros (compró por WhatsApp) no se
   // puede "reclamar" registrándolo en la web: cualquiera podría poner el
@@ -93,8 +107,20 @@ function registrationDenied(req: import("express").Request, phone: string): stri
 }
 
 router.post("/login", pinLock(async (req, res) => {
-  const phone    = String(req.body?.phone ?? "");
+  // Se entra con el celular o con el correo.
+  const input    = String(req.body?.phone ?? "").trim();
   const password = String(req.body?.password ?? "");
+  let phone = input;
+  if (input.includes("@")) {
+    const byEmail = findCustomerByEmail(input);
+    if (!byEmail) {
+      const ipLockEmail = ipLockedResponse(req);
+      if (ipLockEmail) return res.status(ipLockEmail.status).json({ message: ipLockEmail.message });
+      recordIpFailure(req, input);
+      return res.status(401).json({ message: "Correo o contraseña incorrectos." });
+    }
+    phone = byEmail.phone;
+  }
   if (isPhoneBlocked(phone)) return res.status(403).json({ message: BLOCKED_MESSAGE });
   // Pase del admin («Quitar bloqueo»): entra aunque su conexión esté bloqueada.
   const pass = hasLoginPass("cliente", phone);
@@ -112,7 +138,7 @@ router.post("/login", pinLock(async (req, res) => {
     recordIpFailure(req, phone);
     const lockedNow = lockAfterFailure(req, phone, pass);
     if (lockedNow) return res.status(429).json({ message: lockedNow });
-    return res.status(401).json({ message: "Celular o contraseña incorrectos. Te queda 1 intento antes de un bloqueo temporal." });
+    return res.status(401).json({ message: (input.includes("@") ? "Correo" : "Celular") + " o contraseña incorrectos. Te queda 1 intento antes de un bloqueo temporal." });
   }
   if (isCustomerSuspended(customer)) {
     return res.status(403).json({ message: "Tu cuenta está suspendida temporalmente. Contáctanos si es un error." });
@@ -143,11 +169,14 @@ router.post("/guest", async (req, res) => {
   if (findCustomerByPhone(phone)) {
     return res.status(409).json({ message: "Ya existe una cuenta con ese celular. Iniciá sesión." });
   }
+  const emailError = newAccountEmailError(req.body?.email);
+  if (emailError) return res.status(400).json({ message: emailError, needEmail: true });
   const denied = registrationDenied(req, phone);
   if (denied) return res.status(403).json({ message: denied });
 
   const passwordHash = await hashPassword(pin);
   const customer      = createCustomer(phone, passwordHash, pin, true);
+  setCustomerEmail(customer.id, String(req.body.email));
   logRegistration(clientIp(req));
 
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
@@ -194,6 +223,9 @@ router.post("/quick", pinLock(async (req, res) => {
     }
     recordCustomerLoginSuccess(phone);
     rememberCustomerPlain(existing.id, pin);
+    // Si ya compró antes y no tenía correo, se aprovecha el que escribió.
+    const typed = String(req.body?.email ?? "").trim();
+    if (!existing.email && typed && isSafeEmail(typed) && !findCustomerByEmail(typed)) setCustomerEmail(existing.id, typed);
     setSessionCookie(res, existing.id);
     return res.json({ ok: true, phone: existing.phone, created: false });
   }
@@ -201,10 +233,13 @@ router.post("/quick", pinLock(async (req, res) => {
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ message: "Crea un PIN de 4 dígitos (solo números)." });
   }
+  const emailError = newAccountEmailError(req.body?.email);
+  if (emailError) return res.status(400).json({ message: emailError, needEmail: true });
   const denied = registrationDenied(req, phone);
   if (denied) return res.status(403).json({ message: denied });
   const passwordHash = await hashPassword(pin);
   const customer      = createCustomer(phone, passwordHash, pin, true);
+  setCustomerEmail(customer.id, String(req.body.email));
   logRegistration(clientIp(req));
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);

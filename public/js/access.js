@@ -1693,6 +1693,11 @@
       lastClientProfiles = result.profiles.filter(p => p.clientPhone);
       lastClientOverrides = result.overrides || [];
       renderClientSummary(lastClientProfiles, lastClientOverrides, result.archived || []);
+      // Buscado por el correo del cliente: se dice de quién son.
+      const title = document.querySelector("#access-client-summary .panel-header h2");
+      if (title) title.textContent = result.customer
+        ? `Cuentas del cliente · ${result.customer.email} · ${String(result.customer.phone).replace(/\D/g, "").slice(-9)}`
+        : "Cuentas del cliente";
       summaryBox.hidden = false;
       resultsBox.hidden = true;
       platformsBox.hidden = true;
