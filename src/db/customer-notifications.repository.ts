@@ -1,6 +1,11 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { getCatalogProductByPlatform } from "./catalog.repository";
+import { emailCustomerUpdate, type UpdateEmailType } from "../services/customer-update-email.service";
+
+// Estos avisos también le llegan por correo (si registró uno): ver
+// services/customer-update-email.service.ts.
+const EMAIL_TYPES = new Set<string>(["account_replaced", "password_changed", "support_update", "support_resolved"]);
 
 // ─────────────────────────────────────────────────────────────
 // NOTIFICACIONES DEL CLIENTE (campanita en liordark.com) — cuenta nueva
@@ -70,10 +75,19 @@ export function createCustomerNotification(
     : type === "account_replaced"
     ? `${buildSupportResolvedHeadline(platform, true)}\n\n${customMessage}`
     : buildMessage(type, platform);
-  db.prepare(`
+  const info = db.prepare(`
     INSERT INTO customer_notifications (client_phone, type, platform, account_email, message)
     VALUES (?, ?, ?, ?, ?)
   `).run(digits, type, platform, accountEmail, message);
+  if (EMAIL_TYPES.has(type)) {
+    // Después de terminar lo que se está haciendo: si era parte de una
+    // transacción que se deshizo, el aviso ya no existe y no se manda nada.
+    const id = Number(info.lastInsertRowid);
+    setImmediate(() => {
+      if (!db.prepare(`SELECT 1 FROM customer_notifications WHERE id = ?`).get(id)) return;
+      emailCustomerUpdate(digits, type as UpdateEmailType, platform, message);
+    });
+  }
 }
 
 /** Varios clientes de una (ej. todos los que comparten una cuenta recién renovada). */

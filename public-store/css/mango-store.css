@@ -146,7 +146,8 @@ a { color: var(--leaf); }
 body:not([data-page]) .band-hero[data-hero="catalog"],
 body[data-page="catalog"] .band-hero[data-hero="catalog"],
 body[data-page="dashboard"] .band-hero[data-hero="dashboard"],
-body[data-page="codes"] .band-hero[data-hero="codes"] { display: block; }
+body[data-page="codes"] .band-hero[data-hero="codes"],
+body[data-page="support"] .band-hero[data-hero="support"] { display: block; }
 body[data-page="codes"] .band-hero.band-hero-cat[data-hero="codes"] { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .band-kicker { margin: 0 0 2px; font-size: 12.5px; font-weight: 800; color: var(--chip-ink); }
 .band-title { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; text-wrap: balance; }
@@ -207,7 +208,7 @@ body[data-page="codes"] .band-hero.band-hero-cat[data-hero="codes"] { display: f
 .topnav [data-view="catalog"] { order: 1; }
 #nav-dashboard-btn { order: 2; }
 #topbar-codes-btn { order: 3; }
-#topbar-support-link { order: 4; }
+#topbar-support-btn { order: 4; }
 #nav-course-link { order: 5; }
 #nav-login-btn { order: 6; }
 #wholesale-entry-btn { order: 7; }
@@ -1095,3 +1096,57 @@ body[data-nav-dir="back"] .page { --pg-x: -22px; --pg-y: 0px; }
 /* «Pedir más intentos hoy» (Códigos sin consultas) */
 .codes-reset-btn { margin-top: 10px; width: 100%; min-height: 42px; border-radius: 14px; font-size: 13.5px; }
 .codes-reset-note { margin: 10px 0 0; font-size: 12.5px; font-weight: 700; color: var(--muted-2); }
+
+
+/* ═══ SOPORTE — reportar una cuenta y seguir el estado (sin chat) ═══ */
+#page-support { display: grid; gap: 14px; }
+#page-support[hidden] { display: none; }
+.sp-card { background: var(--card); border-radius: 22px; box-shadow: var(--shadow-card); padding: 18px; }
+.sp-card h2, .sp-title { font-size: 17px; margin: 0; }
+.sp-step-head { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.sp-step-num { width: 28px; height: 28px; border-radius: 999px; background: var(--mango); color: var(--ink); display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; flex: none; }
+#sp-reason-wrap { margin-top: 18px; }
+.sp-accounts, .sp-tickets { display: grid; gap: 8px; }
+.sp-tickets { margin-top: 12px; }
+.sp-account { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 16px; background: var(--soft); border: 2px solid transparent; font: inherit; color: var(--ink); cursor: pointer; flex-wrap: wrap; transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease); }
+.sp-account:hover { background: #FFF3D9; }
+.sp-account.picked { border-color: var(--mango-deep); background: #FFF3D9; }
+.sp-account.in-support { background: var(--danger-soft); border-color: #F3B3A2; cursor: default; }
+.sp-account-text { display: grid; min-width: 0; flex: 1 1 180px; }
+.sp-account-text span { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.sp-reasons { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.sp-reason { padding: 12px 14px; border-radius: 14px; background: #fff; border: 2px solid var(--soft); font: inherit; font-weight: 700; color: var(--ink); text-align: left; cursor: pointer; }
+.sp-reason:hover { border-color: var(--mango-light); }
+.sp-reason.picked { border-color: var(--leaf); background: var(--leaf-soft); }
+.sp-tip { font-size: 13px; color: var(--muted-2); margin: 10px 0 0; min-height: 0; }
+.sp-tip:empty { display: none; }
+.sp-send { margin-top: 14px; width: 100%; max-width: 320px; }
+.sp-send:disabled { opacity: .5; cursor: default; }
+.sp-note { margin-top: 14px; padding: 12px 14px; border-radius: 14px; font-size: 14px; }
+.sp-note.ok { background: var(--leaf-soft); color: var(--leaf-ink); }
+.sp-note.bad { background: var(--danger-soft); color: var(--coral-ink); }
+.sp-chip { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.sp-chip.pending { background: #FFF0C2; color: var(--chip-ink); }
+.sp-chip.seen { background: var(--blue-soft); color: var(--blue-ink); }
+.sp-chip.done { background: var(--leaf-soft); color: var(--leaf-ink); }
+.sp-account.in-support .sp-chip { background: #fff; color: var(--coral); }
+.sp-ticket { border-radius: 16px; background: var(--soft); padding: 12px 14px; }
+.sp-ticket header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sp-ticket-who { display: grid; flex: 1 1 160px; min-width: 0; }
+.sp-ticket-who span { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.sp-ticket-problem { margin: 8px 0 6px; font-weight: 700; }
+.sp-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.sp-steps li { flex: 1 1 90px; padding: 6px 8px; border-radius: 10px; background: #fff; font-size: 12.5px; color: var(--muted); display: grid; }
+.sp-steps li.on { background: var(--leaf-soft); color: var(--leaf-ink); font-weight: 800; }
+.sp-steps li small { font-weight: 600; font-size: 11px; }
+.sp-ticket-result { margin: 8px 0 0; font-size: 13.5px; color: var(--leaf-ink); font-weight: 700; }
+.sp-link { background: none; border: 0; padding: 0; color: var(--leaf); font: inherit; text-decoration: underline; cursor: pointer; }
+.sp-web { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--soft); box-shadow: none; }
+.sp-web > div { display: grid; gap: 2px; flex: 1 1 240px; }
+.sp-web span { font-size: 13px; color: var(--muted); }
+.sp-wa { white-space: nowrap; }
+
+/* Mis cuentas: cuenta con un reporte abierto → en rojo */
+#dashboard-active-list .success-account-card.in-support { box-shadow: 0 0 0 2px #E2552B, var(--shadow-card); }
+.success-account-support { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 14px 10px; padding: 10px 12px; border-radius: 14px; background: var(--danger-soft); color: var(--coral-ink); font-size: 13.5px; font-weight: 700; }
+.success-account-support button { margin-left: auto; background: #fff; border: 0; border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 12.5px; color: var(--coral-ink); cursor: pointer; }

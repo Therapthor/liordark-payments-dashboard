@@ -120,6 +120,18 @@ export function findOpenTicketForAccount(phone: string, platform: string, email:
   return row ? toTicket(row) : null;
 }
 
+/** Reportes del cliente de liordark.com (los abiertos primero, luego los
+ *  cerrados de los últimos 60 días) — para su sección «Soporte». */
+export function listClientTickets(phone: string, limit = 30): SupportTicket[] {
+  return (db.prepare(`
+    SELECT * FROM support_tickets
+    WHERE substr(client_phone, -9) = ? AND wholesaler_id IS NULL
+      AND (status IN ('pending', 'seen') OR created_at >= datetime('now', '-60 days'))
+    ORDER BY (status = 'attended') ASC, id DESC
+    LIMIT ?
+  `).all(last9(phone), limit) as any[]).map(toTicket);
+}
+
 /** Pedidos abiertos de «restablecer intentos de códigos» de este cliente. */
 export function listOpenClientCodesTickets(phone: string): SupportTicket[] {
   return (db.prepare(`

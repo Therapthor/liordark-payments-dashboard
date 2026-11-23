@@ -31,7 +31,7 @@ import { verifyRenewalToken } from "../utils/renewal-token.util";
 import { findSmsRenewalLink } from "../db/sms-renewal-links.repository";
 import { findPayLink, isPayLinkExpired, itemStates, setPayLinkOrder, isPayLinkOrderPaid, priceSelection, MULTI_DISCOUNT_MIN, MULTI_DISCOUNT_PCT, listPayLinkCandidates, findOrCreateSelfPayLink, cleanOldPayLinks } from "../db/renewal-pay-links.repository";
 import { loginRateLimit } from "../utils/rate-limit.util";
-import { listReportableAccounts, reportNoSubscription, requestClientCodesReset } from "../services/support-reports.service";
+import { listReportableAccounts, reportClientProblem, requestClientCodesReset, listClientTicketViews, CLIENT_REPORT_REASONS } from "../services/support-reports.service";
 import { findOpenTicketForAccount } from "../db/support-tickets.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { plansFor, planFor, savePlanOrder, money } from "../services/plans.service";
@@ -738,10 +738,15 @@ router.get("/dashboard", (req, res) => {
     return res.status(401).json({ message: "Sesión inválida." });
   }
 
-  const accounts = listAccountsByClientPhone(customer.phone).map(a => ({
-    ...a,
-    daysLeft: daysLeft(a.expiresAt),
-  }));
+  // support: reporte abierto de esa cuenta (Mis cuentas la marca en rojo).
+  const accounts = listAccountsByClientPhone(customer.phone).map(a => {
+    const open = findOpenTicketForAccount(customer.phone, a.platform, a.email);
+    return {
+      ...a,
+      daysLeft: daysLeft(a.expiresAt),
+      support: open ? { id: open.id, status: open.status, problem: open.problem } : null,
+    };
+  });
 
   // Vencidas — sin password, ver listArchivedAccountsByPhone.
   const expiredAccounts = listArchivedAccountsByPhone(customer.phone);
@@ -1002,7 +1007,14 @@ function requireStoreUser(req: any, res: any): { phone: string } | null {
 router.get("/support/accounts", (req, res) => {
   const who = requireStoreUser(req, res);
   if (!who) return;
-  res.json({ accounts: listReportableAccounts(who.phone) });
+  res.json({ accounts: listReportableAccounts(who.phone), reasons: CLIENT_REPORT_REASONS.map(r => ({ id: r.id, label: r.label })) });
+});
+
+// «Soporte» › Mis reportes: estado de cada reporte del cliente.
+router.get("/support/tickets", (req, res) => {
+  const who = requireStoreUser(req, res);
+  if (!who) return;
+  res.json({ tickets: listClientTicketViews(who.phone) });
 });
 
 router.post("/support/reports", (req, res) => {
@@ -1011,7 +1023,8 @@ router.post("/support/reports", (req, res) => {
   const platform = String(req.body?.platform ?? "").trim().slice(0, 60);
   const email    = String(req.body?.email ?? "").trim().slice(0, 200);
   if (!platform || !email) return res.status(400).json({ message: "Falta elegir la cuenta." });
-  const result = reportNoSubscription(who.phone, platform, email);
+  const reason = String(req.body?.reason ?? "nosub").trim().slice(0, 20);
+  const result = reportClientProblem(who.phone, platform, email, reason);
   if (!result.ok) return res.status(result.status).json({ message: result.message });
   emitDashboardEvent({ type: "support_report", id: result.ticket.id, platform: result.ticket.platform });
   res.status(201).json({ ok: true, platformTag: result.ticket.platformTag, email: result.ticket.accountEmail });

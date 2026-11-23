@@ -473,15 +473,10 @@
     document.querySelectorAll(".nav-btn[data-view]").forEach(btn => {
       btn.addEventListener("click", () => switchPage(btn.dataset.view));
     });
-    document.getElementById("topbar-support-link").href = "https://wa.me/" + SUPPORT_PHONE;
-    document.getElementById("topbar-support-link").addEventListener("click", (e) => {
-      e.preventDefault();
-      openChatModal();
-    });
   }
 
   const STORE_PAGE_KEY = "ldp_store_page";
-  const VALID_STORE_PAGES = ["catalog", "dashboard", "codes"];
+  const VALID_STORE_PAGES = ["catalog", "dashboard", "codes", "support"];
 
   function switchPage(view) {
     try { localStorage.setItem(STORE_PAGE_KEY, view); } catch { /* localStorage bloqueado — no crítico */ }
@@ -490,11 +485,13 @@
     document.getElementById("page-catalog").hidden = view !== "catalog";
     document.getElementById("page-dashboard").hidden = view !== "dashboard";
     document.getElementById("page-codes").hidden = view !== "codes";
+    document.getElementById("page-support").hidden = view !== "support";
     document.body.classList.toggle("theme-codes-dark", view === "codes");
     // Título de la banda mango y barra inferior según la sección (mango-store.css).
     document.body.dataset.page = view;
     if (view === "dashboard") { loadDashboardAccounts(); refreshEmailStatus(); if (isAuthenticated) refreshCodesAvailability(); }
     if (view === "codes") loadCodesAccounts();
+    if (view === "support") loadSupportPage();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1646,8 +1643,10 @@
     // cuando ya se puede renovar (mismo umbral que canRenew), para que el
     // estado se note de un vistazo sin tener que leer el texto.
     const headClass = dueSoon ? "urgent" : "ok";
+    // Con un reporte abierto la tarjeta va en rojo y dice en qué va.
+    const sup = a.support ? (a.support.status === "seen" ? "En revisión" : "Enviado") : "";
     return `
-      <div class="success-account-card" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
+      <div class="success-account-card${a.support ? " in-support" : ""}" data-platform="${escapeHtml(a.platform)}" data-email="${escapeHtml(a.email)}">
         <div class="success-account-head ${headClass}">
           ${platformChip(a.platform, "sm")}
           <span class="success-account-platform">${escapeHtml(a.platform)}</span>
@@ -1656,6 +1655,7 @@
             <button class="btn-secondary btn-sm success-copy-btn" data-idx="${idx}" type="button">📋 Copiar</button>
           </div>
         </div>
+        ${a.support ? `<div class="success-account-support">🛠 En soporte · ${sup} — ${escapeHtml(a.support.problem || "")}<button type="button" class="success-support-go">Ver reporte</button></div>` : ""}
         <div class="success-account-body">
           ${expiryLabel ? `<div class="success-account-expiry">${escapeHtml(expiryLabel)}</div>` : ""}
           <div class="success-account-row"><b>Correo:</b> <span class="success-account-value">${escapeHtml(a.email)}</span></div>
@@ -1696,6 +1696,10 @@
     document.getElementById("dashboard-active-list").addEventListener("click", (e) => {
       if (e.target.closest(".success-newaccount-btn")) {
         switchPage("catalog");
+        return;
+      }
+      if (e.target.closest(".success-support-go")) {
+        switchPage("support");
         return;
       }
 
@@ -1906,214 +1910,164 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // SOPORTE — asistente solo con botones, todo en el navegador: no hay
-  // chat ni se guarda ninguna conversación. Lo único que va al panel es el
-  // reporte de una cuenta «sin suscripción» (una vez por cuenta). «No
-  // puedo ingresar» y «Otro problema» llevan a WhatsApp; «Necesito un
-  // código», a Códigos.
+  // SOPORTE — sección propia (ya no es un chat): el cliente elige su
+  // cuenta y qué le pasa (sin escribir mensajes), y sigue el estado de sus
+  // reportes. Todo llega al panel › Soportes. WhatsApp queda solo para
+  // problemas con la página web.
   // ─────────────────────────────────────────────────────────────
 
   const SUPPORT_WA_DISPLAY = "+51 963 081 436";
-  let supportAccounts = [];
-  let supportCloseTimer = null;
+  const SUPPORT_STATUS = {
+    pending:  { label: "Enviado",     cls: "pending" },
+    seen:     { label: "En revisión", cls: "seen" },
+    attended: { label: "Resuelto",    cls: "done" },
+  };
+  let spAccounts = [], spReasons = [], spCodes = [], spPick = null, spReason = null;
 
   function waSupportUrl(text) {
     return "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(text);
   }
-
   function localPhoneNumber() {
     return String(currentPhone || "").replace(/\D/g, "").slice(-9);
   }
-
-  function supportScroll() {
-    const list = document.getElementById("chat-messages");
-    list.scrollTop = list.scrollHeight;
+  function spDate(sql) {
+    if (!sql) return "";
+    const d = new Date(String(sql).replace(" ", "T") + "Z");
+    return d.toLocaleString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  }
+  function spMsg(kind, html) {
+    document.getElementById("sp-msg").innerHTML = html ? `<div class="sp-note ${kind}">${html}</div>` : "";
   }
 
-  function disableSupportOptions() {
-    document.querySelectorAll("#chat-messages .chat-bot-option").forEach(b => {
-      if (b.tagName === "BUTTON") b.disabled = true;
-    });
+  async function loadSupportPage() {
+    spPick = null; spReason = null;
+    document.getElementById("sp-reason-wrap").hidden = true;
+    spMsg("", "");
+    document.getElementById("sp-wa").href = waSupportUrl(`Hola 👋, tengo un problema con la página web. Mi número: ${localPhoneNumber()}`);
+    const box = document.getElementById("sp-accounts");
+    box.innerHTML = `<p class="muted">Cargando tus cuentas…</p>`;
+    try {
+      const [acc, codes] = await Promise.all([
+        api("/support/accounts"),
+        hasCodesAccounts ? api("/codes").catch(() => ({ accounts: [] })) : Promise.resolve({ accounts: [] }),
+      ]);
+      spAccounts = acc.accounts || [];
+      spReasons = acc.reasons || [];
+      spCodes = codes.accounts || [];
+    } catch (err) {
+      box.innerHTML = `<p class="muted">${escapeHtml(err.message || "No se pudo cargar tus cuentas.")}</p>`;
+      return;
+    }
+    renderSupportAccounts();
+    loadSupportTickets();
   }
 
-  // html: texto YA escapado. options: [{ id, label, url?, disabled? }]
-  function supportSay(html, options) {
-    disableSupportOptions();
-    const opts = (options || []).map(o => o.url
-      ? `<a class="chat-bot-option chat-bot-option-link" href="${escapeHtml(o.url)}" target="_blank" rel="noopener">${escapeHtml(o.label)}</a>`
-      : `<button type="button" class="chat-bot-option" data-opt="${escapeHtml(o.id)}"${o.disabled ? " disabled" : ""}>${escapeHtml(o.label)}</button>`
+  function renderSupportAccounts() {
+    const box = document.getElementById("sp-accounts");
+    if (!spAccounts.length) {
+      box.innerHTML = `<p class="muted">No tienes cuentas activas para reportar.</p>`;
+      return;
+    }
+    box.innerHTML = spAccounts.map((a, i) => {
+      const st = a.reported ? SUPPORT_STATUS[a.reportStatus] || SUPPORT_STATUS.pending : null;
+      return `<button type="button" class="sp-account${a.reported ? " in-support" : ""}${spPick === i ? " picked" : ""}" data-sp-acc="${i}"${a.reported ? " disabled" : ""}>
+          ${platformChip(a.platform, "sm")}
+          <span class="sp-account-text"><b>${escapeHtml(a.platformTag)}</b><span>${escapeHtml(a.email)}${a.profileName ? " · " + escapeHtml(a.profileName) : ""}</span></span>
+          ${st ? `<span class="sp-chip ${st.cls}">🛠 En soporte · ${st.label}</span>` : ""}
+        </button>`;
+    }).join("");
+  }
+
+  /** Cuenta de «Códigos» que corresponde a la elegida (para «sin intentos»). */
+  function spCodesAccountFor(a) {
+    const mail = String(a.email || "").toLowerCase();
+    return spCodes.find(c => String(c.email || "").toLowerCase() === mail) || null;
+  }
+
+  function renderSupportReasons() {
+    const a = spAccounts[spPick];
+    const codes = a ? spCodesAccountFor(a) : null;
+    const extra = codes && !codes.openUrl && codes.remaining <= 0 && !codes.resetRequested
+      ? [{ id: "codes-reset", label: "Se acabaron mis intentos de códigos de hoy" }] : [];
+    document.getElementById("sp-reasons").innerHTML = spReasons.concat(extra).map(r =>
+      `<button type="button" class="sp-reason${spReason === r.id ? " picked" : ""}" data-sp-reason="${escapeHtml(r.id)}">${escapeHtml(r.label)}</button>`
     ).join("");
-    document.getElementById("chat-messages").insertAdjacentHTML("beforeend", `
-      <div class="chat-bubble-row from-admin">
-        <div class="chat-bubble"><span class="chat-bot-tag">🤖 Asistente</span><div class="chat-bot-text">${html}</div>${opts ? `<div class="chat-bot-options">${opts}</div>` : ""}</div>
-      </div>`);
-    supportScroll();
+    const tip = document.getElementById("sp-reason-tip");
+    tip.innerHTML = spReason === "code" && codes
+      ? `💡 Esta cuenta tiene <b>Códigos</b>: pídelo ahí primero. Si igual no llega, envía el reporte.`
+      : "";
+    document.getElementById("sp-send").disabled = !spReason;
   }
 
-  function supportUserSays(label) {
-    document.getElementById("chat-messages").insertAdjacentHTML("beforeend", `
-      <div class="chat-bubble-row from-customer"><div class="chat-bubble">${escapeHtml(label)}</div></div>`);
-    supportScroll();
-  }
-
-  const BACK_OPTION = { id: "menu", label: "⬅️ Volver al menú" };
-
-  function supportMenu(text) {
-    supportSay(text, [
-      { id: "nosub", label: "📺 Mi cuenta dice «sin suscripción»" },
-      { id: "login", label: "🔒 No puedo ingresar a mi cuenta" },
-      { id: "other", label: "⚠️ Otro problema con mi cuenta" },
-      ...(hasCodesAccounts ? [
-        { id: "codes", label: "🔑 Necesito un código" },
-        { id: "codes-reset", label: "🔁 Se acabaron mis intentos de códigos" },
-      ] : []),
-    ]);
-  }
-
-  function supportWhatsapp(problemText) {
-    supportSay(
-      `Para esto te atiende un asesor por WhatsApp 💬<br>📱 <b>${SUPPORT_WA_DISPLAY}</b>`,
-      [
-        { id: "wa", label: "💬 Abrir WhatsApp", url: waSupportUrl(`Hola 👋, ${problemText}. Mi número: ${localPhoneNumber()}`) },
-        BACK_OPTION,
-      ]
-    );
-  }
-
-  async function supportPickAccount() {
-    supportSay("Un momento, busco tus cuentas… ⏳");
+  async function sendSupportReport() {
+    const a = spAccounts[spPick];
+    if (!a || !spReason) return;
+    const btn = document.getElementById("sp-send");
+    btn.disabled = true;
     try {
-      const { accounts } = await api("/support/accounts");
-      supportAccounts = accounts || [];
+      if (spReason === "codes-reset") {
+        const codes = spCodesAccountFor(a);
+        await requestCodesReset(codes.accountId);
+      } else {
+        await api("/support/reports", { method: "POST", body: { platform: a.platform, email: a.email, reason: spReason } });
+      }
+      const done = `✅ ¡Listo! Tu reporte de <b>${escapeHtml(a.platformTag)}</b> ya nos llegó. Síguelo aquí abajo en «Mis reportes»; te avisamos en la campanita 🔔${customerHasEmail ? " y por correo" : ""} apenas haya novedades.`;
+      await loadSupportPage();
+      spMsg("ok", done);
     } catch (err) {
-      supportSay(escapeHtml(err.message || "No se pudo cargar tus cuentas."), [BACK_OPTION]);
-      return;
+      spMsg("bad", escapeHtml(err.message || "No se pudo enviar el reporte."));
+      btn.disabled = false;
     }
-    if (!supportAccounts.length) {
-      supportSay("No encontramos cuentas activas en tu perfil 🤔. Si crees que es un error, escríbenos.", [
-        { id: "wa", label: "💬 Abrir WhatsApp", url: waSupportUrl(`Hola 👋, mi cuenta dice sin suscripción. Mi número: ${localPhoneNumber()}`) },
-        BACK_OPTION,
-      ]);
-      return;
-    }
-    supportSay("¿Cuál de tus cuentas dice «sin suscripción»? 👇", [
-      ...supportAccounts.map((a, i) => ({
-        id: "acc:" + i,
-        label: `${a.platformTag} · ${a.email}${a.reported ? " · ya reportada" : ""}`,
-        disabled: a.reported,
-      })),
-      BACK_OPTION,
-    ]);
   }
 
-  let supportCodesAccounts = [];
-
-  async function supportPickCodesReset() {
-    supportSay("Un momento, reviso tus intentos de hoy… ⏳");
+  async function loadSupportTickets() {
+    const box = document.getElementById("sp-tickets");
     try {
-      const { accounts } = await api("/codes");
-      supportCodesAccounts = (accounts || []).filter(a => !a.openUrl && a.remaining <= 0);
+      const { tickets } = await api("/support/tickets");
+      if (!tickets.length) { box.innerHTML = `<p class="muted">Todavía no tienes reportes.</p>`; return; }
+      box.innerHTML = tickets.map(t => {
+        const st = SUPPORT_STATUS[t.status] || SUPPORT_STATUS.pending;
+        const steps = [
+          { on: true, label: "Enviado", at: t.createdAt },
+          { on: t.status !== "pending", label: "En revisión", at: t.reviewedAt },
+          { on: t.status === "attended", label: "Resuelto", at: t.attendedAt },
+        ];
+        return `<article class="sp-ticket ${st.cls}">
+            <header>
+              ${platformChip(t.platform, "sm")}
+              <span class="sp-ticket-who"><b>${escapeHtml(t.platformTag)}</b><span>${escapeHtml(t.accountEmail)}</span></span>
+              <span class="sp-chip ${st.cls}">${st.label}</span>
+            </header>
+            <p class="sp-ticket-problem">${escapeHtml(t.problem)}</p>
+            <ol class="sp-steps">${steps.map(s => `<li class="${s.on ? "on" : ""}"><span>${s.label}</span>${s.on && s.at ? `<small>${escapeHtml(spDate(s.at))}</small>` : ""}</li>`).join("")}</ol>
+            ${t.resolutionLabel ? `<p class="sp-ticket-result">✅ ${escapeHtml(t.resolutionLabel)}${t.resolution === "replaced" ? ` · <button type="button" class="sp-link" data-sp-go="dashboard">Ver en Mis cuentas</button>` : ""}</p>` : ""}
+          </article>`;
+      }).join("");
     } catch (err) {
-      supportSay(escapeHtml(err.message || "No se pudo cargar tus cuentas."), [BACK_OPTION]);
-      return;
-    }
-    if (!supportCodesAccounts.length) {
-      supportSay("Todavía te quedan intentos hoy en tus cuentas 👍. Pide tu código desde «Códigos».", [
-        { id: "codes", label: "🔑 Ir a Códigos" },
-        BACK_OPTION,
-      ]);
-      return;
-    }
-    supportSay("¿De cuál cuenta necesitas más intentos hoy? 👇", [
-      ...supportCodesAccounts.map((a, i) => ({
-        id: "creset:" + i,
-        label: `${a.platform} · ${a.email}${a.resetRequested ? " · ya pedido" : ""}`,
-        disabled: a.resetRequested,
-      })),
-      BACK_OPTION,
-    ]);
-  }
-
-  async function supportCodesReset(index) {
-    const acc = supportCodesAccounts[index];
-    if (!acc) return supportMenu("Elige una opción 👇");
-    try {
-      await requestCodesReset(acc.accountId);
-      supportSay(
-        `✅ ¡Listo! Pedimos que te restablezcan los intentos de <b>${escapeHtml(acc.platform)}</b> (${escapeHtml(acc.email)}) 🔑<br>` +
-        `Te avisamos en la campanita 🔔 apenas puedas volver a pedir tu código. 🥭`
-      );
-      finishSupport();
-    } catch (err) {
-      supportSay(escapeHtml(err.message || "No se pudo enviar el pedido."), [BACK_OPTION]);
+      box.innerHTML = `<p class="muted">${escapeHtml(err.message || "No se pudo cargar tus reportes.")}</p>`;
     }
   }
 
-  function finishSupport() {
-    disableSupportOptions();
-    document.getElementById("chat-messages").insertAdjacentHTML("beforeend", `<div class="chat-empty">— Chat finalizado —</div>`);
-    supportScroll();
-    clearTimeout(supportCloseTimer);
-    supportCloseTimer = setTimeout(closeChatModal, 7000);
-  }
-
-  async function supportReport(index) {
-    const acc = supportAccounts[index];
-    if (!acc) return supportMenu("Elige una opción 👇");
-    try {
-      const data = await api("/support/reports", { method: "POST", body: { platform: acc.platform, email: acc.email } });
-      supportSay(
-        `✅ ¡Listo! Tu cuenta de <b>${escapeHtml(data.platformTag || acc.platformTag)}</b> (${escapeHtml(acc.email)}) ya fue enviada a soporte 🛠️<br>` +
-        `La revisamos y te avisamos por WhatsApp y en la campanita 🔔. ¡Gracias por tu paciencia! 🥭`
-      );
-      finishSupport();
-    } catch (err) {
-      supportSay(escapeHtml(err.message || "No se pudo enviar el reporte."), [BACK_OPTION]);
-    }
-  }
-
-  async function handleSupportOption(btn) {
-    const id = btn.dataset.opt || "";
-    supportUserSays(btn.textContent || "");
-    if (id === "menu") return supportMenu("¿En qué más te ayudo? 👇");
-    if (id === "nosub") return supportPickAccount();
-    if (id === "login") return supportWhatsapp("no puedo ingresar a mi cuenta");
-    if (id === "other") return supportWhatsapp("tengo un problema con mi cuenta");
-    if (id === "codes") {
-      supportSay("¡Listo! Te llevo a «Códigos» 🔑");
-      setTimeout(async () => {
-        closeChatModal();
-        if (await refreshCodesAvailability()) switchPage("codes");
-      }, 700);
-      return;
-    }
-    if (id === "codes-reset") return supportPickCodesReset();
-    if (id.startsWith("creset:")) return supportCodesReset(Number(id.slice(7)));
-    if (id.startsWith("acc:")) return supportReport(Number(id.slice(4)));
-  }
-
-  function openChatModal() {
-    clearTimeout(supportCloseTimer);
-    document.getElementById("chat-modal").hidden = false;
-    document.getElementById("chat-messages").innerHTML = "";
-    supportAccounts = [];
-    supportMenu("¡Hola! 👋 Soy Manguito, el asistente de Liordark 🥭<br>¿Qué pasa con tu cuenta? Elige una opción 👇");
-  }
-
-  function closeChatModal() {
-    clearTimeout(supportCloseTimer);
-    document.getElementById("chat-modal").hidden = true;
-  }
-
-  function initChatModal() {
-    document.getElementById("chat-close").addEventListener("click", closeChatModal);
-    document.getElementById("chat-modal").addEventListener("click", (e) => {
-      if (e.target.id === "chat-modal") closeChatModal();
+  function initSupportPage() {
+    const page = document.getElementById("page-support");
+    page.addEventListener("click", (e) => {
+      const acc = e.target.closest("[data-sp-acc]");
+      if (acc && !acc.disabled) {
+        spPick = Number(acc.dataset.spAcc);
+        spReason = null;
+        spMsg("", "");
+        renderSupportAccounts();
+        document.getElementById("sp-reason-wrap").hidden = false;
+        renderSupportReasons();
+        document.getElementById("sp-reason-wrap").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        return;
+      }
+      const reason = e.target.closest("[data-sp-reason]");
+      if (reason) { spReason = reason.dataset.spReason; renderSupportReasons(); return; }
+      const go = e.target.closest("[data-sp-go]");
+      if (go) { switchPage(go.dataset.spGo); return; }
     });
-    document.getElementById("chat-messages").addEventListener("click", (e) => {
-      const opt = e.target.closest("button.chat-bot-option");
-      if (opt && !opt.disabled) { disableSupportOptions(); opt.classList.add("is-picked"); handleSupportOption(opt); }
-    });
+    document.getElementById("sp-send").addEventListener("click", sendSupportReport);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -2232,7 +2186,7 @@
     initCodesView();
     initEmailReminderModal();
     initEmailBanner();
-    initChatModal();
+    initSupportPage();
 
     try {
       const me = await api("/auth/me");

@@ -5,7 +5,7 @@ import {
 } from "../db/access.repository";
 import {
   createSupportTicket, findOpenTicketForAccount, countTicketsTodayForClient, getSupportTicketById,
-  markSupportTicketSeen, markSupportTicketResolved, type SupportTicket,
+  markSupportTicketSeen, markSupportTicketResolved, listClientTickets, type SupportTicket,
 } from "../db/support-tickets.repository";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
@@ -74,7 +74,25 @@ export type ReportResult =
   | { ok: true; ticket: SupportTicket }
   | { ok: false; status: number; message: string };
 
+// Motivos que el cliente elige en «Soporte» (no escribe mensajes). El
+// texto de `problem` es el que ve el admin en Soportes.
+export const CLIENT_REPORT_REASONS = [
+  { id: "nosub",    label: "No tiene suscripción o me pide pagar", problem: NOSUB_PROBLEM },
+  { id: "password", label: "La contraseña no funciona",            problem: "Contraseña incorrecta" },
+  { id: "logout",   label: "Me sacaron de la cuenta",              problem: "Le cerraron la sesión" },
+  { id: "profile",  label: "Mi perfil está ocupado o lo borraron", problem: "Perfil ocupado o borrado" },
+  { id: "code",     label: "Me pide un código y no llega",         problem: "Pide código y no llega" },
+  { id: "other",    label: "Otro problema con la cuenta",          problem: "Otro problema" },
+] as const;
+
 export function reportNoSubscription(phone: string, platform: string, email: string): ReportResult {
+  return reportClientProblem(phone, platform, email, "nosub");
+}
+
+/** Reporte de una cuenta del cliente con el motivo elegido (uno abierto por cuenta). */
+export function reportClientProblem(phone: string, platform: string, email: string, reasonId: string): ReportResult {
+  const reason = CLIENT_REPORT_REASONS.find(r => r.id === reasonId);
+  if (!reason) return { ok: false, status: 400, message: "Elige qué le pasa a tu cuenta." };
   const account = getActiveAccountForClient(phone, platform, email);
   if (!account) return { ok: false, status: 404, message: "Esa cuenta no está activa en tu perfil." };
   if (account.expiresAt && account.expiresAt < limaTodayISO()) {
@@ -84,16 +102,42 @@ export function reportNoSubscription(phone: string, platform: string, email: str
     return { ok: false, status: 409, message: "Ya reportaste esta cuenta ✋. Está en revisión; te avisaremos apenas quede lista." };
   }
   if (countTicketsTodayForClient(phone) >= MAX_REPORTS_PER_DAY) {
-    return { ok: false, status: 429, message: "Ya enviaste varios reportes hoy. Si es urgente, escríbenos por WhatsApp al +51 963 081 436." };
+    return { ok: false, status: 429, message: "Ya enviaste varios reportes hoy ✋. Los estamos revisando: síguelos en «Mis reportes»." };
   }
   const profile = listAccountsByClientPhone(phone)
     .find(a => a.platform.toUpperCase() === account.platform.toUpperCase() && a.email === account.email);
   const ticket = createSupportTicket({
     clientPhone: phone, wholesalerId: null, platform: account.platform, accountEmail: account.email,
     accountPassword: account.password, profileName: profile?.profileName || "",
-    provider: account.provider || "", problem: NOSUB_PROBLEM,
+    provider: account.provider || "", problem: reason.problem,
   });
   return { ok: true, ticket };
+}
+
+/** Lo que ve el cliente de cada reporte suyo: estado, cómo se resolvió y la
+ *  última novedad. Sin contraseñas ni datos de otros. */
+export type ClientTicketView = {
+  id: number; kind: string; platform: string; platformTag: string; accountEmail: string; profileName: string;
+  problem: string; status: "pending" | "seen" | "attended"; resolution: string; resolutionLabel: string;
+  createdAt: string; reviewedAt: string | null; attendedAt: string | null;
+};
+
+const RESOLUTION_LABEL: Record<string, string> = {
+  replaced:    "Te dimos una cuenta nueva",
+  reactivated: "Tu cuenta fue reactivada",
+  active:      "Tu cuenta tenía la suscripción activa",
+  solved:      "El problema quedó solucionado",
+};
+
+export function listClientTicketViews(phone: string): ClientTicketView[] {
+  return listClientTickets(phone).map(t => ({
+    id: t.id, kind: t.kind, platform: t.platform, platformTag: t.platformTag, accountEmail: t.accountEmail,
+    profileName: t.profileName, problem: t.problem, status: t.status, resolution: t.resolution,
+    resolutionLabel: t.kind === "codes" && t.status === "attended"
+      ? "Te restablecimos los intentos de códigos"
+      : RESOLUTION_LABEL[t.resolution] || (t.status === "attended" ? "Atendido" : ""),
+    createdAt: t.createdAt, reviewedAt: t.reviewedAt, attendedAt: t.attendedAt,
+  }));
 }
 
 /** El cliente pide (Soporte o «Códigos») que le restablezcan los intentos de
@@ -106,7 +150,7 @@ export function requestClientCodesReset(phone: string, accountId: number): Repor
     return { ok: false, status: 409, message: "Ya pediste restablecer los intentos de esta cuenta ✋. Te avisamos en la campanita 🔔 apenas esté listo." };
   }
   if (countTicketsTodayForClient(phone) >= MAX_REPORTS_PER_DAY) {
-    return { ok: false, status: 429, message: "Ya enviaste varios pedidos hoy. Si es urgente, escríbenos por WhatsApp al +51 963 081 436." };
+    return { ok: false, status: 429, message: "Ya enviaste varios pedidos hoy ✋. Los estamos revisando: síguelos en «Mis reportes»." };
   }
   const profile = db.prepare(`
     SELECT id, profile_name AS profileName FROM access_profiles
