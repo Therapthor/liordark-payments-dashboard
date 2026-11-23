@@ -12,8 +12,10 @@ import { db } from "../db/db";
 
 // ─────────────────────────────────────────────────────────────
 // COPIAS DE SEGURIDAD — una vez al día, todo lo que NO está en GitHub:
-// la base del panel, la del bot, los .env y ~/scripts. Los videos del
-// curso NO (el dueño los tiene guardados aparte).
+// la base del panel, la del bot, los .env y ~/scripts. Una vez por semana,
+// además, el código completo de ambos repos (git bundle, con historial), por
+// si algún día se pierde el acceso a GitHub. Los videos del curso NO (el
+// dueño los tiene guardados aparte).
 //
 // Cerradas con age: el servidor solo tiene la llave PÚBLICA (el candado).
 // La privada la crea y guarda el dueño en su equipo (herramienta offline
@@ -49,6 +51,7 @@ db.exec(`DELETE FROM backup_runs WHERE kind = 'media'`);
 db.prepare(`UPDATE backup_runs SET finished_at = datetime('now'), ok = 0, error = 'Interrumpida (el panel se reinició)' WHERE finished_at IS NULL`).run();
 
 const KEEP_LOCAL = 7;
+const CODE_EVERY_MS = 7 * 24 * 3600_000; // el código, una vez por semana
 const PART_BYTES = 15 * 1024 * 1024; // el Apps Script recibe hasta ~50 MB por envío (en base64)
 const RECIPIENT_RE = /^age1[02-9ac-hj-np-z]{58}$/;
 const DRIVE_URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/;
@@ -106,9 +109,10 @@ function ensureBackupDir(): void {
 }
 
 function stamp(): string {
-  // Hora de Lima (UTC−5) en el nombre: «2026-11-23-0320».
+  // Hora de Lima (UTC−5) en el nombre, con segundos (dos copias seguidas no
+  // se pisan): «2026-11-23-032005».
   const d = new Date(Date.now() - 5 * 3600_000).toISOString();
-  return d.slice(0, 10) + "-" + d.slice(11, 13) + d.slice(14, 16);
+  return d.slice(0, 10) + "-" + d.slice(11, 13) + d.slice(14, 16) + d.slice(17, 19);
 }
 
 function copyIfExists(src: string, dest: string, contents: string[], label: string): void {
@@ -134,8 +138,28 @@ async function encryptFile(src: string, dest: string, recipient: string): Promis
   await pipeline(Readable.fromWeb(encrypted as any), fs.createWriteStream(dest, { mode: 0o600 }));
 }
 
+/** El código de un repo: siempre una foto de los archivos actuales
+ *  (codigo-actual.tar.gz, se abre sin git); si el repo tiene el historial
+ *  completo, además repo.bundle (todas las ramas e historial, `git clone`);
+ *  y los cambios hechos a mano en el servidor que no estén en git. false si
+ *  esa carpeta no es un repo. */
+async function bundleRepo(dir: string, dest: string): Promise<boolean> {
+  try { await run("git", ["-C", dir, "rev-parse", "--git-dir"]); } catch { return false; }
+  fs.mkdirSync(dest, { recursive: true });
+  await run("git", ["-C", dir, "archive", "--format=tar.gz", "-o", path.join(dest, "codigo-actual.tar.gz"), "HEAD"]);
+  try {
+    const shallow = (await run("git", ["-C", dir, "rev-parse", "--is-shallow-repository"])).stdout.trim() === "true";
+    if (!shallow) await run("git", ["-C", dir, "bundle", "create", path.join(dest, "repo.bundle"), "--all"]);
+  } catch { /* sin historial: queda la foto de los archivos */ }
+  try {
+    const { stdout } = await run("git", ["-C", dir, "diff", "HEAD"], { maxBuffer: 64 * 1024 * 1024 });
+    if (stdout.trim()) fs.writeFileSync(path.join(dest, "cambios-sin-subir.patch"), stdout);
+  } catch { /* no crítico */ }
+  return true;
+}
+
 /** Arma la carpeta temporal → .tar.gz → .age; borra todo lo intermedio. */
-async function buildArchive(kind: "datos", recipient: string): Promise<{ file: string; contents: string[] }> {
+async function buildArchive(kind: "datos", recipient: string, withCode: boolean): Promise<{ file: string; contents: string[]; code: boolean }> {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ld-copia-"));
   fs.chmodSync(work, 0o700);
   const stage = path.join(work, kind);
@@ -156,6 +180,13 @@ async function buildArchive(kind: "datos", recipient: string): Promise<{ file: s
     copyIfExists(path.join(PANEL_DIR, ".env.production"), path.join(stage, "panel", ".env.production"), contents, "config del panel");
     copyIfExists(path.join(BOT_DIR, ".env.production"), path.join(stage, "bot", ".env.production"), contents, "config del bot");
     copyIfExists(SCRIPTS_DIR, path.join(stage, "scripts"), contents, "~/scripts");
+    let code = false;
+    if (withCode) {
+      const panel = await bundleRepo(PANEL_DIR, path.join(stage, "codigo", "panel"));
+      const bot = await bundleRepo(BOT_DIR, path.join(stage, "codigo", "bot"));
+      code = panel || bot;
+      if (code) contents.push("código" + (panel && bot ? " (panel y bot)" : panel ? " (panel)" : " (bot)"));
+    }
     fs.writeFileSync(path.join(stage, "LEEME.txt"), [
       `Copia de seguridad (${kind}) — ${new Date().toISOString()}`,
       `Incluye: ${contents.join(", ") || "—"}`,
@@ -165,6 +196,9 @@ async function buildArchive(kind: "datos", recipient: string): Promise<{ file: s
       "El código está en GitHub (Therapthor/liordark-payments-dashboard y Therapthor/proyecto-cuentas-bot-backend).",
       "Para restaurar: clonar ambos repos en el servidor, poner cada .env.production y data/*.db en su carpeta,",
       "npm install && npm run build, y arrancar con pm2.",
+      "Sin GitHub (copias semanales con carpeta codigo/): cada codigo/<panel|bot>/codigo-actual.tar.gz tiene los",
+      "archivos tal cual; repo.bundle (si está) tiene todo el historial: git clone codigo/panel/repo.bundle <carpeta>.",
+      "cambios-sin-subir.patch (si está) son cambios hechos a mano en el servidor: git apply dentro de la carpeta.",
     ].join("\n"));
 
     const tarFile = path.join(work, `${kind}.tar.gz`);
@@ -172,7 +206,7 @@ async function buildArchive(kind: "datos", recipient: string): Promise<{ file: s
     ensureBackupDir();
     const out = path.join(BACKUP_DIR, `${kind}-${stamp()}.tar.gz.age`);
     await encryptFile(tarFile, out, recipient);
-    return { file: out, contents };
+    return { file: out, contents, code };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
@@ -242,16 +276,19 @@ export async function runBackup(trigger: "auto" | "manual"): Promise<{ ok: boole
   const messages: string[] = [];
   try {
     pruneLocal("media", 0); // copias de videos de antes: ya no se guardan
+    // El código va la primera vez y luego cada 7 días (o si la última no llegó a Drive).
+    const withCode = Date.now() - Number(getSetting("code_at") || 0) >= CODE_EVERY_MS;
     for (const kind of ["datos"] as const) {
       const id = Number(db.prepare(`INSERT INTO backup_runs (kind, trigger) VALUES (?, ?)`).run(kind, trigger).lastInsertRowid);
       try {
-        const { file, contents } = await buildArchive(kind, recipient);
+        const { file, contents, code } = await buildArchive(kind, recipient, withCode);
         const size = fs.statSync(file).size;
         let drive = "off", error: string | null = null;
         if (getSetting("drive_url")) {
           try { await uploadToDrive(file); drive = "ok"; } catch (err: any) { drive = "error"; error = err?.message || String(err); }
         }
         pruneLocal(kind, KEEP_LOCAL);
+        if (code && drive !== "error") setSetting("code_at", String(Date.now()));
         db.prepare(`UPDATE backup_runs SET finished_at = datetime('now'), ok = 1, file_name = ?, size_bytes = ?, drive = ?, error = ?, contents = ? WHERE id = ?`)
           .run(path.basename(file), size, drive, error, contents.join(", "), id);
         messages.push(`${kind}: ${size < 1048576 ? Math.max(1, Math.round(size / 1024)) + " KB" : (size / 1048576).toFixed(1) + " MB"}` + (drive === "ok" ? " · en Drive" : drive === "error" ? " · ⚠️ " + error : " · solo en el servidor"));

@@ -58,7 +58,7 @@
       return `
       <li class="bk-run ${r.ok || busy ? "" : "bad"}">
         <span class="bk-run-when">${esc(when(r.startedAt))}</span>
-        <span>${r.kind === "media" ? "🎬 Videos" : "🗄 Datos"}${r.trigger === "manual" ? " · a mano" : ""}</span>
+        <span>${r.kind === "media" ? "🎬 Videos" : "🗄 Datos"}${r.contents && r.contents.includes("código") ? " + 💻 código" : ""}${r.trigger === "manual" ? " · a mano" : ""}</span>
         <span>${busy ? "⏳ en curso…" : r.ok ? mb(r.sizeBytes) : "❌ " + esc(r.error || "falló")}</span>
         <span>${busy || !r.ok ? "" : r.drive === "ok" ? "☁️ Drive" : r.drive === "error" ? "⚠️ " + esc(r.error || "Drive falló") : "💻 solo servidor"}</span>
       </li>`;
