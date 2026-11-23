@@ -1157,3 +1157,20 @@ body[data-nav-dir="back"] .page { --pg-x: -22px; --pg-y: 0px; }
 .forgot-wa { margin-top: 10px; }
 .forgot-wa[hidden] { display: none; }
 .forgot-wa p { margin: 0 0 8px; text-align: center; }
+
+/* «Entrar»: aviso según el celular (ya tiene correo / falta correo / nuevo) */
+.quick-status {
+  margin: 8px 0 4px; padding: 10px 12px;
+  border-radius: 12px; background: #E3F3E9; color: #1F6B44;
+  font-size: 13.5px; font-weight: 700; line-height: 1.45;
+}
+.quick-status--need { background: #FFF3D1; color: #6B4A10; }
+.quick-activate { margin-top: 12px; }
+.quick-activate p {
+  margin: 0 0 12px; padding: 12px 14px;
+  border-radius: 12px; background: #FFF3D1; color: #6B4A10;
+  font-size: 14px; font-weight: 700; line-height: 1.45;
+}
+.quick-activate .btn-primary { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; }
+#quick-submit[hidden], #quick-email-wrap[hidden], #quick-pin-wrap[hidden],
+#quick-hint[hidden], .quick-status[hidden], .quick-activate[hidden] { display: none !important; }

@@ -106,7 +106,77 @@
     setFormError("quick-error", "");
     showAuthCard("start-card");
     document.getElementById("auth-modal").hidden = false;
+    lastQuickDigits = "";
+    checkQuickPhone();
     setTimeout(() => document.getElementById("quick-phone").focus(), 50);
+  }
+
+  // ── «Entrar»: celular y correo unidos ──
+  // Apenas escribe su celular se sabe qué pedirle:
+  //  · has_email  → ya tiene correo: solo su PIN.
+  //  · need_email → cliente sin correo: lo agrega aquí y queda unido a su número.
+  //  · new        → número nuevo: correo + crea su PIN.
+  //  · activate   → compró por WhatsApp sin acceso web: se activa por WhatsApp.
+  // Sin respuesta (red, número incompleto) se muestra todo como antes y el
+  // servidor decide al enviar.
+  let quickState = "";
+  let lastQuickDigits = "";
+  let quickCheckSeq = 0;
+  let quickCheckTimer = null;
+
+  function quickDigits() {
+    return document.getElementById("quick-phone").value.replace(/\D/g, "");
+  }
+
+  function setQuickState(state) {
+    quickState = state || "";
+    const status = document.getElementById("quick-status");
+    const emailWrap = document.getElementById("quick-email-wrap");
+    const email = document.getElementById("quick-email");
+    const pinWrap = document.getElementById("quick-pin-wrap");
+    const pin = document.getElementById("quick-pin");
+    const activate = document.getElementById("quick-activate");
+    const submit = document.getElementById("quick-submit");
+    const texts = {
+      has_email: "✅ Ya eres cliente y tu correo está registrado. Solo pon tu PIN.",
+      need_email: "👋 Ya eres cliente, pero tu cuenta aún no tiene correo. Agrégalo aquí: queda unido a tu número y ahí te llegan tus cuentas y tu PIN si lo olvidas.",
+      new: "✨ ¡Bienvenido! Pon tu correo y crea tu PIN de 4 dígitos.",
+    };
+    status.textContent = texts[quickState] || "";
+    status.hidden = !texts[quickState];
+    status.className = "quick-status" + (quickState === "need_email" ? " quick-status--need" : "");
+    const isActivate = quickState === "activate";
+    emailWrap.hidden = quickState === "has_email" || isActivate;
+    email.required = quickState === "need_email" || quickState === "new";
+    pinWrap.hidden = isActivate;
+    pin.required = !isActivate;
+    submit.hidden = isActivate;
+    activate.hidden = !isActivate;
+    document.getElementById("quick-hint").hidden = !!quickState;
+    document.getElementById("quick-pin-label").textContent =
+      quickState === "new" ? "Crea tu PIN de 4 dígitos"
+      : quickState === "has_email" || quickState === "need_email" ? "Tu PIN (el de siempre)"
+      : "Tu PIN de 4 dígitos";
+    if (isActivate) {
+      const digits = quickDigits().slice(-9);
+      document.getElementById("quick-activate-wa").href = "https://wa.me/" + SUPPORT_PHONE + "?text=" + encodeURIComponent(
+        "Hola 👋, quiero activar mi acceso a la tienda web. Mi número: " + digits);
+    }
+  }
+
+  async function checkQuickPhone() {
+    const digits = quickDigits();
+    if (digits === lastQuickDigits) return;
+    lastQuickDigits = digits;
+    const seq = ++quickCheckSeq;
+    const valid = digits.length === 9 || (digits.length === 11 && digits.startsWith("51"));
+    if (!valid) { setQuickState(""); return; }
+    try {
+      const { state } = await api("/auth/phone-status", { method: "POST", body: { phone: digits } });
+      if (seq === quickCheckSeq) setQuickState(state);
+    } catch {
+      if (seq === quickCheckSeq) setQuickState("");
+    }
   }
 
   function closeAuthModal() {
@@ -194,9 +264,15 @@
   }
 
   function initAuthForms() {
+    document.getElementById("quick-phone").addEventListener("input", () => {
+      clearTimeout(quickCheckTimer);
+      quickCheckTimer = setTimeout(checkQuickPhone, 350);
+    });
+
     document.getElementById("quick-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       setFormError("quick-error", "");
+      if (quickState === "activate") return;
       const phone = document.getElementById("quick-phone").value.trim();
       const email = document.getElementById("quick-email").value.trim();
       const pin   = document.getElementById("quick-pin").value;
@@ -207,7 +283,10 @@
         await onAuthenticated();
       } catch (err) {
         setFormError("quick-error", err.message);
-        if (/correo/i.test(err.message || "")) document.getElementById("quick-email").focus();
+        if (/correo/i.test(err.message || "")) {
+          document.getElementById("quick-email-wrap").hidden = false;
+          document.getElementById("quick-email").focus();
+        }
       } finally {
         btn.disabled = false;
       }

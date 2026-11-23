@@ -227,9 +227,20 @@ router.post("/quick", pinLock(async (req, res) => {
     }
     recordCustomerLoginSuccess(phone);
     rememberCustomerPlain(existing.id, pin);
-    // Si ya compró antes y no tenía correo, se aprovecha el que escribió.
-    const typed = String(req.body?.email ?? "").trim();
-    if (!existing.email && typed && isSafeEmail(typed) && !findCustomerByEmail(typed)) setCustomerEmail(existing.id, typed);
+    // Cliente sin correo: sí o sí lo agrega aquí mismo, y queda unido a su
+    // número (con él entra y recupera su PIN). El que ya tiene correo no
+    // necesita escribirlo.
+    if (!existing.email) {
+      const typed = String(req.body?.email ?? "").trim();
+      const emailError = newAccountEmailError(typed);
+      if (emailError) {
+        return res.status(400).json({
+          message: typed ? emailError : "Agrega tu correo para continuar: queda unido a tu número y ahí te llegan tus cuentas y tu PIN si lo olvidas.",
+          needEmail: true,
+        });
+      }
+      setCustomerEmail(existing.id, typed);
+    }
     setSessionCookie(res, existing.id);
     return res.json({ ok: true, phone: existing.phone, created: false });
   }
@@ -250,6 +261,33 @@ router.post("/quick", pinLock(async (req, res) => {
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone, created: true });
 }));
+
+// POST /phone-status — apenas el cliente escribe su celular en «Entrar»,
+// la tienda sabe qué pedirle: solo el PIN (ya tiene correo), correo + PIN
+// (cliente sin correo o número nuevo) o activar por WhatsApp (compró por
+// WhatsApp y todavía no tiene acceso web). No devuelve el correo ni ningún
+// dato; es lo mismo que ya responde /quick al enviar. Con límite por conexión.
+const PHONE_STATUS_MAX = 40;               // consultas por conexión…
+const PHONE_STATUS_WINDOW_MS = 10 * 60_000; // …cada 10 minutos
+const phoneStatusHits = new Map<string, number[]>();
+
+router.post("/phone-status", (req, res) => {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const hits = (phoneStatusHits.get(ip) ?? []).filter(t => now - t < PHONE_STATUS_WINDOW_MS);
+  if (hits.length >= PHONE_STATUS_MAX) return res.status(429).json({ message: "Espera unos minutos." });
+  hits.push(now);
+  phoneStatusHits.set(ip, hits);
+  if (phoneStatusHits.size > 5000) {
+    for (const [k, v] of phoneStatusHits) if (!v.some(t => now - t < PHONE_STATUS_WINDOW_MS)) phoneStatusHits.delete(k);
+  }
+
+  const phone = String(req.body?.phone ?? "");
+  if (normalizeCustomerPhone(phone).length < 9) return res.status(400).json({ message: "Número de celular inválido." });
+  const customer = findCustomerByPhone(phone);
+  if (customer) return res.json({ state: customer.email ? "has_email" : "need_email" });
+  res.json({ state: phoneHasAccounts(phone) ? "activate" : "new" });
+});
 
 // POST /forgot — «¿Olvidaste tu PIN?»: con su correo (o celular) se le
 // manda a SU correo registrado un enlace de un solo uso para crear un PIN
