@@ -1,11 +1,11 @@
 import { db } from "./db";
 import { normalizePeruPhone } from "../utils/phone.util";
 import { getCatalogProductByPlatform } from "./catalog.repository";
-import { emailCustomerUpdate, type UpdateEmailType } from "../services/customer-update-email.service";
+import { emailCustomerUpdate, queuePurchaseEmail, type UpdateEmailType } from "../services/customer-update-email.service";
 
 // Estos avisos también le llegan por correo (si registró uno): ver
 // services/customer-update-email.service.ts.
-const EMAIL_TYPES = new Set<string>(["account_replaced", "password_changed", "support_update", "support_resolved"]);
+const EMAIL_TYPES = new Set<string>(["new_account", "account_replaced", "password_changed", "support_update", "support_resolved"]);
 
 // ─────────────────────────────────────────────────────────────
 // NOTIFICACIONES DEL CLIENTE (campanita en liordark.com) — cuenta nueva
@@ -85,7 +85,8 @@ export function createCustomerNotification(
     const id = Number(info.lastInsertRowid);
     setImmediate(() => {
       if (!db.prepare(`SELECT 1 FROM customer_notifications WHERE id = ?`).get(id)) return;
-      emailCustomerUpdate(digits, type as UpdateEmailType, platform, message);
+      if (type === "new_account") queuePurchaseEmail(digits, platform, accountEmail); // compra: datos de acceso + PIN
+      else emailCustomerUpdate(digits, type as UpdateEmailType, platform, message);
     });
   }
 }

@@ -1150,3 +1150,7 @@ body[data-nav-dir="back"] .page { --pg-x: -22px; --pg-y: 0px; }
 #dashboard-active-list .success-account-card.in-support { box-shadow: 0 0 0 2px #E2552B, var(--shadow-card); }
 .success-account-support { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 14px 10px; padding: 10px 12px; border-radius: 14px; background: var(--danger-soft); color: var(--coral-ink); font-size: 13.5px; font-weight: 700; }
 .success-account-support button { margin-left: auto; background: #fff; border: 0; border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 12.5px; color: var(--coral-ink); cursor: pointer; }
+
+/* ¿Olvidaste tu PIN? — confirmación */
+.forgot-ok { margin: 4px 0 12px; padding: 12px 14px; border-radius: 14px; background: var(--leaf-soft); color: var(--leaf-ink); font-size: 14px; font-weight: 700; line-height: 1.45; }
+.forgot-ok[hidden] { display: none; }

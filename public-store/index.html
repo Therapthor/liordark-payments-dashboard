@@ -43,6 +43,7 @@
           <button type="submit" class="btn-primary btn-block" id="quick-submit">Continuar al pago</button>
         </form>
         <button class="btn-link-small" id="show-login-btn" type="button">¿Tu clave tiene letras? Ingresa aquí</button>
+        <button class="btn-link-small" id="show-forgot-btn" type="button">¿Olvidaste tu PIN?</button>
         <button id="show-guest-btn" type="button" hidden></button>
       </div>
 
@@ -57,8 +58,24 @@
           <p class="form-error" id="login-error" hidden></p>
           <button type="submit" class="btn-primary btn-block">Ingresar</button>
         </form>
+        <button class="btn-link-small" id="show-forgot-btn-2" type="button">¿Olvidaste tu PIN?</button>
         <div class="divider"><span>o</span></div>
         <button class="btn-ghost btn-block" id="back-to-start-from-login" type="button">← Volver</button>
+      </div>
+
+      <!-- ¿Olvidaste tu PIN? → enlace a su correo registrado (un solo uso) -->
+      <div class="auth-card" id="forgot-card" hidden>
+        <h1>¿Olvidaste tu PIN?</h1>
+        <p class="muted">Escribe tu correo o tu celular y te enviamos a tu correo un enlace para crear un PIN nuevo.</p>
+        <form id="forgot-form">
+          <label for="forgot-login">Correo o celular</label>
+          <input type="text" id="forgot-login" required placeholder="tu@correo.com o 9XXXXXXXX" autocomplete="username">
+          <p class="form-error" id="forgot-error" hidden></p>
+          <p class="forgot-ok" id="forgot-ok" hidden></p>
+          <button type="submit" class="btn-primary btn-block" id="forgot-submit">Enviarme el enlace</button>
+        </form>
+        <div class="divider"><span>o</span></div>
+        <button class="btn-ghost btn-block" id="back-to-start-from-forgot" type="button">← Volver</button>
       </div>
 
       <div class="auth-card" id="guest-card" hidden>

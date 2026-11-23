@@ -26,6 +26,9 @@ import { checkLockout, nextCustomerLockoutState, lockoutDurationText } from "../
 import { clientIp, isPublicIp } from "../services/security.service";
 import { oneAtATime, phoneKey } from "../utils/one-at-a-time.util";
 import { isSafeEmail } from "../utils/email.util";
+import { createPinLink, PIN_EMAIL_LINK_MINUTES } from "../db/pin-links.repository";
+import { sendEmail } from "../services/email.service";
+import { sendWelcomeEmail, pinResetEmail } from "../services/customer-update-email.service";
 
 const router = Router();
 const pinLock = oneAtATime(phoneKey);
@@ -176,7 +179,8 @@ router.post("/guest", async (req, res) => {
 
   const passwordHash = await hashPassword(pin);
   const customer      = createCustomer(phone, passwordHash, pin, true);
-  setCustomerEmail(customer.id, String(req.body.email));
+  const withEmail = setCustomerEmail(customer.id, String(req.body.email));
+  if (withEmail) sendWelcomeEmail(withEmail);
   logRegistration(clientIp(req));
 
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
@@ -239,12 +243,44 @@ router.post("/quick", pinLock(async (req, res) => {
   if (denied) return res.status(403).json({ message: denied });
   const passwordHash = await hashPassword(pin);
   const customer      = createCustomer(phone, passwordHash, pin, true);
-  setCustomerEmail(customer.id, String(req.body.email));
+  const withEmail = setCustomerEmail(customer.id, String(req.body.email));
+  if (withEmail) sendWelcomeEmail(withEmail);
   logRegistration(clientIp(req));
   emitDashboardEvent({ type: "customer_registered", phone: customer.phone, isGuest: true });
   setSessionCookie(res, customer.id);
   res.json({ ok: true, phone: customer.phone, created: true });
 }));
+
+// POST /forgot — «¿Olvidaste tu PIN?»: con su correo (o celular) se le
+// manda a SU correo registrado un enlace de un solo uso para crear un PIN
+// nuevo (liordark.com/cambiar-pin/<token>, 30 min). Siempre responde lo
+// mismo, exista o no la cuenta, para no revelar quién es cliente.
+const resetRequests = new Map<number, number[]>(); // por cliente: máx. 3 por hora
+const RESET_GENERIC = "Si tu cuenta tiene un correo registrado, te enviamos un enlace para crear tu PIN nuevo. Revisa también la carpeta de spam.";
+
+router.post("/forgot", async (req, res) => {
+  const input = String(req.body?.login ?? "").trim().slice(0, 200);
+  if (!input) return res.status(400).json({ message: "Escribe tu correo o tu celular." });
+  const ipLock = ipLockedResponse(req);
+  if (ipLock) return res.status(ipLock.status).json({ message: ipLock.message });
+
+  const customer = input.includes("@")
+    ? findCustomerByEmail(input)
+    : (normalizeCustomerPhone(input).length >= 9 ? findCustomerByPhone(input) : null);
+  if (!customer || !customer.email || isCustomerSuspended(customer) || isPhoneBlocked(customer.phone)) {
+    return res.json({ ok: true, message: RESET_GENERIC });
+  }
+  const now = Date.now();
+  const hits = (resetRequests.get(customer.id) || []).filter(t => now - t < 3600_000);
+  if (hits.length >= 3) return res.json({ ok: true, message: RESET_GENERIC });
+  hits.push(now);
+  resetRequests.set(customer.id, hits);
+
+  const link = createPinLink(customer.id, PIN_EMAIL_LINK_MINUTES);
+  const { subject, html } = pinResetEmail("https://liordark.com/cambiar-pin/" + link.token, PIN_EMAIL_LINK_MINUTES);
+  sendEmail(customer.email, subject, html).catch(() => { /* sendEmail ya registra el error */ });
+  res.json({ ok: true, message: RESET_GENERIC });
+});
 
 router.post("/logout", (_req, res) => {
   res.clearCookie(CUSTOMER_SESSION_COOKIE);

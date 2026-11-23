@@ -43,14 +43,14 @@
   <section class="center" id="st-done" hidden>
     <div class="circle ok">✓</div>
     <h1>¡Listo!</h1>
-    <p class="muted">Tu PIN se cambió. Ya puedes entrar con tu celular y tu PIN nuevo.</p>
+    <p class="muted">Tu PIN se cambió. Ya puedes entrar con tu celular o tu correo y tu PIN nuevo.</p>
     <a class="btn orange" href="/">Ir a la tienda</a>
   </section>
 
   <section class="center" id="st-off" hidden>
     <div class="circle off">!</div>
     <h1 id="off-title">Este link venció</h1>
-    <p class="muted" id="off-text">Pide uno nuevo por WhatsApp.</p>
+    <p class="muted" id="off-text">Pide uno nuevo en la tienda: «¿Olvidaste tu PIN?».</p>
     <a class="btn dark" href="/">Ir a la tienda</a>
   </section>
 </main>
@@ -73,7 +73,7 @@
       $("off-text").textContent = "El PIN ya se cambió. Si necesitas cambiarlo otra vez, pide un link nuevo.";
     } else {
       $("off-title").textContent = "Este link venció";
-      $("off-text").textContent = "Los links duran 10 minutos. Pide uno nuevo por WhatsApp.";
+      $("off-text").textContent = "Pide uno nuevo en la tienda: toca «Iniciar sesión» › «¿Olvidaste tu PIN?» y te llega a tu correo.";
     }
     show("st-off");
   }

@@ -101,7 +101,7 @@
   }
 
   function hideAllAuthCards() {
-    ["start-card", "login-card", "guest-card"].forEach(id => {
+    ["start-card", "login-card", "guest-card", "forgot-card"].forEach(id => {
       document.getElementById(id).hidden = true;
     });
   }
@@ -144,6 +144,18 @@
     document.getElementById("show-guest-btn").addEventListener("click", () => showAuthCard("guest-card"));
     document.getElementById("back-to-start-from-login").addEventListener("click", () => showAuthCard("start-card"));
     document.getElementById("back-to-start-from-guest").addEventListener("click", () => showAuthCard("start-card"));
+    const openForgot = () => {
+      setFormError("forgot-error", "");
+      document.getElementById("forgot-ok").hidden = true;
+      document.getElementById("forgot-submit").hidden = false;
+      const typed = document.getElementById("login-phone").value.trim() || document.getElementById("quick-email").value.trim() || document.getElementById("quick-phone").value.trim();
+      document.getElementById("forgot-login").value = typed;
+      showAuthCard("forgot-card");
+      setTimeout(() => document.getElementById("forgot-login").focus(), 50);
+    };
+    document.getElementById("show-forgot-btn").addEventListener("click", openForgot);
+    document.getElementById("show-forgot-btn-2").addEventListener("click", openForgot);
+    document.getElementById("back-to-start-from-forgot").addEventListener("click", () => showAuthCard("start-card"));
     document.getElementById("nav-login-btn").addEventListener("click", () => { pendingAfterAuth = null; openAuthModal(); });
     // Cerrar sin registrarse cancela la compra pendiente.
     document.getElementById("auth-modal-close").addEventListener("click", () => { pendingAfterAuth = null; closeAuthModal(); });
@@ -207,6 +219,25 @@
         await onAuthenticated();
       } catch (err) {
         setFormError("guest-error", err.message);
+      }
+    });
+
+    document.getElementById("forgot-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setFormError("forgot-error", "");
+      const login = document.getElementById("forgot-login").value.trim();
+      const btn = document.getElementById("forgot-submit");
+      btn.disabled = true;
+      try {
+        const r = await api("/auth/forgot", { method: "POST", body: { login } });
+        const ok = document.getElementById("forgot-ok");
+        ok.textContent = "✉️ " + (r.message || "Revisa tu correo.");
+        ok.hidden = false;
+        btn.hidden = true;
+      } catch (err) {
+        setFormError("forgot-error", err.message);
+      } finally {
+        btn.disabled = false;
       }
     });
 

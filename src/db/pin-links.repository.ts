@@ -6,6 +6,8 @@ import { sqliteDate } from "./code-links.repository";
 // (liordark.com/cambiar-pin/<token>). Duran PIN_LINK_MINUTES.
 
 export const PIN_LINK_MINUTES = 10;
+/** El que el cliente se manda a su correo («¿Olvidaste tu PIN?») dura más. */
+export const PIN_EMAIL_LINK_MINUTES = 30;
 
 export type PinLink = {
   token: string; customerId: number; createdAt: string; expiresAt: string; openedAt: string | null; usedAt: string | null;
@@ -18,12 +20,12 @@ function toLink(r: any): PinLink {
 }
 
 /** Crea un link nuevo; los anteriores sin usar del mismo cliente se anulan. */
-export function createPinLink(customerId: number): PinLink {
+export function createPinLink(customerId: number, minutes = PIN_LINK_MINUTES): PinLink {
   let token = "";
   for (let i = 0; i < 12; i++) token += TOKEN_CHARS[crypto.randomInt(TOKEN_CHARS.length)];
   db.prepare(`DELETE FROM pin_links WHERE customer_id = ? AND used_at IS NULL`).run(customerId);
   db.prepare(`INSERT INTO pin_links (token, customer_id, expires_at) VALUES (?, ?, datetime('now', ?))`)
-    .run(token, customerId, `+${PIN_LINK_MINUTES} minutes`);
+    .run(token, customerId, `+${minutes} minutes`);
   return findPinLink(token) as PinLink;
 }
 
