@@ -52,13 +52,17 @@
         lastOk.drive === "ok" ? "en Google Drive y en el servidor" : lastOk.drive === "error" ? "⚠️ solo en el servidor (Drive falló)" : "solo en el servidor (falta conectar Drive)"}</p>`;
     }
     if (d.running) head += `<p class="bk-state">⏳ Haciendo una copia…</p>`;
-    const rows = d.runs.map(r => `
-      <li class="bk-run ${r.ok ? "" : "bad"}">
+    // Sin finishedAt = todavía se está haciendo (no es un fallo).
+    const rows = d.runs.map(r => {
+      const busy = !r.finishedAt;
+      return `
+      <li class="bk-run ${r.ok || busy ? "" : "bad"}">
         <span class="bk-run-when">${esc(when(r.startedAt))}</span>
         <span>${r.kind === "media" ? "🎬 Videos" : "🗄 Datos"}${r.trigger === "manual" ? " · a mano" : ""}</span>
-        <span>${r.ok ? mb(r.sizeBytes) : "❌ " + esc(r.error || "falló")}</span>
-        <span>${!r.ok ? "" : r.drive === "ok" ? "☁️ Drive" : r.drive === "error" ? "⚠️ " + esc(r.error || "Drive falló") : "💻 solo servidor"}</span>
-      </li>`).join("");
+        <span>${busy ? "⏳ en curso…" : r.ok ? mb(r.sizeBytes) : "❌ " + esc(r.error || "falló")}</span>
+        <span>${busy || !r.ok ? "" : r.drive === "ok" ? "☁️ Drive" : r.drive === "error" ? "⚠️ " + esc(r.error || "Drive falló") : "💻 solo servidor"}</span>
+      </li>`;
+    }).join("");
     $("bk-status").innerHTML = head + (rows ? `<ul class="bk-runs">${rows}</ul>` : "") +
       (d.local.length ? `<p class="panel-hint">En el servidor (${esc(d.localDir)}): ${d.local.length} copia(s).</p>` : "");
     $("bk-run").disabled = !ready || d.running;

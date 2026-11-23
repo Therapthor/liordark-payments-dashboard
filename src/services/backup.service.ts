@@ -13,7 +13,7 @@ import { db } from "../db/db";
 // ─────────────────────────────────────────────────────────────
 // COPIAS DE SEGURIDAD — una vez al día, todo lo que NO está en GitHub:
 // la base del panel, la del bot, los .env y ~/scripts. Los videos del
-// curso (pesados) solo cuando cambian.
+// curso NO (el dueño los tiene guardados aparte).
 //
 // Cerradas con age: el servidor solo tiene la llave PÚBLICA (el candado).
 // La privada la crea y guarda el dueño en su equipo (herramienta offline
@@ -31,7 +31,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS backup_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS backup_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL,              -- datos | media
+    kind TEXT NOT NULL,              -- datos
     trigger TEXT NOT NULL,           -- auto | manual
     started_at TEXT NOT NULL DEFAULT (datetime('now')),
     finished_at TEXT,
@@ -43,6 +43,10 @@ db.exec(`
     contents TEXT                    -- qué se incluyó (lista corta)
   );
 `);
+// Los videos ya no se copian; una corrida cortada por un reinicio queda como
+// interrumpida (si no, el panel la mostraría «en curso» para siempre).
+db.exec(`DELETE FROM backup_runs WHERE kind = 'media'`);
+db.prepare(`UPDATE backup_runs SET finished_at = datetime('now'), ok = 0, error = 'Interrumpida (el panel se reinició)' WHERE finished_at IS NULL`).run();
 
 const KEEP_LOCAL = 7;
 const PART_BYTES = 15 * 1024 * 1024; // el Apps Script recibe hasta ~50 MB por envío (en base64)
@@ -94,7 +98,6 @@ export function saveBackupConfig(input: { recipient?: unknown; driveUrl?: unknow
 const PANEL_DIR = process.cwd();
 const BOT_DIR = process.env.BOT_DIR || path.resolve(PANEL_DIR, "..", "proyecto-cuentas-bot-backend");
 const SCRIPTS_DIR = path.join(os.homedir(), "scripts");
-const MEDIA_DIRS = ["data/course-media", "data/avisos-media"].map(d => path.join(PANEL_DIR, d));
 export const BACKUP_DIR = process.env.BACKUP_DIR || path.join(os.homedir(), "liordark-backups");
 
 function ensureBackupDir(): void {
@@ -132,31 +135,27 @@ async function encryptFile(src: string, dest: string, recipient: string): Promis
 }
 
 /** Arma la carpeta temporal → .tar.gz → .age; borra todo lo intermedio. */
-async function buildArchive(kind: "datos" | "media", recipient: string): Promise<{ file: string; contents: string[] }> {
+async function buildArchive(kind: "datos", recipient: string): Promise<{ file: string; contents: string[] }> {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ld-copia-"));
   fs.chmodSync(work, 0o700);
   const stage = path.join(work, kind);
   fs.mkdirSync(stage, { mode: 0o700 });
   const contents: string[] = [];
   try {
-    if (kind === "datos") {
-      // Copia consistente aunque el panel esté escribiendo (API de respaldo de SQLite).
-      fs.mkdirSync(path.join(stage, "panel"), { recursive: true });
-      await db.backup(path.join(stage, "panel", "payments.db"));
-      contents.push("base del panel");
-      const botDb = path.join(BOT_DIR, "data", "orders.db");
-      if (fs.existsSync(botDb)) {
-        fs.mkdirSync(path.join(stage, "bot"), { recursive: true });
-        const b = new Database(botDb, { readonly: true, fileMustExist: true });
-        try { await b.backup(path.join(stage, "bot", "orders.db")); } finally { b.close(); }
-        contents.push("base del bot");
-      }
-      copyIfExists(path.join(PANEL_DIR, ".env.production"), path.join(stage, "panel", ".env.production"), contents, "config del panel");
-      copyIfExists(path.join(BOT_DIR, ".env.production"), path.join(stage, "bot", ".env.production"), contents, "config del bot");
-      copyIfExists(SCRIPTS_DIR, path.join(stage, "scripts"), contents, "~/scripts");
-    } else {
-      for (const dir of MEDIA_DIRS) copyIfExists(dir, path.join(stage, "panel", "data", path.basename(dir)), contents, path.basename(dir));
+    // Copia consistente aunque el panel esté escribiendo (API de respaldo de SQLite).
+    fs.mkdirSync(path.join(stage, "panel"), { recursive: true });
+    await db.backup(path.join(stage, "panel", "payments.db"));
+    contents.push("base del panel");
+    const botDb = path.join(BOT_DIR, "data", "orders.db");
+    if (fs.existsSync(botDb)) {
+      fs.mkdirSync(path.join(stage, "bot"), { recursive: true });
+      const b = new Database(botDb, { readonly: true, fileMustExist: true });
+      try { await b.backup(path.join(stage, "bot", "orders.db")); } finally { b.close(); }
+      contents.push("base del bot");
     }
+    copyIfExists(path.join(PANEL_DIR, ".env.production"), path.join(stage, "panel", ".env.production"), contents, "config del panel");
+    copyIfExists(path.join(BOT_DIR, ".env.production"), path.join(stage, "bot", ".env.production"), contents, "config del bot");
+    copyIfExists(SCRIPTS_DIR, path.join(stage, "scripts"), contents, "~/scripts");
     fs.writeFileSync(path.join(stage, "LEEME.txt"), [
       `Copia de seguridad (${kind}) — ${new Date().toISOString()}`,
       `Incluye: ${contents.join(", ") || "—"}`,
@@ -177,22 +176,6 @@ async function buildArchive(kind: "datos" | "media", recipient: string): Promise
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
-}
-
-/** Huella de la carpeta de videos: si no cambió, no se vuelve a copiar. */
-function mediaFingerprint(): string {
-  const h = crypto.createHash("sha256");
-  const walk = (dir: string) => {
-    if (!fs.existsSync(dir)) return;
-    for (const name of fs.readdirSync(dir).sort()) {
-      const p = path.join(dir, name);
-      const st = fs.statSync(p);
-      if (st.isDirectory()) walk(p);
-      else h.update(`${path.relative(PANEL_DIR, p)}|${st.size}|${Math.floor(st.mtimeMs)}\n`);
-    }
-  };
-  MEDIA_DIRS.forEach(walk);
-  return h.digest("hex");
 }
 
 function pruneLocal(kind: string, keep: number): void {
@@ -250,7 +233,7 @@ export async function testDrive(): Promise<{ ok: true; folder: string } | { ok: 
 let running = false;
 export function backupRunning(): boolean { return running; }
 
-/** Una corrida: siempre «datos»; «media» solo si cambió desde la última. */
+/** Una corrida: la copia de «datos». */
 export async function runBackup(trigger: "auto" | "manual"): Promise<{ ok: boolean; message: string }> {
   const recipient = getSetting("recipient");
   if (!recipient) return { ok: false, message: "Falta tu llave pública: sin ella no se hace ninguna copia (nunca se guarda sin cifrar)." };
@@ -258,10 +241,8 @@ export async function runBackup(trigger: "auto" | "manual"): Promise<{ ok: boole
   running = true;
   const messages: string[] = [];
   try {
-    const kinds: ("datos" | "media")[] = ["datos"];
-    const fp = mediaFingerprint();
-    if (fp !== getSetting("media_fp")) kinds.push("media");
-    for (const kind of kinds) {
+    pruneLocal("media", 0); // copias de videos de antes: ya no se guardan
+    for (const kind of ["datos"] as const) {
       const id = Number(db.prepare(`INSERT INTO backup_runs (kind, trigger) VALUES (?, ?)`).run(kind, trigger).lastInsertRowid);
       try {
         const { file, contents } = await buildArchive(kind, recipient);
@@ -270,8 +251,7 @@ export async function runBackup(trigger: "auto" | "manual"): Promise<{ ok: boole
         if (getSetting("drive_url")) {
           try { await uploadToDrive(file); drive = "ok"; } catch (err: any) { drive = "error"; error = err?.message || String(err); }
         }
-        pruneLocal(kind, kind === "datos" ? KEEP_LOCAL : 2);
-        if (kind === "media" && drive !== "error") setSetting("media_fp", fp);
+        pruneLocal(kind, KEEP_LOCAL);
         db.prepare(`UPDATE backup_runs SET finished_at = datetime('now'), ok = 1, file_name = ?, size_bytes = ?, drive = ?, error = ?, contents = ? WHERE id = ?`)
           .run(path.basename(file), size, drive, error, contents.join(", "), id);
         messages.push(`${kind}: ${size < 1048576 ? Math.max(1, Math.round(size / 1024)) + " KB" : (size / 1048576).toFixed(1) + " MB"}` + (drive === "ok" ? " · en Drive" : drive === "error" ? " · ⚠️ " + error : " · solo en el servidor"));
