@@ -137,6 +137,59 @@
     });
   }
 
+  // ── Imágenes del bot de WhatsApp (JPG: WhatsApp no acepta WEBP) ──
+  async function loadBotImages() {
+    try {
+      const res = await fetch("/api/bot-flow/bot-images", { credentials: "include" });
+      if (!res.ok) return;
+      const { images } = await res.json();
+      document.querySelectorAll("[data-bot-image]").forEach(box => {
+        const url = images && images[box.dataset.botImage];
+        const img = box.querySelector(".bot-image-preview");
+        img.onerror = () => { img.hidden = true; };
+        if (url) { img.src = url; img.hidden = false; } else { img.hidden = true; }
+      });
+    } catch { /* sin red */ }
+  }
+
+  function initBotImages() {
+    document.querySelectorAll("[data-bot-image-file]").forEach(input => {
+      input.addEventListener("change", async () => {
+        const kind = input.dataset.botImageFile;
+        const status = document.querySelector(`[data-bot-image-status="${kind}"]`);
+        const file = input.files && input.files[0];
+        input.value = "";
+        if (!file) return;
+        status.textContent = "Comprimiendo y subiendo…";
+        try {
+          const src = await loadBitmap(file);
+          let jpg = null;
+          for (const q of [0.86, 0.75, 0.62]) {
+            jpg = await renderBlob(src, 1200, "image/jpeg", q, true);
+            if (jpg.size <= UPLOAD_MAX_BYTES) break;
+          }
+          if (src.close) src.close();
+          const fd = new FormData();
+          fd.append("image", jpg, kind + ".jpg");
+          let res = null;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            try { res = await fetch("/api/bot-flow/bot-images/" + kind, { method: "POST", credentials: "include", body: fd }); } catch { res = null; }
+            if (res && ![502, 503, 504].includes(res.status)) break;
+            if (attempt < 3) { status.textContent = "El panel se está actualizando, reintentando…"; await new Promise(r => setTimeout(r, 4000)); }
+          }
+          if (!res) throw new Error("Sin conexión con el panel.");
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.message || `No se pudo subir (error ${res.status}).`);
+          status.textContent = `✅ Guardada (${Math.round(jpg.size / 1024)} KB). El bot ya la usa.`;
+          loadBotImages();
+        } catch (err) {
+          status.textContent = "⚠️ " + (err.message || "No se pudo subir.");
+        }
+      });
+    });
+    loadBotImages();
+  }
+
   async function api(path, options = {}) {
     const res = await fetch("/api/catalog" + path, {
       credentials: "include",
@@ -224,6 +277,7 @@
 
   function initProductModal() {
     document.getElementById("catalog-new-btn").addEventListener("click", () => openProductModal(null));
+    initBotImages();
     wireImageField("catalog", () => document.getElementById("catalog-platform").value.trim() || "producto", () => editingProductId);
     document.getElementById("catalog-cancel").addEventListener("click", () => {
       document.getElementById("catalog-modal").hidden = true;

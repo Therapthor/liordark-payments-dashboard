@@ -47,7 +47,8 @@ import { saleLinksAdminRoutes, openSaleLinkPage } from "./routes/sale-links.rout
 import { cleanPinLinks } from "./db/pin-links.repository";
 import { ensureWelcomeColumn, mergeDuplicateCustomers } from "./db/customer.repository";
 import { runOneTimeRepairs } from "./services/one-time-repairs.service";
-import { mediaFilePath, migrateExternalProductImages } from "./services/product-media.service";
+import { mediaFilePath, botMediaFilePath, migrateExternalProductImages, migrateBotImages } from "./services/product-media.service";
+import { localizeAvisoImages } from "./routes/avisos.routes";
 import { runPinRecovery } from "./services/pin-recovery.service";
 import { ensureWebAccessForAccountHolders } from "./services/web-access.service";
 import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
@@ -259,8 +260,10 @@ app.get(/^\/renovar\/?$/, (req, res, next) => {
 // servidor (ver product-media.service). En todos los dominios (tienda,
 // mayoristas, panel). El nombre lleva la huella del contenido: el navegador
 // la guarda 1 año sin volver a preguntar.
-app.get(/^\/media\/products\/([a-z0-9-]{1,90}\.(?:webp|jpg|png))$/, (req, res) => {
-  const file = mediaFilePath(String((req.params as any)[0] ?? ""));
+app.get(/^\/media\/(products|bot)\/([a-z0-9-]{1,90}\.(?:webp|jpg|png))$/, (req, res) => {
+  const dir = String((req.params as any)[0] ?? "");
+  const name = String((req.params as any)[1] ?? "");
+  const file = dir === "bot" ? botMediaFilePath(name) : mediaFilePath(name);
   if (!file) { res.status(404).end(); return; }
   res.sendFile(file, {
     maxAge: 365 * 24 * 3600 * 1000,
@@ -408,7 +411,13 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   ensureWelcomeColumn(); // correo de bienvenida: quién ya la recibió
   runOneTimeRepairs(); // arreglos puntuales de datos (una sola vez)
   // Imágenes de productos que sigan en Cloudinary → al servidor (en segundo plano).
-  setTimeout(() => { migrateExternalProductImages().catch(() => {}); }, 5_000);
+  // (Cloudinary retirado: productos, combos, QR de pago, avisos e imágenes del bot.)
+  setTimeout(() => {
+    migrateExternalProductImages()
+      .then(() => migrateBotImages())
+      .then(() => localizeAvisoImages())
+      .catch(() => {});
+  }, 5_000);
 
   runExpireChatMediaJob();
   setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);

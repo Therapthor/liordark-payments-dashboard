@@ -1,3 +1,4 @@
+import { migrateExternalProductImages } from "../services/product-media.service";
 import { Router } from "express";
 import {
   listPaymentMethods,
@@ -26,6 +27,7 @@ router.post("/", (req, res) => {
   const data = parseBody(req.body);
   if (!data.name) { res.status(400).json({ message: "Falta el nombre del método de pago." }); return; }
   res.status(201).json({ method: createPaymentMethod(data) });
+  if (/^https?:\/\//i.test(data.imageUrl)) setImmediate(() => { migrateExternalProductImages().catch(() => {}); });
 });
 
 router.put("/:id", (req, res) => {
@@ -34,6 +36,7 @@ router.put("/:id", (req, res) => {
   const method = updatePaymentMethod(Number(req.params.id), data);
   if (!method) { res.status(404).json({ message: "Método de pago no encontrado." }); return; }
   res.json({ method });
+  if (/^https?:\/\//i.test(data.imageUrl)) setImmediate(() => { migrateExternalProductImages().catch(() => {}); });
 });
 
 router.patch("/:id/active", (req, res) => {

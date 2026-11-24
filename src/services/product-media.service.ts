@@ -40,6 +40,57 @@ db.exec(`
   );
 `);
 
+// ── Imágenes del bot de WhatsApp (saludo y aviso de vencimiento) ──
+// WhatsApp solo acepta JPG o PNG.
+export const BOT_MEDIA_DIR = path.resolve(process.cwd(), "data", "media", "bot");
+export const BOT_MEDIA_PREFIX = "/media/bot/";
+const BOT_NAME_RE = /^(principal|vencimiento)-[a-f0-9]{12}\.(jpg|png)$/;
+export type BotImageKind = "principal" | "vencimiento";
+export const BOT_IMAGE_KINDS: BotImageKind[] = ["principal", "vencimiento"];
+db.exec(`
+  CREATE TABLE IF NOT EXISTS bot_images (
+    kind       TEXT PRIMARY KEY,
+    url        TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
+export function botMediaFilePath(name: string): string | null {
+  return BOT_NAME_RE.test(name) ? path.join(BOT_MEDIA_DIR, name) : null;
+}
+
+/** Direcciones del panel («/media/bot/…»); null si no hay. */
+export function getBotImages(): Record<BotImageKind, string | null> {
+  const rows = db.prepare(`SELECT kind, url FROM bot_images`).all() as { kind: BotImageKind; url: string }[];
+  const out: Record<BotImageKind, string | null> = { principal: null, vencimiento: null };
+  for (const r of rows) if (BOT_IMAGE_KINDS.includes(r.kind)) out[r.kind] = r.url;
+  return out;
+}
+
+/** Para el bot (WhatsApp): dirección completa. */
+export function getBotImagesAbsolute(): Record<BotImageKind, string | null> {
+  const rel = getBotImages();
+  return { principal: rel.principal ? PUBLIC_BASE + rel.principal : null, vencimiento: rel.vencimiento ? PUBLIC_BASE + rel.vencimiento : null };
+}
+
+export function saveBotImage(kind: BotImageKind, buf: Buffer): string {
+  if (!BOT_IMAGE_KINDS.includes(kind)) throw new Error("Imagen del bot no válida.");
+  const ext = sniffImage(buf);
+  if (ext !== "jpg" && ext !== "png") throw new Error("WhatsApp solo acepta JPG o PNG.");
+  if (buf.length > MAX_BYTES) throw new Error("La imagen pesa demasiado (máx. 4 MB).");
+  fs.mkdirSync(BOT_MEDIA_DIR, { recursive: true });
+  const name = `${kind}-${crypto.createHash("sha256").update(buf).digest("hex").slice(0, 12)}.${ext}`;
+  writeAtomic(path.join(BOT_MEDIA_DIR, name), buf);
+  const prev = getBotImages()[kind];
+  const url = BOT_MEDIA_PREFIX + name;
+  db.prepare(`INSERT INTO bot_images (kind, url) VALUES (?, ?) ON CONFLICT(kind) DO UPDATE SET url = excluded.url, updated_at = datetime('now')`).run(kind, url);
+  if (prev && prev !== url) {
+    const old = botMediaFilePath(prev.slice(BOT_MEDIA_PREFIX.length));
+    if (old) fs.promises.unlink(old).catch(() => {});
+  }
+  return url;
+}
+
 export function isLocalMedia(url: string | null | undefined): boolean {
   return typeof url === "string" && url.startsWith(MEDIA_PREFIX);
 }
@@ -144,7 +195,7 @@ async function download(url: string): Promise<Buffer | null> {
   }
 }
 
-type Row = { table: "catalog_products" | "catalog_combos"; id: number; label: string; url: string };
+type Row = { table: "catalog_products" | "catalog_combos" | "payment_methods"; id: number; label: string; url: string };
 
 async function migrateOne(row: Row): Promise<{ ok: boolean; reason?: string; url?: string; bytes?: number }> {
   let saved: string | null = null;
@@ -181,6 +232,39 @@ async function migrateOne(row: Row): Promise<{ ok: boolean; reason?: string; url
   return { ok: true, url: saved, bytes };
 }
 
+// Imagen del aviso de vencimiento que el bot usaba fija en Cloudinary.
+const LEGACY_EXPIRY_IMAGE = "https://res.cloudinary.com/duneaub02/image/upload/v1790142675/8ebe08df-a457-4f06-be49-91ae1f1849e2_ejhotq.png";
+
+async function downloadForBot(url: string): Promise<Buffer | null> {
+  const jpg = cloudinaryVariant(url, "c_limit,w_1200,f_jpg,q_auto:good");
+  for (const u of [jpg, url]) {
+    if (!u) continue;
+    const buf = await download(u);
+    const kind = sniffImage(buf);
+    if (kind === "jpg" || kind === "png") return buf;
+  }
+  return null;
+}
+
+/** Saludo y aviso de vencimiento del bot: de Cloudinary al servidor (una vez). */
+export async function migrateBotImages(): Promise<void> {
+  const have = getBotImages();
+  if (!have.principal) {
+    try {
+      const { getPrincipalImageUrl } = await import("./cloudinary.service");
+      const url = await getPrincipalImageUrl();
+      const buf = url ? await downloadForBot(url) : null;
+      if (buf) { saveBotImage("principal", buf); console.log("🖼️ Imagen del saludo del bot: pasada al servidor"); }
+      else if (url) console.warn("⚠️ Imagen del saludo del bot sigue en Cloudinary: " + (lastDownloadError || "no descargó"));
+    } catch (err: any) { console.warn("⚠️ Imagen del saludo del bot:", err?.message); }
+  }
+  if (!have.vencimiento) {
+    const buf = await downloadForBot(LEGACY_EXPIRY_IMAGE);
+    if (buf) { saveBotImage("vencimiento", buf); console.log("🖼️ Imagen del aviso de vencimiento: pasada al servidor"); }
+    else console.warn("⚠️ Imagen del aviso de vencimiento sigue en Cloudinary: " + (lastDownloadError || "no descargó"));
+  }
+}
+
 let migrating: Promise<{ ok: number; fail: number }> | null = null;
 
 /**
@@ -195,6 +279,8 @@ export function migrateExternalProductImages(): Promise<{ ok: number; fail: numb
     const rows: Row[] = [
       ...(db.prepare(`SELECT id, platform AS label, image_url AS url FROM catalog_products WHERE image_url LIKE 'http%'`).all() as any[])
         .map(r => ({ table: "catalog_products" as const, id: r.id, label: r.label, url: r.url })),
+      ...(db.prepare(`SELECT id, name AS label, image_url AS url FROM payment_methods WHERE image_url LIKE 'http%'`).all() as any[])
+        .map(r => ({ table: "payment_methods" as const, id: r.id, label: "pago-" + r.label, url: r.url })),
       ...(db.prepare(`SELECT id, name AS label, image_url AS url FROM catalog_combos WHERE image_url LIKE 'http%'`).all() as any[])
         .map(r => ({ table: "catalog_combos" as const, id: r.id, label: /^combo/i.test(r.label) ? r.label : "combo-" + r.label, url: r.url })),
     ];

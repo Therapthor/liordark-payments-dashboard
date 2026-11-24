@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import { getAviso, saveAviso, type Aviso, type AvisoButtonType, type AvisoTarget } from "../db/avisos.repository";
 import { listCatalogProducts } from "../db/catalog.repository";
-import { isCloudinaryConfigured, uploadAvisoImage, deleteAvisoImage } from "../services/cloudinary.service";
+import axios from "axios";
 
 // ─────────────────────────────────────────────────────────────
 // AVISOS — ventana con imagen al entrar a la tienda o al panel de
@@ -71,13 +71,7 @@ function sniffImage(buf: Buffer): { ext: "jpg" | "png" | "webp"; w: number; h: n
 }
 
 async function storeImage(target: AvisoTarget, buf: Buffer, ext: string): Promise<{ url: string; publicId: string }> {
-  if (isCloudinaryConfigured()) {
-    try {
-      return await uploadAvisoImage(buf);
-    } catch (err: any) {
-      console.error("⚠️ Aviso: no se pudo subir a Cloudinary, se guarda en el servidor:", err?.message);
-    }
-  }
+  // Siempre en el servidor (Cloudinary retirado).
   fs.mkdirSync(MEDIA_DIR, { recursive: true });
   const name = `${target}-${crypto.createHash("sha1").update(buf).digest("hex").slice(0, 16)}.${ext}`;
   fs.writeFileSync(path.join(MEDIA_DIR, name), buf);
@@ -86,10 +80,29 @@ async function storeImage(target: AvisoTarget, buf: Buffer, ext: string): Promis
 
 function removeOldImage(prev: Aviso, next: Aviso): void {
   if (!prev.imageUrl || prev.imageUrl === next.imageUrl) return;
-  if (prev.imagePublicId) { void deleteAvisoImage(prev.imagePublicId); return; }
   if (prev.imageUrl.startsWith(LOCAL_PREFIX)) {
     const name = prev.imageUrl.slice(LOCAL_PREFIX.length);
     if (LOCAL_FILE_RE.test(name)) fs.promises.unlink(path.join(MEDIA_DIR, name)).catch(() => {});
+  }
+}
+
+/** Avisos cuya imagen sigue en Cloudinary: se pasan al servidor (una vez;
+ *  si falla, queda el enlace y se reintenta en el próximo arranque). */
+export async function localizeAvisoImages(): Promise<void> {
+  for (const target of ["store", "wholesale"] as AvisoTarget[]) {
+    const a = getAviso(target);
+    if (!/^https?:\/\//i.test(a.imageUrl)) continue;
+    try {
+      const res = await axios.get(a.imageUrl, { responseType: "arraybuffer", timeout: 20_000, maxContentLength: MAX_MB * 1024 * 1024, validateStatus: st => st === 200 });
+      const buf = Buffer.from(res.data);
+      const info = sniffImage(buf);
+      if (!info) { console.warn(`⚠️ Aviso (${target}): la imagen de Cloudinary no es JPG/PNG/WEBP`); continue; }
+      const stored = await storeImage(target, buf, info.ext);
+      saveAviso({ ...a, imageUrl: stored.url, imagePublicId: "", imageW: info.w || a.imageW, imageH: info.h || a.imageH });
+      console.log(`🖼️ Aviso (${target}): imagen pasada al servidor`);
+    } catch (err: any) {
+      console.warn(`⚠️ Aviso (${target}): la imagen sigue en Cloudinary (${err?.response?.status ? "HTTP " + err.response.status : err?.message})`);
+    }
   }
 }
 

@@ -233,7 +233,6 @@
     const rows = [
       connRow("Panel", live ? "En vivo" : "Conectando…", live ? "ok" : "warn"),
       connRow("Bot", ($("connector-state-bot")?.textContent || "").trim() || "—", dotLevel($("connector-dot-bot"))),
-      connRow("Cloudinary", ($("connector-state-cloudinary")?.textContent || "").trim() || "—", dotLevel($("connector-dot-cloudinary"))),
     ];
     const out = Array.from(document.querySelectorAll("#stock-alert-list .dock-stock-name")).map((n) => n.textContent.trim());
     out.forEach((name) => rows.push(connRow(name, "Sin stock", "bad")));
@@ -243,7 +242,6 @@
     if (pills) {
       pills.innerHTML = [
         `<span class="mp-pill ${dotLevel($("connector-dot-bot"))}"><span class="mp-dot" aria-hidden="true"></span><b>Bot</b> ${esc(($("connector-state-bot")?.textContent || "").trim())}</span>`,
-        `<span class="mp-pill ${dotLevel($("connector-dot-cloudinary"))}"><span class="mp-dot" aria-hidden="true"></span><b>Cloudinary</b> ${esc(($("connector-state-cloudinary")?.textContent || "").trim())}</span>`,
         ...out.map((n) => `<span class="mp-pill bad"><span class="mp-dot" aria-hidden="true"></span><b>${esc(n)}</b></span>`),
       ].join("");
     }

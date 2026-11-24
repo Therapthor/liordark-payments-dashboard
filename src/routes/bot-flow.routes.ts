@@ -5,7 +5,7 @@ import {
   updateBotFlowConfig,
   type BotFlowConfig,
 } from "../db/bot-flow.repository";
-import { replacePrincipalImage, getPrincipalImageUrl, isCloudinaryConfigured } from "../services/cloudinary.service";
+import { getBotImages, saveBotImage, BOT_IMAGE_KINDS, type BotImageKind } from "../services/product-media.service";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
@@ -62,34 +62,35 @@ router.put("/", (req, res) => {
   res.json({ config: updateBotFlowConfig(data) });
 });
 
-// ── Imagen principal del menú de WhatsApp ──
-// El bot la toma directo de Cloudinary (no de esta tabla) — acá solo se
-// sube/reemplaza, y se lee para mostrarla en el panel.
+// ── Imágenes del bot de WhatsApp (saludo y aviso de vencimiento) ──
+// Guardadas en el servidor (antes en Cloudinary). El panel las manda ya
+// comprimidas en JPG; el bot las pide en /api/stock/bot-images.
 
-router.get("/principal-image", async (_req, res) => {
-  try {
-    const url = await getPrincipalImageUrl();
-    res.json({ url, configured: isCloudinaryConfigured() });
-  } catch (err: any) {
-    res.status(502).json({ message: err?.message || "No se pudo consultar Cloudinary." });
-  }
+router.get("/bot-images", (_req, res) => {
+  res.json({ images: getBotImages() });
 });
 
-router.post("/principal-image", upload.single("image"), async (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ message: "Falta la imagen." });
-    return;
-  }
-  if (!req.file.mimetype.startsWith("image/")) {
-    res.status(400).json({ message: "El archivo debe ser una imagen." });
-    return;
-  }
-  try {
-    const url = await replacePrincipalImage(req.file.buffer);
-    res.json({ url });
-  } catch (err: any) {
-    res.status(502).json({ message: err?.message || "No se pudo subir la imagen." });
-  }
+// Compatibilidad: la imagen del saludo.
+router.get("/principal-image", (_req, res) => {
+  res.json({ url: getBotImages().principal, configured: true });
 });
+
+function saveBotImageHandler(kind: BotImageKind) {
+  return (req: any, res: any) => {
+    if (!req.file) { res.status(400).json({ message: "Falta la imagen." }); return; }
+    try {
+      res.json({ url: saveBotImage(kind, req.file.buffer), images: getBotImages() });
+    } catch (err: any) {
+      res.status(400).json({ message: err?.message || "No se pudo guardar la imagen." });
+    }
+  };
+}
+
+router.post("/bot-images/:kind", upload.single("image"), (req, res) => {
+  const kind = String(req.params.kind) as BotImageKind;
+  if (!BOT_IMAGE_KINDS.includes(kind)) { res.status(404).json({ message: "No encontrado." }); return; }
+  saveBotImageHandler(kind)(req, res);
+});
+router.post("/principal-image", upload.single("image"), saveBotImageHandler("principal"));
 
 export default router;

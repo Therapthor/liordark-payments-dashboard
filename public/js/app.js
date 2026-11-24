@@ -701,15 +701,10 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RESUMEN — estado de conectores (bot + Cloudinary)
+  // RESUMEN — estado de conectores (bot)
   // ─────────────────────────────────────────────────────────────
 
   const CONNECTORS_POLL_MS = 30_000;
-  const CLOUDINARY_STATE_LABEL = {
-    ok:             "Conectado",
-    error:          "Con errores",
-    not_configured: "No configurado",
-  };
 
   function setConnectorRow(key, ok, text) {
     const dot   = document.getElementById(`connector-dot-${key}`);
@@ -722,12 +717,9 @@
 
   async function loadConnectorsStatus() {
     try {
-      const { bot, cloudinary } = await api("/live/connectors");
+      const { bot } = await api("/live/connectors");
       setConnectorRow("bot", bot === "connected", bot === "connected" ? "En línea" : "Reconectando…");
-      setConnectorRow("cloudinary", cloudinary === "ok", CLOUDINARY_STATE_LABEL[cloudinary] || "Sin datos");
-    } catch {
-      setConnectorRow("cloudinary", false, "Sin datos");
-    }
+    } catch { /* sin red: queda el estado anterior */ }
   }
 
   // ─────────────────────────────────────────────────────────────
