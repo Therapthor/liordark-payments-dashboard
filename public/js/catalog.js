@@ -67,6 +67,14 @@
     return { url: data.url, kb: Math.round((main.size + small.size) / 1024) };
   }
 
+  // La imagen sigue en un enlace externo (Cloudinary): el servidor no la
+  // pudo traer (ej. Cloudinary la bloquea). Hay que subirla con 📷.
+  function externalImageTag(url) {
+    return /^https?:\/\//i.test(url || "")
+      ? '<span class="catalog-tag catalog-tag-warn" title="Esta imagen sigue en Cloudinary y no se pudo pasar al servidor. Edita y súbela con «📷 Subir imagen».">⚠️ Súbela de nuevo</span>'
+      : "";
+  }
+
   function showImagePreview(prefix) {
     const url = document.getElementById(prefix + "-image-url").value.trim();
     const img = document.getElementById(prefix + "-image-preview");
@@ -134,6 +142,7 @@
           ${escapeHtml(p.platform)}
           ${p.hasProfiles ? "" : '<span class="catalog-tag">Sin perfiles</span>'}
           ${p.active ? "" : '<span class="catalog-tag catalog-tag-off">Apagado</span>'}
+          ${externalImageTag(p.imageUrl)}
         </div>
         <div class="catalog-desc">${escapeHtml(p.description) || "<em>Sin descripción todavía</em>"}</div>
       </div>
@@ -280,6 +289,7 @@
         <div class="catalog-name">
           ${escapeHtml(c.name)}
           ${c.active ? "" : '<span class="catalog-tag catalog-tag-off">Apagado</span>'}
+          ${externalImageTag(c.imageUrl)}
         </div>
         <div class="catalog-desc">${escapeHtml(comboItemsLabel(c.items))}${c.description ? " · " + escapeHtml(c.description) : ""}</div>
       </div>
