@@ -124,6 +124,9 @@ export function cloudinaryVariant(url: string, transformation: string): string |
   return url.slice(0, i + marker.length) + transformation + "/" + tail.join("/");
 }
 
+// Por qué falló la última descarga (Cloudinary explica en «x-cld-error»).
+let lastDownloadError = "";
+
 async function download(url: string): Promise<Buffer | null> {
   try {
     const res = await axios.get(url, {
@@ -132,7 +135,11 @@ async function download(url: string): Promise<Buffer | null> {
       validateStatus: s => s === 200,
     });
     return Buffer.from(res.data);
-  } catch {
+  } catch (err: any) {
+    const status = err?.response?.status;
+    const why = err?.response?.headers?.["x-cld-error"];
+    lastDownloadError = status ? `HTTP ${status}${why ? " (" + String(why).slice(0, 120) + ")" : ""}`
+      : /maxContentLength/i.test(String(err?.message)) ? "pesa más de 4 MB" : String(err?.code || err?.message || "sin respuesta").slice(0, 80);
     return null;
   }
 }
@@ -143,6 +150,7 @@ async function migrateOne(row: Row): Promise<{ ok: boolean; reason?: string; url
   let saved: string | null = null;
   let bytes = 0;
   const big = cloudinaryVariant(row.url, "c_limit,w_720,f_webp,q_auto:good");
+  let cloudinaryWhy = "";
   if (big) {
     const [main, small, jpg] = await Promise.all([
       download(big),
@@ -152,13 +160,16 @@ async function migrateOne(row: Row): Promise<{ ok: boolean; reason?: string; url
     if (sniffImage(main) === "webp" && sniffImage(jpg) === "jpg") {
       saved = saveProductImageSet(row.label, { main: main!, small, jpg });
       bytes = main!.length + (small?.length ?? 0);
-    }
+    } else cloudinaryWhy = "versión liviana: " + (lastDownloadError || "formato inesperado");
   }
   if (!saved) {
     // Sin la versión comprimida: la original, si ya es JPG o PNG.
     const original = await download(row.url);
     const kind = sniffImage(original);
-    if (kind !== "jpg" && kind !== "png") return { ok: false, reason: original ? `formato ${kind ?? "desconocido"}` : "no descargó" };
+    if (kind !== "jpg" && kind !== "png") {
+      const orig = original ? `original en formato ${kind ?? "desconocido"}` : "original: " + (lastDownloadError || "no descargó");
+      return { ok: false, reason: [cloudinaryWhy, orig].filter(Boolean).join(" · ") };
+    }
     saved = saveProductImageSet(row.label, { main: original! });
     bytes = original!.length;
   }

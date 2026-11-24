@@ -296,13 +296,36 @@ function gmailClient(email: string, appPassword: string): ImapFlow {
   });
 }
 
-/** Carpetas donde puede caer un código: Recibidos y Spam. */
+/** Carpetas donde puede caer un código: «Todos» (All Mail: Recibidos más lo
+ *  que un filtro archivó o mandó a una etiqueta, ej. los de Claude) y Spam.
+ *  Si la cuenta no muestra «Todos» por IMAP, Recibidos. */
 async function gmailFolders(client: ImapFlow): Promise<string[]> {
-  const out = ["INBOX"];
+  let all: string | null = null;
+  const junk: string[] = [];
   try {
-    for (const box of await client.list()) if (box.specialUse === "\\Junk") out.push(box.path);
+    for (const box of await client.list()) {
+      if (box.specialUse === "\\All") all = box.path;
+      else if (box.specialUse === "\\Junk") junk.push(box.path);
+    }
   } catch { /* solo Recibidos */ }
-  return out;
+  return [all ?? "INBOX", ...junk];
+}
+
+/** Gmail ignora los puntos y lo que va después de «+»: j.uan+x@gmail.com
+ *  es juan@gmail.com. Así un correo reenviado calza con la cuenta aunque se
+ *  haya escrito distinto al registrarla. */
+export function sameMailbox(a: string, b: string): boolean {
+  return normalizeAddress(a) === normalizeAddress(b);
+}
+function normalizeAddress(raw: string): string {
+  const s = String(raw ?? "").trim().toLowerCase();
+  const at = s.lastIndexOf("@");
+  if (at < 0) return s;
+  let local = s.slice(0, at);
+  let domain = s.slice(at + 1);
+  if (domain === "googlemail.com") domain = "gmail.com";
+  if (domain === "gmail.com") local = local.split("+")[0]!.replace(/\./g, "");
+  return local + "@" + domain;
 }
 
 async function gmailRecent(row: any): Promise<ConnectedMail[]> {
@@ -314,7 +337,7 @@ async function gmailRecent(row: any): Promise<ConnectedMail[]> {
       const lock = await client.getMailboxLock(folder);
       try {
         const uids = (await client.search({ since: new Date(Date.now() - WINDOW_MS) }, { uid: true })) || [];
-        const last = uids.slice(-30);
+        const last = uids.slice(-60);
         if (!last.length) continue;
         const found: ConnectedMail[] = [];
         const uidOf = new Map<string, number>();
@@ -414,7 +437,7 @@ export async function recentCodeMailFor(address: string): Promise<{ mails: Conne
   const a = String(address ?? "").trim().toLowerCase();
   const rows = db.prepare(`SELECT * FROM mail_connections`).all() as any[];
   if (!rows.length) return { mails: [], connected: 0, errors: [] };
-  const own = rows.filter(r => r.email === a);
+  const own = rows.filter(r => sameMailbox(r.email, a));
   const targets = own.length ? own : rows;
   const errors: string[] = [];
   const mails: ConnectedMail[] = [];
@@ -424,7 +447,7 @@ export async function recentCodeMailFor(address: string): Promise<{ mails: Conne
       markOk(row.id);
       for (const m of list) {
         if (!isCodeish(m)) continue;
-        if (!own.length && !m.to.includes(a) && !(m.text && m.text.includes(a))) continue;
+        if (!own.length && !m.to.some(t => sameMailbox(t, a)) && !(m.text && m.text.includes(a))) continue;
         mails.push(m);
       }
     } catch (err: any) {
@@ -435,6 +458,23 @@ export async function recentCodeMailFor(address: string): Promise<{ mails: Conne
   }
   mails.sort((x, y) => Date.parse(y.receivedAt) - Date.parse(x.receivedAt));
   return { mails, connected: targets.length, errors };
+}
+
+/** Diagnóstico (solo lectura): los correos «de código» de las últimas horas
+ *  de cada buzón conectado — solo carpeta, fecha, asunto, remitente y
+ *  destinatarios; nunca el contenido. */
+export async function inspectRecentCodeMail(): Promise<{ mailbox: string; mails: Omit<ConnectedMail, "text">[]; error?: string }[]> {
+  const rows = db.prepare(`SELECT * FROM mail_connections`).all() as any[];
+  const out: { mailbox: string; mails: Omit<ConnectedMail, "text">[]; error?: string }[] = [];
+  for (const row of rows) {
+    try {
+      const list = (row.provider === "gmail" ? await gmailRecent(row) : await outlookRecent(row)).filter(isCodeish);
+      out.push({ mailbox: row.email, mails: list.map(({ text: _t, ...m }) => m) });
+    } catch (err: any) {
+      out.push({ mailbox: row.email, mails: [], error: String(err?.message || err) });
+    }
+  }
+  return out;
 }
 
 /** Cuerpo HTML de un correo (ref = "<idConexión>:<id del correo>"). */
