@@ -158,6 +158,11 @@ apiRouter.use("/course-admin", requireAuth, courseAdminRoutes);
 apiRouter.use("/code-viewer", requireAuth, codeViewerAdminRoutes);
 apiRouter.use("/code-link", codeLinkRoutes);
 apiRouter.use("/pin-link", pinLinkRoutes);
+// Versión actual del panel (sin datos: solo la huella).
+app.get("/api/panel-version", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ v: PANEL_BUILD });
+});
 app.use("/api", apiRouter);
 
 app.get("/api/health", (_req, res) => {
@@ -218,7 +223,11 @@ function buildPanelIndex(): string | null {
     });
   } catch { return null; }
 }
-const PANEL_INDEX = buildPanelIndex();
+// Huella de esta versión del panel (cambia con cada deploy que toca el
+// panel): el panel abierto desde antes la compara y ofrece «🔄 Actualizar».
+const PANEL_INDEX_RAW = buildPanelIndex();
+const PANEL_BUILD = crypto.createHash("sha1").update(PANEL_INDEX_RAW ?? "").digest("hex").slice(0, 12);
+const PANEL_INDEX = PANEL_INDEX_RAW ? PANEL_INDEX_RAW.replace("<head>", `<head>\n  <meta name="panel-build" content="${PANEL_BUILD}">`) : null;
 const panelStatic      = express.static(PANEL_DIR, {
   setHeaders: (res: any, filePath: string) => {
     const versioned = !!res.req?.query?.v && /\.(js|css)$/i.test(filePath);

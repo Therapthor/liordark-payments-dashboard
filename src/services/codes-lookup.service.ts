@@ -1582,12 +1582,57 @@ export function juanpaResult(mails: JuanpaMail[]): CodeLookupResult {
   return withAdminNewest(login ?? results[0]!, results[0]!);
 }
 
+// De quién es cada correo según la plataforma (remitente o asunto). Así,
+// si un mismo correo se usa en ADOBE y en CLAUDE, cada una ve solo lo suyo.
+const PLATFORM_MAIL_HINTS: [string, RegExp][] = [
+  ["CLAUDE", /anthropic|claude/i], ["CHATGPT", /openai|chatgpt/i], ["ADOBE", /adobe/i],
+  ["NETFLIX", /netflix/i], ["DISNEY", /disney/i], ["SPOTIFY", /spotify/i], ["CRUNCHYROLL", /crunchyroll/i],
+  ["AMAZON", /amazon|prime ?video/i], ["PRIME", /amazon|prime ?video/i], ["HBO", /\bhbo\b|\bmax\b/i],
+  ["CANVA", /canva/i], ["CAPCUT", /capcut/i], ["YOUTUBE", /youtube|google/i], ["GEMINI", /gemini|google/i],
+  ["PARAMOUNT", /paramount/i], ["VIX", /\bvix\b/i], ["APPLE", /apple/i], ["DUOLINGO", /duolingo/i],
+];
+export function platformMailHint(platform: string | null | undefined): RegExp | null {
+  const p = String(platform ?? "").toUpperCase();
+  if (!p.trim()) return null;
+  const known = PLATFORM_MAIL_HINTS.find(([name]) => p.includes(name));
+  if (known) return known[1];
+  const word = p.match(/[A-Z]{3,}/)?.[0];
+  return word ? new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") : null;
+}
+
+/** ¿Otras plataformas usan este mismo correo con «Correo conectado»? */
+function connectedMailShared(email: string, platform: string): boolean {
+  const rows = db.prepare(`
+    SELECT DISTINCT UPPER(TRIM(platform)) AS p FROM access_accounts
+    WHERE codes_enabled = 1 AND code_source = 'correo_conectado' AND LOWER(TRIM(email)) = LOWER(TRIM(?))
+  `).all(email) as { p: string }[];
+  return rows.some(r => r.p !== String(platform).trim().toUpperCase());
+}
+
+function accountPlatform(accountId: number | null | undefined): string | null {
+  if (!accountId) return null;
+  const row = db.prepare(`SELECT platform FROM access_accounts WHERE id = ?`).get(accountId) as { platform: string } | undefined;
+  return row?.platform ?? null;
+}
+
 // Correo conectado (Configuración › Correos): buzones propios de Outlook /
 // Gmail. El más nuevo de código o inicio de sesión de las últimas horas.
-async function lookupConnectedMail(email: string): Promise<CodeLookupResult> {
-  const { mails, connected, errors } = await recentCodeMailFor(email);
+// Con plataforma (consulta de una cuenta): solo los correos de esa
+// plataforma; si nadie más usa ese correo y ninguno calza, todos (por si
+// el remitente no se reconoce).
+async function lookupConnectedMail(email: string, platform?: string | null): Promise<CodeLookupResult> {
+  const { mails: all, connected, errors } = await recentCodeMailFor(email);
   if (!connected) {
     return { found: false, kind: null, value: null, items: [], providerMessage: "No hay ningún correo conectado (Configuración › Correos)." };
+  }
+  const hint = platformMailHint(platform);
+  let mails = all;
+  if (hint) {
+    const own = all.filter(m => hint.test(m.subject + " " + m.from));
+    if (own.length || connectedMailShared(email, platform!)) mails = own;
+    if (!mails.length && all.length) {
+      return { found: false, kind: null, value: null, items: [], providerMessage: `Todavía no llegó ningún correo de ${platform} a ${email} (últimas 3 horas).` };
+    }
   }
   if (!mails.length) {
     if (errors.length) throw new ProviderError("provider", "Correo conectado: " + errors[0]);
@@ -1690,6 +1735,13 @@ export function codeSourceLabel(sourceId: string | null): string {
 export async function lookupCode(sourceId: string, email: string): Promise<CodeLookupResult> {
   const source = SOURCES[sourceId];
   if (!source) return { found: false, kind: null, value: null };
+  // Correo conectado: cada plataforma ve solo sus correos (un mismo correo
+  // puede estar en ADOBE y en CLAUDE). La fila de consultas va por plataforma.
+  if (sourceId === "correo_conectado") {
+    const platform = accountPlatform(lookupContext.getStore()?.accountId);
+    return observed(sourceId, email, async () => withFallbackExtraction(await lookupConnectedMail(email, platform)),
+      platform ? "plataforma:" + platform.trim().toUpperCase() : "");
+  }
   // Disney por Pally ya busca su código de 6 dígitos: el lector genérico
   // podía tomar un número del pie (dirección, código postal).
   if (sourceId === "disney_sin_opciones" || sourceId === "spotify_sin_opciones") return observed(sourceId, email, () => source.lookup(email));

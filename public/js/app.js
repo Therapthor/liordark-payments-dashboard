@@ -1937,3 +1937,32 @@
 
   checkAuth();
 })();
+
+// ── Versión nueva del panel publicada: aviso «🔄 Actualizar». El panel que
+// quedó abierto desde antes no ve los cambios hasta recargar. ──
+(function watchPanelVersion() {
+  const meta = document.querySelector('meta[name="panel-build"]');
+  const mine = meta && meta.getAttribute("content");
+  if (!mine) return;
+  let shown = false;
+  async function check() {
+    if (shown || document.hidden) return;
+    try {
+      const res = await fetch("/api/panel-version", { cache: "no-store", credentials: "include" });
+      const data = await res.json();
+      if (data && data.v && data.v !== mine) show();
+    } catch { /* sin red: se revisa después */ }
+  }
+  function show() {
+    shown = true;
+    const bar = document.createElement("div");
+    bar.className = "panel-update-bar";
+    bar.setAttribute("role", "status");
+    bar.innerHTML = '<span>🔄 Hay una versión nueva del panel</span><button type="button">Actualizar</button>';
+    bar.querySelector("button").addEventListener("click", () => location.reload());
+    document.body.appendChild(bar);
+  }
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("focus", check);
+  setInterval(check, 5 * 60 * 1000);
+})();

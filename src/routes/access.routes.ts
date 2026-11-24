@@ -687,11 +687,13 @@ router.post("/codes/watch-now", async (_req, res) => {
 router.get("/codes", (_req, res) => {
   // Varias cuentas suelen compartir el mismo login (ej. ChatGPT, una por
   // cliente) — el código es el mismo para todas, así que se muestra una
-  // fila por correo+fuente en vez de repetirla. La fila usa la primera
-  // cuenta del grupo para "Consultar", y el código más reciente de todas.
+  // fila por plataforma+correo+fuente en vez de repetirla. La fila usa la
+  // primera cuenta del grupo para "Consultar", y el código más reciente de
+  // todas. La plataforma va en la clave: un mismo correo en ADOBE y en
+  // CLAUDE son dos filas (antes CLAUDE quedaba escondida bajo ADOBE).
   const groups = new Map<string, ReturnType<typeof listCodesEnabledAccounts>>();
   for (const a of listCodesEnabledAccounts()) {
-    const key = [a.email.trim().toLowerCase(), a.codeSource ?? "", a.totpSecret ?? ""].join("|");
+    const key = [a.platform.trim().toUpperCase(), a.email.trim().toLowerCase(), a.codeSource ?? "", a.totpSecret ?? ""].join("|");
     const group = groups.get(key);
     if (group) group.push(a); else groups.set(key, [a]);
   }

@@ -2369,3 +2369,18 @@ button.mp-kpi:active { transform: scale(0.98); }
 .bk-steps { margin: 6px 0 10px; padding-left: 20px; font-size: 14px; display: grid; gap: 6px; }
 #config-section-backup input[type=text] { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
 .bk-text { margin: 4px 0 10px; font-size: 14px; }
+
+/* Aviso «🔄 Hay una versión nueva del panel» */
+.panel-update-bar {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 9999; display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 16px; border-radius: 999px;
+  background: var(--mp-ink, #2B1B0E); color: #fff;
+  font-family: var(--mp-display); font-size: 14px; font-weight: 700;
+  box-shadow: 0 14px 30px -12px rgba(43, 27, 14, .6); max-width: calc(100vw - 32px);
+}
+.panel-update-bar button {
+  border: none; border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  background: var(--mp-mango, #FFC93C); color: var(--mp-ink, #2B1B0E); font: inherit;
+}
+@media (max-width: 899px) { .panel-update-bar { bottom: calc(86px + env(safe-area-inset-bottom)); } }
