@@ -688,7 +688,7 @@ router.delete("/clients/:profileId", (req, res) => {
   if (!profile || profile.wholesalerId !== wid(req)) {
     return res.status(404).json({ message: "Perfil no encontrado." });
   }
-  releaseProfile(profile.id);
+  releaseProfile(profile.id, "mayorista");
   res.json({ ok: true });
 });
 

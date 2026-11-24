@@ -1002,7 +1002,7 @@ router.post("/accounts/:id/full-client", (req, res) => {
 });
 
 router.post("/profiles/:id/release", (req, res) => {
-  const profile = releaseProfile(Number(req.params.id));
+  const profile = releaseProfile(Number(req.params.id), "panel");
   if (!profile) { res.status(404).json({ message: "Perfil no encontrado." }); return; }
   res.json({ profile });
 });

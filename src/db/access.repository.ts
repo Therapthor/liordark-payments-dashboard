@@ -491,7 +491,41 @@ export function setClientDate(profileId: number, dateISO: string): void {
   db.prepare(`UPDATE access_profiles SET expires_override = ?, updated_at = datetime('now') WHERE id = ?`).run(dateISO, profileId);
 }
 
-export function releaseProfile(id: number): AccessProfile | null {
+// Registro de cada perfil liberado: a quién se le sacó, de qué orden, con
+// qué fecha y desde dónde. Sirve para rastrear un cliente que «desapareció»
+// (ej. un 🗑 por error) y devolverle su perfil tal cual. Se guarda 120 días.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS profile_release_log (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id       INTEGER NOT NULL,
+    account_id       INTEGER NOT NULL,
+    platform         TEXT    NOT NULL DEFAULT '',
+    client_phone     TEXT    NOT NULL DEFAULT '',
+    order_ref        TEXT    NOT NULL DEFAULT '',
+    expires_override TEXT,
+    plan_months      INTEGER,
+    origin           TEXT    NOT NULL DEFAULT '',
+    released_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_profile_release_log_phone ON profile_release_log(client_phone);
+`);
+
+function logProfileRelease(id: number, origin: string): void {
+  try {
+    db.prepare(`
+      INSERT INTO profile_release_log (profile_id, account_id, platform, client_phone, order_ref, expires_override, plan_months, origin)
+      SELECT p.id, p.account_id, a.platform, p.client_phone, p.order_ref, p.expires_override, p.plan_months, ?
+      FROM access_profiles p JOIN access_accounts a ON a.id = p.account_id
+      WHERE p.id = ? AND p.client_phone != ''
+    `).run(origin, id);
+    db.prepare(`DELETE FROM profile_release_log WHERE released_at < datetime('now', '-120 days')`).run();
+  } catch (err: any) {
+    console.error("⚠️ registro de perfil liberado:", err?.message);
+  }
+}
+
+export function releaseProfile(id: number, origin = ""): AccessProfile | null {
+  logProfileRelease(id, origin);
   // expires_override también se limpia: si no, un cliente nuevo que caiga
   // en este mismo slot heredaría la fecha congelada del cliente anterior.
   // Cuenta con PIN: quien se va conoce el PIN de ese perfil → queda el aviso
@@ -615,7 +649,7 @@ export function listAccountsDueForRenewalCleanup(todayISO: string): AccessAccoun
 export function applyRenewalCleanup(accountId: number): { freedCount: number } {
   const profiles = getProfilesByAccount(accountId);
   const toFree = profiles.filter(p => p.clientPhone && p.renewalStatus !== "yes");
-  for (const p of toFree) releaseProfile(p.id);
+  for (const p of toFree) releaseProfile(p.id, "limpieza de renovación");
 
   // Quien sí renovó se queda, pero su checkbox se reinicia para el ciclo
   // nuevo: si no, el próximo vencimiento se extendería solo sin que pague.
@@ -1284,7 +1318,7 @@ function describeReplaceSource(source: ReplaceSource): string {
 }
 
 function releaseReplaceSource(source: ReplaceSource): void {
-  if (source.kind === "profile") releaseProfile(source.profileId);
+  if (source.kind === "profile") releaseProfile(source.profileId, "cambio de cuenta");
   else deleteManualOverride(source.overrideId);
 }
 

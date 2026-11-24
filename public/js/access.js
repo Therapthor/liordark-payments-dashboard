@@ -841,7 +841,7 @@
     if (act === "send")         return window.open(waLink(ctx.clientPhone, msgEntrega(ctx)), "_blank");
     if (act === "renew-manual") return sendRenewalManual(ctx);
     if (act === "edit")         return openProfileModal(ctx);
-    if (act === "release")      return releaseProfile(ctx.id, ctx.accountId);
+    if (act === "release")      return releaseProfile(ctx);
     if (act === "replace")      return openReplaceAccount(ctx.id, ctx.platform, ctx.email, ctx.clientPhone);
     if (act === "pin")          return setProfilePin(ctx);
     if (act === "pin-keep")     return keepProfilePin(ctx);
@@ -1090,9 +1090,20 @@
     });
   }
 
-  async function releaseProfile(profileId, accountId) {
-    await api("/profiles/" + profileId + "/release", { method: "POST" });
-    refreshAccountInPlace(accountId);
+  // 🗑 saca al cliente de su perfil (y el perfil vuelve a venderse): siempre
+  // se confirma — está al lado de 🔄 y ✏️ y un clic por error dejaba a un
+  // cliente que ya pagó sin su cuenta, sin ningún aviso.
+  function confirmRelease(platform, profileName, clientPhone) {
+    const d = String(clientPhone || "").replace(/\D/g, "").slice(-9);
+    const cel = d.length === 9 ? d.slice(0, 3) + " " + d.slice(3, 6) + " " + d.slice(6) : "este cliente";
+    return confirm(`¿Sacar a ${cel} de ${platform || "esta cuenta"}${profileName ? " · " + profileName : ""}?\n\n`
+      + "Se queda sin esta cuenta y el perfil vuelve a venderse. Úsalo solo si ya no la tiene (no renovó, reembolso…).");
+  }
+
+  async function releaseProfile(ctx) {
+    if (!confirmRelease(ctx.platform, ctx.profileName, ctx.clientPhone)) return;
+    await api("/profiles/" + ctx.id + "/release", { method: "POST" });
+    refreshAccountInPlace(ctx.accountId);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1743,7 +1754,7 @@
             <button class="btn-secondary btn-sm client-replace-account" data-idx="${idx}">🔄 Cambiar cuenta</button>
             <button class="btn-secondary btn-sm client-renew-manual" data-idx="${idx}">💬 Reno-manual</button>
             ${renderRenewalButton(p)}
-            <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}">🗑 Eliminar</button>
+            <button class="btn-secondary btn-sm client-release-profile" data-profile-id="${p.id}" data-idx="${idx}">🗑 Eliminar</button>
           </div>
         </div>
       </li>`;
@@ -1905,6 +1916,8 @@
         const next = RENEWAL_NEXT[renewalBtn.dataset.status || ""];
         await api("/profiles/" + renewalBtn.dataset.profileId + "/renewal", { method: "POST", body: JSON.stringify({ status: next }) });
       } else if (releaseBtn) {
+        const p = lastClientProfiles[Number(releaseBtn.dataset.idx)];
+        if (!confirmRelease(p && p.platform, p && p.profileName, p && p.clientPhone)) return;
         await api("/profiles/" + releaseBtn.dataset.profileId + "/release", { method: "POST" });
       } else {
         return;
