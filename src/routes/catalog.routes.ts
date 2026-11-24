@@ -5,6 +5,7 @@ import {
   updateCatalogProduct,
   deleteCatalogProduct,
   setCatalogProductActive,
+  setCatalogProductImage,
   type CatalogProductInput,
 } from "../db/catalog.repository";
 import {
@@ -13,6 +14,7 @@ import {
   updateCombo,
   deleteCombo,
   setComboActive,
+  setComboImage,
   type ComboInput,
   type ComboItem,
 } from "../db/combo.repository";
@@ -110,6 +112,25 @@ router.put("/products/:id", (req, res) => {
   if (!product) { res.status(404).json({ message: "Producto no encontrado." }); return; }
   res.json({ product });
   localizeSoon(data.imageUrl);
+});
+
+// Imagen subida con «📷 Subir imagen» en un producto/combo que ya existe:
+// se guarda sola, sin tener que tocar «Guardar».
+router.patch("/products/:id/image", (req, res) => {
+  const url = String(req.body?.imageUrl ?? "").trim();
+  const err = imageUrlError(url);
+  if (err) { res.status(400).json({ message: err }); return; }
+  const product = setCatalogProductImage(Number(req.params.id), url);
+  if (!product) { res.status(404).json({ message: "Producto no encontrado." }); return; }
+  res.json({ product });
+});
+router.patch("/combos/:id/image", (req, res) => {
+  const url = String(req.body?.imageUrl ?? "").trim();
+  const err = imageUrlError(url);
+  if (err) { res.status(400).json({ message: err }); return; }
+  const combo = setComboImage(Number(req.params.id), url);
+  if (!combo) { res.status(404).json({ message: "Combo no encontrado." }); return; }
+  res.json({ combo });
 });
 
 router.patch("/products/:id/active", (req, res) => {

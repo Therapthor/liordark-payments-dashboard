@@ -36,34 +36,58 @@
     return new Promise((resolve, reject) => c.toBlob(b => b ? resolve(b) : reject(new Error("No se pudo comprimir la imagen.")), type, quality));
   }
 
+  // Todo junto tiene que pasar por la puerta del servidor (1 MB): si sale
+  // pesada (foto con mucho detalle), se comprime un poco más.
+  const UPLOAD_MAX_BYTES = 900 * 1024;
+
   async function compressImage(file) {
     const src = await loadBitmap(file);
     if (!src.width || !src.height) throw new Error("No se pudo leer la imagen.");
-    let main = await renderBlob(src, 720, "image/webp", 0.8);
-    let small;
-    if (main.type === "image/webp") {
-      small = await renderBlob(src, 360, "image/webp", 0.78);
-    } else {
-      // Navegador sin WEBP (Safari viejo): todo en JPG.
-      main = await renderBlob(src, 720, "image/jpeg", 0.84, true);
-      small = await renderBlob(src, 360, "image/jpeg", 0.8, true);
+    let out = null;
+    for (const [q, jq] of [[0.8, 0.84], [0.66, 0.72], [0.5, 0.6]]) {
+      let main = await renderBlob(src, 720, "image/webp", q);
+      let small;
+      if (main.type === "image/webp") {
+        small = await renderBlob(src, 360, "image/webp", q);
+      } else {
+        // Navegador sin WEBP (Safari viejo): todo en JPG.
+        main = await renderBlob(src, 720, "image/jpeg", jq, true);
+        small = await renderBlob(src, 360, "image/jpeg", jq, true);
+      }
+      const jpg = await renderBlob(src, 720, "image/jpeg", jq, true);
+      out = { main, small, jpg };
+      if (main.size + small.size + jpg.size <= UPLOAD_MAX_BYTES) break;
     }
-    const jpg = await renderBlob(src, 720, "image/jpeg", 0.84, true);
     if (src.close) src.close();
-    return { main, small, jpg };
+    return out;
   }
 
-  async function uploadProductImage(file, label) {
+  async function uploadProductImage(file, label, onRetry) {
     const { main, small, jpg } = await compressImage(file);
     const fd = new FormData();
     fd.append("label", label || "producto");
     fd.append("main", main, "main");
     fd.append("small", small, "small");
     fd.append("jpg", jpg, "jpg");
-    const res = await fetch("/api/catalog/image", { method: "POST", credentials: "include", body: fd });
+    // Si el panel justo se está reiniciando (una actualización), responde
+    // 502/503/504 unos segundos: se reintenta solo.
+    let res = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        res = await fetch("/api/catalog/image", { method: "POST", credentials: "include", body: fd });
+      } catch { res = null; }
+      if (res && ![502, 503, 504].includes(res.status)) break;
+      if (attempt < 3) {
+        if (onRetry) onRetry();
+        await new Promise(r => setTimeout(r, 4000));
+      }
+    }
+    if (!res) throw new Error("Sin conexión con el panel. Revisa tu internet e inténtalo de nuevo.");
     if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
+    if (res.status === 413) throw new Error("La imagen pesa demasiado para subirla. Prueba con otra más liviana.");
+    if ([502, 503, 504].includes(res.status)) throw new Error("El panel se estaba actualizando. Espera unos segundos y vuelve a intentar.");
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.message || "No se pudo subir la imagen.");
+    if (!res.ok) throw new Error(data?.message || `No se pudo subir la imagen (error ${res.status}).`);
     return { url: data.url, kb: Math.round((main.size + small.size) / 1024) };
   }
 
@@ -78,11 +102,13 @@
   function showImagePreview(prefix) {
     const url = document.getElementById(prefix + "-image-url").value.trim();
     const img = document.getElementById(prefix + "-image-preview");
+    // Si no carga (ej. Cloudinary la bloquea), no se muestra el ícono roto.
+    img.onerror = () => { img.hidden = true; };
     if (url && (url.startsWith("/media/") || /^https?:\/\//.test(url))) { img.src = url; img.hidden = false; }
     else { img.removeAttribute("src"); img.hidden = true; }
   }
 
-  function wireImageField(prefix, labelOf) {
+  function wireImageField(prefix, labelOf, savedIdOf) {
     const fileInput = document.getElementById(prefix + "-image-file");
     const status = document.getElementById(prefix + "-image-status");
     const urlInput = document.getElementById(prefix + "-image-url");
@@ -93,10 +119,18 @@
       if (!file) return;
       status.textContent = "Comprimiendo y subiendo…";
       try {
-        const { url, kb } = await uploadProductImage(file, labelOf());
+        const { url, kb } = await uploadProductImage(file, labelOf(), () => { status.textContent = "El panel se está actualizando, reintentando…"; });
         urlInput.value = url;
         showImagePreview(prefix);
-        status.textContent = `✅ Lista (${kb} KB). Toca «Guardar».`;
+        // Producto/combo que ya existe: la imagen se guarda sola.
+        const id = savedIdOf();
+        if (id) {
+          await api((prefix === "combo" ? "/combos/" : "/products/") + id + "/image", { method: "PATCH", body: JSON.stringify({ imageUrl: url }) });
+          status.textContent = `✅ Imagen comprimida (${kb} KB) y guardada.`;
+          loadAll().catch(() => {});
+        } else {
+          status.textContent = `✅ Imagen comprimida (${kb} KB). Se guarda al tocar «Guardar».`;
+        }
       } catch (err) {
         status.textContent = "⚠️ " + (err.message || "No se pudo subir.");
       }
@@ -190,7 +224,7 @@
 
   function initProductModal() {
     document.getElementById("catalog-new-btn").addEventListener("click", () => openProductModal(null));
-    wireImageField("catalog", () => document.getElementById("catalog-platform").value.trim() || "producto");
+    wireImageField("catalog", () => document.getElementById("catalog-platform").value.trim() || "producto", () => editingProductId);
     document.getElementById("catalog-cancel").addEventListener("click", () => {
       document.getElementById("catalog-modal").hidden = true;
     });
@@ -360,7 +394,7 @@
 
   function initComboModal() {
     document.getElementById("combo-new-btn").addEventListener("click", () => openComboModal(null));
-    wireImageField("combo", () => "combo-" + (document.getElementById("combo-name")?.value.trim() || "combo"));
+    wireImageField("combo", () => "combo-" + (document.getElementById("combo-name")?.value.trim() || "combo"), () => editingComboId);
     document.getElementById("combo-cancel").addEventListener("click", () => {
       document.getElementById("combo-modal").hidden = true;
     });

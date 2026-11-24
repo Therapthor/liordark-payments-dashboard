@@ -63,6 +63,13 @@ export function listCatalogProducts(activeOnly = false): CatalogProduct[] {
   `).all() as any[]).map(toProduct);
 }
 
+/** Solo la imagen (al subirla desde el panel se guarda sola). */
+export function setCatalogProductImage(id: number, imageUrl: string): CatalogProduct | null {
+  db.prepare(`UPDATE catalog_products SET image_url = ?, updated_at = datetime('now') WHERE id = ?`).run(imageUrl, id);
+  const row = db.prepare(`SELECT * FROM catalog_products WHERE id = ?`).get(id);
+  return row ? toProduct(row) : null;
+}
+
 export function setCatalogProductActive(id: number, active: boolean): CatalogProduct | null {
   db.prepare(`
     UPDATE catalog_products SET active = ?, updated_at = datetime('now') WHERE id = ?

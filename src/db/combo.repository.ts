@@ -104,6 +104,13 @@ export function updateCombo(id: number, c: ComboInput): Combo | null {
   return row ? toCombo(row, getItems(id)) : null;
 }
 
+/** Solo la imagen (al subirla desde el panel se guarda sola). */
+export function setComboImage(id: number, imageUrl: string): Combo | null {
+  db.prepare(`UPDATE catalog_combos SET image_url = ?, updated_at = datetime('now') WHERE id = ?`).run(imageUrl, id);
+  const row = db.prepare(`SELECT * FROM catalog_combos WHERE id = ?`).get(id);
+  return row ? toCombo(row, getItems(id)) : null;
+}
+
 export function setComboActive(id: number, active: boolean): Combo | null {
   db.prepare(`
     UPDATE catalog_combos SET active = ?, updated_at = datetime('now') WHERE id = ?
