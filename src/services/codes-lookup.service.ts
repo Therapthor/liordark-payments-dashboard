@@ -499,8 +499,21 @@ export function isSensitiveResult(result: CodeLookupResult): boolean {
 /** true si este resultado NO se le puede entregar al cliente: el de 6
  *  dígitos de Netflix "sin opciones" (cambio de datos de la cuenta) y las
  *  sub-acciones sensibles de "con opciones". Lo ve solo el admin. */
+// Claude por correo conectado: al cliente solo el correo «Tu enlace seguro
+// a Claude está aquí» (o el mismo en inglés); cualquier otro correo de
+// Claude/Anthropic (recibos, cambios, avisos) va solo al admin.
+const CLAUDE_LINK_SUBJECT_RE = /tu enlace seguro a claude|secure link to (log ?in to )?claude/i;
+/** Correo de Claude que NO es el enlace de inicio de sesión: solo admin. */
+export function isClaudeAdminOnlySubject(sourceId: string, subject: string): boolean {
+  return sourceId === "correo_conectado" && /anthropic|claude/i.test(subject || "") && !CLAUDE_LINK_SUBJECT_RE.test(subject || "");
+}
+function isClaudeMailResult(r: CodeLookupResult): boolean {
+  return /anthropic|claude/i.test(String(r.subject ?? "")) || /anthropic/i.test(String(r.emailHtml ?? "").slice(0, 20000));
+}
+
 export function isAdminOnlyResult(sourceId: string, result: CodeLookupResult): boolean {
   if (!result.found) return false;
+  if (sourceId === "correo_conectado" && isClaudeMailResult(result)) return !CLAUDE_LINK_SUBJECT_RE.test(String(result.subject ?? ""));
   // Netflix (Pally, José, Juanpa): al cliente se le entrega el código de
   // inicio de sesión de 4 dígitos, el link de inicio de sesión y el de
   // «Hogar». Los códigos de 6 dígitos y los cambios de datos, nunca.
@@ -1639,14 +1652,30 @@ async function lookupConnectedMail(email: string, platform?: string | null): Pro
     return { found: false, kind: null, value: null, items: [], providerMessage: `Todavía no llegó ningún correo de código a ${email} (últimas 3 horas).` };
   }
   const items: ListedEmail[] = mails.map(m => ({ ref: m.ref, subject: m.subject, receivedAt: m.receivedAt }));
-  const newest = items[0]!;
-  const body = await cachedBody("mail|" + newest.ref, () => connectedMailBody(newest.ref));
-  return listedEmailResult(newest, body, items);
+  // Los más nuevos (hasta 4) con su contenido: el admin ve el más nuevo; el
+  // cliente, el más nuevo que le corresponde (ej. Claude: solo «Tu enlace
+  // seguro…»). Quedan en memoria para la fila de correos del panel.
+  const results: CodeLookupResult[] = [];
+  for (const item of items.slice(0, 4)) {
+    const body = await cachedBody("mail|" + item.ref, () => connectedMailBody(item.ref));
+    results.push(withFallbackExtraction(listedEmailResult(item, body, items)));
+  }
+  const newest = results[0]!;
+  const forClient = results.find(r => r.found && !isAdminOnlyResult("correo_conectado", r));
+  if (forClient) return withAdminNewest(forClient, newest);
+  if (!newest.found || !isAdminOnlyResult("correo_conectado", newest)) return newest;
+  return withAdminNewest({
+    found: false, kind: null, value: null, items, ...(newest.subject ? { subject: newest.subject } : {}),
+    providerMessage: platform ? `Todavía no llegó un correo de inicio de sesión de ${platform} (últimas 3 horas).` : "Todavía no llegó un correo de inicio de sesión (últimas 3 horas).",
+  }, newest);
 }
 
 /** Cuerpo de UN correo de la lista (para la bandeja: los demás correos
  *  recientes de la misma dirección, no solo el más nuevo). */
 export async function fetchListedEmail(sourceId: string, email: string, item: ListedEmail): Promise<CodeLookupResult | null> {
+  if (sourceId === "correo_conectado") {
+    return withFallbackExtraction(listedEmailResult(item, await cachedBody("mail|" + item.ref, () => connectedMailBody(item.ref)), []));
+  }
   if (sourceId === "latinocol_outlook") return listedEmailResult(item, await lcOutlookBody(email, item.ref), []);
   if (sourceId === "latinocol_yurama") return listedEmailResult(item, await lcYuramaBody(item.ref, email), []);
   if (INBOX_LINK_SOURCES.includes(sourceId)) {
@@ -1667,9 +1696,10 @@ export type RecentMail = {
   adminOnly: boolean; current: boolean;
 };
 export function recentInboxMails(sourceId: string, email: string, result: CodeLookupResult, n = 4): RecentMail[] {
-  if (!INBOX_LINK_SOURCES.includes(sourceId) || !result.items?.length) return [];
+  const connected = sourceId === "correo_conectado";
+  if ((!INBOX_LINK_SOURCES.includes(sourceId) && !connected) || !result.items?.length) return [];
   return result.items.slice(0, n).map(item => {
-    const body = lcBodyCache.get("juanpa|" + email.toLowerCase() + "|" + item.ref);
+    const body = lcBodyCache.get(connected ? "mail|" + item.ref : "juanpa|" + email.toLowerCase() + "|" + item.ref);
     const r = body !== undefined ? listedEmailResult(item, body, []) : null;
     const approval = r ? loginApprovalOf(r) : null;
     const value = r && r.found ? (approval?.approveUrl ?? loginLinkOf(r) ?? r.value) : null;
@@ -1679,7 +1709,8 @@ export function recentInboxMails(sourceId: string, email: string, result: CodeLo
       kind: r && r.found ? (approval || /^https?:\/\//i.test(value ?? "") ? "link" : r.kind) : null,
       value,
       receivedIso: when && !Number.isNaN(when.getTime()) ? when.toISOString() : null,
-      adminOnly: !!r && r.found && (isAdminOnlyResult(sourceId, r) || (!deliversEverything(sourceId) && isAccountChangeResult(r))),
+      adminOnly: (!!r && r.found && (isAdminOnlyResult(sourceId, r) || (!deliversEverything(sourceId) && isAccountChangeResult(r))))
+        || isClaudeAdminOnlySubject(sourceId, item.subject),
       current: item.ref === result.providerRef,
     };
   });
@@ -1689,7 +1720,7 @@ export function recentInboxMails(sourceId: string, email: string, result: CodeLo
 export const INBOX_LINK_SOURCES = ["juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"];
 
 /** Fuentes que listan todos los correos recientes (las vigila el panel solo). */
-export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo"];
+export const LIST_SOURCES = ["latinocol_outlook", "latinocol_yurama", "juanpa_bandeja", "juanpa_disney", "juanpa_prime", "juanpa_hbo", "correo_conectado"];
 
 type Source = { label: string; lookup: (email: string) => Promise<CodeLookupResult> };
 

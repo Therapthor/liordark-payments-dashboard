@@ -3,7 +3,7 @@ import {
   onLookup, withLookupContext, lookupCode, fetchListedEmail, codeSourceLabel, listCodeSources,
   isAccountChangeResult, deliversEverything, parseProviderDate, sanitizeEmailHtml, LIST_SOURCES, TOTP_SOURCE_ID,
   loginApprovalOf,
-  type LookupEvent, type CodeLookupResult, type ListedEmail,
+  type LookupEvent, type CodeLookupResult, type ListedEmail, platformMailHint, isClaudeAdminOnlySubject,
 } from "./codes-lookup.service";
 import { listCodesEnabledAccounts } from "../db/codes.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
@@ -140,7 +140,20 @@ const accountByEmail = db.prepare(`
   SELECT id, platform FROM access_accounts WHERE lower(email) = lower(?) ORDER BY codes_enabled DESC, id DESC LIMIT 1
 `);
 
-function platformFor(sourceId: string, email: string): { accountId: number | null; platform: string } {
+const accountsByEmail = db.prepare(`
+  SELECT id, platform FROM access_accounts WHERE lower(email) = lower(?) ORDER BY codes_enabled DESC, id DESC
+`);
+
+function platformFor(sourceId: string, email: string, subject = ""): { accountId: number | null; platform: string } {
+  // Un mismo correo en varias plataformas (ej. ADOBE y CLAUDE): la que calza
+  // con el correo que llegó (remitente/asunto).
+  if (subject) {
+    const rows = accountsByEmail.all(email) as { id: number; platform: string }[];
+    if (new Set(rows.map(r => r.platform.trim().toUpperCase())).size > 1) {
+      const hit = rows.find(r => platformMailHint(r.platform)?.test(subject));
+      if (hit) return { accountId: hit.id, platform: hit.platform };
+    }
+  }
   const row = accountByEmail.get(email) as { id: number; platform: string } | undefined;
   if (row) return { accountId: row.id, platform: row.platform };
   const label = codeSourceLabel(sourceId);
@@ -182,6 +195,7 @@ export type InboxItem = {
   id: number; sourceId: string; sourceLabel: string; email: string; accountId: number | null; platform: string;
   subject: string; kind: string; value: string; receivedAt: string; receivedIso: string | null;
   expired: boolean; accountChange: boolean; origin: string; firstSeenAt: string; hasHtml: boolean;
+  adminOnly: boolean; // ej. correo de Claude que no es el enlace de inicio de sesión
   // Netflix «Aprueba la solicitud de inicio de sesión»: Aprobar = value.
   approval: { approveUrl: string; denyUrl: string | null; device: string | null } | null;
 };
@@ -201,6 +215,7 @@ function rowToItem(r: any): InboxItem {
     receivedAt: r.provider_received_at, receivedIso: r.received_iso ?? null,
     expired: !!r.expired, accountChange: !!r.account_change, origin: r.origin,
     firstSeenAt: r.first_seen_at, hasHtml: !!r.has_html, approval: approvalOfRow(r),
+    adminOnly: isClaudeAdminOnlySubject(r.source_id, r.subject),
   };
 }
 
@@ -235,7 +250,7 @@ function saveToInbox(sourceId: string, email: string, origin: string, r: CodeLoo
     if (prev) { touchInbox.run(expired, prev.id); return null; }
   }
 
-  const { accountId, platform } = platformFor(sourceId, mail);
+  const { accountId, platform } = platformFor(sourceId, mail, r?.subject ?? listed?.subject ?? "");
   const when = parseProviderDate(receivedAt);
   const info = insertInbox.run({
     sourceId, email: mail, accountId, platform,
@@ -448,7 +463,9 @@ export async function runCodeWatch(): Promise<{ checked: number }> {
     const seen = new Set<string>();
     for (const a of listCodesEnabledAccounts()) {
       if (!a.codeSource || !LIST_SOURCES.includes(a.codeSource) || !a.email) continue;
-      const key = a.codeSource + "|" + a.email.trim().toLowerCase();
+      // Correo conectado: un mismo correo puede estar en ADOBE y en CLAUDE —
+      // cada plataforma se revisa aparte (cada una guarda sus correos).
+      const key = a.codeSource + "|" + a.email.trim().toLowerCase() + (a.codeSource === "correo_conectado" ? "|" + String(a.platform).trim().toUpperCase() : "");
       if (seen.has(key)) continue;
       seen.add(key);
       if (a.codeSource.startsWith("juanpa_") && Date.now() - (lastWatchedAt.get(key) ?? 0) < JUANPA_WATCH_EVERY_MS) continue;

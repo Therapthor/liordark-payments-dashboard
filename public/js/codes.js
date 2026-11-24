@@ -489,7 +489,7 @@
   const PLATFORM_MARKS = [
     [/netflix/i, "netflix", "N", "Netflix"], [/disney/i, "disney", "D+", "Disney+"],
     [/prime|amazon/i, "prime", "P", "Prime Video"], [/crunchy/i, "crunchy", "C", "Crunchyroll"],
-    [/chatgpt|openai/i, "chatgpt", "AI", "ChatGPT"], [/canva/i, "canva", "C", "Canva"],
+    [/chatgpt|openai/i, "chatgpt", "AI", "ChatGPT"], [/canva/i, "canva", "C", "Canva"], [/claude|anthropic/i, "claude", "C", "Claude"],
   ];
   function platformOf(name) {
     const hit = PLATFORM_MARKS.find(([re]) => re.test(name || ""));

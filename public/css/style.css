@@ -745,7 +745,7 @@ button, input {
   --cx-good: #49c97e; --cx-warn: #f5b041; --cx-bad: #ff6b5e; --cx-idle: #7d6a58;
   --cx-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
   --p-netflix: #e50914; --p-disney: #1f6bff; --p-prime: #00a8e1; --p-crunchy: #f47521;
-  --p-chatgpt: #10a37f; --p-canva: #8b5cf6; --p-other: #ffb547;
+  --p-chatgpt: #10a37f; --p-canva: #8b5cf6; --p-claude: #D97757; --p-other: #ffb547;
 }
 .cx-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
 .cx-title { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -.02em; color: var(--ctext); }
@@ -820,6 +820,7 @@ button, input {
 .cx-mark.p-crunchy, .cx-hero-stripe.p-crunchy { background: var(--p-crunchy); }
 .cx-mark.p-chatgpt, .cx-hero-stripe.p-chatgpt { background: var(--p-chatgpt); }
 .cx-mark.p-canva, .cx-hero-stripe.p-canva { background: var(--p-canva); }
+.cx-mark.p-claude, .cx-hero-stripe.p-claude { background: var(--p-claude); color: #fff; }
 .cx-mark.p-other { color: #1c140c; }
 
 /* Pastillas de estado */
@@ -860,6 +861,7 @@ button, input {
 .cx-card.p-crunchy::before { background: var(--p-crunchy); }
 .cx-card.p-chatgpt::before { background: var(--p-chatgpt); }
 .cx-card.p-canva::before { background: var(--p-canva); }
+.cx-card.p-claude::before { background: var(--p-claude); }
 .cx-card.arrived { animation: cxIn .45s ease-out, cxGlow 2.4s ease-out; border-color: var(--cx-amber); }
 @keyframes cxIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .cx-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -959,6 +961,7 @@ button, input {
 .cx-q-card.p-crunchy::before { background: var(--p-crunchy); }
 .cx-q-card.p-chatgpt::before { background: var(--p-chatgpt); }
 .cx-q-card.p-canva::before { background: var(--p-canva); }
+.cx-q-card.p-claude::before { background: var(--p-claude); }
 .cx-q-card.is-hint::before, .cx-q-card.is-searching::before { background: var(--cx-line); }
 .cx-q-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .cx-q-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }

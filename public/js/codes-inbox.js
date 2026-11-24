@@ -37,6 +37,7 @@
   const PLATFORMS = [
     [/netflix/i, "netflix", "N"], [/disney/i, "disney", "D+"], [/prime|amazon/i, "prime", "P"],
     [/crunchy/i, "crunchy", "C"], [/chatgpt|openai/i, "chatgpt", "AI"], [/canva/i, "canva", "C"],
+    [/claude|anthropic/i, "claude", "C"],
   ];
   function platformOf(name) {
     const hit = PLATFORMS.find(([re]) => re.test(name || ""));
@@ -46,6 +47,7 @@
   // ── Estado de un correo de la bandeja ──
   function itemState(it) {
     if (it.accountChange) return { cls: "lock", text: "Cambio de cuenta" };
+    if (it.adminOnly) return { cls: "lock", text: "🔒 Solo admin" };
     if (!it.value) return { cls: "muted", text: "Sin código" };
     if (it.expired) return { cls: "muted", text: "Caducado" };
     const d = itemDate(it);

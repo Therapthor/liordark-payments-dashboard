@@ -257,6 +257,21 @@ const isCodeish = (m: { subject: string; from: string }) => CODEISH_RE.test(m.su
 
 const WINDOW_MS = 3 * 60 * 60 * 1000; // últimas 3 horas
 
+// Lo que trae cada buzón se guarda 20 s: el vigilante consulta muchas
+// cuentas seguidas con el mismo buzón (ej. 11 cuentas de Claude) y Gmail
+// bloquea si se entra demasiadas veces. Una consulta que llega dentro de
+// esos 20 s usa la misma lista.
+const RECENT_TTL_MS = 20_000;
+const recentCache = new Map<number, { at: number; list: Promise<ConnectedMail[]> }>();
+function recentFor(row: any): Promise<ConnectedMail[]> {
+  const hit = recentCache.get(row.id);
+  if (hit && Date.now() - hit.at < RECENT_TTL_MS) return hit.list;
+  const list = row.provider === "gmail" ? gmailRecent(row) : outlookRecent(row);
+  recentCache.set(row.id, { at: Date.now(), list });
+  list.catch(() => recentCache.delete(row.id));
+  return list;
+}
+
 async function outlookRecent(row: any): Promise<ConnectedMail[]> {
   const token = await outlookToken(row);
   const since = new Date(Date.now() - WINDOW_MS).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -443,7 +458,7 @@ export async function recentCodeMailFor(address: string): Promise<{ mails: Conne
   const mails: ConnectedMail[] = [];
   for (const row of targets) {
     try {
-      const list = row.provider === "gmail" ? await gmailRecent(row) : await outlookRecent(row);
+      const list = await recentFor(row);
       markOk(row.id);
       for (const m of list) {
         if (!isCodeish(m)) continue;
