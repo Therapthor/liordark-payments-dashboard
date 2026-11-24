@@ -769,11 +769,18 @@
   // y para js/avisos.js (botón del aviso: abrir un producto o «Arma tu combo»).
   window.LiordarkStore = { platformChip, openProductDetail, openComboBuilder };
 
-  function productImgHtml(p, kind) {
+  // Imágenes guardadas en el servidor (/media/products/…​.webp): las tarjetas
+  // y fichas usan la versión chica (-s, 360 px); el detalle, la grande.
+  function imgSrc(url, big) {
+    if (!big && /^\/media\/products\/[a-z0-9-]+\.webp$/.test(url || "")) return url.replace(/\.webp$/, "-s.webp");
+    return url;
+  }
+
+  function productImgHtml(p, kind, big) {
     const { mono, tone } = kind === "combo" ? { mono: "COMBO", tone: "" } : platformStyle(p.platform);
     const fallback = `<span class="product-img-fallback ${tone}">${escapeHtml(mono)}</span>`;
     return p.imageUrl
-      ? `<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.insertAdjacentHTML('afterbegin', this.dataset.fallback); this.remove()" data-fallback="${escapeHtml(fallback)}">`
+      ? `<img src="${escapeHtml(imgSrc(p.imageUrl, big))}" alt="" ${big ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" onerror="this.parentElement.insertAdjacentHTML('afterbegin', this.dataset.fallback); this.remove()" data-fallback="${escapeHtml(fallback)}">`
       : fallback;
   }
 
@@ -945,7 +952,7 @@
   function productTileHtml(p, size) {
     const chip = platformChip(p.platform, size);
     if (!p.imageUrl) return chip;
-    return `<span class="plat plat-img${size ? " plat-" + size : ""}" aria-hidden="true"><img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.outerHTML = this.dataset.fallback" data-fallback="${escapeHtml(chip)}"></span>`;
+    return `<span class="plat plat-img${size ? " plat-" + size : ""}" aria-hidden="true"><img src="${escapeHtml(imgSrc(p.imageUrl))}" alt="" loading="lazy" decoding="async" onerror="this.parentElement.outerHTML = this.dataset.fallback" data-fallback="${escapeHtml(chip)}"></span>`;
   }
   // Productos para las fichas: primero los que tienen imagen y stock, luego
   // los que tienen imagen, y si faltan, fichas de plataforma.
@@ -1304,7 +1311,7 @@
     const needsPassword   = kind === "platform" && requiresPasswordPlatform(item.platform);
     const outOfStock = isOutOfStock(item, kind);
 
-    document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind);
+    document.getElementById("detail-img-wrap").innerHTML = productImgHtml(item, kind, true);
     document.getElementById("detail-title").textContent = title;
     document.getElementById("detail-annual").hidden = !isAnnual(item);
     renderDesc(document.getElementById("detail-desc"), desc);

@@ -1,3 +1,5 @@
+import fs from "fs";
+import { isLocalMedia, localJpegFile } from "./product-media.service";
 import PDFDocument from "pdfkit";
 import axios from "axios";
 import { listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
@@ -82,6 +84,11 @@ function toPngUrl(url: string): string {
 
 async function fetchImageBuffer(url: string | undefined): Promise<Buffer | null> {
   if (!url) return null;
+  // Imagen guardada en el servidor: su versión JPG, directo del disco.
+  if (isLocalMedia(url)) {
+    const file = localJpegFile(url);
+    try { return file ? fs.readFileSync(file) : null; } catch { return null; }
+  }
   try {
     const res = await axios.get(toPngUrl(url), { responseType: "arraybuffer", timeout: 10_000 });
     return Buffer.from(res.data);

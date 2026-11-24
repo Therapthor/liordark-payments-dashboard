@@ -5,6 +5,96 @@
   // HELPERS (propios — este archivo no depende de app.js)
   // ─────────────────────────────────────────────────────────────
 
+  // ── Imagen del producto/combo: se comprime aquí (en el navegador) y se
+  // sube al servidor. 3 versiones: 720 px (detalle), 360 px (tarjetas) y
+  // JPG 720 px (WhatsApp y PDF). El servidor no puede comprimir. ──
+  async function loadBitmap(file) {
+    if (window.createImageBitmap) {
+      try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { /* plan B */ }
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = url;
+      await img.decode();
+      return img;
+    } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  }
+
+  function renderBlob(src, maxW, type, quality, whiteBg) {
+    const w0 = src.width, h0 = src.height;
+    const scale = Math.min(1, maxW / w0);
+    const w = Math.max(1, Math.round(w0 * scale)), h = Math.max(1, Math.round(h0 * scale));
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d");
+    if (whiteBg) { ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); }
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(src, 0, 0, w, h);
+    return new Promise((resolve, reject) => c.toBlob(b => b ? resolve(b) : reject(new Error("No se pudo comprimir la imagen.")), type, quality));
+  }
+
+  async function compressImage(file) {
+    const src = await loadBitmap(file);
+    if (!src.width || !src.height) throw new Error("No se pudo leer la imagen.");
+    let main = await renderBlob(src, 720, "image/webp", 0.8);
+    let small;
+    if (main.type === "image/webp") {
+      small = await renderBlob(src, 360, "image/webp", 0.78);
+    } else {
+      // Navegador sin WEBP (Safari viejo): todo en JPG.
+      main = await renderBlob(src, 720, "image/jpeg", 0.84, true);
+      small = await renderBlob(src, 360, "image/jpeg", 0.8, true);
+    }
+    const jpg = await renderBlob(src, 720, "image/jpeg", 0.84, true);
+    if (src.close) src.close();
+    return { main, small, jpg };
+  }
+
+  async function uploadProductImage(file, label) {
+    const { main, small, jpg } = await compressImage(file);
+    const fd = new FormData();
+    fd.append("label", label || "producto");
+    fd.append("main", main, "main");
+    fd.append("small", small, "small");
+    fd.append("jpg", jpg, "jpg");
+    const res = await fetch("/api/catalog/image", { method: "POST", credentials: "include", body: fd });
+    if (res.status === 401) { location.reload(); throw new Error("No autenticado"); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "No se pudo subir la imagen.");
+    return { url: data.url, kb: Math.round((main.size + small.size) / 1024) };
+  }
+
+  function showImagePreview(prefix) {
+    const url = document.getElementById(prefix + "-image-url").value.trim();
+    const img = document.getElementById(prefix + "-image-preview");
+    if (url && (url.startsWith("/media/") || /^https?:\/\//.test(url))) { img.src = url; img.hidden = false; }
+    else { img.removeAttribute("src"); img.hidden = true; }
+  }
+
+  function wireImageField(prefix, labelOf) {
+    const fileInput = document.getElementById(prefix + "-image-file");
+    const status = document.getElementById(prefix + "-image-status");
+    const urlInput = document.getElementById(prefix + "-image-url");
+    urlInput.addEventListener("input", () => showImagePreview(prefix));
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file) return;
+      status.textContent = "Comprimiendo y subiendo…";
+      try {
+        const { url, kb } = await uploadProductImage(file, labelOf());
+        urlInput.value = url;
+        showImagePreview(prefix);
+        status.textContent = `✅ Lista (${kb} KB). Toca «Guardar».`;
+      } catch (err) {
+        status.textContent = "⚠️ " + (err.message || "No se pudo subir.");
+      }
+    });
+  }
+
   async function api(path, options = {}) {
     const res = await fetch("/api/catalog" + path, {
       credentials: "include",
@@ -82,6 +172,8 @@
     document.getElementById("catalog-has-profiles").checked = product ? product.hasProfiles : true;
     document.getElementById("catalog-description").value    = product?.description ?? "";
     document.getElementById("catalog-image-url").value      = product?.imageUrl ?? "";
+    document.getElementById("catalog-image-status").textContent = "";
+    showImagePreview("catalog");
     document.getElementById("catalog-keywords").value       = product?.keywords ?? "";
     document.getElementById("catalog-error").hidden = true;
     document.getElementById("catalog-modal").hidden = false;
@@ -89,6 +181,7 @@
 
   function initProductModal() {
     document.getElementById("catalog-new-btn").addEventListener("click", () => openProductModal(null));
+    wireImageField("catalog", () => document.getElementById("catalog-platform").value.trim() || "producto");
     document.getElementById("catalog-cancel").addEventListener("click", () => {
       document.getElementById("catalog-modal").hidden = true;
     });
@@ -244,6 +337,8 @@
     document.getElementById("combo-price").value       = combo?.price ?? "";
     document.getElementById("combo-description").value = combo?.description ?? "";
     document.getElementById("combo-image-url").value   = combo?.imageUrl ?? "";
+    document.getElementById("combo-image-status").textContent = "";
+    showImagePreview("combo");
 
     document.getElementById("combo-items-list").innerHTML = "";
     const items = combo?.items?.length ? combo.items : [{ platform: "" }, { platform: "" }];
@@ -255,6 +350,7 @@
 
   function initComboModal() {
     document.getElementById("combo-new-btn").addEventListener("click", () => openComboModal(null));
+    wireImageField("combo", () => "combo-" + (document.getElementById("combo-name")?.value.trim() || "combo"));
     document.getElementById("combo-cancel").addEventListener("click", () => {
       document.getElementById("combo-modal").hidden = true;
     });

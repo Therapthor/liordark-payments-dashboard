@@ -557,6 +557,14 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
 }
 .catalog-thumb { width: 46px; height: 46px; border-radius: 14px; background: var(--mp-soft); }
 .catalog-thumb-empty { color: var(--mp-muted); }
+/* Imagen del producto/combo: vista previa + «📷 Subir imagen» + enlace opcional */
+.catalog-image-field { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+.catalog-image-label { font-weight: 700; font-size: 14px; }
+.catalog-image-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.catalog-image-preview { width: 96px; height: 60px; object-fit: cover; border-radius: 12px; background: var(--mp-soft); }
+.catalog-image-preview[hidden] { display: none; }
+.catalog-image-upload { cursor: pointer; display: inline-flex; align-items: center; }
+.catalog-image-status { font-size: 13px; }
 .catalog-name { font-family: var(--mp-display); font-weight: 700; font-size: 16px; flex-wrap: wrap; }
 .catalog-desc { color: var(--mp-muted); font-weight: 600; font-size: 13px; }
 .catalog-price { font-family: var(--mp-display); font-weight: 800; font-size: 18px; }

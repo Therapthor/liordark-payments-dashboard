@@ -41,6 +41,7 @@ import { createWholesalerNotification } from "../db/wholesaler-notifications.rep
 import { markCoursePurchasePaid, createPendingPurchase } from "../services/course.service";
 import { findCustomerByPhone } from "../db/customer.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
+import { botImageUrl } from "../services/product-media.service";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp, NO por el navegador.
@@ -72,7 +73,7 @@ router.get("/catalog", (_req, res) => {
       price:       p.price,
       title:       p.title,
       description: p.description,
-      imageUrl:    p.imageUrl,
+      imageUrl:    botImageUrl(p.imageUrl), // WhatsApp: JPG con dirección completa
       hasProfiles: p.hasProfiles,
       keywords:    p.keywords.split(",").map(k => k.trim().toLowerCase()).filter(Boolean),
       available,
@@ -99,7 +100,7 @@ router.get("/combos", (_req, res) => {
       name:        c.name,
       price:       c.price,
       description: c.description,
-      imageUrl:    c.imageUrl,
+      imageUrl:    botImageUrl(c.imageUrl),
       items,
       inStock: items.every(i => i.inStock),
     };

@@ -1122,9 +1122,17 @@
       <label>Información del producto
         <textarea id="catalog-description" maxlength="500" rows="3" placeholder="Lo que ve el cliente en la tarjeta del producto"></textarea>
       </label>
-      <label>URL de la imagen
-        <input id="catalog-image-url" type="url" maxlength="500" placeholder="https://..." />
-      </label>
+      <div class="catalog-image-field">
+        <span class="catalog-image-label">Imagen del producto</span>
+        <div class="catalog-image-row">
+          <img id="catalog-image-preview" class="catalog-image-preview" alt="" hidden />
+          <label class="btn-secondary btn-sm catalog-image-upload">📷 Subir imagen
+            <input id="catalog-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+          </label>
+          <span id="catalog-image-status" class="text-muted catalog-image-status"></span>
+        </div>
+        <input id="catalog-image-url" type="text" maxlength="500" placeholder="o pega un enlace https://… (se pasa al servidor solo)" aria-label="Enlace de la imagen" />
+      </div>
       <label>Palabras clave <span class="text-muted">(separadas por coma — para que el bot la reconozca si el cliente escribe el nombre directo)</span>
         <input id="catalog-keywords" type="text" maxlength="300" placeholder="ej. netflix, netflix 4k, netflix premium" />
       </label>
@@ -1157,9 +1165,17 @@
       <label>Información del combo
         <textarea id="combo-description" maxlength="500" rows="3" placeholder="Lo que ve el cliente en la tarjeta del combo"></textarea>
       </label>
-      <label>URL de la imagen
-        <input id="combo-image-url" type="url" maxlength="500" placeholder="https://..." />
-      </label>
+      <div class="catalog-image-field">
+        <span class="catalog-image-label">Imagen del combo</span>
+        <div class="catalog-image-row">
+          <img id="combo-image-preview" class="catalog-image-preview" alt="" hidden />
+          <label class="btn-secondary btn-sm catalog-image-upload">📷 Subir imagen
+            <input id="combo-image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+          </label>
+          <span id="combo-image-status" class="text-muted catalog-image-status"></span>
+        </div>
+        <input id="combo-image-url" type="text" maxlength="500" placeholder="o pega un enlace https://… (se pasa al servidor solo)" aria-label="Enlace de la imagen" />
+      </div>
       <p id="combo-error" class="login-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="combo-cancel" class="btn-secondary">Cancelar</button>

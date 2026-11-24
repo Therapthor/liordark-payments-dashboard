@@ -180,6 +180,7 @@ async function buildArchive(kind: "datos", recipient: string, withCode: boolean)
     copyIfExists(path.join(PANEL_DIR, ".env.production"), path.join(stage, "panel", ".env.production"), contents, "config del panel");
     copyIfExists(path.join(BOT_DIR, ".env.production"), path.join(stage, "bot", ".env.production"), contents, "config del bot");
     copyIfExists(SCRIPTS_DIR, path.join(stage, "scripts"), contents, "~/scripts");
+    copyIfExists(path.join(PANEL_DIR, "data", "media"), path.join(stage, "panel", "media"), contents, "imágenes de productos");
     let code = false;
     if (withCode) {
       const panel = await bundleRepo(PANEL_DIR, path.join(stage, "codigo", "panel"));

@@ -47,6 +47,7 @@ import { saleLinksAdminRoutes, openSaleLinkPage } from "./routes/sale-links.rout
 import { cleanPinLinks } from "./db/pin-links.repository";
 import { ensureWelcomeColumn, mergeDuplicateCustomers } from "./db/customer.repository";
 import { runOneTimeRepairs } from "./services/one-time-repairs.service";
+import { mediaFilePath, migrateExternalProductImages } from "./services/product-media.service";
 import { runPinRecovery } from "./services/pin-recovery.service";
 import { ensureWebAccessForAccountHolders } from "./services/web-access.service";
 import { syncPlanCatalogPrices, cleanOldPlanOrders } from "./services/plans.service";
@@ -245,6 +246,20 @@ app.get(/^\/renovar\/?$/, (req, res, next) => {
   res.sendFile(RENEW_PAGE);
 });
 
+// /media/products/<nombre> — imágenes de productos y combos guardadas en el
+// servidor (ver product-media.service). En todos los dominios (tienda,
+// mayoristas, panel). El nombre lleva la huella del contenido: el navegador
+// la guarda 1 año sin volver a preguntar.
+app.get(/^\/media\/products\/([a-z0-9-]{1,90}\.(?:webp|jpg|png))$/, (req, res) => {
+  const file = mediaFilePath(String((req.params as any)[0] ?? ""));
+  if (!file) { res.status(404).end(); return; }
+  res.sendFile(file, {
+    maxAge: 365 * 24 * 3600 * 1000,
+    immutable: true,
+    headers: { "X-Content-Type-Options": "nosniff", "Access-Control-Allow-Origin": "*" },
+  }, (err: any) => { if (err && !res.headersSent) res.status(404).end(); });
+});
+
 // liordark.com/codigos y liordark.com/soporte — links cortos que el admin
 // manda por WhatsApp: abren la tienda en Códigos / Soporte (si no tiene
 // sesión, primero le pide entrar).
@@ -383,6 +398,8 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   scheduleBackupDaily();
   ensureWelcomeColumn(); // correo de bienvenida: quién ya la recibió
   runOneTimeRepairs(); // arreglos puntuales de datos (una sola vez)
+  // Imágenes de productos que sigan en Cloudinary → al servidor (en segundo plano).
+  setTimeout(() => { migrateExternalProductImages().catch(() => {}); }, 5_000);
 
   runExpireChatMediaJob();
   setInterval(runExpireChatMediaJob, CHAT_MEDIA_EXPIRY_INTERVAL_MS);
