@@ -41,7 +41,7 @@ import { createWholesalerNotification } from "../db/wholesaler-notifications.rep
 import { markCoursePurchasePaid, createPendingPurchase } from "../services/course.service";
 import { findCustomerByPhone } from "../db/customer.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
-import { botImageUrl, getBotImagesAbsolute } from "../services/product-media.service";
+import { botImageUrl } from "../services/product-media.service";
 
 // ─────────────────────────────────────────────────────────────
 // API DE STOCK — consumida por el bot de WhatsApp, NO por el navegador.
@@ -374,12 +374,6 @@ router.get("/payment-methods", (_req, res) => {
       imageUrl:    botImageUrl(m.imageUrl), // WhatsApp: JPG con dirección completa
     }));
   res.json({ methods });
-});
-
-// GET /bot-images — imagen del saludo y del aviso de vencimiento (en el
-// servidor; antes el bot las sacaba de Cloudinary). null = sin imagen.
-router.get("/bot-images", (_req, res) => {
-  res.json(getBotImagesAbsolute());
 });
 
 // GET /flow-config — textos/títulos editables del flujo de WhatsApp

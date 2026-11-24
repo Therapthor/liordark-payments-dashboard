@@ -1,14 +1,11 @@
 import { Router } from "express";
-import multer from "multer";
 import {
   getBotFlowConfig,
   updateBotFlowConfig,
   type BotFlowConfig,
 } from "../db/bot-flow.repository";
-import { getBotImages, saveBotImage, BOT_IMAGE_KINDS, type BotImageKind } from "../services/product-media.service";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 function parseBody(body: any): Omit<BotFlowConfig, "updatedAt"> {
   return {
@@ -61,36 +58,5 @@ router.put("/", (req, res) => {
 
   res.json({ config: updateBotFlowConfig(data) });
 });
-
-// ── Imágenes del bot de WhatsApp (saludo y aviso de vencimiento) ──
-// Guardadas en el servidor (antes en Cloudinary). El panel las manda ya
-// comprimidas en JPG; el bot las pide en /api/stock/bot-images.
-
-router.get("/bot-images", (_req, res) => {
-  res.json({ images: getBotImages() });
-});
-
-// Compatibilidad: la imagen del saludo.
-router.get("/principal-image", (_req, res) => {
-  res.json({ url: getBotImages().principal, configured: true });
-});
-
-function saveBotImageHandler(kind: BotImageKind) {
-  return (req: any, res: any) => {
-    if (!req.file) { res.status(400).json({ message: "Falta la imagen." }); return; }
-    try {
-      res.json({ url: saveBotImage(kind, req.file.buffer), images: getBotImages() });
-    } catch (err: any) {
-      res.status(400).json({ message: err?.message || "No se pudo guardar la imagen." });
-    }
-  };
-}
-
-router.post("/bot-images/:kind", upload.single("image"), (req, res) => {
-  const kind = String(req.params.kind) as BotImageKind;
-  if (!BOT_IMAGE_KINDS.includes(kind)) { res.status(404).json({ message: "No encontrado." }); return; }
-  saveBotImageHandler(kind)(req, res);
-});
-router.post("/principal-image", upload.single("image"), saveBotImageHandler("principal"));
 
 export default router;

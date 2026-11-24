@@ -45,13 +45,6 @@ export const env = {
   // llaves de acceso registradas (normalmente, con llaves solo entra la llave).
   PANEL_PASSWORD_LOGIN: String(process.env.PANEL_PASSWORD_LOGIN ?? "").trim().toLowerCase() === "on",
 
-  // Mismas credenciales que ya usa el bot — el panel sube ahí la imagen
-  // principal del menú de WhatsApp (Configuración > Flujo).
-  CLOUDINARY_CLOUD_NAME:   getEnv("CLOUDINARY_CLOUD_NAME", false),
-  CLOUDINARY_API_KEY:      getEnv("CLOUDINARY_API_KEY", false),
-  CLOUDINARY_API_SECRET:   getEnv("CLOUDINARY_API_SECRET", false),
-  CLOUDINARY_FOLDER_UTILS: getEnv("CLOUDINARY_FOLDER_UTILS", false),
-
   // Códigos — cuenta Gmail DEDICADA que recibe (por reenvío) los correos
   // de código de las cuentas marcadas. Sin esto configurado, el poller
   // queda inactivo (no rompe nada, solo no busca códigos nuevos).

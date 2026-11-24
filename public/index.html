@@ -869,30 +869,6 @@
           <ul id="catalog-list" class="catalog-list"></ul>
           <p id="catalog-empty" class="feed-empty" hidden>Todavía no hay productos en el catálogo.</p>
 
-          <!-- Imágenes del bot de WhatsApp: en el servidor (antes en Cloudinary) -->
-          <div class="bot-images-card">
-            <h3>🤖 Imágenes del bot de WhatsApp</h3>
-            <p class="panel-hint">La del saludo sale en el menú del bot; la del vencimiento, en el aviso de «tu cuenta vence». Se comprimen y se guardan solas al subirlas.</p>
-            <div class="bot-images-grid">
-              <div class="bot-image-item" data-bot-image="principal">
-                <span class="catalog-image-label">Saludo del bot</span>
-                <img class="bot-image-preview" alt="" hidden />
-                <label class="btn-secondary btn-sm catalog-image-upload">📷 Subir imagen
-                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden data-bot-image-file="principal" />
-                </label>
-                <span class="text-muted catalog-image-status" data-bot-image-status="principal"></span>
-              </div>
-              <div class="bot-image-item" data-bot-image="vencimiento">
-                <span class="catalog-image-label">Aviso de vencimiento</span>
-                <img class="bot-image-preview" alt="" hidden />
-                <label class="btn-secondary btn-sm catalog-image-upload">📷 Subir imagen
-                  <input type="file" accept="image/png,image/jpeg,image/webp" hidden data-bot-image-file="vencimiento" />
-                </label>
-                <span class="text-muted catalog-image-status" data-bot-image-status="vencimiento"></span>
-              </div>
-            </div>
-          </div>
-
           <!-- Combos fijos: el dueño ya no los usa. Oculto (no borrado) para no romper catalog.js. -->
           <div id="catalog-combos-section" hidden>
           <div class="panel-header standalone catalog-combos-header">
