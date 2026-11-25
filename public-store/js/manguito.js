@@ -11,7 +11,6 @@
   const MAX_IMAGES = 4;
   const IMG_MAX_SIDE = 1568;          // más grande no mejora y gasta más tokens
   const UPLOAD_MAX_BYTES = 900 * 1024; // el servidor web acepta hasta ~1 MB por pedido
-  const AVG_MSG_USD = 0.02;            // para estimar «≈ N mensajes» en los planes
   const PAY_WINDOW_MS = 5 * 60 * 1000;
   const POLL_MS = 4000;
   const POLL_MAX_MS = 15 * 60 * 1000;
@@ -646,16 +645,16 @@
         <h3>Mensual</h3><p class="mg-plan-desc">Para usarlo todos los días sin sustos.</p>
         <div class="mg-price">${soles(m.priceSoles)} <small>/ 30 días</small></div>
         <ul>
-          <li>${usd(m.usd)} de uso al mes (≈ ${Math.round(m.usd / AVG_MSG_USD)} mensajes)</li>
-          <li>Repartido para que te dure: hasta ${m.windowPct}% cada ${s.windowHours} horas y ${m.weekPct}% por semana</li>
+          <li>${usd(m.usd)} de uso al mes</li>
+          <li>Uso restringido por horas para cuidar tus créditos</li>
           <li>Si llegas al límite, esperas un rato y sigues (o usas créditos)</li>
-          <li>Elige solo el mejor modelo: Haiku, Sonnet u Opus</li>
+          <li>Modelos de Claude automáticos: usa el mejor en cada tarea</li>
         </ul>
         <button class="mg-btn-solid" type="button" data-buy="plan">${buyLabel || "Elegir plan mensual"}</button></div>`;
     }
     if (s.packs && s.packs.length) {
       html += `<div class="mg-plan"><h3>Créditos</h3><p class="mg-plan-desc">Paga solo lo que usas, sin límites de tiempo.</p>
-        <div class="mg-packs">${s.packs.map((p, i) => `<label class="mg-pack"><span><input type="radio" name="mg-pack" value="${i}"${i === 0 ? " checked" : ""}> <b>${soles(p.priceSoles)}</b></span><span>${usd(p.usd)} · ≈ ${Math.round(p.usd / AVG_MSG_USD)} mensajes</span></label>`).join("")}</div>
+        <div class="mg-packs">${s.packs.map((p, i) => `<label class="mg-pack"><span><input type="radio" name="mg-pack" value="${i}"${i === 0 ? " checked" : ""}> <b>${soles(p.priceSoles)}</b></span><span>${usd(p.usd)} de saldo</span></label>`).join("")}</div>
         <ul>
           <li>Úsalo cuando quieras: hoy, mañana o en un solo día</li>
           <li>Recarga cuando se acabe</li>

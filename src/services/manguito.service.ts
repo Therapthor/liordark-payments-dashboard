@@ -895,7 +895,7 @@ export type MonthlyPlan = { enabled: boolean; priceSoles: number; usd: number; w
 export type CreditPack = { priceSoles: number; usd: number };
 export type StoreConfig = { enabled: boolean; rate: number; monthly: MonthlyPlan; packs: CreditPack[] };
 const DEFAULT_MONTHLY: MonthlyPlan = { enabled: true, priceSoles: 20, usd: 50, weekPct: 25, windowPct: 4 };
-const DEFAULT_PACKS: CreditPack[] = [{ priceSoles: 20, usd: 4 }, { priceSoles: 50, usd: 11 }, { priceSoles: 100, usd: 24 }];
+const DEFAULT_PACKS: CreditPack[] = [{ priceSoles: 20, usd: 50 }, { priceSoles: 45, usd: 100 }];
 
 function readJson<T>(key: string, def: T): T {
   try { const v = getAdminSetting(key); return v ? JSON.parse(v) as T : def; } catch { return def; }

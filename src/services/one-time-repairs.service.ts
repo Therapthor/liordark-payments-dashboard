@@ -87,6 +87,27 @@ function restoreAmazonSale3909(): string {
   return r.changes ? "perfil devuelto a su cliente (vence 2026-12-23)" : "no se pudo actualizar";
 }
 
+/**
+ * 25-nov-2026 — el dueño fijó los paquetes de créditos de Manguito Pro:
+ * S/ 20 → US$ 50 y S/ 45 → US$ 100. Solo cambia si siguen los paquetes
+ * de prueba de la primera versión (S/ 20 → US$ 4, S/ 50 → US$ 11…); si
+ * ya los editó en el panel, no se tocan.
+ */
+function setManguitoCreditPacks(): string {
+  const KEY = "ai_credit_packs";
+  const row = db.prepare(`SELECT value FROM admin_settings WHERE key = ?`).get(KEY) as { value: string } | undefined;
+  const NEW = JSON.stringify([{ priceSoles: 20, usd: 50 }, { priceSoles: 45, usd: 100 }]);
+  if (!row) return "sin paquetes guardados: se usan los nuevos de fábrica";
+  let packs: { priceSoles: number; usd: number }[] = [];
+  try { packs = JSON.parse(row.value); } catch { return "paquetes ilegibles: no se tocan"; }
+  const old = packs.length >= 1 && packs[0]?.priceSoles === 20 && packs[0]?.usd === 4 &&
+    packs.every(p => (p.priceSoles === 20 && p.usd === 4) || (p.priceSoles === 50 && p.usd === 11) || (p.priceSoles === 100 && p.usd === 24));
+  if (!old) return "ya editados en el panel: no se tocan";
+  db.prepare(`UPDATE admin_settings SET value = ? WHERE key = ?`).run(NEW, KEY);
+  return "paquetes cambiados a S/ 20 → US$ 50 y S/ 45 → US$ 100";
+}
+
 export function runOneTimeRepairs(): void {
   once("2026-11-24-amazon-3909", restoreAmazonSale3909);
+  once("2026-11-25-manguito-packs", setManguitoCreditPacks);
 }
