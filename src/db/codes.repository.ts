@@ -163,7 +163,8 @@ export function listClientCodesAccounts(clientPhone: string): ClientCodesAccount
   const digits = clientPhone.replace(/\D/g, "");
   if (!digits) return [];
 
-  return db.prepare(`
+  const today = limaTodayISO();
+  const real = db.prepare(`
     SELECT a.id AS accountId, a.platform AS platform, a.email AS email,
            p.profile_name AS profileName, COALESCE(p.expires_override, a.expires_at) AS expiresAt, a.totp_secret AS totpSecret
     FROM access_profiles p
@@ -172,7 +173,32 @@ export function listClientCodesAccounts(clientPhone: string): ClientCodesAccount
       AND substr(p.client_phone, -9) = substr(?, -9)
       AND COALESCE(p.expires_override, a.expires_at) IS NOT NULL AND COALESCE(p.expires_override, a.expires_at) >= ?
     ORDER BY a.platform ASC
-  `).all(digits, limaTodayISO()) as ClientCodesAccount[];
+  `).all(digits, today) as ClientCodesAccount[];
+
+  // Reemplazo «en uso» de Soporte: el cliente no ocupa un perfil, tiene un
+  // reemplazo manual con el correo de una cuenta real de Accesos. Sus
+  // códigos salen de esa cuenta (misma plataforma y correo, con «🔑 Código»
+  // activo); la fecha es la del reemplazo. Antes no aparecía en Códigos.
+  const fromOverrides = db.prepare(`
+    SELECT o.id AS overrideId, a.id AS accountId, a.platform AS platform, a.email AS email,
+           o.profile_name AS profileName, COALESCE(o.expires_at, a.expires_at) AS expiresAt, a.totp_secret AS totpSecret
+    FROM manual_account_overrides o
+    JOIN access_accounts a
+      ON a.platform = UPPER(TRIM(o.platform)) AND LOWER(TRIM(a.email)) = LOWER(TRIM(o.email))
+    WHERE o.wholesaler_id IS NULL AND substr(o.client_phone, -9) = substr(?, -9)
+      AND a.codes_enabled = 1 AND COALESCE(a.code_source, '') != '' AND a.code_source NOT IN (${ADMIN_ONLY_SQL})
+      AND COALESCE(o.expires_at, a.expires_at) IS NOT NULL AND COALESCE(o.expires_at, a.expires_at) >= ?
+    ORDER BY o.id ASC, COALESCE(a.expires_at, '9999-99-99') DESC, a.id DESC
+  `).all(digits, today) as (ClientCodesAccount & { overrideId: number })[];
+  const seenOverride = new Set<number>();
+  const overrides: ClientCodesAccount[] = [];
+  for (const { overrideId, ...row } of fromOverrides) {
+    if (seenOverride.has(overrideId)) continue; // una cuenta por reemplazo
+    seenOverride.add(overrideId);
+    overrides.push(row);
+  }
+
+  return [...real, ...overrides].sort((a, b) => a.platform.localeCompare(b.platform));
 }
 
 /** true si esta cuenta (con código habilitado) de verdad le pertenece a
