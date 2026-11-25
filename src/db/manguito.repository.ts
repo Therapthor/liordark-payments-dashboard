@@ -85,6 +85,55 @@ if (!(db.prepare(`PRAGMA table_info(ai_conversations)`).all() as { name: string 
   db.exec(`ALTER TABLE ai_conversations ADD COLUMN summary_upto INTEGER NOT NULL DEFAULT 0`);
 }
 
+// Venta de Manguito Pro: saldo de cada cliente (plan mensual y/o créditos),
+// compras por Yape y links para compartir chats.
+//  · ai_wallets: créditos (US$) y plan mensual vigente (inicio/fin en ms,
+//    US$ por ciclo de 30 días) y el inicio de la ventana de 3 horas.
+//  · ai_purchases: cada compra (pedido web del bot); al pagarse se acredita.
+//  · ai_shares: copia fija de los mensajes elegidos + contraseña opcional.
+//  · ai_usage.source: de dónde salió cada gasto (plan | credits | free).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_wallets (
+    customer_id  INTEGER PRIMARY KEY,
+    credits_usd  REAL    NOT NULL DEFAULT 0,
+    plan_start   INTEGER NOT NULL DEFAULT 0,
+    plan_end     INTEGER NOT NULL DEFAULT 0,
+    plan_usd     REAL    NOT NULL DEFAULT 0,
+    window_start INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS ai_purchases (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id  INTEGER NOT NULL,
+    order_name   TEXT    NOT NULL UNIQUE,
+    kind         TEXT    NOT NULL,              -- plan | credits | gift
+    amount_soles TEXT    NOT NULL DEFAULT '',
+    usd          REAL    NOT NULL DEFAULT 0,
+    status       TEXT    NOT NULL DEFAULT 'pending',
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    paid_at      TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_purch_customer ON ai_purchases(customer_id, status);
+  CREATE TABLE IF NOT EXISTS ai_shares (
+    token           TEXT    PRIMARY KEY,
+    customer_id     INTEGER NOT NULL,
+    conversation_id INTEGER NOT NULL,
+    title           TEXT    NOT NULL DEFAULT '',
+    mode            TEXT    NOT NULL DEFAULT 'all', -- all | result | selected
+    messages        TEXT    NOT NULL DEFAULT '[]',
+    pass_hash       TEXT    NOT NULL DEFAULT '',
+    pass_salt       TEXT    NOT NULL DEFAULT '',
+    views           INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_shares_customer ON ai_shares(customer_id, created_at);
+`);
+if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).some(c => c.name === "source")) {
+  db.exec(`ALTER TABLE ai_usage ADD COLUMN source TEXT NOT NULL DEFAULT ''`);
+}
+// Lo «gratis» (celulares de la lista del panel) es lo que cuentan los topes
+// del panel; lo pagado (plan o créditos) tiene sus propios límites.
+const FREE = `source IN ('free', '')`;
+
 // Qué clave de la lista se usó (para ver el gasto de cada una).
 if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).some(c => c.name === "cred_id")) {
   db.exec(`ALTER TABLE ai_usage ADD COLUMN cred_id TEXT NOT NULL DEFAULT ''`);
@@ -166,29 +215,36 @@ export function deleteUploadRows(ids: string[]): void {
   for (const id of ids) del.run(id);
 }
 
-export function logUsage(u: {
+export type UsageSource = "plan" | "credits" | "free";
+
+/** Guarda el gasto; si salió de los créditos, los descuenta (nunca bajan de 0). */
+export const logUsage = db.transaction((u: {
   customerId: number; kind: "chat" | "router" | "test" | "compact" | "memory"; tier?: string; model: string; credId?: string;
-  inputTokens: number; outputTokens: number; cacheRead: number; cacheWrite: number; costUsd: number;
-}): void {
+  inputTokens: number; outputTokens: number; cacheRead: number; cacheWrite: number; costUsd: number; source?: UsageSource;
+}): void => {
   db.prepare(`
-    INSERT INTO ai_usage (customer_id, kind, tier, model, cred_id, input_tokens, output_tokens, cache_read, cache_write, cost_usd)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(u.customerId, u.kind, u.tier ?? "", u.model, u.credId ?? "", u.inputTokens, u.outputTokens, u.cacheRead, u.cacheWrite, u.costUsd);
-}
+    INSERT INTO ai_usage (customer_id, kind, tier, model, cred_id, input_tokens, output_tokens, cache_read, cache_write, cost_usd, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(u.customerId, u.kind, u.tier ?? "", u.model, u.credId ?? "", u.inputTokens, u.outputTokens, u.cacheRead, u.cacheWrite, u.costUsd, u.source ?? "free");
+  if (u.source === "credits" && u.costUsd > 0) {
+    db.prepare(`UPDATE ai_wallets SET credits_usd = MAX(0, credits_usd - ?) WHERE customer_id = ?`).run(u.costUsd, u.customerId);
+  }
+});
 
 // Días y meses en hora de Lima (UTC-5), igual que el resto del panel.
 export function spentTodayByCustomer(customerId: number): number {
   const r = db.prepare(`
     SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage
-    WHERE customer_id = ? AND date(created_at, '-5 hours') = date('now', '-5 hours')
+    WHERE customer_id = ? AND ${FREE} AND date(created_at, '-5 hours') = date('now', '-5 hours')
   `).get(customerId) as { t: number };
   return r.t;
 }
 
+/** Gasto gratis (de prueba) de todos este mes: lo que cuenta el tope total del panel. */
 export function spentThisMonth(): number {
   const r = db.prepare(`
     SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage
-    WHERE strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
+    WHERE ${FREE} AND strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
   `).get() as { t: number };
   return r.t;
 }
@@ -317,7 +373,7 @@ export function pausesToday(customerId: number): number {
 /** Respuestas del chat desde `sinceMs` (para la tanda de mensajes antes de una pausa). */
 export function chatsSince(customerId: number, sinceMs: number): number {
   const r = db.prepare(`
-    SELECT COUNT(*) AS n FROM ai_usage WHERE customer_id = ? AND kind = 'chat' AND created_at >= datetime(?, 'unixepoch')
+    SELECT COUNT(*) AS n FROM ai_usage WHERE customer_id = ? AND kind = 'chat' AND ${FREE} AND created_at >= datetime(?, 'unixepoch')
   `).get(customerId, Math.floor(sinceMs / 1000)) as { n: number };
   return r.n;
 }
@@ -326,7 +382,197 @@ export function chatsSince(customerId: number, sinceMs: number): number {
 export function spentThisMonthByCustomer(customerId: number): number {
   const r = db.prepare(`
     SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage
-    WHERE customer_id = ? AND strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
+    WHERE customer_id = ? AND ${FREE} AND strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
   `).get(customerId) as { t: number };
   return r.t;
+}
+
+// ── Saldo (plan mensual y créditos) ──
+
+export type AiWallet = { credits: number; planStart: number; planEnd: number; planUsd: number; windowStart: number };
+
+export function wallet(customerId: number): AiWallet {
+  const r = db.prepare(`
+    SELECT credits_usd AS credits, plan_start AS planStart, plan_end AS planEnd, plan_usd AS planUsd, window_start AS windowStart
+    FROM ai_wallets WHERE customer_id = ?
+  `).get(customerId) as AiWallet | undefined;
+  return r ?? { credits: 0, planStart: 0, planEnd: 0, planUsd: 0, windowStart: 0 };
+}
+
+function ensureWallet(customerId: number): void {
+  db.prepare(`INSERT OR IGNORE INTO ai_wallets (customer_id) VALUES (?)`).run(customerId);
+}
+
+export function setWindowStart(customerId: number, ms: number): void {
+  ensureWallet(customerId);
+  db.prepare(`UPDATE ai_wallets SET window_start = ? WHERE customer_id = ?`).run(ms, customerId);
+}
+
+const PLAN_DAYS_MS = 30 * 24 * 3600e3;
+
+/** Suma créditos o 30 días de plan (si el plan sigue vigente, se alarga). */
+function grant(customerId: number, kind: string, usd: number): void {
+  ensureWallet(customerId);
+  if (kind === "plan") {
+    const w = wallet(customerId);
+    const now = Date.now();
+    if (w.planEnd > now) {
+      db.prepare(`UPDATE ai_wallets SET plan_end = plan_end + ?, plan_usd = ? WHERE customer_id = ?`).run(PLAN_DAYS_MS, usd, customerId);
+    } else {
+      db.prepare(`UPDATE ai_wallets SET plan_start = ?, plan_end = ?, plan_usd = ?, window_start = 0 WHERE customer_id = ?`).run(now, now + PLAN_DAYS_MS, usd, customerId);
+    }
+  } else {
+    db.prepare(`UPDATE ai_wallets SET credits_usd = credits_usd + ? WHERE customer_id = ?`).run(usd, customerId);
+  }
+}
+
+/** Gasto pagado con el plan desde `sinceMs`. */
+export function planSpentSince(customerId: number, sinceMs: number): number {
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage
+    WHERE customer_id = ? AND source = 'plan' AND created_at >= datetime(?, 'unixepoch')
+  `).get(customerId, Math.floor(sinceMs / 1000)) as { t: number };
+  return r.t;
+}
+
+/** Créditos gastados desde `sinceMs` (para el ritmo de gasto). */
+export function creditsSpentSince(customerId: number, sinceMs: number): { usd: number; messages: number } {
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS usd, SUM(kind = 'chat') AS messages FROM ai_usage
+    WHERE customer_id = ? AND source = 'credits' AND created_at >= datetime(?, 'unixepoch')
+  `).get(customerId, Math.floor(sinceMs / 1000)) as { usd: number; messages: number | null };
+  return { usd: r.usd, messages: r.messages ?? 0 };
+}
+
+// ── Compras ──
+
+export type AiPurchase = {
+  id: number; customerId: number; orderName: string; kind: "plan" | "credits" | "gift";
+  amountSoles: string; usd: number; status: "pending" | "paid"; createdAt: string; paidAt: string | null;
+};
+const PURCHASE_COLS = `id, customer_id AS customerId, order_name AS orderName, kind, amount_soles AS amountSoles, usd, status, created_at AS createdAt, paid_at AS paidAt`;
+
+export function createAiPurchase(p: { customerId: number; orderName: string; kind: "plan" | "credits"; amountSoles: string; usd: number }): void {
+  db.prepare(`
+    INSERT OR IGNORE INTO ai_purchases (customer_id, order_name, kind, amount_soles, usd) VALUES (?, ?, ?, ?, ?)
+  `).run(p.customerId, p.orderName, p.kind, p.amountSoles, p.usd);
+}
+
+export function findAiPurchase(orderName: string): AiPurchase | null {
+  return (db.prepare(`SELECT ${PURCHASE_COLS} FROM ai_purchases WHERE order_name = ?`).get(orderName) as AiPurchase | undefined) ?? null;
+}
+
+/** Marca la compra como pagada y acredita. Idempotente. */
+export const markAiPurchasePaid = db.transaction((orderName: string, amountSoles?: string): { ok: boolean; alreadyPaid?: boolean; purchase?: AiPurchase } => {
+  const p = findAiPurchase(orderName);
+  if (!p) return { ok: false };
+  if (p.status === "paid") return { ok: true, alreadyPaid: true, purchase: p };
+  db.prepare(`UPDATE ai_purchases SET status = 'paid', paid_at = datetime('now'), amount_soles = COALESCE(?, amount_soles) WHERE id = ?`)
+    .run(amountSoles ?? null, p.id);
+  grant(p.customerId, p.kind, p.usd);
+  return { ok: true, purchase: { ...p, status: "paid" } };
+});
+
+/** Regalo desde el panel (créditos o 30 días de plan), queda en la lista de compras. */
+export const giftAi = db.transaction((customerId: number, kind: "plan" | "credits", usd: number): void => {
+  const orderName = `regalo-${kind}-${customerId}-${Date.now()}`;
+  db.prepare(`
+    INSERT INTO ai_purchases (customer_id, order_name, kind, amount_soles, usd, status, paid_at) VALUES (?, ?, 'gift', '0', ?, 'paid', datetime('now'))
+  `).run(customerId, orderName, usd);
+  grant(customerId, kind, usd);
+});
+
+export function hasPaidAiPurchase(customerId: number): boolean {
+  return !!db.prepare(`SELECT 1 FROM ai_purchases WHERE customer_id = ? AND status = 'paid' LIMIT 1`).get(customerId);
+}
+
+export function recentAiPurchases(limit = 30): (AiPurchase & { phone: string })[] {
+  return db.prepare(`
+    SELECT ${PURCHASE_COLS.split(", ").map(c => "p." + c).join(", ")}, COALESCE(c.phone, '') AS phone
+    FROM ai_purchases p LEFT JOIN customers c ON c.id = p.customer_id
+    WHERE p.status = 'paid' ORDER BY p.id DESC LIMIT ?
+  `).all(limit) as (AiPurchase & { phone: string })[];
+}
+
+/** Lo vendido que aún no se usa: créditos de todos + lo que queda del ciclo de cada plan vigente. */
+export function outstandingBalance(): { credits: number; plans: number; activePlans: number } {
+  const credits = (db.prepare(`SELECT COALESCE(SUM(credits_usd), 0) AS t FROM ai_wallets`).get() as { t: number }).t;
+  const now = Date.now();
+  const plans = db.prepare(`SELECT customer_id AS customerId, plan_start AS planStart, plan_usd AS planUsd FROM ai_wallets WHERE plan_end > ?`).all(now) as { customerId: number; planStart: number; planUsd: number }[];
+  let left = 0;
+  for (const p of plans) {
+    const cycleStart = p.planStart + Math.floor((now - p.planStart) / PLAN_DAYS_MS) * PLAN_DAYS_MS;
+    left += Math.max(0, p.planUsd - planSpentSince(p.customerId, cycleStart));
+  }
+  return { credits, plans: left, activePlans: plans.length };
+}
+
+/** Pagos pendientes viejos (nunca se pagaron) se limpian. */
+export function cleanupPendingAiPurchases(): void {
+  db.prepare(`DELETE FROM ai_purchases WHERE status = 'pending' AND created_at < datetime('now', '-2 days')`).run();
+}
+
+// ── Borrar todo el historial ──
+
+/** Borra todas las conversaciones del cliente y devuelve los ids de sus imágenes. */
+export const deleteAllConversations = db.transaction((customerId: number): string[] => {
+  const ids = (db.prepare(`SELECT id FROM ai_conversations WHERE customer_id = ?`).all(customerId) as { id: number }[]).map(r => r.id);
+  const images: string[] = [];
+  for (const id of ids) images.push(...listMessages(id).flatMap(m => m.images));
+  db.prepare(`DELETE FROM ai_messages WHERE conversation_id IN (SELECT id FROM ai_conversations WHERE customer_id = ?)`).run(customerId);
+  db.prepare(`DELETE FROM ai_conversations WHERE customer_id = ?`).run(customerId);
+  const orphan = (db.prepare(`SELECT id FROM ai_uploads WHERE customer_id = ?`).all(customerId) as { id: string }[]).map(r => r.id);
+  return [...new Set([...images, ...orphan])];
+});
+
+// ── Links para compartir ──
+
+export type AiShareMessage = { role: "user" | "assistant"; text: string; label?: string; images?: number };
+export type AiShare = {
+  token: string; customerId: number; conversationId: number; title: string; mode: string;
+  messages: AiShareMessage[]; locked: boolean; passHash: string; passSalt: string; views: number; createdAt: string;
+};
+function toShare(r: any): AiShare {
+  let messages: AiShareMessage[] = [];
+  try { messages = JSON.parse(r.messages || "[]"); } catch { /* vacío */ }
+  return {
+    token: r.token, customerId: r.customer_id, conversationId: r.conversation_id, title: r.title, mode: r.mode,
+    messages, locked: !!r.pass_hash, passHash: r.pass_hash, passSalt: r.pass_salt, views: r.views, createdAt: r.created_at,
+  };
+}
+
+export function createShare(s: { token: string; customerId: number; conversationId: number; title: string; mode: string; messages: AiShareMessage[]; passHash: string; passSalt: string }): void {
+  db.prepare(`
+    INSERT INTO ai_shares (token, customer_id, conversation_id, title, mode, messages, pass_hash, pass_salt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(s.token, s.customerId, s.conversationId, s.title, s.mode, JSON.stringify(s.messages), s.passHash, s.passSalt);
+}
+
+export function getShare(token: string): AiShare | null {
+  const r = db.prepare(`SELECT * FROM ai_shares WHERE token = ?`).get(token);
+  return r ? toShare(r) : null;
+}
+
+export function listShares(customerId: number): AiShare[] {
+  return (db.prepare(`SELECT * FROM ai_shares WHERE customer_id = ? ORDER BY created_at DESC LIMIT 100`).all(customerId) as any[]).map(toShare);
+}
+
+export function deleteShare(customerId: number, token: string): boolean {
+  return db.prepare(`DELETE FROM ai_shares WHERE customer_id = ? AND token = ?`).run(customerId, token).changes > 0;
+}
+
+export function deleteAllShares(customerId: number): number {
+  return db.prepare(`DELETE FROM ai_shares WHERE customer_id = ?`).run(customerId).changes;
+}
+
+export function bumpShareViews(token: string): void {
+  db.prepare(`UPDATE ai_shares SET views = views + 1 WHERE token = ?`).run(token);
+}
+
+/** Costo promedio por mensaje del cliente (últimos 30 días; respuesta + selector + resúmenes). */
+export function avgCostPerMessage(customerId: number): number {
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS usd, SUM(kind = 'chat') AS n FROM ai_usage
+    WHERE customer_id = ? AND created_at >= datetime('now', '-30 days')
+  `).get(customerId) as { usd: number; n: number | null };
+  return r.n && r.n >= 3 ? r.usd / r.n : 0;
 }

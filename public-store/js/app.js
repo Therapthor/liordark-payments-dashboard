@@ -213,13 +213,23 @@
     refreshManguitoLink(authed);
   }
 
-  // Manguito Pro (chat con IA, prueba privada): el botón solo aparece para
-  // los celulares que el admin habilitó en el panel.
+  // Manguito Pro (chat con IA): el botón aparece si el cliente ya tiene
+  // acceso (lista del panel o lo compró) o si está a la venta; el banner
+  // del catálogo, solo cuando está a la venta.
   async function refreshManguitoLink(authed) {
     const link = document.getElementById("nav-manguito-link");
-    if (!link) return;
-    if (!authed) { link.hidden = true; return; }
-    try { link.hidden = !(await api("/ai/access")).allowed; } catch { link.hidden = true; }
+    const banner = document.getElementById("manguito-banner");
+    let info = null, allowed = false;
+    try { info = await (await fetch("/api/store/ai-public/info", { credentials: "include" })).json(); } catch { info = null; }
+    if (authed) { try { allowed = !!(await api("/ai/access")).allowed; } catch { allowed = false; } }
+    const onSale = !!(info && info.enabled);
+    if (link) link.hidden = !(allowed || onSale);
+    if (banner) {
+      banner.hidden = !onSale || allowed;
+      const prices = [info && info.monthly ? info.monthly.priceSoles : null, ...((info && info.packs) || []).map(p => p.priceSoles)].filter(x => x);
+      const sub = document.getElementById("manguito-banner-sub");
+      if (sub && prices.length) sub.textContent = "Desde S/ " + Math.min(...prices) + " · sin cuentas raras ni pagos en dólares · pagas con Yape";
+    }
   }
 
   // Curso: solo si está publicado (o, en borrador, para el celular de

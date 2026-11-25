@@ -3,108 +3,152 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="theme-color" content="#2B1B0E">
+<meta name="theme-color" content="#FBF8F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14110E" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex">
 <title>Manguito Pro</title>
 <link rel="icon" href="/assets/logo.webp">
-<link rel="preload" href="/fonts/outfit-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/outfit-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/css/mango-base.css">
 <link rel="stylesheet" href="/css/manguito.css">
 </head>
 <body class="mg">
 
 <div class="mg-app" id="mg-app">
-  <!-- Conversaciones (en el celular, cajón lateral) -->
+  <!-- ═══ Barra lateral ═══ -->
   <aside class="mg-side" id="mg-side" aria-label="Conversaciones">
     <div class="mg-side-top">
       <a class="mg-brand" href="/" title="Volver a la tienda">
-        <img src="/assets/logo.webp" alt="" width="34" height="34">
-        <span><b>Manguito Pro</b><small>Beta privada</small></span>
+        <img src="/assets/logo.webp" alt="" width="30" height="30">
+        <span>Manguito <em>Pro</em></span>
       </a>
-      <button class="mg-icon-btn mg-only-mobile" id="mg-side-close" type="button" aria-label="Cerrar">✕</button>
+      <button class="mg-icon-btn mg-only-mobile" id="mg-side-close" type="button" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
+
     <button class="mg-new" id="mg-new" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nueva conversación
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <span>Nueva conversación</span>
     </button>
-    <p class="mg-side-label">Recientes</p>
-    <ul class="mg-conv-list" id="mg-conv-list"></ul>
+
+    <label class="mg-search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="mg-search" type="search" placeholder="Buscar conversaciones" autocomplete="off">
+    </label>
+
+    <nav class="mg-conv-nav" id="mg-conv-nav" aria-label="Historial"></nav>
     <p class="mg-side-empty" id="mg-conv-empty" hidden>Aún no tienes conversaciones.</p>
-    <button class="mg-side-btn" id="mg-mem-open" type="button">🧠 Lo que recuerdo de ti</button>
-    <a class="mg-back" href="/">← Volver a la tienda</a>
+
+    <!-- Medidor de saldo -->
+    <button class="mg-meter" id="mg-meter" type="button" hidden aria-label="Ver mi saldo"></button>
+
+    <div class="mg-account">
+      <button class="mg-account-btn" id="mg-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+        <span class="mg-avatar" aria-hidden="true">🥭</span>
+        <span class="mg-account-txt"><b>Mi Manguito</b><small id="mg-plan-name">—</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5-5 5 5"/></svg>
+      </button>
+      <div class="mg-menu" id="mg-menu" role="menu" hidden>
+        <button type="button" role="menuitem" data-menu="plans">💳 Planes y recargas</button>
+        <button type="button" role="menuitem" data-menu="memory">🧠 Lo que recuerdo de ti</button>
+        <button type="button" role="menuitem" data-menu="links">🔗 Mis links compartidos</button>
+        <button type="button" role="menuitem" data-menu="wipe" class="danger">🗑️ Borrar todo el historial</button>
+        <a role="menuitem" href="/">← Volver a la tienda</a>
+      </div>
+    </div>
   </aside>
   <div class="mg-scrim" id="mg-scrim" hidden></div>
 
+  <!-- ═══ Principal ═══ -->
   <main class="mg-main" id="mg-main">
     <header class="mg-top">
       <button class="mg-icon-btn mg-only-mobile" id="mg-side-open" type="button" aria-label="Conversaciones">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
       </button>
       <h1 id="mg-title">Manguito Pro</h1>
-      <span class="mg-auto" title="Manguito Pro elige solo el modelo más conveniente para cada pregunta, para no gastar de más.">🥭 Modo automático</span>
-      <span class="mg-usage" id="mg-usage" hidden title="Cuánto usaste de tu Manguito Pro este mes"></span>
+      <span class="mg-chip-auto" title="Manguito Pro elige solo el modelo más conveniente para cada pregunta, para no gastar de más.">
+        <i></i>Automático
+      </span>
+      <button class="mg-share-btn" id="mg-share" type="button" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></svg>
+        <span>Compartir</span>
+      </button>
     </header>
 
-    <!-- Estados sin chat: sin sesión, sin acceso, sin conectar -->
+    <!-- Sin sesión / sin conectar -->
     <section class="mg-gate" id="mg-gate" hidden>
-      <img src="/assets/logo.webp" alt="" width="72" height="72">
+      <img src="/assets/logo.webp" alt="" width="64" height="64">
       <h2 id="mg-gate-title">Manguito Pro</h2>
       <p id="mg-gate-text"></p>
-      <a class="mg-btn" id="mg-gate-btn" href="/#manguito" hidden>Iniciar sesión</a>
+      <a class="mg-btn-dark" id="mg-gate-btn" href="/#manguito" hidden>Iniciar sesión</a>
+    </section>
+
+    <!-- Planes (sin acceso, o «Planes y recargas») -->
+    <section class="mg-plans" id="mg-plans" hidden>
+      <div class="mg-plans-in">
+        <button class="mg-link-back" id="mg-plans-back" type="button" hidden>← Volver al chat</button>
+        <img src="/assets/logo.webp" alt="" width="56" height="56">
+        <h2>Usa Claude con Manguito Pro</h2>
+        <p class="mg-plans-sub">La mejor inteligencia artificial, sin crear cuentas raras ni pagar en dólares. Elige cómo quieres usarla:</p>
+        <div class="mg-plan-grid" id="mg-plan-grid"></div>
+        <p class="mg-plans-foot">Pagas con Yape y se activa solo en segundos. El modelo lo elige Manguito para cada pregunta (Haiku, Sonnet u Opus).</p>
+      </div>
     </section>
 
     <section class="mg-thread" id="mg-thread" aria-live="polite">
       <div class="mg-hello" id="mg-hello">
-        <img src="/assets/logo.webp" alt="" width="64" height="64">
-        <h2>¡Hola! Soy Manguito Pro 🥭</h2>
-        <p>Pregúntame lo que quieras, pega un texto o sube una imagen. Elijo solo el modelo justo para cada pregunta.</p>
+        <img src="/assets/logo.webp" alt="" width="52" height="52">
+        <h2 id="mg-hello-title">¿En qué te ayudo hoy?</h2>
         <div class="mg-sugg" id="mg-sugg">
-          <button type="button" data-prompt="Explícame de forma sencilla cómo funciona la inteligencia artificial.">💡 Explícame algo</button>
-          <button type="button" data-prompt="Corrige la ortografía y mejora este texto: ">✍️ Mejorar un texto</button>
-          <button type="button" data-prompt="Dame 5 ideas para vender más por WhatsApp.">📈 Ideas de negocio</button>
-          <button type="button" data-prompt="¿Qué ves en esta imagen?" data-attach="1">🖼️ Analizar una imagen</button>
+          <button type="button" data-prompt="Explícame de forma sencilla cómo funciona la inteligencia artificial."><b>💡 Explícame algo</b><span>Un tema difícil, en simple</span></button>
+          <button type="button" data-prompt="Corrige la ortografía y mejora este texto: "><b>✍️ Mejora un texto</b><span>Ortografía, tono y claridad</span></button>
+          <button type="button" data-prompt="Dame 5 ideas para vender más por WhatsApp."><b>📈 Ideas de negocio</b><span>Ventas, precios, redes</span></button>
+          <button type="button" data-prompt="¿Qué ves en esta imagen?" data-attach="1"><b>🖼️ Analiza una imagen</b><span>Pégala o súbela</span></button>
         </div>
       </div>
       <div id="mg-messages"></div>
     </section>
 
-    <div class="mg-pause" id="mg-pause" hidden></div>
+    <div class="mg-banner" id="mg-banner" hidden></div>
     <form class="mg-composer" id="mg-composer" autocomplete="off">
-      <div class="mg-thumbs" id="mg-thumbs" hidden></div>
-      <div class="mg-input-row">
-        <label class="mg-icon-btn mg-attach" title="Subir imagen (también puedes pegarla o arrastrarla)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6L15 7.6"/></svg>
-          <input type="file" id="mg-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
-        </label>
+      <div class="mg-box">
+        <div class="mg-thumbs" id="mg-thumbs" hidden></div>
         <textarea id="mg-input" rows="1" placeholder="Escribe tu mensaje…" maxlength="20000" enterkeyhint="send"></textarea>
-        <button class="mg-send" id="mg-send" type="submit" aria-label="Enviar" disabled>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-        </button>
-        <button class="mg-stop" id="mg-stop" type="button" aria-label="Detener" hidden>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
-        </button>
+        <div class="mg-box-bar">
+          <label class="mg-tool" title="Adjuntar imagen (también puedes pegarla o arrastrarla)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6L15 7.6"/></svg>
+            <input type="file" id="mg-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+          </label>
+          <span class="mg-box-hint" id="mg-box-hint">Enter para enviar · Shift+Enter nueva línea</span>
+          <button class="mg-send" id="mg-send" type="submit" aria-label="Enviar" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+          <button class="mg-stop" id="mg-stop" type="button" aria-label="Detener" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+          </button>
+        </div>
       </div>
       <p class="mg-foot" id="mg-foot">Manguito Pro puede equivocarse. Revisa la información importante.</p>
     </form>
 
-    <div class="mg-drop" id="mg-drop" hidden><span>Suelta la imagen aquí 🖼️</span></div>
+    <div class="mg-drop" id="mg-drop" hidden><span>Suelta la imagen aquí</span></div>
   </main>
 </div>
 
 <div class="mg-toast" id="mg-toast" role="status" hidden></div>
 
-<!-- Memoria («cerebro»): lo que Manguito recuerda del cliente -->
-<div class="mg-modal" id="mg-mem" hidden>
-  <div class="mg-modal-card" role="dialog" aria-modal="true" aria-labelledby="mg-mem-title">
-    <h2 id="mg-mem-title">🧠 Lo que recuerdo de ti</h2>
-    <p class="mg-muted">Lo armo solo con tus conversaciones para ayudarte mejor la próxima vez. Nunca guardo contraseñas, PIN ni códigos.</p>
-    <div class="mg-mem-text" id="mg-mem-text"></div>
-    <div class="mg-modal-actions">
-      <button class="mg-btn-ghost" id="mg-mem-clear" type="button">Borrar memoria</button>
-      <button class="mg-btn-solid" id="mg-mem-close" type="button">Cerrar</button>
-    </div>
+<!-- Ventana genérica (memoria, saldo, compartir, links, borrar, pago) -->
+<div class="mg-modal" id="mg-modal" hidden>
+  <div class="mg-modal-card" role="dialog" aria-modal="true" aria-labelledby="mg-modal-title">
+    <button class="mg-modal-x" id="mg-modal-x" type="button" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div id="mg-modal-body"></div>
   </div>
 </div>
 
+<script src="/js/manguito-md.js"></script>
 <script src="/js/manguito.js"></script>
 </body>
 </html>

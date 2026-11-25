@@ -329,6 +329,19 @@ app.get(/^\/cambiar-pin\/[A-Za-z0-9]{6,20}\/?$/, (req, res, next) => {
   res.sendFile(PIN_LINK_PAGE);
 });
 
+// liordark.com/manguito/s/<token> — chat de Manguito Pro compartido por un
+// cliente (público o con contraseña). Misma política estricta del chat.
+const MANGUITO_SHARE_PAGE = path.resolve(process.cwd(), "public-store/manguito/compartido.html");
+app.get(/^\/manguito\/s\/[A-Za-z0-9_-]{22}\/?$/, (req, res, next) => {
+  if (req.hostname === "mayorista.liordark.com" || req.hostname === "panel.liordark.com") return next();
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Content-Security-Policy", MANGUITO_CSP);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Robots-Tag", "noindex");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.sendFile(MANGUITO_SHARE_PAGE);
+});
+
 app.use((req, res, next) => {
   const host = req.hostname;
   if (host === "liordark.com" || host === "www.liordark.com") {

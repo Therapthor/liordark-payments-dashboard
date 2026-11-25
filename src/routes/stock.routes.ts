@@ -39,6 +39,7 @@ import { applyWholesalerCreditChange, creditWasAlreadyApplied } from "../db/whol
 import { applyMembershipPayment, isMembershipReference, membershipDateLabel } from "../db/wholesaler-membership.repository";
 import { createWholesalerNotification } from "../db/wholesaler-notifications.repository";
 import { markCoursePurchasePaid, createPendingPurchase } from "../services/course.service";
+import { onAiPurchasePaid } from "../services/manguito.service";
 import { findCustomerByPhone } from "../db/customer.repository";
 import { emitDashboardEvent } from "../utils/live-events.util";
 import { botImageUrl } from "../services/product-media.service";
@@ -446,6 +447,19 @@ router.post("/course-paid", (req, res) => {
   const amount    = req.body?.amount !== undefined ? String(req.body.amount) : undefined;
   if (!orderName) {
     res.status(400).json({ message: "Falta orderName." });
+    return;
+  }
+
+  // Manguito Pro (plan mensual o créditos) usa el mismo pedido web del bot.
+  const ai = onAiPurchasePaid(orderName, amount);
+  if (ai || String(req.body?.courseId ?? "").startsWith("manguito")) {
+    if (!ai) { res.status(404).json({ message: "Compra de Manguito Pro no encontrada." }); return; }
+    if (ai.ok && !ai.alreadyPaid) {
+      try {
+        emitDashboardEvent({ type: "order_approved", message: "Manguito Pro vendido (" + ai.label + ") — S/ " + (amount ?? ""), createdAt: new Date().toISOString() });
+      } catch { /* no crítico */ }
+    }
+    res.json({ ok: ai.ok, alreadyPaid: !!ai.alreadyPaid });
     return;
   }
 

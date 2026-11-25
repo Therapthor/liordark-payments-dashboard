@@ -2,14 +2,19 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import type Anthropic from "@anthropic-ai/sdk";
+import axios from "axios";
+import { env } from "../config/env";
 import { getAdminSetting, setAdminSetting } from "../db/security.repository";
-import { findCustomerById } from "../db/customer.repository";
+import { findCustomerById, findCustomerByPhone } from "../db/customer.repository";
+import { normalizePeruPhone } from "../utils/phone.util";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
   setSummary, pruneMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
   deleteConversation, deleteUploadRows, getConversation, customerState, setMemory,
   bumpMessagesSinceMemory, registerPause, pausesToday, chatsSince, spentThisMonthByCustomer,
-  type AiMessage, type AiConversation,
+  wallet, setWindowStart, planSpentSince, creditsSpentSince, createAiPurchase, findAiPurchase, markAiPurchasePaid,
+  giftAi, hasPaidAiPurchase, recentAiPurchases, outstandingBalance, cleanupPendingAiPurchases, avgCostPerMessage,
+  type AiMessage, type AiConversation, type UsageSource, type AiWallet,
 } from "../db/manguito.repository";
 
 // ─────────────────────────────────────────────────────────────
@@ -435,7 +440,7 @@ function fallbackRoute(text: string, imageCount: number): { tier: Tier; effort: 
 }
 
 async function chooseRoute(
-  customerId: number, text: string, imageCount: number, prevTier: Tier | null,
+  customerId: number, text: string, imageCount: number, prevTier: Tier | null, source: UsageSource,
 ): Promise<{ tier: Tier; effort: Effort; how: "regla" | "selector" | "respaldo" }> {
   const quick = obviousRoute(text, imageCount, prevTier);
   if (quick) return { ...quick, how: "regla" };
@@ -455,7 +460,7 @@ async function chooseRoute(
       messages: [{ role: "user", content: summary }],
     }));
     const u = usageOf(r.usage);
-    logUsage({ customerId, kind: "router", model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u) });
+    logUsage({ customerId, kind: "router", model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u), source });
     const block = r.content.find(b => b.type === "text");
     const parsed = block && block.type === "text" ? JSON.parse(block.text) : null;
     if (parsed && parsed.tier in TIERS && ["low", "medium", "high"].includes(parsed.effort)) {
@@ -550,44 +555,43 @@ export type ChatEvent =
   | { type: "text"; text: string }
   | { type: "done"; status: "ok" | "stopped" | "refusal" | "error"; messageId: number; message?: string };
 
-export type ChatGate = { ok: true } | { ok: false; status: number; message: string };
+export type ChatGate = { ok: true; source: Source } | { ok: false; status: number; message: string; code?: string };
 
-/** ¿Puede escribir ahora? (configuración, topes, ritmo, una respuesta a la vez). */
+/** ¿Puede escribir ahora? (configuración, saldo o topes, ritmo, una respuesta a la vez). */
 const limaTime = (ms: number) => new Date(ms - 5 * 3600e3).toISOString().slice(11, 16);
+const limaDayTime = (ms: number) => {
+  const d = new Date(ms - 5 * 3600e3).toISOString();
+  return `${d.slice(8, 10)}/${d.slice(5, 7)} a las ${d.slice(11, 16)}`;
+};
 
 export function chatGate(customerId: number): ChatGate {
   if (!isAiConfigured()) return { ok: false, status: 503, message: "Manguito Pro todavía no está conectado." };
-  const cfg = aiConfig();
-  const pause = customerState(customerId).cooldownUntil;
-  if (pause > Date.now()) return { ok: false, status: 429, message: `☕ Manguito está descansando después de mucho uso seguido. Vuelve a las ${limaTime(pause)} y sigues sin problema.` };
-  if (spentThisMonth() >= cfg.monthlyCap) return { ok: false, status: 429, message: "Manguito Pro llegó a su límite de este mes. Vuelve pronto 🥭" };
-  const caps = capsFor(customerId, cfg);
-  if (spentThisMonthByCustomer(customerId) >= caps.monthly) return { ok: false, status: 429, message: "Usaste todo tu Manguito Pro de este mes. El 1 del próximo mes se renueva 🥭" };
-  if (spentTodayByCustomer(customerId) >= caps.daily) return { ok: false, status: 429, message: "Llegaste al límite de uso de hoy. Mañana se renueva 🥭" };
+  const pick = pickSource(customerId);
+  if (!pick.ok) return pick;
   if (activeChats.has(customerId)) return { ok: false, status: 409, message: "Espera a que termine la respuesta anterior." };
   const now = Date.now();
   const recent = (recentByCustomer.get(customerId) || []).filter(t => now - t < 60e3);
   if (recent.length >= MAX_PER_MINUTE) return { ok: false, status: 429, message: "Vas muy rápido: espera un minuto y sigue." };
-  return { ok: true };
+  return pick;
 }
 
-/** Con poco saldo (día o mes del cliente), baja de nivel para no pasarse. */
-function capTierByBudget(tier: Tier, customerId: number): Tier {
-  const caps = capsFor(customerId);
-  const left = Math.min(
-    caps.daily - spentTodayByCustomer(customerId),
-    caps.monthly - spentThisMonthByCustomer(customerId),
-  );
+/** Con poco saldo, baja de nivel para no pasarse. */
+function capTierByBudget(tier: Tier, left: number): Tier {
   if (left < 0.10) return "rapido";
   if (left < 0.40 && tier === "experto") return "equilibrado";
   return tier;
 }
 
 export async function runChat(opts: {
-  customerId: number; conversationId: number; text: string; imageCount: number;
+  customerId: number; conversationId: number; text: string; imageCount: number; source: Source;
   prevTier: Tier | null; signal: AbortSignal; emit: (e: ChatEvent) => void;
 }): Promise<void> {
-  const { customerId, conversationId, signal, emit } = opts;
+  const { customerId, conversationId, signal, emit, source } = opts;
+  // Plan: la ventana de 3 horas empieza con el primer mensaje.
+  if (source.kind === "plan") {
+    const w = wallet(customerId);
+    if (!(w.windowStart > 0 && Date.now() < w.windowStart + WINDOW_MS)) setWindowStart(customerId, Date.now());
+  }
   activeChats.add(customerId);
   recentByCustomer.set(customerId, [...(recentByCustomer.get(customerId) || []).filter(t => Date.now() - t < 60e3), Date.now()]);
 
@@ -599,8 +603,8 @@ export async function runChat(opts: {
   let errorMessage = "";
   let credId = "";
   try {
-    const route = await chooseRoute(customerId, opts.text, opts.imageCount, opts.prevTier);
-    tier = capTierByBudget(route.tier, customerId);
+    const route = await chooseRoute(customerId, opts.text, opts.imageCount, opts.prevTier, source.kind);
+    tier = capTierByBudget(route.tier, source.left);
     const cfg = TIERS[tier];
     model = cfg.model;
     emit({ type: "meta", conversationId, tier, label: cfg.label });
@@ -677,12 +681,12 @@ export async function runChat(opts: {
   }
 
   if (model && (usage.inputTokens || usage.outputTokens)) {
-    logUsage({ customerId, kind: "chat", tier, model, credId, ...usage, costUsd: costUsd(model, usage) });
+    logUsage({ customerId, kind: "chat", tier, model, credId, ...usage, costUsd: costUsd(model, usage), source: source.kind });
   }
   if (status === "refusal" && !text.trim()) text = "Lo siento, con eso no puedo ayudarte. ¿Te ayudo con otra cosa?";
   const messageId = addMessage({ conversationId, role: "assistant", text, tier, model, status });
   emit({ type: "done", status, messageId, ...(errorMessage ? { message: errorMessage } : {}) });
-  afterChat(customerId, conversationId, status === "ok");
+  afterChat(customerId, conversationId, status === "ok", source.kind);
 }
 
 // ── Pausa de 1 hora (como Claude) ──
@@ -703,13 +707,13 @@ function maybePause(customerId: number): void {
 
 /** Después de cada respuesta: ¿toca pausa?; resumen y memoria con el modelo
  *  más barato, en segundo plano (no hace esperar). */
-function afterChat(customerId: number, conversationId: number, ok: boolean): void {
-  maybePause(customerId);
+function afterChat(customerId: number, conversationId: number, ok: boolean, source: UsageSource): void {
+  if (source === "free") maybePause(customerId); // los planes tienen su ventana de 3 h; los créditos, sin límite
   if (!ok) return;
   const pending = bumpMessagesSinceMemory(customerId);
   void (async () => {
-    await compactConversation(customerId, conversationId).catch(() => {});
-    if (pending >= MEMORY_EVERY) await updateMemory(customerId, conversationId).catch(() => {});
+    await compactConversation(customerId, conversationId, source).catch(() => {});
+    if (pending >= MEMORY_EVERY) await updateMemory(customerId, conversationId, source).catch(() => {});
   })();
 }
 
@@ -738,7 +742,7 @@ function transcript(msgs: AiMessage[], maxChars: number): string {
   return out;
 }
 
-async function cheapText(customerId: number, kind: "compact" | "memory", system: string, user: string, maxTokens: number): Promise<string> {
+async function cheapText(customerId: number, kind: "compact" | "memory", source: UsageSource, system: string, user: string, maxTokens: number): Promise<string> {
   const { value: r, cred } = await withCredential(client => client.messages.create({
     model: ROUTER_MODEL,
     max_tokens: maxTokens,
@@ -748,12 +752,12 @@ async function cheapText(customerId: number, kind: "compact" | "memory", system:
     messages: [{ role: "user", content: user }],
   }));
   const u = usageOf(r.usage);
-  logUsage({ customerId, kind, model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u) });
+  logUsage({ customerId, kind, model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u), source });
   const b = r.content.find(x => x.type === "text");
   return b && b.type === "text" ? b.text.trim() : "";
 }
 
-async function summarizeConversation(customerId: number, conversationId: number): Promise<void> {
+async function summarizeConversation(customerId: number, conversationId: number, source: UsageSource): Promise<void> {
   const conv = getConversation(customerId, conversationId);
   if (!conv) return;
   const fresh = listMessages(conversationId).filter(m => m.id > conv.summaryUpto);
@@ -763,7 +767,7 @@ async function summarizeConversation(customerId: number, conversationId: number)
   while (cut < fresh.length && fresh[cut]!.role !== "user") cut++;
   const old = fresh.slice(0, cut);
   if (!old.length) return;
-  const summary = await cheapText(customerId, "compact",
+  const summary = await cheapText(customerId, "compact", source,
     "Resumes conversaciones para poder continuarlas sin releerlas. Escribe en español, en viñetas breves: el tema, datos y decisiones importantes, lo que el cliente pidió, lo que ya se le respondió (lo esencial, incluido código clave si hace falta para seguir) y lo que quedó pendiente. Nada de relleno. Nunca incluyas contraseñas, PIN, códigos de verificación ni números de tarjeta. Máximo 1200 caracteres.",
     (conv.summary ? `Resumen anterior:\n${conv.summary}\n\n` : "") + `Mensajes nuevos a resumir:\n${transcript(old, 24_000)}`,
     700);
@@ -787,11 +791,11 @@ function pruneConversation(customerId: number, conversationId: number): void {
   deleteUploadRows(imgs);
 }
 
-export async function compactConversation(customerId: number, conversationId: number): Promise<void> {
+export async function compactConversation(customerId: number, conversationId: number, source?: UsageSource): Promise<void> {
   if (compacting.has(conversationId)) return;
   compacting.add(conversationId);
   try {
-    await summarizeConversation(customerId, conversationId);
+    await summarizeConversation(customerId, conversationId, source ?? currentSourceKind(customerId));
     pruneConversation(customerId, conversationId);
   } finally {
     compacting.delete(conversationId);
@@ -800,11 +804,11 @@ export async function compactConversation(customerId: number, conversationId: nu
 
 // ── Memoria («cerebro»): lo que Manguito recuerda de cada cliente ──
 
-export async function updateMemory(customerId: number, conversationId: number): Promise<void> {
+export async function updateMemory(customerId: number, conversationId: number, source: UsageSource): Promise<void> {
   const recent = listMessages(conversationId).slice(-12);
   if (!recent.some(m => m.role === "user" && m.text.trim())) return;
   const prev = customerState(customerId).memory;
-  const next = await cheapText(customerId, "memory",
+  const next = await cheapText(customerId, "memory", source,
     [
       "Mantienes la memoria de un asistente sobre UN cliente: datos útiles y duraderos para ayudarlo mejor en el futuro (cómo prefiere que le respondan, su negocio o trabajo, proyectos en curso, temas que le interesan, su nombre si lo dijo).",
       "Devuelve SOLO la memoria actualizada, en viñetas cortas en español, máximo 1200 caracteres. Junta lo anterior con lo nuevo, quita lo repetido u obsoleto.",
@@ -824,9 +828,9 @@ export function clearMemory(customerId: number): void {
   setMemory(customerId, "");
 }
 
-/** Lo que el cliente ve de su uso (sin montos en dólares). `burstLeft`:
+/** Uso gratis (celulares de la lista del panel): % del mes, pausa y
  *  mensajes que le quedan antes de una pausa (null si hoy ya no pausa). */
-export function customerUsage(customerId: number): { monthPct: number; cooldownUntil: number; burstLeft: number | null } {
+function freeUsage(customerId: number): { monthPct: number; cooldownUntil: number; burstLeft: number | null } {
   const cfg = aiConfig();
   const monthly = capsFor(customerId, cfg).monthly;
   const pct = monthly > 0 ? Math.min(100, Math.round(spentThisMonthByCustomer(customerId) / monthly * 100)) : 100;
@@ -843,6 +847,7 @@ export function customerUsage(customerId: number): { monthPct: number; cooldownU
 
 export async function manguitoMaintenance(): Promise<void> {
   if (!isAiConfigured()) return;
+  cleanupPendingAiPurchases();
   for (const c of conversationsToCompact(SUMMARIZE_AT)) {
     await compactConversation(c.customerId, c.id).catch(() => {});
   }
@@ -861,4 +866,266 @@ export function startManguitoMaintenance(): void {
   if (maintenanceTimer) return;
   setTimeout(() => { manguitoMaintenance().catch(() => {}); }, 90_000);
   maintenanceTimer = setInterval(() => { manguitoMaintenance().catch(() => {}); }, 3 * 3600e3);
+}
+
+// ═════════════════════════════════════════════════════════════
+// VENTA DE MANGUITO PRO — plan mensual o créditos (se pagan por Yape)
+//
+// · Plan mensual: un saldo en US$ por cada 30 días, con límites como
+//   Claude para que no se gaste todo de golpe: cada 3 horas (ventana que
+//   empieza con el primer mensaje) y por semana (% del saldo del mes).
+// · Créditos: saldo en US$ sin límites de tiempo: se puede gastar en un día
+//   y recargar. Se descuenta lo que cuesta cada respuesta.
+// · Si el plan llegó a su límite y tiene créditos, sigue con los créditos.
+// · Los celulares de la lista del panel siguen gratis con sus topes.
+// El pago es un pedido web del bot (mismo Yape automático que el curso:
+// courseId «manguito-…»); al confirmarse, el bot avisa a
+// /api/stock/course-paid → onAiPurchasePaid.
+// ═════════════════════════════════════════════════════════════
+
+export type Source = { kind: UsageSource; left: number };
+export const WINDOW_HOURS = 3;
+const WINDOW_MS = WINDOW_HOURS * 3600e3;
+const WEEK_MS = 7 * 24 * 3600e3;
+const CYCLE_MS = 30 * 24 * 3600e3;
+const MIN_CREDITS = 0.003;
+
+const SK = { enabled: "ai_store_enabled", monthly: "ai_plan_monthly", packs: "ai_credit_packs", rate: "ai_exchange_rate" };
+export type MonthlyPlan = { enabled: boolean; priceSoles: number; usd: number; weekPct: number; windowPct: number };
+export type CreditPack = { priceSoles: number; usd: number };
+export type StoreConfig = { enabled: boolean; rate: number; monthly: MonthlyPlan; packs: CreditPack[] };
+const DEFAULT_MONTHLY: MonthlyPlan = { enabled: true, priceSoles: 20, usd: 50, weekPct: 25, windowPct: 4 };
+const DEFAULT_PACKS: CreditPack[] = [{ priceSoles: 20, usd: 4 }, { priceSoles: 50, usd: 11 }, { priceSoles: 100, usd: 24 }];
+
+function readJson<T>(key: string, def: T): T {
+  try { const v = getAdminSetting(key); return v ? JSON.parse(v) as T : def; } catch { return def; }
+}
+
+export function storeConfig(): StoreConfig {
+  const m = { ...DEFAULT_MONTHLY, ...readJson<Partial<MonthlyPlan>>(SK.monthly, {}) };
+  const packs = readJson<CreditPack[]>(SK.packs, DEFAULT_PACKS).filter(p => p && p.priceSoles > 0 && p.usd > 0).slice(0, 4);
+  return { enabled: getAdminSetting(SK.enabled) === "1", rate: num(getAdminSetting(SK.rate), 3.75), monthly: m, packs };
+}
+
+/** Guarda la venta (panel). Devuelve un error legible o null. */
+export function saveStoreConfig(body: any): string | null {
+  const n = (v: unknown) => Number(String(v ?? "").replace(",", "."));
+  if (body?.monthly) {
+    const m = body.monthly;
+    const plan: MonthlyPlan = {
+      enabled: !!m.enabled, priceSoles: n(m.priceSoles), usd: n(m.usd), weekPct: n(m.weekPct), windowPct: n(m.windowPct),
+    };
+    if (!(plan.priceSoles > 0 && plan.priceSoles <= 5000)) return "Precio del plan mensual inválido.";
+    if (!(plan.usd > 0 && plan.usd <= 1000)) return "Saldo del plan mensual inválido (US$ 0.01 a 1000).";
+    if (!(plan.weekPct > 0 && plan.weekPct <= 100)) return "El límite semanal debe ser de 1 a 100 %.";
+    if (!(plan.windowPct > 0 && plan.windowPct <= 100)) return "El límite de 3 horas debe ser de 1 a 100 %.";
+    setAdminSetting(SK.monthly, JSON.stringify(plan));
+  }
+  if (Array.isArray(body?.packs)) {
+    const packs: CreditPack[] = [];
+    for (const p of body.packs.slice(0, 4)) {
+      const price = n(p?.priceSoles), usd = n(p?.usd);
+      if (!price && !usd) continue;
+      if (!(price > 0 && price <= 5000 && usd > 0 && usd <= 1000)) return "Revisa los paquetes de créditos (precio en S/ y saldo en US$).";
+      packs.push({ priceSoles: Math.round(price * 100) / 100, usd: Math.round(usd * 100) / 100 });
+    }
+    setAdminSetting(SK.packs, JSON.stringify(packs));
+  }
+  if (body?.rate !== undefined) {
+    const r = n(body.rate);
+    if (!(r > 1 && r < 10)) return "Tipo de cambio inválido.";
+    setAdminSetting(SK.rate, String(r));
+  }
+  if (body?.enabled !== undefined) setAdminSetting(SK.enabled, body.enabled ? "1" : "0");
+  return null;
+}
+
+// ── Estado del plan ──
+
+export type Limit = { used: number; limit: number; resetsAt: number };
+export type PlanStatus = { endsAt: number; usd: number; cycle: Limit; week: Limit; window: Limit };
+
+function planStatus(customerId: number, w: AiWallet = wallet(customerId), now = Date.now()): PlanStatus | null {
+  if (!(w.planEnd > now) || w.planUsd <= 0) return null;
+  const cfg = storeConfig().monthly;
+  const cycleStart = w.planStart + Math.floor((now - w.planStart) / CYCLE_MS) * CYCLE_MS;
+  const cycleEnd = Math.min(cycleStart + CYCLE_MS, w.planEnd);
+  const weekStart = cycleStart + Math.floor((now - cycleStart) / WEEK_MS) * WEEK_MS;
+  const weekEnd = Math.min(weekStart + WEEK_MS, cycleEnd);
+  const windowOpen = w.windowStart > 0 && now < w.windowStart + WINDOW_MS;
+  const r2 = (x: number) => Math.round(x * 10000) / 10000;
+  return {
+    endsAt: w.planEnd,
+    usd: w.planUsd,
+    cycle: { used: r2(planSpentSince(customerId, cycleStart)), limit: w.planUsd, resetsAt: cycleEnd },
+    week: { used: r2(planSpentSince(customerId, weekStart)), limit: r2(w.planUsd * cfg.weekPct / 100), resetsAt: weekEnd },
+    window: windowOpen
+      ? { used: r2(planSpentSince(customerId, Math.max(w.windowStart, cycleStart))), limit: r2(w.planUsd * cfg.windowPct / 100), resetsAt: w.windowStart + WINDOW_MS }
+      : { used: 0, limit: r2(w.planUsd * cfg.windowPct / 100), resetsAt: 0 },
+  };
+}
+
+function planBlock(p: PlanStatus): string | null {
+  const plural = p.cycle.resetsAt >= p.endsAt ? "Tu plan vence" : "Se renueva";
+  if (p.cycle.used >= p.cycle.limit) return `Usaste todo el saldo de este mes. ${plural} el ${limaDayTime(p.cycle.resetsAt)}.`;
+  if (p.week.used >= p.week.limit) return `Llegaste al límite de esta semana. Se renueva el ${limaDayTime(p.week.resetsAt)}.`;
+  if (p.window.resetsAt && p.window.used >= p.window.limit) return `☕ Llegaste al límite de estas ${WINDOW_HOURS} horas. Vuelve a las ${limaTime(p.window.resetsAt)} y sigues sin problema.`;
+  return null;
+}
+
+function planLeft(p: PlanStatus): number {
+  return Math.min(p.cycle.limit - p.cycle.used, p.week.limit - p.week.used, p.window.limit - p.window.used);
+}
+
+// ── ¿De dónde sale el próximo mensaje? plan → créditos → gratis ──
+
+type FreeCheck = { ok: true; source: Source } | { ok: false; listed: boolean; status: number; message: string };
+
+function freeSource(customerId: number): FreeCheck {
+  const c = findCustomerById(customerId);
+  if (!c || !isAiAllowedPhone(c.phone)) return { ok: false, listed: false, status: 402, message: "" };
+  const cfg = aiConfig();
+  const pause = customerState(customerId).cooldownUntil;
+  if (pause > Date.now()) return { ok: false, listed: true, status: 429, message: `☕ Manguito está descansando después de mucho uso seguido. Vuelve a las ${limaTime(pause)} y sigues sin problema.` };
+  if (spentThisMonth() >= cfg.monthlyCap) return { ok: false, listed: true, status: 429, message: "Manguito Pro llegó a su límite de este mes. Vuelve pronto 🥭" };
+  const caps = capsFor(customerId, cfg);
+  const month = spentThisMonthByCustomer(customerId), today = spentTodayByCustomer(customerId);
+  if (month >= caps.monthly) return { ok: false, listed: true, status: 429, message: "Usaste todo tu Manguito Pro de este mes. El 1 del próximo mes se renueva 🥭" };
+  if (today >= caps.daily) return { ok: false, listed: true, status: 429, message: "Llegaste al límite de uso de hoy. Mañana se renueva 🥭" };
+  return { ok: true, source: { kind: "free", left: Math.min(caps.monthly - month, caps.daily - today, cfg.monthlyCap - spentThisMonth()) } };
+}
+
+type Pick = { ok: true; source: Source } | { ok: false; status: number; message: string; code: string };
+
+export function pickSource(customerId: number): Pick {
+  const w = wallet(customerId);
+  const plan = planStatus(customerId, w);
+  const blocked = plan ? planBlock(plan) : null;
+  if (plan && !blocked) return { ok: true, source: { kind: "plan", left: planLeft(plan) } };
+  if (w.credits > MIN_CREDITS) return { ok: true, source: { kind: "credits", left: w.credits } };
+  const free = freeSource(customerId);
+  if (free.ok) return free;
+  const store = storeConfig();
+  const canRecharge = store.enabled && store.packs.length > 0;
+  if (blocked) return { ok: false, status: 429, code: "plan_limit", message: blocked + (canRecharge ? " Si no quieres esperar, puedes recargar créditos." : "") };
+  if (free.listed) return { ok: false, status: free.status, code: "free_limit", message: free.message };
+  if (hasPaidAiPurchase(customerId)) return { ok: false, status: 402, code: "no_balance", message: "Te quedaste sin saldo. Recarga para seguir conversando 🥭" };
+  return { ok: false, status: 402, code: "no_access", message: "Para usar Manguito Pro elige un plan 🥭" };
+}
+
+function currentSourceKind(customerId: number): UsageSource {
+  const p = pickSource(customerId);
+  return p.ok ? p.source.kind : "free";
+}
+
+/** ¿Puede entrar al chat? (lista del panel, o compró alguna vez). */
+export function hasAiAccess(customer: { id: number; phone: string }): boolean {
+  if (isAiAllowedPhone(customer.phone) || hasPaidAiPurchase(customer.id)) return true;
+  const w = wallet(customer.id);
+  return w.credits > 0 || w.planEnd > Date.now();
+}
+
+// ── Medidor para el cliente ──
+
+export function customerMeter(customerId: number) {
+  const w = wallet(customerId);
+  const now = Date.now();
+  const plan = planStatus(customerId, w, now);
+  const c = findCustomerById(customerId);
+  const listed = !!c && isAiAllowedPhone(c.phone);
+  const day = creditsSpentSince(customerId, now - 24 * 3600e3);
+  const avg = avgCostPerMessage(customerId) || 0.02;
+  const pick = pickSource(customerId);
+  return {
+    plan,
+    credits: (w.credits > 0 || hasPaidAiPurchase(customerId)) ? {
+      balance: Math.round(w.credits * 10000) / 10000,
+      spent24h: Math.round(day.usd * 10000) / 10000,
+      messages24h: day.messages,
+      estMessages: Math.floor(w.credits / avg),
+      hoursLeft: w.credits > MIN_CREDITS && day.usd > 0.001 ? Math.round(w.credits / (day.usd / 24) * 10) / 10 : null,
+    } : null,
+    free: listed ? freeUsage(customerId) : null,
+    canChat: pick.ok,
+    source: pick.ok ? pick.source.kind : null,
+    block: pick.ok ? null : { code: pick.code, message: pick.message },
+  };
+}
+
+/** Lo que la tienda y la página de planes muestran (sin sesión también). */
+export function publicStoreInfo() {
+  const s = storeConfig();
+  return {
+    enabled: s.enabled && isAiConfigured(),
+    windowHours: WINDOW_HOURS,
+    monthly: s.monthly.enabled ? { priceSoles: s.monthly.priceSoles, usd: s.monthly.usd, weekPct: s.monthly.weekPct, windowPct: s.monthly.windowPct } : null,
+    packs: s.packs,
+  };
+}
+
+// ── Compra ──
+
+export async function startAiPurchase(customer: { id: number; phone: string }, kind: "plan" | "credits", pack: number):
+  Promise<{ ok: true; orderName: string; amount: string } | { ok: false; status: number; message: string }> {
+  const s = storeConfig();
+  if (!s.enabled || !isAiConfigured()) return { ok: false, status: 403, message: "Manguito Pro todavía no está a la venta." };
+  let price: number, usd: number, label: string;
+  if (kind === "plan") {
+    if (!s.monthly.enabled) return { ok: false, status: 400, message: "El plan mensual no está disponible." };
+    price = s.monthly.priceSoles; usd = s.monthly.usd; label = "Manguito Pro — Plan mensual";
+  } else {
+    const p = s.packs[pack];
+    if (!p) return { ok: false, status: 400, message: "Ese paquete ya no existe. Recarga la página." };
+    price = p.priceSoles; usd = p.usd; label = `Manguito Pro — Créditos US$ ${p.usd}`;
+  }
+  try {
+    const r = await axios.post(
+      env.BOT_BASE_URL + "/api/web-orders",
+      { phone: normalizePeruPhone(customer.phone), course: { courseId: kind === "plan" ? "manguito-plan" : "manguito-creditos", price, label } },
+      { headers: { "x-dashboard-key": env.DASHBOARD_API_KEY }, timeout: 15_000 },
+    );
+    const { orderName, amount } = r.data as { orderName: string; amount: string };
+    if (!orderName) throw new Error("sin pedido");
+    createAiPurchase({ customerId: customer.id, orderName, kind, amountSoles: String(amount ?? price), usd });
+    return { ok: true, orderName, amount: String(amount) };
+  } catch (err: any) {
+    return { ok: false, status: err?.response?.status || 502, message: err?.response?.data?.message || "No se pudo crear el pago. Intenta de nuevo." };
+  }
+}
+
+export function aiPurchaseStatus(customerId: number, orderName: string): { found: boolean; paid: boolean } {
+  const p = findAiPurchase(orderName);
+  if (!p || p.customerId !== customerId) return { found: false, paid: false };
+  return { found: true, paid: p.status === "paid" };
+}
+
+/** El bot confirmó el Yape. null si no es una compra de Manguito Pro. */
+export function onAiPurchasePaid(orderName: string, amount?: string): { ok: boolean; alreadyPaid?: boolean; label?: string } | null {
+  if (!findAiPurchase(orderName)) return null;
+  const r = markAiPurchasePaid(orderName, amount);
+  const p = r.purchase;
+  return { ok: r.ok, alreadyPaid: !!r.alreadyPaid, label: p ? (p.kind === "plan" ? "Plan mensual" : `Créditos US$ ${p.usd}`) : "" };
+}
+
+// ── Panel ──
+
+export function storeAdminView() {
+  const s = storeConfig();
+  return {
+    store: s,
+    outstanding: outstandingBalance(),
+    purchases: recentAiPurchases(30).map(p => ({ ...p, phone: p.phone ? "•••" + p.phone.slice(-3) : "" })),
+  };
+}
+
+/** Regalar créditos o 30 días de plan a un cliente (por celular). */
+export function giftToPhone(phoneRaw: string, kind: "plan" | "credits", usdRaw: unknown): string | null {
+  const phone = normalizePeruPhone(String(phoneRaw || ""));
+  const c = findCustomerByPhone(phone);
+  if (!c) return "No hay un cliente con ese celular en la tienda.";
+  const usd = Number(String(usdRaw ?? "").replace(",", "."));
+  const amount = kind === "plan" ? (usd > 0 ? usd : storeConfig().monthly.usd) : usd;
+  if (!(amount > 0 && amount <= 1000)) return "Monto inválido (US$ 0.01 a 1000).";
+  giftAi(c.id, kind, Math.round(amount * 100) / 100);
+  return null;
 }

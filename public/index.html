@@ -967,6 +967,39 @@
             <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">💵</span><div><b>Gasto estimado</b><small>Según los precios oficiales por token; el saldo real lo ves en tu cuenta de la API.</small></div></div>
             <div id="mgp-usage" class="mgp-usage"></div>
           </div>
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">🛒</span><div><b>Venta de Manguito Pro</b><small>Plan mensual (con límites cada 3 horas y por semana) y créditos (sin límites). Se paga con Yape como el resto de la tienda.</small></div></div>
+            <form id="mgs-form" autocomplete="off">
+              <label class="mgp-check"><input type="checkbox" id="mgs-enabled" /> Mostrar Manguito Pro a la venta en la tienda</label>
+              <p class="mgp-label">Plan mensual (30 días)</p>
+              <label class="mgp-check"><input type="checkbox" id="mgs-m-enabled" /> Vender plan mensual</label>
+              <div class="mgp-caps">
+                <label>Precio (S/)<input id="mgs-m-price" type="number" min="0" step="0.1" /></label>
+                <label>Saldo de uso al mes (US$)<input id="mgs-m-usd" type="number" min="0" step="0.5" /></label>
+                <label>Límite por semana (% del mes)<input id="mgs-m-week" type="number" min="1" max="100" step="1" /></label>
+                <label>Límite cada 3 horas (% del mes)<input id="mgs-m-window" type="number" min="1" max="100" step="0.5" /></label>
+              </div>
+              <p class="mgp-calc" id="mgs-m-calc"></p>
+              <p class="mgp-label">Paquetes de créditos (sin límites de tiempo; deja vacío para no usarlo)</p>
+              <div class="mgp-packs" id="mgs-packs"></div>
+              <div class="mgp-caps">
+                <label>Tipo de cambio (S/ por US$)<input id="mgs-rate" type="number" min="1" max="10" step="0.01" /></label>
+              </div>
+              <div class="mgp-actions"><button class="btn-primary" type="submit">Guardar venta</button></div>
+              <p class="text-muted" id="mgs-msg"></p>
+            </form>
+            <div id="mgs-stats"></div>
+            <form id="mgs-gift" class="mgp-gift" autocomplete="off">
+              <p class="mgp-label">Regalar saldo a un cliente</p>
+              <div class="mgp-caps">
+                <label>Celular<input id="mgs-g-phone" type="tel" placeholder="9XXXXXXXX" /></label>
+                <label>Qué regalar<select id="mgs-g-kind"><option value="credits">Créditos</option><option value="plan">30 días de plan mensual</option></select></label>
+                <label>Monto (US$)<input id="mgs-g-usd" type="number" min="0" step="0.5" placeholder="Plan: vacío = el del plan" /></label>
+              </div>
+              <div class="mgp-actions"><button class="btn-secondary" type="submit">Regalar</button></div>
+              <p class="text-muted" id="mgs-msg2"></p>
+            </form>
+          </div>
         </div>
 
         <!-- PUBLICIDAD — ver public/js/marketing.js y routes/marketing.routes.ts -->

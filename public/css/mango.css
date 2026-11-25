@@ -2416,3 +2416,17 @@ button.mp-kpi:active { transform: scale(0.98); }
 .mgp-chip.off { background: #ECECEC; color: #555; }
 .mgp-add-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
 @media (max-width: 640px) { .mgp-add-row { grid-template-columns: 1fr; } }
+
+/* Venta de Manguito Pro (Configuración › 🥭 Manguito Pro) */
+#mgs-form, #mgs-gift { display: flex; flex-direction: column; gap: 6px; }
+#mgs-form input[type=number], #mgs-gift input, #mgs-gift select { width: 100%; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--mp-line, #F3E2C4); background: #fff; }
+.mgp-check { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; margin: 4px 0; }
+.mgp-check input { width: 18px; height: 18px; }
+.mgp-calc { margin: 4px 0 6px; font-size: 13px; color: var(--mp-muted, #8A6E4B); }
+.mgp-calc.bad { color: #B3261E; font-weight: 700; }
+.mgp-calc.good { color: #1F6B44; font-weight: 700; }
+.mgp-packs { display: grid; gap: 8px; }
+.mgp-pack-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 8px; align-items: center; }
+.mgp-pack-row small { font-size: 12.5px; }
+.mgp-gift { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--mp-line, #F3E2C4); }
+@media (max-width: 640px) { .mgp-pack-row { grid-template-columns: 1fr 1fr; } .mgp-pack-row small { grid-column: 1 / -1; } }

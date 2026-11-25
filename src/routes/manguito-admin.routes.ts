@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   aiConfig, saveAiConfig, testAiConnection, isAiConfigured, listCredentials, credentialState,
-  addCredential, editCredential, deleteCredential,
+  addCredential, editCredential, deleteCredential, storeAdminView, saveStoreConfig, giftToPhone,
 } from "../services/manguito.service";
 import { usageSummary, monthSpendByCredential } from "../db/manguito.repository";
 
@@ -27,6 +27,7 @@ function view() {
     clientMonthlyCap: c.clientMonthlyCap,
     monthlyCap: c.monthlyCap,
     usage: usageSummary(),
+    ...storeAdminView(),
   };
 }
 
@@ -38,6 +39,20 @@ router.get("/", (_req, res) => {
 // Celulares con acceso y topes.
 router.post("/", (req, res) => {
   const err = saveAiConfig(req.body);
+  if (err) { res.status(400).json({ message: err }); return; }
+  res.json(view());
+});
+
+// Venta: activar en la tienda, plan mensual, paquetes de créditos, tipo de cambio.
+router.post("/store", (req, res) => {
+  const err = saveStoreConfig(req.body);
+  if (err) { res.status(400).json({ message: err }); return; }
+  res.json(view());
+});
+
+// Regalar créditos o 30 días de plan a un cliente (por celular).
+router.post("/gift", (req, res) => {
+  const err = giftToPhone(req.body?.phone, req.body?.kind === "plan" ? "plan" : "credits", req.body?.usd);
   if (err) { res.status(400).json({ message: err }); return; }
   res.json(view());
 });

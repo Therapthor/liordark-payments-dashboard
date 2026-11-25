@@ -60,6 +60,64 @@
           u.byTier.map(r => `<tr><td>${esc(TIER_NAMES[r.tier] || r.tier)}</td><td>${r.calls}</td><td>${usd(r.usd)}</td></tr>`).join("") +
           `</tbody></table>`
         : `<p class="text-muted">Todavía no hay uso este mes.</p>`);
+    renderStore(v);
+  }
+
+  // ── Venta (plan mensual y créditos) ──
+  const PACK_ROWS = 4;
+  function renderStore(v) {
+    const st = v.store;
+    if (!st || !$("mgs-form")) return;
+    $("mgs-enabled").checked = !!st.enabled;
+    $("mgs-m-enabled").checked = !!st.monthly.enabled;
+    $("mgs-m-price").value = st.monthly.priceSoles;
+    $("mgs-m-usd").value = st.monthly.usd;
+    $("mgs-m-week").value = st.monthly.weekPct;
+    $("mgs-m-window").value = st.monthly.windowPct;
+    $("mgs-rate").value = st.rate;
+    let rows = "";
+    for (let i = 0; i < PACK_ROWS; i++) {
+      const p = st.packs[i] || { priceSoles: "", usd: "" };
+      rows += `<div class="mgp-pack-row"><input type="number" min="0" step="0.1" placeholder="Precio S/" data-pack="${i}" data-f="priceSoles" value="${esc(p.priceSoles)}" />` +
+        `<input type="number" min="0" step="0.5" placeholder="Saldo US$" data-pack="${i}" data-f="usd" value="${esc(p.usd)}" /><small class="mgp-calc" id="mgs-pc-${i}"></small></div>`;
+    }
+    $("mgs-packs").innerHTML = rows;
+    calcStore();
+    const o = v.outstanding || { credits: 0, plans: 0, activePlans: 0 };
+    const sales = v.purchases || [];
+    $("mgs-stats").innerHTML =
+      `<div class="mgp-stats"><div><b>${usd(o.credits + o.plans)}</b><span>Saldo vendido aún sin usar (créditos ${usd(o.credits)} + planes ${usd(o.plans)})</span></div>` +
+      `<div><b>${o.activePlans}</b><span>Planes mensuales activos</span></div></div>` +
+      `<p class="text-muted">Tu cuenta de la API debe tener al menos ese saldo para cumplirle a todos.</p>` +
+      (sales.length
+        ? `<table class="mgp-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Qué</th><th>Pagó</th><th>Saldo</th></tr></thead><tbody>` +
+          sales.map(p => `<tr><td>${esc(String(p.paidAt || p.createdAt).slice(0, 16))}</td><td>${esc(p.phone)}</td><td>${p.kind === "plan" ? "Plan mensual" : p.kind === "gift" ? "🎁 Regalo" : "Créditos"}</td><td>${p.kind === "gift" ? "—" : "S/ " + esc(p.amountSoles)}</td><td>${usd(p.usd)}</td></tr>`).join("") +
+          `</tbody></table>`
+        : `<p class="text-muted">Todavía no hay ventas.</p>`);
+  }
+
+  // Ganancia o pérdida si el cliente usa TODO su saldo.
+  function margin(priceSoles, usdAmount) {
+    const rate = Number($("mgs-rate").value) || 3.75;
+    const cost = usdAmount * rate;
+    return { cost, diff: priceSoles - cost };
+  }
+  function calcLine(el, price, amount, extra) {
+    if (!el) return;
+    if (!(price > 0 && amount > 0)) { el.textContent = ""; el.className = "mgp-calc"; return; }
+    const m = margin(price, amount);
+    el.textContent = `Si lo usa todo te cuesta ≈ S/ ${m.cost.toFixed(2)} → ${m.diff >= 0 ? "ganas" : "pierdes"} S/ ${Math.abs(m.diff).toFixed(2)}${extra || ""}`;
+    el.className = "mgp-calc " + (m.diff >= 0 ? "good" : "bad");
+  }
+  function calcStore() {
+    const usdM = Number($("mgs-m-usd").value) || 0;
+    const week = usdM * (Number($("mgs-m-week").value) || 0) / 100;
+    const win = usdM * (Number($("mgs-m-window").value) || 0) / 100;
+    calcLine($("mgs-m-calc"), Number($("mgs-m-price").value), usdM, ` · por semana hasta ${usd(week)} · cada 3 h hasta ${usd(win)}`);
+    for (let i = 0; i < PACK_ROWS; i++) {
+      const pr = document.querySelector(`[data-pack="${i}"][data-f="priceSoles"]`), us = document.querySelector(`[data-pack="${i}"][data-f="usd"]`);
+      if (pr && us) calcLine($("mgs-pc-" + i), Number(pr.value), Number(us.value));
+    }
   }
 
   async function call(method, path, body) {
@@ -84,6 +142,34 @@
 
   function init() {
     if (!$("mgp-add")) return;
+    if ($("mgs-form")) {
+      $("mgs-form").addEventListener("input", calcStore);
+      $("mgs-form").addEventListener("submit", async e => {
+        e.preventDefault();
+        msg("Guardando…", "mgs-msg");
+        const packs = [];
+        for (let i = 0; i < PACK_ROWS; i++) {
+          const pr = document.querySelector(`[data-pack="${i}"][data-f="priceSoles"]`).value, us = document.querySelector(`[data-pack="${i}"][data-f="usd"]`).value;
+          if (pr || us) packs.push({ priceSoles: pr, usd: us });
+        }
+        try {
+          render(await call("POST", "/store", {
+            enabled: $("mgs-enabled").checked, rate: $("mgs-rate").value, packs,
+            monthly: { enabled: $("mgs-m-enabled").checked, priceSoles: $("mgs-m-price").value, usd: $("mgs-m-usd").value, weekPct: $("mgs-m-week").value, windowPct: $("mgs-m-window").value },
+          }));
+          msg("✅ Guardado.", "mgs-msg");
+        } catch (err) { msg("⚠️ " + err.message, "mgs-msg"); }
+      });
+      $("mgs-gift").addEventListener("submit", async e => {
+        e.preventDefault();
+        msg("Regalando…", "mgs-msg2");
+        try {
+          render(await call("POST", "/gift", { phone: $("mgs-g-phone").value, kind: $("mgs-g-kind").value, usd: $("mgs-g-usd").value }));
+          $("mgs-g-phone").value = ""; $("mgs-g-usd").value = "";
+          msg("✅ Listo, ya lo tiene en su Manguito Pro.", "mgs-msg2");
+        } catch (err) { msg("⚠️ " + err.message, "mgs-msg2"); }
+      });
+    }
     $("mgp-add").addEventListener("submit", async e => {
       e.preventDefault();
       const body = { label: $("mgp-label").value, baseUrl: $("mgp-base").value };
