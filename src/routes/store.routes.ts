@@ -1,5 +1,6 @@
 import { Router } from "express";
 import axios from "axios";
+import { tiktokPixelId } from "./marketing.routes";
 import { env } from "../config/env";
 import { requireCustomerSession, type RequestWithCustomer } from "../services/customer-auth.service";
 import { findCustomerById, setCustomerEmail, findCustomerByEmail } from "../db/customer.repository";
@@ -505,6 +506,13 @@ router.post("/renew-pack/:code/order", async (req, res) => {
     const message = err?.response?.data?.message || "No se pudo generar el monto. Intenta de nuevo en unos segundos.";
     res.status(err?.response?.status === 422 ? 409 : 502).json({ message });
   }
+});
+
+// GET /api/store/tracking — ID del píxel de TikTok (o null). Público: la
+// tienda lo carga solo si el admin lo configuró en el panel.
+router.get("/tracking", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ tiktokPixelId: tiktokPixelId() });
 });
 
 // GET /api/store/catalog — productos + combos activos, con disponibilidad

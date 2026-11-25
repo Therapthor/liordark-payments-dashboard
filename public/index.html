@@ -756,6 +756,7 @@
           <button class="config-subnav-item" data-config-section="avisos">📣 Avisos</button>
           <button class="config-subnav-item" data-config-section="reviews">⭐ Reseñas <span class="rvw-badge" id="reviews-pending-badge" hidden></span></button>
           <button class="config-subnav-item" data-config-section="mail">📧 Correos</button>
+          <button class="config-subnav-item" data-config-section="marketing">📈 Publicidad</button>
           <button class="config-subnav-item" data-config-section="security">🔒 Seguridad</button>
           <button class="config-subnav-item" data-config-section="backup">💾 Copias</button>
         </div>
@@ -908,6 +909,22 @@
 
           <div id="avisos-grid" class="avisos-grid"><p class="panel-hint">Cargando…</p></div>
 
+        </div>
+
+        <!-- PUBLICIDAD — ver public/js/marketing.js y routes/marketing.routes.ts -->
+        <div id="config-section-marketing" class="config-section" hidden>
+          <div class="panel-header standalone">
+            <h2>Publicidad</h2>
+          </div>
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">♪</span><div><b>Píxel de TikTok</b><small>Mide qué anuncios traen ventas en liordark.com</small></div></div>
+            <form id="mkt-tiktok-form" class="mlc-row" autocomplete="off">
+              <input id="mkt-tiktok-id" placeholder="ID del píxel (ej. C4ABC123DEF456GHI789)" spellcheck="false" />
+              <button class="btn-secondary" type="submit">Guardar</button>
+            </form>
+            <p class="text-muted" id="mkt-tiktok-status"></p>
+            <p class="text-muted" style="margin-top:8px;font-size:13px;line-height:1.5">Dónde está el ID: TikTok Ads Manager › Herramientas › Eventos › Eventos web › tu píxel (el código de letras y números debajo del nombre). Al guardarlo, la tienda le avisa a TikTok: visitas, producto visto, inicio de pago, compra pagada y cuenta nueva. Para apagarlo, borra el ID y guarda.</p>
+          </div>
         </div>
 
         <div id="config-section-mail" class="config-section" hidden>
@@ -1992,6 +2009,7 @@
   <script src="js/mango.js"></script>
   <script src="js/mango-views.js"></script>
   <script src="js/rest.js"></script>
+  <script src="js/marketing.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

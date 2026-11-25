@@ -405,6 +405,7 @@
     document.getElementById("config-section-reviews").hidden         = section !== "reviews";
     document.getElementById("config-section-mail").hidden            = section !== "mail";
     document.getElementById("config-section-backup").hidden          = section !== "backup";
+    document.getElementById("config-section-marketing").hidden       = section !== "marketing";
     document.querySelectorAll(".config-subnav-item[data-config-section]").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.configSection === section);
     });
@@ -417,6 +418,7 @@
     if (section === "reviews" && window.LiordarkReviews) window.LiordarkReviews.load();
     if (section === "mail" && window.LiordarkMail) window.LiordarkMail.load();
     if (section === "backup" && window.LiordarkBackup) window.LiordarkBackup.load();
+    if (section === "marketing" && window.LiordarkMarketing) window.LiordarkMarketing.load();
   }
 
   function initConfigSubnav() {

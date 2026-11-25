@@ -279,7 +279,8 @@
       const btn   = document.getElementById("quick-submit");
       btn.disabled = true;
       try {
-        await api("/auth/quick", { method: "POST", body: { phone, email, password: pin } });
+        const done = await api("/auth/quick", { method: "POST", body: { phone, email, password: pin } });
+        if (done && done.created) adTrack("CompleteRegistration", {});
         await onAuthenticated();
       } catch (err) {
         setFormError("quick-error", err.message);
@@ -1215,6 +1216,7 @@
       });
       activeSaleCode = null;
 
+      adBeginCheckout("combo-armado", "Combo: " + platforms.join(" + "), order.amount, order.orderName);
       await ensureYapeInfo();
       document.getElementById("checkout-amount").textContent = "S/ " + order.amount;
       document.getElementById("checkout-amount-copy").dataset.copy = order.amount;
@@ -1307,6 +1309,7 @@
 
     const title = kind === "combo" ? item.name : item.title;
     const desc  = productDesc(item, kind);
+    adTrack("ViewContent", adContent(kind === "combo" ? "combo-" + id : id, title, item.price));
     const needsCanvaEmail = kind === "platform" && isManualActivationPlatform(item.platform);
     const needsPassword   = kind === "platform" && requiresPasswordPlatform(item.platform);
     const outOfStock = isOutOfStock(item, kind);
@@ -1721,6 +1724,7 @@
       if (activeSaleCode) body.saleLink = activeSaleCode;
       const order = await api("/checkout", { method: "POST", body });
       activeSaleCode = null;
+      adBeginCheckout(kind === "combo" ? "combo-" + id : id, platformLabel || id, order.amount, order.orderName);
 
       await ensureYapeInfo();
 
@@ -1768,6 +1772,7 @@
   //    perdió/tardó) → mensaje neutro «Procesando tu pedido».
   function showCheckoutReserved(reserveInfo, paid) {
     const isPaid = !!paid && reserveInfo.amount !== null;
+    if (isPaid) adPurchaseDone();
     document.getElementById("checkout-reserved").classList.toggle("is-paid", isPaid);
     document.getElementById("checkout-reserved-icon").textContent = isPaid ? "✓" : "⏳";
     document.getElementById("checkout-reserved-title").textContent = isPaid ? "¡Pago aprobado!" : "Procesando tu pedido";
@@ -1962,6 +1967,7 @@
   }
 
   function showCheckoutSuccess(newAccounts) {
+    adPurchaseDone();
     const container = document.getElementById("checkout-success-accounts");
     container.innerHTML = newAccounts.map(successAccountHtml).join("");
     wireSuccessCopyButtons(container, newAccounts);
@@ -2375,6 +2381,62 @@
     });
   }
 
+  // ── Píxel de TikTok (publicidad) ──
+  // Solo si el admin pegó el ID en el panel (Configuración › 📈 Publicidad).
+  // Eventos: PageView (al cargar), ViewContent (abre un producto),
+  // InitiateCheckout (se le muestra el monto a pagar), Purchase (pago
+  // aprobado) y CompleteRegistration (cuenta nueva). Sin ID no carga nada.
+  // Nunca se manda el celular, el correo ni el PIN del cliente.
+  let adCheckout = null; // compra en curso: se reporta una sola vez al aprobarse
+  function loadTikTokPixel(pixelId) {
+    if (!pixelId || window.ttq) return;
+    /* Código base oficial de TikTok (cola de eventos hasta que carga events.js). */
+    !function (w, d, t) {
+      w.TiktokAnalyticsObject = t; var ttq = w[t] = w[t] || [];
+      ttq.methods = ["page", "track", "identify", "instances", "debug", "on", "off", "once", "ready", "alias", "group", "enableCookie", "disableCookie", "holdConsent", "revokeConsent", "grantConsent"];
+      ttq.setAndDefer = function (t, e) { t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); }; };
+      for (var i = 0; i < ttq.methods.length; i++) ttq.setAndDefer(ttq, ttq.methods[i]);
+      ttq.instance = function (t) { for (var e = ttq._i[t] || [], n = 0; n < ttq.methods.length; n++) ttq.setAndDefer(e, ttq.methods[n]); return e; };
+      ttq.load = function (e, n) {
+        var r = "https://analytics.tiktok.com/i18n/pixel/events.js", o = n && n.partner;
+        ttq._i = ttq._i || {}, ttq._i[e] = [], ttq._i[e]._u = r, ttq._t = ttq._t || {}, ttq._t[e] = +new Date, ttq._o = ttq._o || {}, ttq._o[e] = n || {};
+        n = d.createElement("script"); n.type = "text/javascript", n.async = !0, n.src = r + "?sdkid=" + e + "&lib=" + t;
+        e = d.getElementsByTagName("script")[0]; e.parentNode.insertBefore(n, e);
+      };
+      ttq.load(pixelId);
+      ttq.page();
+    }(window, document, "ttq");
+  }
+  async function initAdPixel() {
+    try {
+      const { tiktokPixelId } = await api("/tracking");
+      loadTikTokPixel(tiktokPixelId);
+    } catch { /* sin red: la tienda sigue igual */ }
+  }
+  function adTrack(event, params, eventId) {
+    try {
+      if (!window.ttq || typeof window.ttq.track !== "function") return;
+      window.ttq.track(event, Object.assign({ currency: "PEN" }, params || {}), eventId ? { event_id: eventId } : undefined);
+    } catch { /* la publicidad nunca rompe la tienda */ }
+  }
+  function adContent(id, name, price) {
+    const value = Number(String(price ?? "").replace(",", "."));
+    return {
+      contents: [{ content_id: String(id), content_name: String(name || id), content_type: "product", quantity: 1, price: isFinite(value) ? value : undefined }],
+      content_type: "product",
+      value: isFinite(value) ? value : undefined,
+    };
+  }
+  function adBeginCheckout(id, name, amount, orderName) {
+    adCheckout = { params: adContent(id, name, amount), eventId: orderName ? "pay-" + orderName : undefined };
+    adTrack("InitiateCheckout", adCheckout.params);
+  }
+  function adPurchaseDone() {
+    if (!adCheckout) return;
+    adTrack("Purchase", adCheckout.params, adCheckout.eventId);
+    adCheckout = null;
+  }
+
   // ── Tienda siempre al día ──
   // Una pestaña que quedó abierta desde antes de una actualización (pasa
   // mucho en el celular) seguía con el formulario viejo. Al volver a la
@@ -2411,6 +2473,7 @@
 
   async function init() {
     watchStoreVersion();
+    initAdPixel();
     initAuthToggle();
     initAuthForms();
     initNav();
