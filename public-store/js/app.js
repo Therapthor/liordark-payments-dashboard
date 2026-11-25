@@ -1288,6 +1288,7 @@
 
       const platforms = [...comboBuilderCart];
       closeComboBuilder();
+      adTrack("AddToCart", adContent("combo-armado", "Combo: " + platforms.join(" + ")));
       requireAuth(() => withEmail(() => startCustomComboCheckout(platforms, clientEmail, clientPassword)), { label: "tu combo" });
     });
   }
@@ -1377,6 +1378,7 @@
       closeProductDetail();
       const months = selectedPlan ? selectedPlan.months : undefined;
       const label = selectedPlan ? title + " · " + selectedPlan.label : title;
+      adTrack("AddToCart", adContent(kind === "combo" ? "combo-" + id : id, label, selectedPlan ? selectedPlan.price : item.price));
       requireAuth(() => withEmail(() => startCheckout({ kind, id, clientEmail, clientPassword, months, isReserve: outOfStock, platformLabel: label })),
         { label, price: selectedPlan ? selectedPlan.price : item.price });
     };
@@ -2384,7 +2386,7 @@
   // ── Píxel de TikTok (publicidad) ──
   // Solo si el admin pegó el ID en el panel (Configuración › 📈 Publicidad).
   // Eventos: PageView (al cargar), ViewContent (abre un producto),
-  // InitiateCheckout (se le muestra el monto a pagar), Purchase (pago
+  // AddToCart (toca «Comprar»: la tienda no tiene carrito), InitiateCheckout (se le muestra el monto a pagar), Purchase (pago
   // aprobado) y CompleteRegistration (cuenta nueva). Sin ID no carga nada.
   // Nunca se manda el celular, el correo ni el PIN del cliente.
   let adCheckout = null; // compra en curso: se reporta una sola vez al aprobarse
@@ -2420,7 +2422,8 @@
     } catch { /* la publicidad nunca rompe la tienda */ }
   }
   function adContent(id, name, price) {
-    const value = Number(String(price ?? "").replace(",", "."));
+    const raw = String(price ?? "").replace(",", ".").trim();
+    const value = raw ? Number(raw) : NaN;
     return {
       contents: [{ content_id: String(id), content_name: String(name || id), content_type: "product", quantity: 1, price: isFinite(value) ? value : undefined }],
       content_type: "product",
