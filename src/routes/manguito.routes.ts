@@ -9,7 +9,7 @@ import {
 } from "../db/manguito.repository";
 import {
   TIERS, UPLOAD_DIR, chatGate, isAiConfigured, newUploadId, runChat, uploadPath,
-  getMemory, clearMemory, customerMeter, hasAiAccess, publicStoreInfo, startAiPurchase, aiPurchaseStatus,
+  getMemory, clearMemory, customerMeter, hasAiAccess, publicStoreInfo, startAiPurchase, aiPurchaseStatus, lapsedInfo,
   type ChatEvent, type Tier,
 } from "../services/manguito.service";
 import { createShareFor, mySharesView, removeShare, continueShare, SHARE_TOKEN_RE } from "../services/manguito-share.service";
@@ -34,7 +34,10 @@ router.get("/access", (req, res) => {
   const c = customerOf(req);
   res.setHeader("Cache-Control", "no-store");
   const allowed = !!c && hasAiAccess(c);
-  res.json({ allowed, configured: isAiConfigured(), store: publicStoreInfo(c?.phone), meter: allowed ? customerMeter(c!.id) : null });
+  res.json({
+    allowed, configured: isAiConfigured(), store: publicStoreInfo(c?.phone), meter: allowed ? customerMeter(c!.id) : null,
+    lapsed: !allowed && c ? lapsedInfo(c.id) : null,
+  });
 });
 
 // Comprar plan mensual o créditos (cualquier cliente con sesión).

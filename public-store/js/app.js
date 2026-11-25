@@ -246,7 +246,7 @@
     tip.className = "mg-tour";
     tip.setAttribute("role", "dialog");
     tip.innerHTML = `<b>🥭 ¡Nuevo! Manguito Pro</b><p>Aquí está tu inteligencia artificial: usa Claude sin cuentas raras y paga con Yape.</p>` +
-      `<div class="mg-tour-btns"><button type="button" class="mg-tour-skip">Entendido</button><a class="mg-tour-go" href="/manguito/">Probar ahora</a></div>`;
+      `<div class="mg-tour-btns"><button type="button" class="mg-tour-skip">Entendido</button><a class="mg-tour-go" href="/manguito/">Ver planes</a></div>`;
     document.body.appendChild(tip);
     link.classList.add("mg-tour-pulse");
     const place = () => {
@@ -944,14 +944,12 @@
       }
       const exclusiveProducts = sortedProducts.filter(p => isExclusive(p, "platform"));
       const regularProducts   = sortedProducts.filter(p => !isExclusive(p, "platform"));
+      // Manguito Pro va primero en «Exclusivos».
       const mgInfo = await manguitoInfo();
-      if (mgInfo && mgInfo.enabled) {
-        html += `<div class="section-chip section-chip-exclusive">Inteligencia artificial</div>`;
-        html += `<div class="product-grid product-grid-exclusive">${manguitoCardHtml(mgInfo)}</div>`;
-      }
-      if (exclusiveProducts.length > 0) {
+      const mgCard = mgInfo && mgInfo.enabled ? manguitoCardHtml(mgInfo) : "";
+      if (exclusiveProducts.length > 0 || mgCard) {
         html += `<div class="section-chip section-chip-exclusive">Exclusivos</div>`;
-        html += `<div class="product-grid product-grid-exclusive">${exclusiveProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
+        html += `<div class="product-grid product-grid-exclusive">${mgCard}${exclusiveProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;
       }
       if (regularProducts.length > 0) {
         html += `<div class="section-chip">Perfiles</div>`;

@@ -17,7 +17,7 @@ import {
   bumpMessagesSinceMemory, registerPause, pausesToday, chatsSince, spentThisMonthByCustomer,
   wallet, setWindowStart, planSpentSince, creditsSpentSince, createAiPurchase, findAiPurchase, markAiPurchasePaid,
   giftAi, hasPaidAiPurchase, recentAiPurchases, outstandingBalance, cleanupPendingAiPurchases, avgCostPerMessage,
-  spentByCredentialSince, subscribersSummary, salesThisMonth, walletsForNotices, setWalletNotice,
+  spentByCredentialSince, subscribersSummary, salesThisMonth, walletsForNotices, setWalletNotice, countConversations,
   type AiMessage, type AiConversation, type UsageSource, type AiWallet,
 } from "../db/manguito.repository";
 
@@ -84,6 +84,7 @@ const K = {
   creds: "ai_credentials", phones: "ai_allowed_phones", dailyCap: "ai_daily_cap_usd", monthlyCap: "ai_monthly_cap_usd",
   clientMonthlyCap: "ai_client_monthly_cap_usd", burstMessages: "ai_burst_messages", pausesPerDay: "ai_pauses_per_day",
   phoneCaps: "ai_phone_caps", // {celular: tope US$ al mes} — topes especiales (sin tope diario)
+  freePaused: "ai_free_paused", // "1" = la lista gratis no tiene acceso (para ver la compra como cliente)
   // Versión anterior (una sola clave): se pasa sola a la lista.
   oldApiKey: "ai_api_key", oldAuthToken: "ai_auth_token", oldBaseUrl: "ai_base_url",
 };
@@ -164,7 +165,7 @@ export function credentialState(c: AiCredential): { state: "ok" | "paused" | "of
 
 export type AiConfig = {
   phones: string[]; burstMessages: number; pausesPerDay: number; dailyCap: number; clientMonthlyCap: number; monthlyCap: number;
-  phoneCaps: Record<string, number>;
+  phoneCaps: Record<string, number>; freePaused: boolean;
 };
 
 function readPhoneCaps(): Record<string, number> {
@@ -185,6 +186,7 @@ export function aiConfig(): AiConfig {
     clientMonthlyCap: num(getAdminSetting(K.clientMonthlyCap), DEFAULT_CLIENT_MONTHLY_CAP),
     monthlyCap:       num(getAdminSetting(K.monthlyCap), DEFAULT_MONTHLY_CAP),
     phoneCaps:        readPhoneCaps(),
+    freePaused:       getAdminSetting(K.freePaused) === "1",
   };
 }
 
@@ -197,7 +199,7 @@ const last9 = (p: string) => String(p || "").replace(/\D/g, "").slice(-9);
 export function isAiAllowedPhone(phone: string): boolean {
   const d = last9(phone);
   const cfg = aiConfig();
-  return d.length === 9 && (cfg.phones.includes(d) || d in cfg.phoneCaps);
+  return d.length === 9 && !cfg.freePaused && (cfg.phones.includes(d) || d in cfg.phoneCaps);
 }
 
 /** Topes de este cliente: el especial de su celular (al mes, sin tope
@@ -285,6 +287,7 @@ export function saveAiConfig(body: any): string | null {
     const err = addCredential(body);
     if (err) return err;
   }
+  if (typeof body?.freePaused === "boolean") setAdminSetting(K.freePaused, body.freePaused ? "1" : "0");
   if (body?.phoneCaps !== undefined) {
     const caps = parsePhoneCaps(String(body.phoneCaps));
     if (typeof caps === "string") return caps;
@@ -1044,11 +1047,19 @@ function currentSourceKind(customerId: number): UsageSource {
   return p.ok ? p.source.kind : "free";
 }
 
-/** ¿Puede entrar al chat? (lista del panel, o compró alguna vez). */
+/** ¿Puede entrar al chat? Lista gratis del panel, plan vigente o créditos.
+ *  Si no renueva, pierde el acceso pero sus conversaciones quedan guardadas
+ *  (vuelven apenas paga). */
 export function hasAiAccess(customer: { id: number; phone: string }): boolean {
-  if (isAiAllowedPhone(customer.phone) || hasPaidAiPurchase(customer.id)) return true;
+  if (isAiAllowedPhone(customer.phone)) return true;
   const w = wallet(customer.id);
-  return w.credits > 0 || w.planEnd > Date.now();
+  return w.credits > MIN_CREDITS || w.planEnd > Date.now();
+}
+
+/** Cliente que pagó antes y ya no tiene saldo: para el aviso «renueva». */
+export function lapsedInfo(customerId: number): { planEnd: number; conversations: number } | null {
+  if (!hasPaidAiPurchase(customerId)) return null;
+  return { planEnd: wallet(customerId).planEnd || 0, conversations: countConversations(customerId) };
 }
 
 // ── Medidor para el cliente ──
@@ -1280,7 +1291,7 @@ function sendWalletNotices(): void {
       setWalletNotice(w.customerId, "notice_expiring", w.planEnd);
     }
     if (w.planEnd > 0 && w.planEnd <= now && now - w.planEnd < 7 * 864e5 && w.noticeExpired !== w.planEnd) {
-      notify("Tu plan de Manguito Pro venció. Cuando quieras, renuévalo desde Manguito Pro › Planes y recargas 🥭");
+      notify("Tu plan de Manguito Pro venció. Tus conversaciones siguen guardadas: renuévalo con Yape y continúas donde lo dejaste 🥭");
       setWalletNotice(w.customerId, "notice_expired", w.planEnd);
     }
     const ref = w.lastCreditsUsd || 0;

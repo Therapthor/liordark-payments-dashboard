@@ -642,6 +642,12 @@
     if (!s || !s.enabled) { grid.innerHTML = `<p class="mg-muted">Por ahora no hay planes a la venta. Vuelve pronto 🥭</p>`; return; }
     const buyLabel = state.authed ? null : "Inicia sesión para comprar";
     let html = "";
+    // Pagó antes y no renovó: sin acceso, pero su historial sigue guardado.
+    const lp = !state.allowed && state.lapsed;
+    if (lp) {
+      const when = lp.planEnd && lp.planEnd < Date.now() ? `Tu plan venció el ${dayLabel(lp.planEnd).replace(/\.$/, "")}.` : "Se acabó tu saldo.";
+      html += `<div class="mg-lapsed">⏰ ${when} ${lp.conversations ? `Tus ${lp.conversations} conversación(es) siguen guardadas: ` : ""}renueva y continúas donde lo dejaste.</div>`;
+    }
     if (s.monthly) {
       const m = s.monthly;
       html += `<div class="mg-plan featured"><span class="mg-plan-tag">Más elegido</span>
@@ -886,6 +892,7 @@
     state.authed = true;
     state.allowed = !!access.allowed;
     state.store = access.store || state.store;
+    state.lapsed = access.lapsed || null;
     document.body.classList.toggle("mg-guest", !state.allowed);
     if (!state.allowed) { showPlans(false); return true; }
     if (!access.configured) { gate("Casi listo", "Manguito Pro todavía no está conectado. Vuelve en un rato.", false); return true; }
@@ -920,6 +927,7 @@
     state.authed = true;
     state.allowed = !!access.allowed;
     state.store = access.store || null;
+    state.lapsed = access.lapsed || null;
     if (!state.allowed) {
       if (state.store && state.store.enabled) { showPlans(false); return; }
       gate("Prueba privada", "Manguito Pro está en prueba privada por ahora. ¡Muy pronto para todos! 🥭", false);

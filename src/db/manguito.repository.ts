@@ -489,6 +489,10 @@ export const giftAi = db.transaction((customerId: number, kind: "plan" | "credit
   grant(customerId, kind, usd);
 });
 
+export function countConversations(customerId: number): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM ai_conversations WHERE customer_id = ?`).get(customerId) as { n: number }).n;
+}
+
 export function hasPaidAiPurchase(customerId: number): boolean {
   return !!db.prepare(`SELECT 1 FROM ai_purchases WHERE customer_id = ? AND status = 'paid' LIMIT 1`).get(customerId);
 }

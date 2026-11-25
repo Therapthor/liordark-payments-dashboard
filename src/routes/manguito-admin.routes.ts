@@ -23,6 +23,7 @@ function view() {
         ? Math.round(Math.max(0, k.budgetUsd - spentByCredentialSince(k.id, k.budgetAt)) * 100) / 100 : null,
     })),
     phones: c.phones,
+    freePaused: c.freePaused,
     phoneCaps: Object.entries(c.phoneCaps).map(([p, v]) => `${p} = ${v}`).join("\n"),
     burstMessages: c.burstMessages,
     pausesPerDay: c.pausesPerDay,
