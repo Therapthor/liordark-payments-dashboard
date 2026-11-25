@@ -141,12 +141,29 @@
           '<g class="mgl-pencil"><path d="M97 6l8 4-12 25-8-4z" fill="#FFC93C"/><path d="M97 6l8 4 2-4-8-4z" fill="#F49AA8"/>' +
           '<path d="M85 31l8 4-7 6z" fill="#F5DDB5"/><path d="M86 38l3 1.6-3 2.4z" fill="#2B1B0E"/></g>' +
         '</svg>' +
-        // 2) latigazos para apurar
+        // 2) latigazos para apurar: el jefe (con lentes) chasquea el látigo y
+        //    el otro manguito abre los ojos de miedo y teclea más rápido.
         '<svg class="mgl-scene" viewBox="0 0 150 70" aria-hidden="true">' +
-          '<g class="mgl-bob" transform="translate(4 4)">' + mangoSvg(shades) + '</g>' +
-          '<path d="M56 40l8-6" stroke="#2B1B0E" stroke-width="3" stroke-linecap="round"/>' +
-          '<path class="mgl-whip" d="M64 34c16-14 36-16 58-6" stroke="#7A4E12" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
-          '<g class="mgl-spark" stroke="#F5A30A" stroke-width="2.4" stroke-linecap="round"><path d="M126 20l6-6"/><path d="M130 30h8"/><path d="M126 40l6 6"/></g>' +
+          '<g transform="translate(0 10) scale(.8)"><g class="mgl-bobY">' + mangoSvg(shades) +
+            '<path d="M54 42l10-7" stroke="#2B1B0E" stroke-width="3.4" stroke-linecap="round"/></g></g>' +
+          '<path class="mgl-whip" d="M51 38c14-13 30-16 46-10" stroke="#7A4E12" stroke-width="2.4" fill="none" stroke-linecap="round"/>' +
+          '<g class="mgl-spark" stroke="#F5A30A" stroke-width="2.2" stroke-linecap="round"><path d="M92 16l-4-5"/><path d="M98 14l1-6"/><path d="M86 22l-6-2"/></g>' +
+          '<g transform="translate(96 12) scale(.78)"><g class="mgl-worker">' +
+            '<path d="M33 12c5-7 14-8 19-4-4 6-12 8-19 4z" fill="#3E9B5C"/>' +
+            '<path d="M32 12c-14 0-24 12-24 26 0 13 10 21 22 21 14 0 26-10 26-24C56 22 46 12 32 12z" fill="url(#mgl-grad)"/>' +
+            '<circle cx="19" cy="41" r="3" fill="#F0712A" opacity=".45"/><circle cx="45" cy="41" r="3" fill="#F0712A" opacity=".45"/>' +
+            '<g class="mgl-calm"><circle cx="25" cy="34" r="3.3" fill="#2B1B0E"/><circle cx="39" cy="34" r="3.3" fill="#2B1B0E"/>' +
+              '<path d="M28 42c2 2.6 6 2.6 8 0" stroke="#2B1B0E" stroke-width="2" fill="none" stroke-linecap="round"/></g>' +
+            '<g class="mgl-scared"><circle cx="25" cy="33" r="5.6" fill="#fff" stroke="#2B1B0E" stroke-width="1.4"/>' +
+              '<circle cx="39" cy="33" r="5.6" fill="#fff" stroke="#2B1B0E" stroke-width="1.4"/>' +
+              '<circle cx="25" cy="33" r="1.8" fill="#2B1B0E"/><circle cx="39" cy="33" r="1.8" fill="#2B1B0E"/>' +
+              '<path d="M20 24l8-2M44 24l-8-2" stroke="#2B1B0E" stroke-width="1.8" stroke-linecap="round"/>' +
+              '<ellipse cx="32" cy="44" rx="2.6" ry="3.4" fill="#2B1B0E"/></g>' +
+            '<path class="mgl-sweat" d="M50 18c2.4 3.4 3.4 6 .4 7.2-3.2-1-2.6-3.6-.4-7.2z" fill="#7CC4F2"/>' +
+            '<g class="mgl-hands"><circle cx="20" cy="56" r="3.4" fill="#FFB21A" stroke="#E08A12" stroke-width="1"/>' +
+              '<circle cx="44" cy="56" r="3.4" fill="#FFB21A" stroke="#E08A12" stroke-width="1"/></g>' +
+          '</g></g>' +
+          '<path d="M98 62h34l4 5H94z" fill="#D9D1C6"/><path d="M101 63.5h28" stroke="#BDB3A6" stroke-width="1" stroke-dasharray="2 2"/>' +
         '</svg>' +
         // 3) cargando
         '<svg class="mgl-scene" viewBox="0 0 150 70" aria-hidden="true">' +
@@ -155,7 +172,7 @@
           '<rect class="mgl-bar" x="30" y="62" width="90" height="6" rx="3" fill="#F5A30A"/>' +
         '</svg>' +
       '</div>' +
-      '<div class="mgl-caption"><span>Manguito está escribiendo…</span><span>¡Chas! Apurando a la IA…</span><span>Cargando tu respuesta…</span></div>' +
+      '<div class="mgl-caption"><span>Manguito está escribiendo…</span><span>¡Chas! ¡Apúrate, Manguito!</span><span>Cargando tu respuesta…</span></div>' +
     '</div>';
   }
 
