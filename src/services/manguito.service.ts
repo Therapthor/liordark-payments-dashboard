@@ -5,6 +5,9 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { getAdminSetting, setAdminSetting } from "../db/security.repository";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
+  applyCompaction, countMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
+  deleteConversation, deleteUploadRows, getConversation, customerState, setMemory,
+  bumpMessagesSinceMemory, setCooldown, spentLastMinutesByCustomer, spentThisMonthByCustomer,
   type AiMessage,
 } from "../db/manguito.repository";
 
@@ -66,11 +69,15 @@ function sdk(): typeof Anthropic {
 
 const K = {
   creds: "ai_credentials", phones: "ai_allowed_phones", dailyCap: "ai_daily_cap_usd", monthlyCap: "ai_monthly_cap_usd",
+  hourlyCap: "ai_hourly_cap_usd", clientMonthlyCap: "ai_client_monthly_cap_usd",
   // Versión anterior (una sola clave): se pasa sola a la lista.
   oldApiKey: "ai_api_key", oldAuthToken: "ai_auth_token", oldBaseUrl: "ai_base_url",
 };
-export const DEFAULT_DAILY_CAP = 3;
+export const DEFAULT_DAILY_CAP = 2;
 export const DEFAULT_MONTHLY_CAP = 50;
+export const DEFAULT_HOURLY_CAP = 0.5;        // pasarlo en 1 hora → pausa de 1 hora
+export const DEFAULT_CLIENT_MONTHLY_CAP = 10; // por cliente al mes
+const COOLDOWN_MIN = 60;
 
 // ── Claves de API (varias, en orden) ──
 // Se usan en el orden de la lista. Si una se queda sin saldo, la rechazan o
@@ -136,13 +143,15 @@ export function credentialState(c: AiCredential): { state: "ok" | "paused" | "of
   return { state: "ok", reason: "" };
 }
 
-export type AiConfig = { phones: string[]; dailyCap: number; monthlyCap: number };
+export type AiConfig = { phones: string[]; hourlyCap: number; dailyCap: number; clientMonthlyCap: number; monthlyCap: number };
 
 export function aiConfig(): AiConfig {
   return {
-    phones:     (getAdminSetting(K.phones) || "").split(",").map(s => s.trim()).filter(Boolean),
-    dailyCap:   num(getAdminSetting(K.dailyCap), DEFAULT_DAILY_CAP),
-    monthlyCap: num(getAdminSetting(K.monthlyCap), DEFAULT_MONTHLY_CAP),
+    phones:           (getAdminSetting(K.phones) || "").split(",").map(s => s.trim()).filter(Boolean),
+    hourlyCap:        num(getAdminSetting(K.hourlyCap), DEFAULT_HOURLY_CAP),
+    dailyCap:         num(getAdminSetting(K.dailyCap), DEFAULT_DAILY_CAP),
+    clientMonthlyCap: num(getAdminSetting(K.clientMonthlyCap), DEFAULT_CLIENT_MONTHLY_CAP),
+    monthlyCap:       num(getAdminSetting(K.monthlyCap), DEFAULT_MONTHLY_CAP),
   };
 }
 
@@ -217,7 +226,7 @@ export function saveAiConfig(body: any): string | null {
     const list = String(body.phones).split(/[\s,;]+/).map(last9).filter(p => p.length === 9);
     setAdminSetting(K.phones, [...new Set(list)].join(","));
   }
-  for (const [field, key] of [["dailyCap", K.dailyCap], ["monthlyCap", K.monthlyCap]] as const) {
+  for (const [field, key] of [["hourlyCap", K.hourlyCap], ["dailyCap", K.dailyCap], ["clientMonthlyCap", K.clientMonthlyCap], ["monthlyCap", K.monthlyCap]] as const) {
     if (body?.[field] === undefined) continue;
     const n = Number(body[field]);
     if (!isFinite(n) || n < 0 || n > 10000) return "El tope debe ser un monto entre 0 y 10000 dólares.";
@@ -446,15 +455,19 @@ function buildHistory(conversationId: number): Anthropic.MessageParam[] {
   });
 }
 
-function systemPrompt(): string {
+function systemPrompt(customerId: number, conversationId: number): string {
   const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10).split("-").reverse().join("/");
+  const memory = customerState(customerId).memory.trim();
+  const summary = getConversation(customerId, conversationId)?.summary?.trim() || "";
   return [
     "Eres Manguito Pro, el asistente de inteligencia artificial de Manguitope (liordark.com). Funcionas con modelos Claude de Anthropic; si te preguntan, puedes decirlo.",
     "Responde en el idioma del cliente (normalmente español de Perú), claro, cálido y directo. Usa Markdown sencillo cuando ayude (listas, negritas, tablas cortas, bloques de código con su lenguaje).",
     "Sé breve por defecto: responde lo que se pidió, sin relleno; extiéndete solo si el cliente lo pide o el tema lo necesita.",
     "No puedes crear ni editar videos, audio ni imágenes: si te lo piden, dilo con amabilidad y ofrece una alternativa en texto (un guion, una descripción, un prompt).",
-    "No tienes acceso a internet ni a archivos fuera de esta conversación. Si no sabes algo con certeza, dilo.",
+    "No tienes acceso a internet ni a archivos fuera de esta conversación, y no ejecutas código: solo lo escribes para que el cliente lo use. Si no sabes algo con certeza, dilo.",
     `Fecha de hoy: ${today}.`,
+    ...(memory ? ["", "Lo que recuerdas de este cliente (de conversaciones anteriores; úsalo con naturalidad, sin recitarlo):", memory] : []),
+    ...(summary ? ["", "Resumen de la parte anterior de esta conversación (ya no se muestra completa):", summary] : []),
   ].join("\n");
 }
 
@@ -472,10 +485,15 @@ export type ChatEvent =
 export type ChatGate = { ok: true } | { ok: false; status: number; message: string };
 
 /** ¿Puede escribir ahora? (configuración, topes, ritmo, una respuesta a la vez). */
+const limaTime = (ms: number) => new Date(ms - 5 * 3600e3).toISOString().slice(11, 16);
+
 export function chatGate(customerId: number): ChatGate {
   if (!isAiConfigured()) return { ok: false, status: 503, message: "Manguito Pro todavía no está conectado." };
   const cfg = aiConfig();
+  const pause = customerState(customerId).cooldownUntil;
+  if (pause > Date.now()) return { ok: false, status: 429, message: `☕ Manguito está descansando después de mucho uso seguido. Vuelve a las ${limaTime(pause)} y sigues sin problema.` };
   if (spentThisMonth() >= cfg.monthlyCap) return { ok: false, status: 429, message: "Manguito Pro llegó a su límite de este mes. Vuelve pronto 🥭" };
+  if (spentThisMonthByCustomer(customerId) >= cfg.clientMonthlyCap) return { ok: false, status: 429, message: "Usaste todo tu Manguito Pro de este mes. El 1 del próximo mes se renueva 🥭" };
   if (spentTodayByCustomer(customerId) >= cfg.dailyCap) return { ok: false, status: 429, message: "Llegaste al límite de uso de hoy. Mañana se renueva 🥭" };
   if (activeChats.has(customerId)) return { ok: false, status: 409, message: "Espera a que termine la respuesta anterior." };
   const now = Date.now();
@@ -484,9 +502,14 @@ export function chatGate(customerId: number): ChatGate {
   return { ok: true };
 }
 
-/** Con poco saldo del día, baja de nivel para no pasarse. */
+/** Con poco saldo (hora, día o mes del cliente), baja de nivel para no pasarse. */
 function capTierByBudget(tier: Tier, customerId: number): Tier {
-  const left = aiConfig().dailyCap - spentTodayByCustomer(customerId);
+  const cfg = aiConfig();
+  const left = Math.min(
+    cfg.dailyCap - spentTodayByCustomer(customerId),
+    cfg.clientMonthlyCap - spentThisMonthByCustomer(customerId),
+    cfg.hourlyCap - spentLastMinutesByCustomer(customerId, COOLDOWN_MIN),
+  );
   if (left < 0.10) return "rapido";
   if (left < 0.40 && tier === "experto") return "equilibrado";
   return tier;
@@ -517,7 +540,7 @@ export async function runChat(opts: {
     const base = {
       model: cfg.model,
       max_tokens: cfg.maxTokens,
-      system: systemPrompt(),
+      system: systemPrompt(customerId, conversationId),
       messages: buildHistory(conversationId),
       thinking: { type: "adaptive" as const },
       output_config: { effort: route.effort },
@@ -582,4 +605,140 @@ export async function runChat(opts: {
   if (status === "refusal" && !text.trim()) text = "Lo siento, con eso no puedo ayudarte. ¿Te ayudo con otra cosa?";
   const messageId = addMessage({ conversationId, role: "assistant", text, tier, model, status });
   emit({ type: "done", status, messageId, ...(errorMessage ? { message: errorMessage } : {}) });
+  afterChat(customerId, conversationId, status === "ok");
+}
+
+/** Después de cada respuesta: pausa si gastó mucho en 1 hora; memoria y
+ *  compactación con el modelo más barato, en segundo plano (no hace esperar). */
+function afterChat(customerId: number, conversationId: number, ok: boolean): void {
+  if (spentLastMinutesByCustomer(customerId, COOLDOWN_MIN) >= aiConfig().hourlyCap) {
+    setCooldown(customerId, Date.now() + COOLDOWN_MIN * 60e3);
+  }
+  if (!ok) return;
+  const pending = bumpMessagesSinceMemory(customerId);
+  void (async () => {
+    if (countMessages(conversationId) > COMPACT_AT) await compactConversation(customerId, conversationId).catch(() => {});
+    if (pending >= MEMORY_EVERY) await updateMemory(customerId, conversationId).catch(() => {});
+  })();
+}
+
+// ── Compactación: lo viejo de cada conversación pasa a un resumen ──
+// Cuando una conversación pasa de COMPACT_AT mensajes, todo menos los
+// últimos KEEP_RECENT se resume (con Haiku, el más barato) y se borra: ocupa
+// menos espacio en el servidor y se mandan menos tokens en cada respuesta.
+const COMPACT_AT = 24;
+const KEEP_RECENT = 10;
+const SUMMARY_MAX = 1500;
+const MEMORY_MAX = 1200;
+const MEMORY_EVERY = 6;          // la memoria se actualiza cada 6 mensajes del cliente
+const MAX_CONVERSATIONS = 40;    // por cliente (las más viejas se borran)
+const UPLOAD_DAYS = 14;          // las imágenes se borran a los 14 días
+const compacting = new Set<number>();
+
+function transcript(msgs: AiMessage[], maxChars: number): string {
+  const lines = msgs.map(m => `${m.role === "user" ? "Cliente" : "Manguito"}: ${m.text.replace(/\s+/g, " ").trim()}${m.images.length ? ` [${m.images.length} imagen(es)]` : ""}`);
+  let out = lines.join("\n");
+  if (out.length > maxChars) out = "…" + out.slice(-maxChars);
+  return out;
+}
+
+async function cheapText(customerId: number, kind: "compact" | "memory", system: string, user: string, maxTokens: number): Promise<string> {
+  const { value: r, cred } = await withCredential(client => client.messages.create({
+    model: ROUTER_MODEL,
+    max_tokens: maxTokens,
+    thinking: { type: "disabled" },
+    output_config: { effort: "low" },
+    system,
+    messages: [{ role: "user", content: user }],
+  }));
+  const u = usageOf(r.usage);
+  logUsage({ customerId, kind, model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u) });
+  const b = r.content.find(x => x.type === "text");
+  return b && b.type === "text" ? b.text.trim() : "";
+}
+
+export async function compactConversation(customerId: number, conversationId: number): Promise<boolean> {
+  if (compacting.has(conversationId)) return false;
+  compacting.add(conversationId);
+  try {
+    const conv = getConversation(customerId, conversationId);
+    const msgs = listMessages(conversationId);
+    if (!conv || msgs.length <= COMPACT_AT) return false;
+    // Se conservan los últimos KEEP_RECENT, empezando siempre por un mensaje del cliente.
+    let cut = msgs.length - KEEP_RECENT;
+    while (cut < msgs.length && msgs[cut]!.role !== "user") cut++;
+    const old = msgs.slice(0, cut);
+    if (!old.length) return false;
+    const summary = await cheapText(customerId, "compact",
+      "Resumes conversaciones para poder continuarlas. Escribe en español, en viñetas breves: el tema, datos y decisiones importantes, lo que el cliente pidió y lo que quedó pendiente. Nada de relleno. Nunca incluyas contraseñas, PIN, códigos ni números de tarjeta. Máximo 1200 caracteres.",
+      (conv.summary ? `Resumen anterior:\n${conv.summary}\n\n` : "") + `Mensajes nuevos a resumir:\n${transcript(old, 24_000)}`,
+      700);
+    if (!summary) return false;
+    applyCompaction(conversationId, old[old.length - 1]!.id, summary.slice(0, SUMMARY_MAX), old.length);
+    // Las imágenes de los mensajes resumidos ya no se usan: se borran.
+    const imgs = old.flatMap(m => m.images);
+    for (const id of imgs) { const up = getUpload(id); if (up) fs.promises.unlink(uploadPath(id, up.mediaType)).catch(() => {}); }
+    deleteUploadRows(imgs);
+    return true;
+  } finally {
+    compacting.delete(conversationId);
+  }
+}
+
+// ── Memoria («cerebro»): lo que Manguito recuerda de cada cliente ──
+
+export async function updateMemory(customerId: number, conversationId: number): Promise<void> {
+  const recent = listMessages(conversationId).slice(-12);
+  if (!recent.some(m => m.role === "user" && m.text.trim())) return;
+  const prev = customerState(customerId).memory;
+  const next = await cheapText(customerId, "memory",
+    [
+      "Mantienes la memoria de un asistente sobre UN cliente: datos útiles y duraderos para ayudarlo mejor en el futuro (cómo prefiere que le respondan, su negocio o trabajo, proyectos en curso, temas que le interesan, su nombre si lo dijo).",
+      "Devuelve SOLO la memoria actualizada, en viñetas cortas en español, máximo 1200 caracteres. Junta lo anterior con lo nuevo, quita lo repetido u obsoleto.",
+      "NUNCA guardes contraseñas, PIN, códigos de verificación, números de tarjeta o de documento, direcciones exactas ni datos de terceros.",
+      "Si no hay nada nuevo que valga la pena recordar, devuelve la memoria anterior tal cual.",
+    ].join("\n"),
+    `Memoria actual:\n${prev || "(vacía)"}\n\nConversación reciente:\n${transcript(recent, 12_000)}`,
+    600);
+  if (next) setMemory(customerId, next.slice(0, MEMORY_MAX));
+}
+
+export function getMemory(customerId: number): string {
+  return customerState(customerId).memory;
+}
+
+export function clearMemory(customerId: number): void {
+  setMemory(customerId, "");
+}
+
+/** Lo que el cliente ve de su uso (sin montos en dólares). */
+export function customerUsage(customerId: number): { monthPct: number; cooldownUntil: number } {
+  const cfg = aiConfig();
+  const pct = cfg.clientMonthlyCap > 0 ? Math.min(100, Math.round(spentThisMonthByCustomer(customerId) / cfg.clientMonthlyCap * 100)) : 100;
+  const pause = customerState(customerId).cooldownUntil;
+  return { monthPct: pct, cooldownUntil: pause > Date.now() ? pause : 0 };
+}
+
+// ── Mantenimiento cada 3 horas: compactar, límite de conversaciones e imágenes ──
+
+export async function manguitoMaintenance(): Promise<void> {
+  if (!isAiConfigured()) return;
+  for (const c of conversationsToCompact(COMPACT_AT)) {
+    await compactConversation(c.customerId, c.id).catch(() => {});
+  }
+  for (const c of conversationsOverLimit(MAX_CONVERSATIONS)) {
+    const imgs = deleteConversation(c.customerId, c.id) || [];
+    for (const id of imgs) { const up = getUpload(id); if (up) fs.promises.unlink(uploadPath(id, up.mediaType)).catch(() => {}); }
+    deleteUploadRows(imgs);
+  }
+  const old = oldUploads(UPLOAD_DAYS);
+  for (const u of old) fs.promises.unlink(uploadPath(u.id, u.mediaType)).catch(() => {});
+  deleteUploadRows(old.map(u => u.id));
+}
+
+let maintenanceTimer: NodeJS.Timeout | null = null;
+export function startManguitoMaintenance(): void {
+  if (maintenanceTimer) return;
+  setTimeout(() => { manguitoMaintenance().catch(() => {}); }, 90_000);
+  maintenanceTimer = setInterval(() => { manguitoMaintenance().catch(() => {}); }, 3 * 3600e3);
 }

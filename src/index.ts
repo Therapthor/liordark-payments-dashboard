@@ -31,6 +31,7 @@ import mailConnectionsRoutes from "./routes/mail-connections.routes";
 import backupRoutes from "./routes/backup.routes";
 import { runBackup } from "./services/backup.service";
 import customerAuthRoutes from "./routes/customer-auth.routes";
+import { startManguitoMaintenance } from "./services/manguito.service";
 import marketingRoutes from "./routes/marketing.routes";
 import manguitoAdminRoutes from "./routes/manguito-admin.routes";
 import storeRoutes, { generateExpiryNotificationsForAllCustomers } from "./routes/store.routes";
@@ -226,6 +227,14 @@ const PANEL_CSP = [
 // Tienda y mayorista: nadie más puede meterlas en un iframe (clic engañoso
 // para gastar saldo) y no se cargan plugins ni <base> ajenos (auditoría M2).
 const SITE_CSP = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
+// Manguito Pro (liordark.com/manguito/): lo que escriba el cliente o la IA
+// nunca corre como código — solo nuestros propios scripts y estilos, nada de
+// afuera, y solo habla con este mismo servidor.
+const MANGUITO_CSP = [
+  "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' blob: data:",
+  "font-src 'self'", "connect-src 'self'", "object-src 'none'", "base-uri 'self'",
+  "frame-ancestors 'self'", "form-action 'self'",
+].join("; ");
 // PANEL MÁS RÁPIDO: cada JS/CSS del panel se pide con «?v=<huella del
 // archivo>» (se calcula al arrancar). Con esa huella el navegador lo guarda
 // un año sin volver a preguntar; cuando un deploy cambia el archivo, cambia
@@ -323,7 +332,8 @@ app.get(/^\/cambiar-pin\/[A-Za-z0-9]{6,20}\/?$/, (req, res, next) => {
 app.use((req, res, next) => {
   const host = req.hostname;
   if (host === "liordark.com" || host === "www.liordark.com") {
-    res.setHeader("Content-Security-Policy", SITE_CSP);
+    res.setHeader("Content-Security-Policy", req.path.startsWith("/manguito") ? MANGUITO_CSP : SITE_CSP);
+    if (req.path.startsWith("/manguito")) res.setHeader("X-Content-Type-Options", "nosniff");
     storeStatic(req, res, next);
   } else if (host === "mayorista.liordark.com") {
     res.setHeader("Content-Security-Policy", SITE_CSP);
@@ -434,6 +444,7 @@ const server = app.listen(env.PORT, LISTEN_HOST, () => {
   scheduleBackupDaily();
   ensureWelcomeColumn(); // correo de bienvenida: quién ya la recibió
   runOneTimeRepairs(); // arreglos puntuales de datos (una sola vez)
+  startManguitoMaintenance(); // Manguito Pro: compactar, límite de conversaciones e imágenes viejas
   // Imágenes de productos que sigan en Cloudinary → al servidor (en segundo plano).
   // (Cloudinary retirado: productos, combos, QR de pago y avisos.)
   setTimeout(() => {

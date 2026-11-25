@@ -949,8 +949,10 @@
               <label class="mgp-label" for="mgp-phones">Celulares con acceso (uno por línea)</label>
               <textarea id="mgp-phones" rows="3" placeholder="9XXXXXXXX" spellcheck="false"></textarea>
               <div class="mgp-caps">
-                <label>Tope por cliente al día (US$)<input id="mgp-daily" type="number" min="0" step="0.5" /></label>
-                <label>Tope total al mes (US$)<input id="mgp-monthly" type="number" min="0" step="1" /></label>
+                <label>Por cliente en 1 hora (US$) — si lo pasa, descansa 1 h<input id="mgp-hourly" type="number" min="0" step="0.1" /></label>
+                <label>Por cliente al día (US$)<input id="mgp-daily" type="number" min="0" step="0.5" /></label>
+                <label>Por cliente al mes (US$)<input id="mgp-client-monthly" type="number" min="0" step="1" /></label>
+                <label>Total de todos al mes (US$)<input id="mgp-monthly" type="number" min="0" step="1" /></label>
               </div>
               <div class="mgp-actions">
                 <button class="btn-primary" type="submit">Guardar</button>

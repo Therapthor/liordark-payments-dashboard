@@ -9,7 +9,7 @@ import {
 } from "../db/manguito.repository";
 import {
   TIERS, UPLOAD_DIR, chatGate, isAiAllowedPhone, isAiConfigured, newUploadId, runChat, uploadPath,
-  type ChatEvent, type Tier,
+  getMemory, clearMemory, customerUsage, type ChatEvent, type Tier,
 } from "../services/manguito.service";
 
 // ─────────────────────────────────────────────────────────────
@@ -30,7 +30,8 @@ function customerOf(req: unknown) {
 router.get("/access", (req, res) => {
   const c = customerOf(req);
   res.setHeader("Cache-Control", "no-store");
-  res.json({ allowed: !!c && isAiAllowedPhone(c.phone), configured: isAiConfigured() });
+  const allowed = !!c && isAiAllowedPhone(c.phone);
+  res.json({ allowed, configured: isAiConfigured(), ...(allowed ? { usage: customerUsage(c!.id) } : {}) });
 });
 
 // Todo lo demás: solo celulares permitidos.
@@ -47,12 +48,22 @@ router.get("/conversations", (req, res) => {
   res.json({ conversations: listConversations(customerOf(req)!.id) });
 });
 
+// Memoria («cerebro»): el cliente puede ver qué recuerda Manguito y borrarlo.
+router.get("/memory", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ memory: getMemory(customerOf(req)!.id) });
+});
+router.delete("/memory", (req, res) => {
+  clearMemory(customerOf(req)!.id);
+  res.json({ ok: true });
+});
+
 router.get("/conversations/:id", (req, res) => {
   const conv = getConversation(customerOf(req)!.id, Number(req.params.id));
   if (!conv) { res.status(404).json({ message: "Conversación no encontrada." }); return; }
   res.setHeader("Cache-Control", "no-store");
   res.json({
-    conversation: conv,
+    conversation: { id: conv.id, title: conv.title, summary: conv.summary, compacted: conv.compacted },
     messages: listMessages(conv.id).map(m => ({
       id: m.id, role: m.role, text: m.text, images: m.images.map(imageUrl), status: m.status,
       label: (TIERS as Record<string, { label: string }>)[m.tier]?.label || "",

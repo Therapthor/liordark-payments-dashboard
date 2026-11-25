@@ -167,13 +167,29 @@
     if (force || t.scrollHeight - t.scrollTop - t.clientHeight < 160) t.scrollTop = t.scrollHeight;
   }
 
-  function renderMessages(list) {
+  function renderMessages(list, conv) {
     const box = $("mg-messages");
     box.innerHTML = "";
+    if (conv && conv.summary) {
+      const d = document.createElement("details");
+      d.className = "mg-summary";
+      d.innerHTML = `<summary>📦 ${conv.compacted} mensaje(s) anteriores resumidos para ahorrar espacio</summary><div>${esc(conv.summary)}</div>`;
+      box.appendChild(d);
+    }
     for (const m of list) box.appendChild(m.role === "user" ? userMessageEl(m) : assistantMessageEl(m));
-    $("mg-hello").hidden = list.length > 0;
+    $("mg-hello").hidden = list.length > 0 || !!(conv && conv.summary);
     scrollToEnd(true);
   }
+
+  // Imagen que ya se borró (las imágenes duran 14 días): aviso en su lugar.
+  document.addEventListener("error", e => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || !img.closest(".mg-msg-imgs")) return;
+    const span = document.createElement("span");
+    span.className = "mg-img-gone";
+    span.textContent = "Imagen vencida (se borran a los 14 días)";
+    (img.closest("a") || img).replaceWith(span);
+  }, true);
 
   // Copiar respuesta / código (delegado)
   document.addEventListener("click", e => {
@@ -206,7 +222,7 @@
       const data = await api("/conversations/" + id);
       state.convId = data.conversation.id;
       $("mg-title").textContent = data.conversation.title || "Manguito Pro";
-      renderMessages(data.messages || []);
+      renderMessages(data.messages || [], data.conversation);
       renderConversations();
       try { localStorage.setItem("mg_conv", String(state.convId)); } catch { /* sin storage */ }
     } catch (err) { toast(err.message); }
@@ -343,7 +359,7 @@
   function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.4) + "px"; }
   function updateSend() {
     const uploading = state.pending.some(p => p.loading);
-    $("mg-send").disabled = state.streaming || uploading || (!input.value.trim() && !state.pending.length);
+    $("mg-send").disabled = state.streaming || state.paused || uploading || (!input.value.trim() && !state.pending.length);
   }
   input.addEventListener("input", () => { autosize(); updateSend(); });
   input.addEventListener("keydown", e => {
@@ -445,7 +461,51 @@
       if (frame) cancelAnimationFrame(frame);
       paint();
       loadConversations();
+      refreshUsage();
     }
+  });
+
+  // ── Uso del mes y pausa de 1 hora ──
+  let pauseTimer = null;
+  function showUsage(u) {
+    if (!u) return;
+    const chip = $("mg-usage");
+    chip.hidden = false;
+    chip.textContent = `Uso del mes: ${u.monthPct}%`;
+    chip.classList.toggle("high", u.monthPct >= 80);
+    const paused = u.cooldownUntil && u.cooldownUntil > Date.now();
+    $("mg-pause").hidden = !paused;
+    clearTimeout(pauseTimer);
+    if (paused) {
+      const t = new Date(u.cooldownUntil).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+      $("mg-pause").textContent = `☕ Manguito está descansando después de mucho uso seguido. Vuelve a las ${t} y sigues sin problema.`;
+      pauseTimer = setTimeout(refreshUsage, Math.min(u.cooldownUntil - Date.now() + 1500, 2147000000));
+    }
+    state.paused = !!paused;
+    updateSend();
+  }
+  async function refreshUsage() {
+    try { showUsage((await api("/access")).usage); } catch { /* sin red */ }
+  }
+
+  // ── Memoria («cerebro») ──
+  async function openMemory() {
+    closeSide();
+    $("mg-mem-text").textContent = "Cargando…";
+    $("mg-mem").hidden = false;
+    try {
+      const { memory } = await api("/memory");
+      $("mg-mem-text").textContent = memory || "Todavía no recuerdo nada de ti. Mientras más conversemos, mejor te conoceré 🥭";
+      $("mg-mem-clear").hidden = !memory;
+    } catch (err) { $("mg-mem-text").textContent = err.message; }
+  }
+  $("mg-mem-open").addEventListener("click", openMemory);
+  $("mg-mem-close").addEventListener("click", () => { $("mg-mem").hidden = true; });
+  $("mg-mem").addEventListener("click", e => { if (e.target.id === "mg-mem") $("mg-mem").hidden = true; });
+  $("mg-mem-clear").addEventListener("click", async () => {
+    if (!confirm("¿Borrar todo lo que Manguito recuerda de ti?")) return;
+    try { await api("/memory", { method: "DELETE" }); $("mg-mem-text").textContent = "Listo, empecé de cero."; $("mg-mem-clear").hidden = true; }
+    catch (err) { toast(err.message); }
   });
 
   // ── Arranque: ¿tiene acceso? ──
@@ -468,6 +528,7 @@
     }
     if (!access.allowed) { gate("Prueba privada", "Manguito Pro está en prueba privada por ahora. ¡Muy pronto para todos! 🥭", false); return; }
     if (!access.configured) { gate("Casi listo", "Manguito Pro todavía no está conectado. Vuelve en un rato.", false); return; }
+    showUsage(access.usage);
     await loadConversations();
     let last = null;
     try { last = Number(localStorage.getItem("mg_conv")) || null; } catch { /* sin storage */ }

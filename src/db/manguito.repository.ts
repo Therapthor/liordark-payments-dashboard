@@ -54,12 +54,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_customer ON ai_usage(customer_id, created_at);
 `);
+// Resumen de lo ya compactado de cada conversación (ver compactación en
+// manguito.service.ts): los mensajes viejos se borran y queda su resumen.
+{
+  const cols = (db.prepare(`PRAGMA table_info(ai_conversations)`).all() as { name: string }[]).map(c => c.name);
+  if (!cols.includes("summary")) db.exec(`ALTER TABLE ai_conversations ADD COLUMN summary TEXT NOT NULL DEFAULT ''`);
+  if (!cols.includes("compacted")) db.exec(`ALTER TABLE ai_conversations ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0`);
+}
+// «Cerebro» de cada cliente: lo que Manguito recuerda de él entre
+// conversaciones, y la pausa de 1 hora cuando gasta mucho de golpe.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_customer_state (
+    customer_id       INTEGER PRIMARY KEY,
+    memory            TEXT    NOT NULL DEFAULT '',
+    memory_updated_at TEXT,
+    msgs_since_memory INTEGER NOT NULL DEFAULT 0,
+    cooldown_until    INTEGER NOT NULL DEFAULT 0
+  );
+`);
+
 // Qué clave de la lista se usó (para ver el gasto de cada una).
 if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).some(c => c.name === "cred_id")) {
   db.exec(`ALTER TABLE ai_usage ADD COLUMN cred_id TEXT NOT NULL DEFAULT ''`);
 }
 
-export type AiConversation = { id: number; title: string; createdAt: string; updatedAt: string };
+export type AiConversation = { id: number; title: string; createdAt: string; updatedAt: string; summary: string; compacted: number };
 export type AiMessage = {
   id: number; conversationId: number; role: "user" | "assistant"; text: string;
   images: string[]; tier: string; model: string; status: string; createdAt: string;
@@ -76,14 +95,14 @@ function toMessage(r: any): AiMessage {
 
 export function listConversations(customerId: number, limit = 60): AiConversation[] {
   return db.prepare(`
-    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, summary, compacted
     FROM ai_conversations WHERE customer_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?
   `).all(customerId, limit) as AiConversation[];
 }
 
 export function getConversation(customerId: number, id: number): AiConversation | null {
   const row = db.prepare(`
-    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt
+    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, summary, compacted
     FROM ai_conversations WHERE id = ? AND customer_id = ?
   `).get(id, customerId) as AiConversation | undefined;
   return row ?? null;
@@ -136,7 +155,7 @@ export function deleteUploadRows(ids: string[]): void {
 }
 
 export function logUsage(u: {
-  customerId: number; kind: "chat" | "router" | "test"; tier?: string; model: string; credId?: string;
+  customerId: number; kind: "chat" | "router" | "test" | "compact" | "memory"; tier?: string; model: string; credId?: string;
   inputTokens: number; outputTokens: number; cacheRead: number; cacheWrite: number; costUsd: number;
 }): void {
   db.prepare(`
@@ -191,4 +210,88 @@ export function monthSpendByCredential(): Record<string, number> {
     GROUP BY cred_id
   `).all() as { id: string; usd: number }[];
   return Object.fromEntries(rows.map(r => [r.id, r.usd]));
+}
+
+// ── Compactación y límites de espacio ──
+
+/** Reemplaza los mensajes con id <= upto por su resumen (en una transacción). */
+export const applyCompaction = db.transaction((conversationId: number, upto: number, summary: string, count: number) => {
+  db.prepare(`DELETE FROM ai_messages WHERE conversation_id = ? AND id <= ?`).run(conversationId, upto);
+  db.prepare(`UPDATE ai_conversations SET summary = ?, compacted = compacted + ? WHERE id = ?`).run(summary, count, conversationId);
+});
+
+export function countMessages(conversationId: number): number {
+  return (db.prepare(`SELECT COUNT(*) AS n FROM ai_messages WHERE conversation_id = ?`).get(conversationId) as { n: number }).n;
+}
+
+/** Conversaciones con muchos mensajes guardados (para compactar en segundo plano). */
+export function conversationsToCompact(minMessages: number): { id: number; customerId: number }[] {
+  return db.prepare(`
+    SELECT c.id AS id, c.customer_id AS customerId FROM ai_conversations c
+    WHERE (SELECT COUNT(*) FROM ai_messages m WHERE m.conversation_id = c.id) > ?
+  `).all(minMessages) as { id: number; customerId: number }[];
+}
+
+/** Conversaciones que pasan del máximo por cliente (las más viejas primero). */
+export function conversationsOverLimit(maxPerCustomer: number): { id: number; customerId: number }[] {
+  return db.prepare(`
+    SELECT id, customer_id AS customerId FROM (
+      SELECT id, customer_id, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY updated_at DESC, id DESC) AS rn
+      FROM ai_conversations
+    ) WHERE rn > ?
+  `).all(maxPerCustomer) as { id: number; customerId: number }[];
+}
+
+/** Imágenes subidas hace más de `days` días. */
+export function oldUploads(days: number): { id: string; mediaType: string }[] {
+  return db.prepare(`
+    SELECT id, media_type AS mediaType FROM ai_uploads WHERE created_at < datetime('now', ?)
+  `).all(`-${days} days`) as { id: string; mediaType: string }[];
+}
+
+// ── Estado del cliente: memoria («cerebro») y pausa ──
+
+export type AiCustomerState = { memory: string; memoryUpdatedAt: string | null; msgsSinceMemory: number; cooldownUntil: number };
+
+export function customerState(customerId: number): AiCustomerState {
+  const r = db.prepare(`
+    SELECT memory, memory_updated_at AS memoryUpdatedAt, msgs_since_memory AS msgsSinceMemory, cooldown_until AS cooldownUntil
+    FROM ai_customer_state WHERE customer_id = ?
+  `).get(customerId) as AiCustomerState | undefined;
+  return r ?? { memory: "", memoryUpdatedAt: null, msgsSinceMemory: 0, cooldownUntil: 0 };
+}
+
+function ensureState(customerId: number): void {
+  db.prepare(`INSERT OR IGNORE INTO ai_customer_state (customer_id) VALUES (?)`).run(customerId);
+}
+
+export function setMemory(customerId: number, memory: string): void {
+  ensureState(customerId);
+  db.prepare(`UPDATE ai_customer_state SET memory = ?, memory_updated_at = datetime('now'), msgs_since_memory = 0 WHERE customer_id = ?`).run(memory, customerId);
+}
+
+export function bumpMessagesSinceMemory(customerId: number): number {
+  ensureState(customerId);
+  db.prepare(`UPDATE ai_customer_state SET msgs_since_memory = msgs_since_memory + 1 WHERE customer_id = ?`).run(customerId);
+  return customerState(customerId).msgsSinceMemory;
+}
+
+export function setCooldown(customerId: number, untilMs: number): void {
+  ensureState(customerId);
+  db.prepare(`UPDATE ai_customer_state SET cooldown_until = ? WHERE customer_id = ?`).run(untilMs, customerId);
+}
+
+export function spentLastMinutesByCustomer(customerId: number, minutes: number): number {
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage WHERE customer_id = ? AND created_at >= datetime('now', ?)
+  `).get(customerId, `-${minutes} minutes`) as { t: number };
+  return r.t;
+}
+
+export function spentThisMonthByCustomer(customerId: number): number {
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage
+    WHERE customer_id = ? AND strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
+  `).get(customerId) as { t: number };
+  return r.t;
 }

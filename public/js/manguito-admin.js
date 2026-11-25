@@ -12,7 +12,7 @@
     const m = Math.round((Date.now() - ms) / 60000);
     return m < 1 ? "recién" : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`;
   };
-  const TIER_NAMES = { rapido: "⚡ Rápido (Haiku)", equilibrado: "🧠 Equilibrado (Sonnet)", experto: "🏆 Experto (Opus)", router: "🧭 Selector de modelo", test: "🔌 Pruebas de conexión" };
+  const TIER_NAMES = { rapido: "⚡ Rápido (Haiku)", equilibrado: "🧠 Equilibrado (Sonnet)", experto: "🏆 Experto (Opus)", router: "🧭 Selector de modelo", compact: "📦 Compactar conversaciones", memory: "🧠 Memoria de clientes", test: "🔌 Pruebas de conexión" };
 
   const msg = (text, id) => { $(id || "mgp-msg").textContent = text || ""; };
 
@@ -44,7 +44,9 @@
       : `${keys.length} clave${keys.length > 1 ? "s" : ""} · ${active} lista${active === 1 ? "" : "s"} para usar`;
     $("mgp-keys").innerHTML = keys.map((k, i) => keyRow(k, i, keys.length)).join("");
     $("mgp-phones").value = (v.phones || []).join("\n");
+    $("mgp-hourly").value = v.hourlyCap;
     $("mgp-daily").value = v.dailyCap;
+    $("mgp-client-monthly").value = v.clientMonthlyCap;
     $("mgp-monthly").value = v.monthlyCap;
     const u = v.usage || { today: {}, month: {}, byTier: [] };
     $("mgp-usage").innerHTML =
@@ -118,7 +120,10 @@
       e.preventDefault();
       msg("Guardando…", "mgp-msg2");
       try {
-        render(await call("POST", "", { phones: $("mgp-phones").value, dailyCap: $("mgp-daily").value, monthlyCap: $("mgp-monthly").value }));
+        render(await call("POST", "", {
+          phones: $("mgp-phones").value, hourlyCap: $("mgp-hourly").value, dailyCap: $("mgp-daily").value,
+          clientMonthlyCap: $("mgp-client-monthly").value, monthlyCap: $("mgp-monthly").value,
+        }));
         msg("✅ Guardado.", "mgp-msg2");
       } catch (err) { msg("⚠️ " + err.message, "mgp-msg2"); }
     });

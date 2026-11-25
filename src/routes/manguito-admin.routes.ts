@@ -20,7 +20,9 @@ function view() {
       monthUsd: spend[k.id] ?? 0,
     })),
     phones: c.phones,
+    hourlyCap: c.hourlyCap,
     dailyCap: c.dailyCap,
+    clientMonthlyCap: c.clientMonthlyCap,
     monthlyCap: c.monthlyCap,
     usage: usageSummary(),
   };
