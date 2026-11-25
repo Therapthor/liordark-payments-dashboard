@@ -2386,3 +2386,21 @@ button.mp-kpi:active { transform: scale(0.98); }
 @media (max-width: 899px) { .panel-update-bar { bottom: calc(86px + env(safe-area-inset-bottom)); } }
 
 /* Imágenes del bot de WhatsApp (Configuración › Catálogo) */
+
+/* ── Configuración › 🥭 Manguito Pro ── */
+#config-section-manguito .mlc-card { margin-bottom: 14px; }
+#mgp-form { display: flex; flex-direction: column; gap: 6px; }
+.mgp-label { font-size: 13px; font-weight: 700; margin-top: 8px; }
+#mgp-form input, #mgp-form textarea { width: 100%; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--mp-line, #F3E2C4); background: #fff; }
+.mgp-more { margin-top: 6px; font-size: 13.5px; }
+.mgp-more summary { cursor: pointer; font-weight: 700; color: var(--mp-leaf, #1F6B44); }
+.mgp-caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 8px; }
+.mgp-caps label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; }
+.mgp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.mgp-actions a { text-decoration: none; display: inline-flex; align-items: center; }
+.mgp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.mgp-stats div { background: var(--mp-soft, #F6EFE4); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; }
+.mgp-stats b { font-size: 18px; }
+.mgp-stats span { font-size: 12.5px; color: var(--mp-muted, #8A6E4B); }
+.mgp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.mgp-table th, .mgp-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--mp-line, #F3E2C4); }

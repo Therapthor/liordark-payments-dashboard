@@ -210,6 +210,16 @@
     document.getElementById("nav-guest-actions").hidden = authed;
     document.getElementById("band-auth-actions").hidden = !authed;
     refreshCourseVisibility();
+    refreshManguitoLink(authed);
+  }
+
+  // Manguito Pro (chat con IA, prueba privada): el botón solo aparece para
+  // los celulares que el admin habilitó en el panel.
+  async function refreshManguitoLink(authed) {
+    const link = document.getElementById("nav-manguito-link");
+    if (!link) return;
+    if (!authed) { link.hidden = true; return; }
+    try { link.hidden = !(await api("/ai/access")).allowed; } catch { link.hidden = true; }
   }
 
   // Curso: solo si está publicado (o, en borrador, para el celular de
@@ -419,6 +429,7 @@
     // solo no se pierde dónde estaba parado.
     // liordark.com/#codigos (botón «Volver a Códigos» del visor) y los links
     // liordark.com/codigos y /soporte que el admin manda por WhatsApp.
+    if (location.hash === "#manguito") { location.replace("/manguito/"); return; }
     const linkPage = LINK_PAGES[location.hash];
     if (linkPage) {
       history.replaceState(null, "", location.pathname + location.search);
@@ -460,6 +471,12 @@
     await loadCatalog();
     // Llegó por liordark.com/codigos o /soporte sin sesión: primero inicia
     // sesión y después cae directo en esa sección.
+    if (location.hash === "#manguito") {
+      history.replaceState(null, "", location.pathname + location.search);
+      pendingAfterAuth = () => location.assign("/manguito/");
+      openAuthModal({ title: "🥭 Manguito Pro", subtitle: "Ingresa con tu celular y tu PIN para usar Manguito Pro.", button: "Entrar" });
+      return;
+    }
     const linkPage = LINK_PAGES[location.hash];
     if (linkPage) {
       history.replaceState(null, "", location.pathname + location.search);

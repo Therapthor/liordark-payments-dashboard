@@ -10,3 +10,4 @@ data/*.db-wal
 *.log
 data/course-media/
 data/avisos-media/
+data/ai-uploads/

@@ -757,6 +757,7 @@
           <button class="config-subnav-item" data-config-section="reviews">⭐ Reseñas <span class="rvw-badge" id="reviews-pending-badge" hidden></span></button>
           <button class="config-subnav-item" data-config-section="mail">📧 Correos</button>
           <button class="config-subnav-item" data-config-section="marketing">📈 Publicidad</button>
+          <button class="config-subnav-item" data-config-section="manguito">🥭 Manguito Pro</button>
           <button class="config-subnav-item" data-config-section="security">🔒 Seguridad</button>
           <button class="config-subnav-item" data-config-section="backup">💾 Copias</button>
         </div>
@@ -909,6 +910,45 @@
 
           <div id="avisos-grid" class="avisos-grid"><p class="panel-hint">Cargando…</p></div>
 
+        </div>
+
+        <!-- MANGUITO PRO — chat con IA (API de Anthropic) en liordark.com/manguito/.
+             Ver public/js/manguito-admin.js y routes/manguito-admin.routes.ts -->
+        <div id="config-section-manguito" class="config-section" hidden>
+          <div class="panel-header standalone">
+            <h2>Manguito Pro</h2>
+          </div>
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">🥭</span><div><b>Conexión con la API</b><small id="mgp-status">Cargando…</small></div></div>
+            <form id="mgp-form" autocomplete="off">
+              <label class="mgp-label" for="mgp-key">Clave de la API (empieza con sk-ant-)</label>
+              <input id="mgp-key" type="password" placeholder="Pégala aquí para cambiarla (vacío = no cambia)" spellcheck="false" autocomplete="new-password" />
+              <details class="mgp-more">
+                <summary>¿Tu proveedor te dio «base URL» y «auth token»?</summary>
+                <label class="mgp-label" for="mgp-token">Auth token (en lugar de la clave)</label>
+                <input id="mgp-token" type="password" placeholder="Vacío = no cambia" spellcheck="false" autocomplete="new-password" />
+                <label class="mgp-label" for="mgp-base">Base URL (vacío = la oficial de Anthropic)</label>
+                <input id="mgp-base" type="text" placeholder="https://api.anthropic.com" spellcheck="false" />
+              </details>
+              <label class="mgp-label" for="mgp-phones">Celulares con acceso (uno por línea)</label>
+              <textarea id="mgp-phones" rows="3" placeholder="9XXXXXXXX" spellcheck="false"></textarea>
+              <div class="mgp-caps">
+                <label>Tope por cliente al día (US$)<input id="mgp-daily" type="number" min="0" step="0.5" /></label>
+                <label>Tope total al mes (US$)<input id="mgp-monthly" type="number" min="0" step="1" /></label>
+              </div>
+              <div class="mgp-actions">
+                <button class="btn-primary" type="submit">Guardar</button>
+                <button class="btn-secondary" type="button" id="mgp-test">Probar conexión</button>
+                <button class="btn-secondary" type="button" id="mgp-clear">Quitar clave</button>
+                <a class="btn-secondary" href="https://liordark.com/manguito/" target="_blank" rel="noopener">Abrir Manguito Pro</a>
+              </div>
+              <p class="text-muted" id="mgp-msg"></p>
+            </form>
+          </div>
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">💵</span><div><b>Gasto estimado</b><small>Según los precios oficiales por token; el saldo real lo ves en tu cuenta de la API.</small></div></div>
+            <div id="mgp-usage" class="mgp-usage"></div>
+          </div>
         </div>
 
         <!-- PUBLICIDAD — ver public/js/marketing.js y routes/marketing.routes.ts -->
@@ -2010,6 +2050,7 @@
   <script src="js/mango-views.js"></script>
   <script src="js/rest.js"></script>
   <script src="js/marketing.js"></script>
+  <script src="js/manguito-admin.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
