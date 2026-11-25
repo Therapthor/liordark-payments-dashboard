@@ -1174,3 +1174,31 @@ body[data-nav-dir="back"] .page { --pg-x: -22px; --pg-y: 0px; }
 .quick-activate .btn-primary { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; }
 #quick-submit[hidden], #quick-email-wrap[hidden], #quick-pin-wrap[hidden],
 #quick-hint[hidden], .quick-status[hidden], .quick-activate[hidden] { display: none !important; }
+
+/* Manguito Pro en el catálogo y globito del tutorial */
+.manguito-card { text-decoration: none; color: inherit; }
+.manguito-card-img { background: linear-gradient(135deg, #FFE8A3, #FFC93C); display: grid; place-items: center; }
+.manguito-card-img img { width: 62%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 22px; box-shadow: var(--shadow-pop); }
+.mg-tour {
+  position: fixed; z-index: 1000; width: min(300px, calc(100vw - 24px)); padding: 14px 14px 12px;
+  background: var(--ink, #2B1B0E); color: #FFF8EC; border-radius: 16px; box-shadow: 0 18px 40px -16px rgba(0,0,0,.55);
+  animation: mg-tour-in .35s cubic-bezier(.32,.72,0,1);
+}
+.mg-tour::before {
+  content: ""; position: absolute; top: -7px; left: calc(var(--arrow-x, 50%) - 7px); width: 14px; height: 14px;
+  background: inherit; transform: rotate(45deg); border-radius: 3px;
+}
+.mg-tour.above::before { top: auto; bottom: -7px; }
+.mg-tour b { display: block; font-size: 15px; margin-bottom: 4px; }
+.mg-tour p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; opacity: .9; }
+.mg-tour-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.mg-tour-skip { border: 0; background: rgba(255,255,255,.12); color: inherit; border-radius: 10px; padding: 7px 12px; font-weight: 700; cursor: pointer; }
+.mg-tour-go { background: var(--mango, #FFC93C); color: #2B1B0E; border-radius: 10px; padding: 7px 12px; font-weight: 800; text-decoration: none; }
+.mg-tour-pulse { position: relative; }
+.mg-tour-pulse::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 14px; border: 2px solid var(--mango, #FFC93C);
+  animation: mg-tour-ring 1.4s ease-out infinite; pointer-events: none;
+}
+@keyframes mg-tour-ring { 0% { opacity: .9; transform: scale(.96); } 100% { opacity: 0; transform: scale(1.12); } }
+@keyframes mg-tour-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mg-tour, .mg-tour-pulse::after { animation: none; } }

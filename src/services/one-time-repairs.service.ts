@@ -110,4 +110,11 @@ function setManguitoCreditPacks(): string {
 export function runOneTimeRepairs(): void {
   once("2026-11-24-amazon-3909", restoreAmazonSale3909);
   once("2026-11-25-manguito-packs", setManguitoCreditPacks);
+  once("2026-11-25-manguito-venta", enableManguitoStore);
+}
+
+/** 25-nov-2026 — el dueño pidió publicar Manguito Pro a la venta en la tienda. */
+function enableManguitoStore(): string {
+  db.prepare(`INSERT INTO admin_settings (key, value) VALUES ('ai_store_enabled', '1') ON CONFLICT(key) DO UPDATE SET value = '1'`).run();
+  return "Manguito Pro a la venta en la tienda";
 }

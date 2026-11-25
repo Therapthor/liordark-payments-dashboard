@@ -1,9 +1,9 @@
 import { Router } from "express";
 import {
   aiConfig, saveAiConfig, testAiConnection, isAiConfigured, listCredentials, credentialState,
-  addCredential, editCredential, deleteCredential, storeAdminView, saveStoreConfig, giftToPhone,
+  addCredential, editCredential, deleteCredential, storeAdminView, saveStoreConfig, giftToPhone, checkApiBalance,
 } from "../services/manguito.service";
-import { usageSummary, monthSpendByCredential } from "../db/manguito.repository";
+import { usageSummary, monthSpendByCredential, spentByCredentialSince } from "../db/manguito.repository";
 
 // ── Configuración › 🥭 Manguito Pro (solo admin) ──
 // Las claves nunca vuelven al navegador: solo sus últimos 4 caracteres.
@@ -18,6 +18,9 @@ function view() {
       id: k.id, label: k.label, kind: k.kind, tail: k.secret.slice(-4), baseUrl: k.baseUrl,
       enabled: k.enabled, ...credentialState(k), failedAt: k.failedAt, lastOkAt: k.lastOkAt,
       monthUsd: spend[k.id] ?? 0,
+      budgetUsd: k.budgetUsd ?? null,
+      budgetLeft: k.budgetUsd !== null && k.budgetUsd !== undefined && k.budgetAt
+        ? Math.round(Math.max(0, k.budgetUsd - spentByCredentialSince(k.id, k.budgetAt)) * 100) / 100 : null,
     })),
     phones: c.phones,
     phoneCaps: Object.entries(c.phoneCaps).map(([p, v]) => `${p} = ${v}`).join("\n"),
@@ -66,7 +69,8 @@ router.post("/keys", (req, res) => {
 
 router.patch("/keys/:id", (req, res) => {
   const err = editCredential(String(req.params.id), req.body);
-  if (err) { res.status(404).json({ message: err }); return; }
+  if (err) { res.status(400).json({ message: err }); return; }
+  if (req.body?.budgetUsd !== undefined) checkApiBalance();
   res.json(view());
 });
 

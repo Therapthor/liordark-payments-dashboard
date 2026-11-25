@@ -323,6 +323,9 @@ ensureColumn("access_profiles", "expires_override", "expires_override TEXT");
 // NULL = reporte de un cliente de liordark.com; si no, lo reportó ESE
 // mayorista a nombre de uno de sus propios clientes (ver wholesaler.routes.ts).
 ensureColumn("support_tickets", "wholesaler_id", "wholesaler_id INTEGER");
+// Incidencias automáticas del sistema (kind = 'system', ej. Manguito Pro sin
+// saldo en la API): qué pasó, en texto (nunca datos de clientes ni claves).
+ensureColumn("support_tickets", "details", "details TEXT NOT NULL DEFAULT ''");
 db.exec(`CREATE INDEX IF NOT EXISTS idx_support_tickets_wholesaler ON support_tickets(wholesaler_id)`);
 
 // Se marca cuando el admin usa "Reemplazar" (pool o manual) sobre este

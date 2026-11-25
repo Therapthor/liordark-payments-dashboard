@@ -15,7 +15,7 @@ const EMAIL_TYPES = new Set<string>(["new_account", "account_replaced", "passwor
 // (support.routes.ts).
 // ─────────────────────────────────────────────────────────────
 
-export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed" | "account_replaced" | "support_update";
+export type CustomerNotificationType = "new_account" | "renewed" | "support_resolved" | "expiring" | "password_changed" | "account_replaced" | "support_update" | "manguito";
 
 export type CustomerNotification = {
   id:          number;
@@ -66,7 +66,7 @@ export function createCustomerNotification(
 ): void {
   const digits = normalizePeruPhone(clientPhone);
   if (!digits || !platform) return;
-  const message = type === "support_update"
+  const message = type === "support_update" || type === "manguito" // manguito: avisos de Manguito Pro (plan, créditos)
     ? customMessage.trim()
     : type === "support_resolved"
     ? (customMessage.trim() ? `${buildSupportResolvedHeadline(platform, replaced)}\n\n${customMessage.trim()}` : buildSupportResolvedHeadline(platform, replaced))

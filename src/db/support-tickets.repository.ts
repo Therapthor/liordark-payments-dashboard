@@ -16,7 +16,7 @@ import { findWholesalerById } from "./wholesaler.repository";
 export type SupportTicketStatus = "pending" | "seen" | "attended";
 export type SupportTicketResolution = "" | "active" | "solved" | "replaced" | "reactivated";
 
-export type SupportTicketKind = "" | "account" | "codes";
+export type SupportTicketKind = "" | "account" | "codes" | "system";
 
 export type SupportTicket = {
   id:              number;
@@ -40,6 +40,7 @@ export type SupportTicket = {
   reviewedAt:      string | null;
   attendedAt:      string | null;
   replacedAt:      string | null;
+  details:         string;      // solo incidencias del sistema
 };
 
 function toTicket(row: any): SupportTicket {
@@ -66,6 +67,7 @@ function toTicket(row: any): SupportTicket {
     reviewedAt:      row.reviewed_at ?? null,
     attendedAt:      row.attended_at,
     replacedAt:      row.replaced_at,
+    details:         row.details || "",
   };
 }
 
@@ -87,6 +89,32 @@ export function createSupportTicket(params: {
     params.kind ?? "", params.profileId ?? null
   );
   return toTicket(db.prepare(`SELECT * FROM support_tickets WHERE id = ?`).get(info.lastInsertRowid));
+}
+
+/**
+ * Incidencia automática del sistema (Soportes del panel): ej. «Manguito Pro:
+ * la API se quedó sin saldo». Si ya hay una abierta con el mismo título, no
+ * se repite: solo se actualiza el detalle y cuántas veces pasó.
+ */
+export function createSystemIncident(title: string, details: string): SupportTicket | null {
+  const t = title.slice(0, 120);
+  const d = details.slice(0, 2000);
+  const open = db.prepare(`
+    SELECT id, details FROM support_tickets WHERE kind = 'system' AND problem = ? AND status != 'attended' ORDER BY id DESC LIMIT 1
+  `).get(t) as { id: number; details: string } | undefined;
+  if (open) {
+    const m = /\n\n🔁 Se repitió (\d+) vez/.exec(open.details);
+    const n = m ? Number(m[1]) + 1 : 1;
+    const stamp = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+    db.prepare(`UPDATE support_tickets SET details = ? WHERE id = ?`)
+      .run(`${d}\n\n🔁 Se repitió ${n} vez/veces · última: ${stamp} (hora Lima)`, open.id);
+    return null;
+  }
+  const info = db.prepare(`
+    INSERT INTO support_tickets (client_phone, wholesaler_id, platform, account_email, account_password, profile_name, provider, problem, kind, profile_id, details)
+    VALUES ('', NULL, 'MANGUITO PRO', '', '', '', 'Sistema', ?, 'system', NULL, ?)
+  `).run(t, d);
+  return getSupportTicketById(Number(info.lastInsertRowid));
 }
 
 export function getSupportTicketById(id: number): SupportTicket | null {

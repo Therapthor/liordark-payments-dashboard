@@ -7,6 +7,9 @@ import { env } from "../config/env";
 import { getAdminSetting, setAdminSetting } from "../db/security.repository";
 import { findCustomerById, findCustomerByPhone } from "../db/customer.repository";
 import { normalizePeruPhone } from "../utils/phone.util";
+import { createSystemIncident } from "../db/support-tickets.repository";
+import { createCustomerNotification } from "../db/customer-notifications.repository";
+import { findWholesalerByPhone } from "../db/wholesaler.repository";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
   setSummary, pruneMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
@@ -14,6 +17,7 @@ import {
   bumpMessagesSinceMemory, registerPause, pausesToday, chatsSince, spentThisMonthByCustomer,
   wallet, setWindowStart, planSpentSince, creditsSpentSince, createAiPurchase, findAiPurchase, markAiPurchasePaid,
   giftAi, hasPaidAiPurchase, recentAiPurchases, outstandingBalance, cleanupPendingAiPurchases, avgCostPerMessage,
+  spentByCredentialSince, subscribersSummary, salesThisMonth, walletsForNotices, setWalletNotice,
   type AiMessage, type AiConversation, type UsageSource, type AiWallet,
 } from "../db/manguito.repository";
 
@@ -101,6 +105,9 @@ export type FailKind = "billing" | "auth" | "rate";
 export type AiCredential = {
   id: string; label: string; kind: "apiKey" | "authToken"; secret: string; baseUrl: string;
   enabled: boolean; failedAt: number | null; failKind: FailKind | ""; lastOkAt: number | null; addedAt: number;
+  // Saldo que el admin dice que tiene la cuenta de la API (y desde cuándo):
+  // lo que queda = ese saldo − lo gastado con esta clave desde entonces.
+  budgetUsd?: number | null; budgetAt?: number | null;
 };
 const COOLDOWN_MS: Record<FailKind, number> = { billing: 6 * 3600e3, auth: 24 * 3600e3, rate: 60e3 };
 export const FAIL_TEXT: Record<FailKind, string> = {
@@ -249,6 +256,15 @@ export function editCredential(id: string, body: any): string | null {
   if (typeof body?.enabled === "boolean") c.enabled = body.enabled;
   if (typeof body?.label === "string" && body.label.trim()) c.label = body.label.trim().slice(0, 40);
   if (body?.reset) { c.failedAt = null; c.failKind = ""; }
+  if (body?.budgetUsd !== undefined) {
+    const raw = String(body.budgetUsd ?? "").trim().replace(",", ".");
+    if (raw === "") { c.budgetUsd = null; c.budgetAt = null; }
+    else {
+      const n = Number(raw);
+      if (!isFinite(n) || n < 0 || n > 100000) return "El saldo debe ser un monto en US$.";
+      c.budgetUsd = Math.round(n * 100) / 100; c.budgetAt = Date.now();
+    }
+  }
   if (body?.move === "up" && i > 0) [list[i - 1], list[i]] = [list[i]!, list[i - 1]!];
   if (body?.move === "down" && i < list.length - 1) [list[i + 1], list[i]] = [list[i]!, list[i + 1]!];
   saveCredentials(list);
@@ -346,6 +362,7 @@ async function withCredential<T>(
       if (!kind) throw err;
       updateCredential(cred.id, { failedAt: Date.now(), failKind: kind });
       console.warn(`⚠️ Manguito Pro: clave «${cred.label}» en pausa (${FAIL_TEXT[kind]})`);
+      if (kind !== "rate") reportKeyProblem(cred, kind);
       lastErr = err;
       if (!canSwitch()) throw err;
     }
@@ -674,8 +691,10 @@ export async function runChat(opts: {
     }, () => !text && !signal.aborted);
     credId = cred.id;
   } catch (err) {
-    if (signal.aborted || err instanceof sdk().APIUserAbortError) status = "stopped";
-    else { status = "error"; errorMessage = friendlyApiError(err); }
+    let aborted = signal.aborted;
+    try { aborted = aborted || err instanceof sdk().APIUserAbortError; } catch { /* sin SDK */ }
+    if (aborted) status = "stopped";
+    else { status = "error"; errorMessage = friendlyApiError(err); noteChatError(err); }
   } finally {
     activeChats.delete(customerId);
   }
@@ -846,8 +865,15 @@ function freeUsage(customerId: number): { monthPct: number; cooldownUntil: numbe
 // ── Mantenimiento cada 3 horas: compactar, límite de conversaciones e imágenes ──
 
 export async function manguitoMaintenance(): Promise<void> {
+  try { await maintenanceSteps(); }
+  catch (err: any) { incident("Manguito Pro: falló el mantenimiento automático", `Error: ${safeErr(err)}`); }
+}
+
+async function maintenanceSteps(): Promise<void> {
   if (!isAiConfigured()) return;
   cleanupPendingAiPurchases();
+  try { sendWalletNotices(); } catch (err: any) { incident("Manguito Pro: no se pudieron mandar los avisos de vencimiento", `Error: ${safeErr(err)}`); }
+  checkApiBalance();
   for (const c of conversationsToCompact(SUMMARIZE_AT)) {
     await compactConversation(c.customerId, c.id).catch(() => {});
   }
@@ -1053,13 +1079,15 @@ export function customerMeter(customerId: number) {
 }
 
 /** Lo que la tienda y la página de planes muestran (sin sesión también). */
-export function publicStoreInfo() {
+export function publicStoreInfo(phone?: string) {
   const s = storeConfig();
+  const discount = aiDiscountFor(phone);
   return {
     enabled: s.enabled && isAiConfigured(),
     windowHours: WINDOW_HOURS,
-    monthly: s.monthly.enabled ? { priceSoles: s.monthly.priceSoles, usd: s.monthly.usd, weekPct: s.monthly.weekPct, windowPct: s.monthly.windowPct } : null,
-    packs: s.packs,
+    discount, // mayoristas: S/ 5 menos (precios ya descontados)
+    monthly: s.monthly.enabled ? { priceSoles: discounted(s.monthly.priceSoles, discount), basePrice: s.monthly.priceSoles, usd: s.monthly.usd, weekPct: s.monthly.weekPct, windowPct: s.monthly.windowPct } : null,
+    packs: s.packs.map(p => ({ priceSoles: discounted(p.priceSoles, discount), basePrice: p.priceSoles, usd: p.usd })),
   };
 }
 
@@ -1078,6 +1106,8 @@ export async function startAiPurchase(customer: { id: number; phone: string }, k
     if (!p) return { ok: false, status: 400, message: "Ese paquete ya no existe. Recarga la página." };
     price = p.priceSoles; usd = p.usd; label = `Manguito Pro — Créditos US$ ${p.usd}`;
   }
+  const discount = aiDiscountFor(customer.phone);
+  if (discount) { price = discounted(price, discount); label += " (mayorista)"; }
   try {
     const r = await axios.post(
       env.BOT_BASE_URL + "/api/web-orders",
@@ -1104,6 +1134,7 @@ export function onAiPurchasePaid(orderName: string, amount?: string): { ok: bool
   if (!findAiPurchase(orderName)) return null;
   const r = markAiPurchasePaid(orderName, amount);
   const p = r.purchase;
+  if (r.ok && !r.alreadyPaid) setImmediate(() => { try { checkApiBalance(); } catch { /* no crítico */ } });
   return { ok: r.ok, alreadyPaid: !!r.alreadyPaid, label: p ? (p.kind === "plan" ? "Plan mensual" : `Créditos US$ ${p.usd}`) : "" };
 }
 
@@ -1111,10 +1142,19 @@ export function onAiPurchasePaid(orderName: string, amount?: string): { ok: bool
 
 export function storeAdminView() {
   const s = storeConfig();
+  const now = Date.now();
   return {
     store: s,
     outstanding: outstandingBalance(),
-    purchases: recentAiPurchases(30).map(p => ({ ...p, phone: p.phone ? "•••" + p.phone.slice(-3) : "" })),
+    apiBalance: apiBalance(),
+    month: salesThisMonth(),
+    purchases: recentAiPurchases(30),
+    subscribers: subscribersSummary().map(r => ({
+      phone: r.phone, planActive: r.planEnd > now, planEnd: r.planEnd, planUsd: r.planUsd,
+      credits: Math.round(r.credits * 100) / 100, paidSoles: r.paidSoles, giftsUsd: r.giftsUsd,
+      spentUsd: Math.round(r.spentUsd * 10000) / 10000, monthUsd: Math.round(r.monthUsd * 10000) / 10000,
+      lastAt: r.lastAt, wholesaler: aiDiscountFor(r.phone) > 0,
+    })),
   };
 }
 
@@ -1129,3 +1169,138 @@ export function giftToPhone(phoneRaw: string, kind: "plan" | "credits", usdRaw: 
   giftAi(c.id, kind, Math.round(amount * 100) / 100);
   return null;
 }
+
+// ═════════════════════════════════════════════════════════════
+// INCIDENCIAS AUTOMÁTICAS (panel › Soportes) y AVISOS
+// Si Manguito Pro se rompe (claves sin saldo o inválidas, errores
+// seguidos al responder, mantenimiento que falla, pago sin compra), queda
+// una incidencia en Soportes con QUÉ pasó. Solo texto: nunca la clave,
+// nunca lo que escribió un cliente. No se repite mientras siga abierta.
+// ═════════════════════════════════════════════════════════════
+
+const limaStamp = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 16).replace("T", " ");
+
+export function safeErr(err: unknown): string {
+  const e = err as any;
+  const status = e?.status ? `HTTP ${e.status} · ` : "";
+  // Sin claves ni datos: solo el tipo y el mensaje del proveedor, recortado.
+  const msg = String(e?.error?.error?.message || e?.message || e || "desconocido")
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-…").replace(/\s+/g, " ").slice(0, 300);
+  return status + msg;
+}
+
+function incident(title: string, details: string): void {
+  try { createSystemIncident(title, `${details}\n\n🕒 ${limaStamp()} (hora Lima)`); }
+  catch (err: any) { console.error("⚠️ No se pudo crear la incidencia:", err?.message); }
+}
+
+function keyStates(): string {
+  return listCredentials().map((c, i) => {
+    const st = credentialState(c);
+    return `${i + 1}. ${c.label}: ${st.state === "ok" ? "activa" : st.state === "off" ? "desactivada" : "en pausa (" + st.reason + ")"}`;
+  }).join("\n") || "(sin claves)";
+}
+
+function reportKeyProblem(cred: AiCredential, kind: FailKind): void {
+  const usable = listCredentials().filter(c => c.enabled && !isCoolingDown(c)).length;
+  if (kind === "billing") {
+    incident(`Manguito Pro: la clave «${cred.label}» se quedó sin saldo`,
+      `Recarga saldo en esa cuenta de la API o agrega otra clave en Configuración › 🥭 Manguito Pro.\n` +
+      (usable ? `Mientras tanto sigue con las otras claves (${usable} activa/s).` : `⚠️ No queda ninguna clave activa: Manguito Pro NO está respondiendo.`) +
+      `\n\nClaves:\n${keyStates()}`);
+  } else {
+    incident(`Manguito Pro: la clave «${cred.label}» fue rechazada`,
+      `La API dijo que la clave es inválida o no tiene permiso (¿la borraron o la cambiaron?). Revísala o agrega otra en Configuración › 🥭 Manguito Pro.\n` +
+      (usable ? `Sigue con las otras claves (${usable} activa/s).` : `⚠️ No queda ninguna clave activa: Manguito Pro NO está respondiendo.`) +
+      `\n\nClaves:\n${keyStates()}`);
+  }
+}
+
+// Errores al responder: 3 o más en 10 minutos → incidencia.
+const chatErrors: { at: number; kind: string }[] = [];
+function noteChatError(err: unknown): void {
+  if (err instanceof NoCredentialError) {
+    incident("Manguito Pro: no hay claves activas", "Nadie puede usar el chat. Agrega o activa una clave en Configuración › 🥭 Manguito Pro.");
+    return;
+  }
+  const now = Date.now();
+  chatErrors.push({ at: now, kind: safeErr(err) });
+  while (chatErrors.length && now - chatErrors[0]!.at > 10 * 60e3) chatErrors.shift();
+  if (chatErrors.length >= 3) {
+    const counts = new Map<string, number>();
+    for (const e of chatErrors) counts.set(e.kind, (counts.get(e.kind) || 0) + 1);
+    incident("Manguito Pro: errores seguidos al responder",
+      `${chatErrors.length} respuestas fallaron en los últimos 10 minutos.\n\n` +
+      [...counts].map(([k, n]) => `• ${n}× ${k}`).join("\n") + `\n\nClaves:\n${keyStates()}`);
+    chatErrors.length = 0;
+  }
+}
+
+/** El bot confirmó un Yape de Manguito Pro pero la compra no existe en el panel. */
+export function reportOrphanAiPayment(orderName: string, amount: string): void {
+  incident("Manguito Pro: pago confirmado sin compra",
+    `El bot confirmó el Yape del pedido ${orderName} (S/ ${amount || "?"}) pero no se encontró la compra en el panel, así que no se acreditó nada.\n` +
+    `El celular va al inicio del pedido (web-<celular>-…). Dale su saldo con «Regalar saldo» en Configuración › 🥭 Manguito Pro.`);
+}
+
+// ── Saldo de la API («stock»): pedir recarga a tiempo ──
+
+export function apiBalance(): { known: boolean; remaining: number; keys: number } {
+  let remaining = 0, keys = 0;
+  for (const c of listCredentials()) {
+    if (!c.enabled || c.budgetUsd === null || c.budgetUsd === undefined || !c.budgetAt) continue;
+    keys++;
+    remaining += Math.max(0, c.budgetUsd - spentByCredentialSince(c.id, c.budgetAt));
+  }
+  return { known: keys > 0, remaining: Math.round(remaining * 100) / 100, keys };
+}
+
+export function checkApiBalance(): void {
+  const bal = apiBalance();
+  if (!bal.known) return;
+  const o = outstandingBalance();
+  const owed = Math.round((o.credits + o.plans) * 100) / 100;
+  if (bal.remaining < 10 || bal.remaining < owed) {
+    incident("Manguito Pro: pide más saldo para la API",
+      `Queda ≈ US$ ${bal.remaining.toFixed(2)} en las claves (según el saldo que anotaste en el panel y lo gastado desde entonces).\n` +
+      `Saldo vendido a clientes aún sin usar: US$ ${owed.toFixed(2)} (créditos US$ ${o.credits.toFixed(2)} + planes US$ ${o.plans.toFixed(2)}).\n\n` +
+      `Recarga la cuenta de la API (o crea otra clave) y anota el saldo nuevo en Configuración › 🥭 Manguito Pro › Claves.`);
+  }
+}
+
+// ── Avisos al cliente (campanita): plan por vencer / vencido, créditos ──
+
+function sendWalletNotices(): void {
+  const now = Date.now();
+  for (const w of walletsForNotices()) {
+    if (!w.phone) continue;
+    const notify = (msg: string) => createCustomerNotification(w.phone, "manguito", "MANGUITO PRO", "", msg);
+    if (w.planEnd > now && w.planEnd - now < 3 * 864e5 && w.noticeExpiring !== w.planEnd) {
+      notify(`⏰ Tu plan de Manguito Pro vence el ${limaDayTime(w.planEnd)}. Renuévalo con Yape desde Manguito Pro › Planes y recargas.`);
+      setWalletNotice(w.customerId, "notice_expiring", w.planEnd);
+    }
+    if (w.planEnd > 0 && w.planEnd <= now && now - w.planEnd < 7 * 864e5 && w.noticeExpired !== w.planEnd) {
+      notify("Tu plan de Manguito Pro venció. Cuando quieras, renuévalo desde Manguito Pro › Planes y recargas 🥭");
+      setWalletNotice(w.customerId, "notice_expired", w.planEnd);
+    }
+    const ref = w.lastCreditsUsd || 0;
+    if (ref > 0 && w.credits > MIN_CREDITS && w.credits < ref * 0.1 && !w.noticeLow) {
+      notify(`🔋 Te queda poco saldo de créditos en Manguito Pro (US$ ${w.credits.toFixed(2)}). Recarga cuando quieras.`);
+      setWalletNotice(w.customerId, "notice_low", 1);
+    }
+    if (ref > 0 && w.credits <= MIN_CREDITS && !w.noticeOut && w.planEnd <= now) {
+      notify("Se acabaron tus créditos de Manguito Pro. Recarga con Yape para seguir conversando 🥭");
+      setWalletNotice(w.customerId, "notice_out", 1);
+    }
+  }
+}
+
+// ── Mayoristas: S/ 5 menos ──
+
+export const WHOLESALE_DISCOUNT = 5;
+export function aiDiscountFor(phone: string | undefined): number {
+  if (!phone) return 0;
+  const w = findWholesalerByPhone(phone);
+  return w && w.status === "active" ? WHOLESALE_DISCOUNT : 0;
+}
+export const discounted = (price: number, discount: number) => Math.max(1, Math.round((price - discount) * 100) / 100);

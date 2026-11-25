@@ -34,7 +34,7 @@ router.get("/access", (req, res) => {
   const c = customerOf(req);
   res.setHeader("Cache-Control", "no-store");
   const allowed = !!c && hasAiAccess(c);
-  res.json({ allowed, configured: isAiConfigured(), store: publicStoreInfo(), meter: allowed ? customerMeter(c!.id) : null });
+  res.json({ allowed, configured: isAiConfigured(), store: publicStoreInfo(c?.phone), meter: allowed ? customerMeter(c!.id) : null });
 });
 
 // Comprar plan mensual o créditos (cualquier cliente con sesión).

@@ -213,23 +213,85 @@
     refreshManguitoLink(authed);
   }
 
-  // Manguito Pro (chat con IA): el botón aparece si el cliente ya tiene
-  // acceso (lista del panel o lo compró) o si está a la venta; el banner
-  // del catálogo, solo cuando está a la venta.
+  // Manguito Pro (chat con IA): el botón del menú aparece si el cliente ya
+  // tiene acceso (lista del panel o lo compró) o si está a la venta; en el
+  // catálogo sale como un producto más (ver manguitoCardHtml). Al entrar
+  // por primera vez, un globito señala dónde está (ver showManguitoTour).
+  let manguitoInfoP = null;
+  function manguitoInfo() {
+    if (!manguitoInfoP) {
+      manguitoInfoP = fetch("/api/store/ai-public/info", { credentials: "include" }).then(r => r.json()).catch(() => null);
+      setTimeout(() => { manguitoInfoP = null; }, 60_000);
+    }
+    return manguitoInfoP;
+  }
   async function refreshManguitoLink(authed) {
     const link = document.getElementById("nav-manguito-link");
-    const banner = document.getElementById("manguito-banner");
-    let info = null, allowed = false;
-    try { info = await (await fetch("/api/store/ai-public/info", { credentials: "include" })).json(); } catch { info = null; }
+    const info = await manguitoInfo();
+    let allowed = false;
     if (authed) { try { allowed = !!(await api("/ai/access")).allowed; } catch { allowed = false; } }
     const onSale = !!(info && info.enabled);
     if (link) link.hidden = !(allowed || onSale);
-    if (banner) {
-      banner.hidden = !onSale || allowed;
-      const prices = [info && info.monthly ? info.monthly.priceSoles : null, ...((info && info.packs) || []).map(p => p.priceSoles)].filter(x => x);
-      const sub = document.getElementById("manguito-banner-sub");
-      if (sub && prices.length) sub.textContent = "Desde S/ " + Math.min(...prices) + " · sin cuentas raras ni pagos en dólares · pagas con Yape";
-    }
+    if (authed && link && !link.hidden) showManguitoTour(link);
+  }
+
+  // Tutorial: globito que apunta al botón «Manguito Pro» del menú (una vez).
+  function showManguitoTour(link) {
+    try { if (localStorage.getItem("mg_tour_v1")) return; } catch { return; }
+    if (document.getElementById("mg-tour")) return;
+    const r = link.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const tip = document.createElement("div");
+    tip.id = "mg-tour";
+    tip.className = "mg-tour";
+    tip.setAttribute("role", "dialog");
+    tip.innerHTML = `<b>🥭 ¡Nuevo! Manguito Pro</b><p>Aquí está tu inteligencia artificial: usa Claude sin cuentas raras y paga con Yape.</p>` +
+      `<div class="mg-tour-btns"><button type="button" class="mg-tour-skip">Entendido</button><a class="mg-tour-go" href="/manguito/">Probar ahora</a></div>`;
+    document.body.appendChild(tip);
+    link.classList.add("mg-tour-pulse");
+    const place = () => {
+      const b = link.getBoundingClientRect();
+      const w = tip.offsetWidth;
+      const left = Math.max(12, Math.min(window.innerWidth - w - 12, b.left + b.width / 2 - w / 2));
+      tip.style.left = left + "px";
+      // Menú abajo (celular): el globito va encima del botón.
+      const above = b.bottom + tip.offsetHeight + 16 > window.innerHeight;
+      tip.classList.toggle("above", above);
+      tip.style.top = (above ? b.top - tip.offsetHeight - 12 : b.bottom + 12) + "px";
+      tip.style.setProperty("--arrow-x", Math.max(16, Math.min(w - 16, b.left + b.width / 2 - left)) + "px");
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, { passive: true });
+    const done = () => {
+      try { localStorage.setItem("mg_tour_v1", "1"); } catch { /* sin storage */ }
+      tip.remove(); link.classList.remove("mg-tour-pulse");
+      window.removeEventListener("resize", place); window.removeEventListener("scroll", place);
+    };
+    tip.querySelector(".mg-tour-skip").addEventListener("click", done);
+    tip.querySelector(".mg-tour-go").addEventListener("click", done);
+    link.addEventListener("click", done, { once: true });
+  }
+
+  // Manguito Pro como producto del catálogo (stock ilimitado: es un servicio).
+  function manguitoCardHtml(info) {
+    const prices = [info.monthly ? info.monthly.priceSoles : null, ...(info.packs || []).map(p => p.priceSoles)].filter(x => x);
+    const from = prices.length ? Math.min(...prices) : null;
+    return `
+      <a class="product-card product-card-exclusive manguito-card" href="/manguito/" aria-label="Manguito Pro · inteligencia artificial con Claude">
+        <div class="product-img-wrap manguito-card-img">
+          <img src="/assets/logo.webp" alt="" loading="lazy" decoding="async">
+          <span class="product-badge-overlay badge-exclusive">Nuevo · IA</span>
+        </div>
+        <div class="product-body">
+          <span class="product-title">Manguito Pro · IA con Claude</span>
+          <span class="product-stock"><i></i>Disponible · mensual o créditos</span>
+          <div class="product-buy-row">
+            <span class="product-price-big">${from ? `<small>Desde S/</small>${escapeHtml(String(from))}` : ""}</span>
+            <span class="product-cta" aria-hidden="true">Ver planes</span>
+          </div>
+        </div>
+      </a>`;
   }
 
   // Curso: solo si está publicado (o, en borrador, para el celular de
@@ -623,6 +685,7 @@
     document.getElementById("notif-list").addEventListener("click", (e) => {
       const item = e.target.closest(".notif-item");
       if (!item || !item.dataset.platform) return;
+      if (item.dataset.platform === "MANGUITO PRO") { location.assign("/manguito/"); return; }
       closeNotifPanel();
       pendingHighlight = { platform: item.dataset.platform, email: item.dataset.email };
       switchPage("dashboard");
@@ -881,6 +944,11 @@
       }
       const exclusiveProducts = sortedProducts.filter(p => isExclusive(p, "platform"));
       const regularProducts   = sortedProducts.filter(p => !isExclusive(p, "platform"));
+      const mgInfo = await manguitoInfo();
+      if (mgInfo && mgInfo.enabled) {
+        html += `<div class="section-chip section-chip-exclusive">Inteligencia artificial</div>`;
+        html += `<div class="product-grid product-grid-exclusive">${manguitoCardHtml(mgInfo)}</div>`;
+      }
       if (exclusiveProducts.length > 0) {
         html += `<div class="section-chip section-chip-exclusive">Exclusivos</div>`;
         html += `<div class="product-grid product-grid-exclusive">${exclusiveProducts.map(p => productCardHtml(p, "platform", { exclusive: true })).join("")}</div>`;

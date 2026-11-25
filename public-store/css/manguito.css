@@ -316,6 +316,10 @@ body.mg {
 .mg-plans-in > img { border-radius: 14px; background: var(--accent); }
 .mg-plans h2 { font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: -.02em; margin: 14px 0 6px; }
 .mg-plans-sub { color: var(--text-2); max-width: 520px; margin: 0 auto 26px; }
+.mg-powered { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 10px; padding: 4px 12px; border-radius: 99px; border: 1px solid var(--line); font-size: 13px; color: var(--text-2); }
+.mg-powered b { color: var(--text); }
+.mg-discount { margin: 0 auto 14px; max-width: 520px; padding: 8px 12px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); font-weight: 800; font-size: 14px; }
+.mg-price s, .mg-pack s { color: var(--muted); font-weight: 600; font-size: .6em; }
 .mg-link-back { display: block; border: 0; background: none; cursor: pointer; color: var(--muted); font-weight: 700; margin: 0 0 14px; padding: 4px; }
 .mg-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; text-align: left; }
 .mg-plan {

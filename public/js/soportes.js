@@ -66,7 +66,29 @@
     return `<span class="soporte-badge soporte-badge-done">✅ Tenía suscripción</span>`;
   }
 
+  // Incidencia automática del sistema (ej. Manguito Pro sin saldo en la API).
+  function renderSystemCard(t) {
+    const open = t.status !== "attended";
+    const when = open ? `Detectado ${escapeHtml(fmtDateTime(t.createdAt))}` : `Resuelto ${escapeHtml(fmtDateTime(t.attendedAt))} · detectado ${escapeHtml(fmtDateTime(t.createdAt))}`;
+    return `
+      <div class="soporte-card soporte-system${open ? "" : " is-done"}" data-id="${t.id}">
+        <div class="soporte-card-head">
+          <b class="soporte-platform">⚠️ ${escapeHtml(t.platformTag)}</b>
+          <span class="soporte-problem">${escapeHtml(t.problem)}</span>
+          ${open ? (t.status === "seen" ? `<span class="soporte-badge soporte-badge-review">🔎 En revisión</span>` : `<span class="soporte-badge soporte-badge-new">🆕 Nuevo</span>`) : `<span class="soporte-badge soporte-badge-done">🎉 Resuelto</span>`}
+          <span class="soporte-badge">🤖 Automático</span>
+        </div>
+        <div class="soporte-card-sub">${when}</div>
+        <pre class="soporte-details">${escapeHtml(t.details || "")}</pre>
+        ${open ? `<div class="soporte-actions">
+          <button class="btn-secondary btn-sm" data-act="review" type="button"${t.status === "seen" ? " disabled" : ""}>${t.status === "seen" ? "🔎 En revisión ✓" : "🔎 En revisión"}</button>
+          <button class="btn-primary btn-sm" data-act="solved" type="button">🎉 Ya lo arreglé</button>
+        </div>` : ""}
+      </div>`;
+  }
+
   function renderCard(t) {
+    if (t.kind === "system") return renderSystemCard(t);
     const open = t.status !== "attended";
     const codes = t.kind === "codes";
     // Reportes del panel mayorista: se le escribe al mayorista, no al cliente final.
@@ -168,11 +190,11 @@
   }
 
   async function quickAction(t, act, btn) {
-    if (QUICK_CONFIRM[act] && !confirm(QUICK_CONFIRM[act])) return;
+    if (t.kind !== "system" && QUICK_CONFIRM[act] && !confirm(QUICK_CONFIRM[act])) return;
     btn.disabled = true;
     try {
       await api(`/tickets/${t.id}/${act}`, { method: "POST" });
-      toast(QUICK_DONE[act] + (t.wholesalerId ? " (en su campanita del panel mayorista)" : " (en su campanita de liordark.com)"));
+      toast(t.kind === "system" ? "✅ Listo" : QUICK_DONE[act] + (t.wholesalerId ? " (en su campanita del panel mayorista)" : " (en su campanita de liordark.com)"));
     } catch (err) {
       btn.disabled = false;
       alert(err.message || "No se pudo guardar.");

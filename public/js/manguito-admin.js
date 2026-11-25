@@ -24,12 +24,14 @@
       <div class="mgp-key-main">
         <b>${i + 1}. ${esc(k.label)}</b>
         <small>${k.kind === "authToken" ? "Token" : "Clave"} ••••${esc(k.tail)}${k.baseUrl ? " · " + esc(k.baseUrl) : ""} · este mes ${usd(k.monthUsd)}${k.lastOkAt ? " · respondió " + ago(k.lastOkAt) : ""}</small>
+        <small class="${k.budgetLeft !== null && k.budgetLeft < 10 ? "mgp-low" : ""}">${k.budgetLeft !== null ? `💰 Queda ≈ ${usd(k.budgetLeft)} de ${usd(k.budgetUsd)} anotados` : "💰 Saldo de la cuenta: sin anotar (anótalo para que te avise cuando se acabe)"}</small>
         ${chip}
       </div>
       <div class="mgp-key-btns">
         <button type="button" class="btn-secondary btn-sm" data-act="up" ${i === 0 ? "disabled" : ""} title="Usar antes">↑</button>
         <button type="button" class="btn-secondary btn-sm" data-act="down" ${i === n - 1 ? "disabled" : ""} title="Usar después">↓</button>
         <button type="button" class="btn-secondary btn-sm" data-act="test">Probar</button>
+        <button type="button" class="btn-secondary btn-sm" data-act="budget" title="El saldo que tiene ahora la cuenta de la API (lo ves en su página de facturación)">Anotar saldo</button>
         ${k.state === "paused" ? `<button type="button" class="btn-secondary btn-sm" data-act="reset">Quitar pausa</button>` : ""}
         <button type="button" class="btn-secondary btn-sm" data-act="toggle">${k.enabled ? "Desactivar" : "Activar"}</button>
         <button type="button" class="btn-secondary btn-sm" data-act="delete">Borrar</button>
@@ -84,11 +86,35 @@
     $("mgs-packs").innerHTML = rows;
     calcStore();
     const o = v.outstanding || { credits: 0, plans: 0, activePlans: 0 };
+    const rate = Number(st.rate) || 3.75;
+    const mo = v.month || { soles: 0, sales: 0, costUsd: 0 };
+    const bal = v.apiBalance || { known: false, remaining: 0 };
+    const owed = o.credits + o.plans;
+    const soles = n => "S/ " + (Number(n) || 0).toFixed(2);
+    const subs = v.subscribers || [];
+    const subsHtml = subs.length
+      ? `<table class="mgp-table"><thead><tr><th>Cliente</th><th>Tiene</th><th>Pagó</th><th>Gastó (costo)</th><th>Ganancia</th><th>Este mes</th><th>Último uso</th></tr></thead><tbody>` +
+        subs.map(r => {
+          const has = [r.planActive ? "Plan hasta " + new Date(r.planEnd).toLocaleDateString("es-PE", { day: "numeric", month: "short" }) : "", r.credits > 0 ? "Créditos " + usd(r.credits) : ""].filter(Boolean).join(" + ") || "Sin saldo";
+          const cost = r.spentUsd * rate;
+          const gain = r.paidSoles - cost;
+          return `<tr><td>${esc(r.phone)}${r.wholesaler ? " 🏪" : ""}</td><td>${esc(has)}</td><td>${soles(r.paidSoles)}${r.giftsUsd ? ` <small>+ 🎁 ${usd(r.giftsUsd)}</small>` : ""}</td>` +
+            `<td>${usd(r.spentUsd)} <small>(${soles(cost)})</small></td><td class="${gain >= 0 ? "mgp-good" : "mgp-bad"}">${soles(gain)}</td><td>${usd(r.monthUsd)}</td>` +
+            `<td>${r.lastAt ? esc(String(r.lastAt).slice(0, 16)) : "—"}</td></tr>`;
+        }).join("") + `</tbody></table>`
+      : `<p class="text-muted">Todavía no hay suscriptores.</p>`;
     const sales = v.purchases || [];
     $("mgs-stats").innerHTML =
-      `<div class="mgp-stats"><div><b>${usd(o.credits + o.plans)}</b><span>Saldo vendido aún sin usar (créditos ${usd(o.credits)} + planes ${usd(o.plans)})</span></div>` +
+      `<p class="mgp-label">Control del mes</p>` +
+      `<div class="mgp-stats"><div><b>${soles(mo.soles)}</b><span>Vendido este mes · ${mo.sales} venta(s)</span></div>` +
+      `<div><b>${usd(mo.costUsd)}</b><span>Gastaron este mes (≈ ${soles(mo.costUsd * rate)})</span></div>` +
+      `<div><b class="${mo.soles - mo.costUsd * rate >= 0 ? "mgp-good" : "mgp-bad"}">${soles(mo.soles - mo.costUsd * rate)}</b><span>Ganancia del mes</span></div></div>` +
+      `<div class="mgp-stats"><div><b>${usd(owed)}</b><span>Saldo vendido aún sin usar (créditos ${usd(o.credits)} + planes ${usd(o.plans)})</span></div>` +
+      `<div><b class="${bal.known && (bal.remaining < 10 || bal.remaining < owed) ? "mgp-bad" : ""}">${bal.known ? usd(bal.remaining) : "—"}</b><span>${bal.known ? "Queda en la API (según lo anotado)" : "Saldo de la API: anótalo en cada clave"}</span></div>` +
       `<div><b>${o.activePlans}</b><span>Planes mensuales activos</span></div></div>` +
-      `<p class="text-muted">Tu cuenta de la API debe tener al menos ese saldo para cumplirle a todos.</p>` +
+      `<p class="text-muted">Si lo que queda en la API no alcanza para lo vendido, te dejo una incidencia en Soportes para que recargues.</p>` +
+      `<p class="mgp-label">Suscriptores</p>` + subsHtml +
+      `<p class="mgp-label">Últimas ventas</p>` +
       (sales.length
         ? `<table class="mgp-table"><thead><tr><th>Fecha</th><th>Cliente</th><th>Qué</th><th>Pagó</th><th>Saldo</th></tr></thead><tbody>` +
           sales.map(p => `<tr><td>${esc(String(p.paidAt || p.createdAt).slice(0, 16))}</td><td>${esc(p.phone)}</td><td>${p.kind === "plan" ? "Plan mensual" : p.kind === "gift" ? "🎁 Regalo" : "Créditos"}</td><td>${p.kind === "gift" ? "—" : "S/ " + esc(p.amountSoles)}</td><td>${usd(p.usd)}</td></tr>`).join("") +
@@ -194,6 +220,13 @@
       const act = btn.dataset.act;
       try {
         if (act === "test") { msg("Probando…"); showTest(await call("POST", `/keys/${id}/test`)); return; }
+        if (act === "budget") {
+          const v = prompt("¿Cuánto saldo tiene AHORA esta cuenta de la API? (US$, lo ves en su página de facturación). Vacío = no anotar.");
+          if (v === null) return;
+          render(await call("PATCH", `/keys/${id}`, { budgetUsd: v.trim() }));
+          msg(v.trim() ? "✅ Saldo anotado. Te aviso en Soportes cuando quede poco." : "Saldo borrado.");
+          return;
+        }
         if (act === "delete") {
           if (!confirm("¿Borrar esta clave de la lista?")) return;
           render(await call("DELETE", `/keys/${id}`)); msg("Clave borrada."); return;

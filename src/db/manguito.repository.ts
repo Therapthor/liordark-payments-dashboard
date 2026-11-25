@@ -127,6 +127,13 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ai_shares_customer ON ai_shares(customer_id, created_at);
 `);
+// Avisos de campanita ya mandados (para no repetirlos).
+{
+  const cols = (db.prepare(`PRAGMA table_info(ai_wallets)`).all() as { name: string }[]).map(c => c.name);
+  for (const c of ["notice_expiring", "notice_expired", "notice_low", "notice_out"]) {
+    if (!cols.includes(c)) db.exec(`ALTER TABLE ai_wallets ADD COLUMN ${c} INTEGER NOT NULL DEFAULT 0`);
+  }
+}
 if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).some(c => c.name === "source")) {
   db.exec(`ALTER TABLE ai_usage ADD COLUMN source TEXT NOT NULL DEFAULT ''`);
 }
@@ -422,7 +429,7 @@ function grant(customerId: number, kind: string, usd: number): void {
       db.prepare(`UPDATE ai_wallets SET plan_start = ?, plan_end = ?, plan_usd = ?, window_start = 0 WHERE customer_id = ?`).run(now, now + PLAN_DAYS_MS, usd, customerId);
     }
   } else {
-    db.prepare(`UPDATE ai_wallets SET credits_usd = credits_usd + ? WHERE customer_id = ?`).run(usd, customerId);
+    db.prepare(`UPDATE ai_wallets SET credits_usd = credits_usd + ?, notice_low = 0, notice_out = 0 WHERE customer_id = ?`).run(usd, customerId);
   }
 }
 
@@ -575,4 +582,61 @@ export function avgCostPerMessage(customerId: number): number {
     WHERE customer_id = ? AND created_at >= datetime('now', '-30 days')
   `).get(customerId) as { usd: number; n: number | null };
   return r.n && r.n >= 3 ? r.usd / r.n : 0;
+}
+
+/** Gasto estimado de una clave desde `sinceMs` (para el saldo que queda en la API). */
+export function spentByCredentialSince(credId: string, sinceMs: number): number {
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage WHERE cred_id = ? AND created_at >= datetime(?, 'unixepoch')
+  `).get(credId, Math.floor(sinceMs / 1000)) as { t: number };
+  return r.t;
+}
+
+/** Suscriptores (plan o créditos) con lo que pagaron y lo que gastaron. */
+export function subscribersSummary(): {
+  customerId: number; phone: string; planEnd: number; planUsd: number; credits: number;
+  paidSoles: number; giftsUsd: number; spentUsd: number; monthUsd: number; lastAt: string | null;
+}[] {
+  return db.prepare(`
+    SELECT w.customer_id AS customerId, COALESCE(c.phone, '') AS phone, w.plan_end AS planEnd, w.plan_usd AS planUsd, w.credits_usd AS credits,
+      (SELECT COALESCE(SUM(CAST(p.amount_soles AS REAL)), 0) FROM ai_purchases p WHERE p.customer_id = w.customer_id AND p.status = 'paid' AND p.kind != 'gift') AS paidSoles,
+      (SELECT COALESCE(SUM(p.usd), 0) FROM ai_purchases p WHERE p.customer_id = w.customer_id AND p.status = 'paid' AND p.kind = 'gift') AS giftsUsd,
+      (SELECT COALESCE(SUM(u.cost_usd), 0) FROM ai_usage u WHERE u.customer_id = w.customer_id AND u.source IN ('plan', 'credits')) AS spentUsd,
+      (SELECT COALESCE(SUM(u.cost_usd), 0) FROM ai_usage u WHERE u.customer_id = w.customer_id AND u.source IN ('plan', 'credits')
+         AND strftime('%Y-%m', u.created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')) AS monthUsd,
+      (SELECT MAX(u.created_at) FROM ai_usage u WHERE u.customer_id = w.customer_id AND u.kind = 'chat') AS lastAt
+    FROM ai_wallets w LEFT JOIN customers c ON c.id = w.customer_id
+    WHERE w.plan_end > 0 OR w.credits_usd > 0 OR EXISTS (SELECT 1 FROM ai_purchases p WHERE p.customer_id = w.customer_id AND p.status = 'paid')
+    ORDER BY (w.plan_end > strftime('%s', 'now') * 1000 OR w.credits_usd > 0) DESC, lastAt DESC
+    LIMIT 300
+  `).all() as any[];
+}
+
+/** Ventas y gasto pagado de este mes (hora de Lima). */
+export function salesThisMonth(): { soles: number; sales: number; costUsd: number } {
+  const a = db.prepare(`
+    SELECT COALESCE(SUM(CAST(amount_soles AS REAL)), 0) AS soles, COUNT(*) AS sales FROM ai_purchases
+    WHERE status = 'paid' AND kind != 'gift' AND strftime('%Y-%m', paid_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
+  `).get() as { soles: number; sales: number };
+  const b = db.prepare(`
+    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage
+    WHERE source IN ('plan', 'credits') AND strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours')
+  `).get() as { t: number };
+  return { soles: a.soles, sales: a.sales, costUsd: b.t };
+}
+
+export type WalletNoticeRow = {
+  customerId: number; phone: string; planEnd: number; credits: number;
+  noticeExpiring: number; noticeExpired: number; noticeLow: number; noticeOut: number; lastCreditsUsd: number;
+};
+export function walletsForNotices(): WalletNoticeRow[] {
+  return db.prepare(`
+    SELECT w.customer_id AS customerId, COALESCE(c.phone, '') AS phone, w.plan_end AS planEnd, w.credits_usd AS credits,
+      w.notice_expiring AS noticeExpiring, w.notice_expired AS noticeExpired, w.notice_low AS noticeLow, w.notice_out AS noticeOut,
+      (SELECT p.usd FROM ai_purchases p WHERE p.customer_id = w.customer_id AND p.status = 'paid' AND p.kind IN ('credits', 'gift') ORDER BY p.id DESC LIMIT 1) AS lastCreditsUsd
+    FROM ai_wallets w LEFT JOIN customers c ON c.id = w.customer_id
+  `).all() as WalletNoticeRow[];
+}
+export function setWalletNotice(customerId: number, field: "notice_expiring" | "notice_expired" | "notice_low" | "notice_out", value: number): void {
+  db.prepare(`UPDATE ai_wallets SET ${field} = ? WHERE customer_id = ?`).run(value, customerId);
 }

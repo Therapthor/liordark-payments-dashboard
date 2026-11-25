@@ -2430,3 +2430,10 @@ button.mp-kpi:active { transform: scale(0.98); }
 .mgp-pack-row small { font-size: 12.5px; }
 .mgp-gift { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--mp-line, #F3E2C4); }
 @media (max-width: 640px) { .mgp-pack-row { grid-template-columns: 1fr 1fr; } .mgp-pack-row small { grid-column: 1 / -1; } }
+
+.mgp-good { color: #1F6B44; }
+.mgp-bad { color: #B3261E; }
+.mgp-low { color: #B3261E; font-weight: 700; }
+#mgs-stats .mgp-table { display: block; overflow-x: auto; white-space: nowrap; }
+#mgs-stats .mgp-table small { color: var(--mp-muted, #8A6E4B); }
+.soporte-details { white-space: pre-wrap; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--mp-soft, #F6EFE4); border-radius: 12px; padding: 10px 12px; margin: 8px 0; max-height: 260px; overflow: auto; }

@@ -574,6 +574,9 @@
       text = m.block.message; cls = "block";
       if (canBuy && m.block.code !== "free_limit") btn = m.block.code === "no_access" ? "Ver planes" : "Recargar";
       refreshTimer = setTimeout(refreshMeter, 60e3); // se revisa solo cada minuto
+    } else if (m.plan && m.plan.endsAt - Date.now() < 3 * 864e5) {
+      text = `⏰ Tu plan vence el ${dayTime(m.plan.endsAt)}. Renuévalo con Yape para no quedarte sin Manguito.`;
+      if (canBuy) btn = "Renovar";
     } else if (m.plan && m.source === "plan" && m.plan.window.resetsAt && pct(m.plan.window.used, m.plan.window.limit) >= 75) {
       text = `⚡ Vas rápido: usaste ${pct(m.plan.window.used, m.plan.window.limit)}% de estas ${state.store ? state.store.windowHours : 3} horas (se renueva a las ${hhmm(m.plan.window.resetsAt)}).`;
     } else if (m.plan && m.source === "plan" && pct(m.plan.week.used, m.plan.week.limit) >= 80) {
@@ -643,7 +646,7 @@
       const m = s.monthly;
       html += `<div class="mg-plan featured"><span class="mg-plan-tag">Más elegido</span>
         <h3>Mensual</h3><p class="mg-plan-desc">Para usarlo todos los días sin sustos.</p>
-        <div class="mg-price">${soles(m.priceSoles)} <small>/ 30 días</small></div>
+        <div class="mg-price">${m.basePrice && m.basePrice > m.priceSoles ? `<s>${soles(m.basePrice)}</s> ` : ""}${soles(m.priceSoles)} <small>/ 30 días</small></div>
         <ul>
           <li>${usd(m.usd)} de uso al mes</li>
           <li>Uso restringido por horas para cuidar tus créditos</li>
@@ -655,7 +658,7 @@
     }
     if (s.packs && s.packs.length) {
       html += `<div class="mg-plan"><h3>Créditos</h3><p class="mg-plan-desc">Paga solo lo que usas, sin límites de tiempo.</p>
-        <div class="mg-packs">${s.packs.map((p, i) => `<label class="mg-pack"><span><input type="radio" name="mg-pack" value="${i}"${i === 0 ? " checked" : ""}> <b>${soles(p.priceSoles)}</b></span><span>${usd(p.usd)} de saldo</span></label>`).join("")}</div>
+        <div class="mg-packs">${s.packs.map((p, i) => `<label class="mg-pack"><span><input type="radio" name="mg-pack" value="${i}"${i === 0 ? " checked" : ""}> ${p.basePrice && p.basePrice > p.priceSoles ? `<s>${soles(p.basePrice)}</s> ` : ""}<b>${soles(p.priceSoles)}</b></span><span>${usd(p.usd)} de saldo</span></label>`).join("")}</div>
         <ul>
           <li>Úsalo cuando quieras: hoy, mañana o en un solo día</li>
           <li>Recarga cuando se acabe</li>
@@ -665,6 +668,8 @@
         <button class="mg-btn-solid" type="button" data-buy="credits">${buyLabel || "Comprar créditos"}</button></div>`;
     }
     grid.innerHTML = html;
+    const note = $("mg-plans-discount");
+    if (note) { note.hidden = !(s.discount > 0); note.textContent = s.discount > 0 ? `🏪 Eres mayorista: tienes S/ ${s.discount} menos en cada plan.` : ""; }
   }
 
   function showPlans(withBack) {
