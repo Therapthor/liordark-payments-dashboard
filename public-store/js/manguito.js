@@ -73,6 +73,7 @@
 
   // ── Ventana genérica ──
   let modalOnClose = null;
+  let closingTimer = null;
   function openModal(html, onClose) {
     if (modalOnClose) { const f = modalOnClose; modalOnClose = null; f(); }
     // Cuerpo nuevo cada vez: así no quedan escuchas de la ventana anterior.
@@ -80,14 +81,24 @@
     const body = old.cloneNode(false);
     old.replaceWith(body);
     body.innerHTML = html;
+    clearTimeout(closingTimer);
+    $("mg-modal").classList.remove("closing");
     $("mg-modal").hidden = false;
     modalOnClose = onClose || null;
     return body;
   }
   function closeModal() {
-    $("mg-modal").hidden = true;
-    $("mg-modal-body").innerHTML = "";
+    const m = $("mg-modal");
+    if (m.hidden || m.classList.contains("closing")) return;
     if (modalOnClose) { const f = modalOnClose; modalOnClose = null; f(); }
+    // Salida suave antes de ocultar.
+    m.classList.add("closing");
+    clearTimeout(closingTimer);
+    closingTimer = setTimeout(() => {
+      m.classList.remove("closing");
+      m.hidden = true;
+      $("mg-modal-body").innerHTML = "";
+    }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
   }
   $("mg-modal-x").addEventListener("click", closeModal);
   $("mg-modal").addEventListener("click", e => { if (e.target.id === "mg-modal") closeModal(); });
@@ -103,6 +114,50 @@
     share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></svg>',
     trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
   };
+
+  // ── Animación mientras carga la respuesta: tres manguitos que se turnan
+  //    (uno escribe, otro tira latigazos para apurar, otro carga la barra).
+  //    Solo SVG con clases: los movimientos están en manguito.css.
+  function mangoSvg(extra) {
+    return '<path class="mgl-leaf" d="M33 12c5-7 14-8 19-4-4 6-12 8-19 4z" fill="#3E9B5C"/>' +
+      '<path d="M32 12c-14 0-24 12-24 26 0 13 10 21 22 21 14 0 26-10 26-24C56 22 46 12 32 12z" fill="url(#mgl-grad)"/>' +
+      '<circle cx="19" cy="41" r="3" fill="#F0712A" opacity=".45"/><circle cx="45" cy="41" r="3" fill="#F0712A" opacity=".45"/>' +
+      (extra || '<g class="mgl-eyes"><circle cx="25" cy="34" r="3.3" fill="#2B1B0E"/><circle cx="39" cy="34" r="3.3" fill="#2B1B0E"/>' +
+        '<circle cx="26.2" cy="32.8" r="1.1" fill="#fff"/><circle cx="40.2" cy="32.8" r="1.1" fill="#fff"/></g>') +
+      '<path d="M28 42c2 2.6 6 2.6 8 0" stroke="#2B1B0E" stroke-width="2" fill="none" stroke-linecap="round"/>';
+  }
+  function loaderHtml() {
+    const grad = '<defs><linearGradient id="mgl-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE08A"/>' +
+      '<stop offset=".5" stop-color="#FFB21A"/><stop offset="1" stop-color="#F07B1F"/></linearGradient></defs>';
+    const shades = '<g><rect x="18" y="29" width="13" height="8" rx="3" fill="#2B1B0E"/><rect x="33" y="29" width="13" height="8" rx="3" fill="#2B1B0E"/>' +
+      '<path d="M31 32h2" stroke="#2B1B0E" stroke-width="2"/><path d="M21 31l3 0" stroke="#fff" stroke-width="1.2" opacity=".6"/></g>';
+    return '<div class="mgl" role="status" aria-label="Manguito está preparando tu respuesta">' +
+      '<div class="mgl-stage">' +
+        // 1) escribiendo
+        '<svg class="mgl-scene" viewBox="0 0 150 70" aria-hidden="true">' + grad +
+          '<g class="mgl-bob" transform="translate(4 4)">' + mangoSvg() + '</g>' +
+          '<rect x="80" y="20" width="56" height="42" rx="6" fill="#fff" stroke="#E2DCD3" stroke-width="1.5"/>' +
+          '<path class="mgl-write" d="M88 32h38M88 41h30M88 50h34" stroke="#C9BFB2" stroke-width="3" stroke-linecap="round" fill="none"/>' +
+          '<g class="mgl-pencil"><path d="M97 6l8 4-12 25-8-4z" fill="#FFC93C"/><path d="M97 6l8 4 2-4-8-4z" fill="#F49AA8"/>' +
+          '<path d="M85 31l8 4-7 6z" fill="#F5DDB5"/><path d="M86 38l3 1.6-3 2.4z" fill="#2B1B0E"/></g>' +
+        '</svg>' +
+        // 2) latigazos para apurar
+        '<svg class="mgl-scene" viewBox="0 0 150 70" aria-hidden="true">' +
+          '<g class="mgl-bob" transform="translate(4 4)">' + mangoSvg(shades) + '</g>' +
+          '<path d="M56 40l8-6" stroke="#2B1B0E" stroke-width="3" stroke-linecap="round"/>' +
+          '<path class="mgl-whip" d="M64 34c16-14 36-16 58-6" stroke="#7A4E12" stroke-width="2.6" fill="none" stroke-linecap="round"/>' +
+          '<g class="mgl-spark" stroke="#F5A30A" stroke-width="2.4" stroke-linecap="round"><path d="M126 20l6-6"/><path d="M130 30h8"/><path d="M126 40l6 6"/></g>' +
+        '</svg>' +
+        // 3) cargando
+        '<svg class="mgl-scene" viewBox="0 0 150 70" aria-hidden="true">' +
+          '<g class="mgl-hop" transform="translate(44 0)">' + mangoSvg() + '</g>' +
+          '<rect x="30" y="62" width="90" height="6" rx="3" fill="#F1ECE5"/>' +
+          '<rect class="mgl-bar" x="30" y="62" width="90" height="6" rx="3" fill="#F5A30A"/>' +
+        '</svg>' +
+      '</div>' +
+      '<div class="mgl-caption"><span>Manguito está escribiendo…</span><span>¡Chas! Apurando a la IA…</span><span>Cargando tu respuesta…</span></div>' +
+    '</div>';
+  }
 
   function userMessageEl(m) {
     const el = document.createElement("div");
@@ -131,7 +186,7 @@
     tier.hidden = !m.label;
     tier.textContent = m.label || "";
     const answer = el.querySelector(".mg-answer");
-    if (m.typing && !m.text) answer.innerHTML = '<span class="mg-typing" aria-label="Pensando"><i></i><i></i><i></i></span>';
+    if (m.typing && !m.text) answer.innerHTML = loaderHtml();
     else answer.innerHTML = md(m.text) || "";
     if (m.status === "stopped") answer.insertAdjacentHTML("beforeend", '<div class="mg-note">Respuesta detenida.</div>');
     if (m.status === "error") {
@@ -294,7 +349,11 @@
 
   // ── Vistas: chat / planes / puerta ──
   function showView(v) {
+    const changed = state.view !== v;
     state.view = v;
+    // Entrada suave de la vista nueva.
+    const el = $(v === "chat" ? "mg-thread" : v === "plans" ? "mg-plans" : "mg-gate");
+    if (changed && el) { el.classList.remove("mg-view-in"); void el.offsetWidth; el.classList.add("mg-view-in"); }
     $("mg-thread").hidden = v !== "chat";
     $("mg-composer").hidden = v !== "chat";
     $("mg-plans").hidden = v !== "plans";
