@@ -2375,7 +2375,42 @@
     });
   }
 
+  // ── Tienda siempre al día ──
+  // Una pestaña que quedó abierta desde antes de una actualización (pasa
+  // mucho en el celular) seguía con el formulario viejo. Al volver a la
+  // pestaña se compara la huella con el servidor y, si cambió, se recarga
+  // sola — pero nunca en medio de algo: con una ventana abierta (pago,
+  // registro, detalle) o escribiendo, espera a la próxima revisión.
+  function watchStoreVersion() {
+    let mine = null;
+    let checking = false;
+    function busy() {
+      const el = document.activeElement;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true;
+      return !!document.querySelector(".modal-backdrop:not([hidden])");
+    }
+    async function check() {
+      if (checking || document.hidden) return;
+      checking = true;
+      try {
+        const res = await fetch("/api/store-version", { cache: "no-store", credentials: "include" });
+        const data = await res.json();
+        if (data && data.v) {
+          if (!mine) mine = data.v;
+          else if (data.v !== mine && !busy()) location.reload();
+        }
+      } catch { /* sin red: se revisa después */ }
+      checking = false;
+    }
+    check();
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    window.addEventListener("pageshow", (e) => { if (e.persisted) check(); });
+    setInterval(check, 5 * 60 * 1000);
+  }
+
   async function init() {
+    watchStoreVersion();
     initAuthToggle();
     initAuthForms();
     initNav();

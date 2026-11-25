@@ -87,6 +87,13 @@ function lockAfterFailure(req: import("express").Request, phone: string, pass: b
 // Desde ahora toda cuenta nueva se crea con correo: ahí le llegan sus
 // datos, los cambios de su cuenta y los recordatorios, y el admin lo puede
 // encontrar por su correo. Un correo, una cuenta.
+/** La tienda actual siempre manda «email» (aunque vaya vacío); una página
+ *  vieja o la del curso no lo mandan porque no tienen dónde escribirlo. */
+function formHasEmailField(body: unknown): boolean {
+  return !!body && typeof body === "object" && Object.prototype.hasOwnProperty.call(body, "email");
+}
+const STALE_FORM_MESSAGE = "Para crear tu cuenta necesitamos tu correo: recarga la página (↻) y aparecerá dónde escribirlo.";
+
 function newAccountEmailError(raw: unknown): string | null {
   const email = String(raw ?? "").trim();
   if (!email) return "Pon tu correo: ahí te llegan tus cuentas, los cambios y los recordatorios.";
@@ -230,7 +237,11 @@ router.post("/quick", pinLock(async (req, res) => {
     // Cliente sin correo: sí o sí lo agrega aquí mismo, y queda unido a su
     // número (con él entra y recupera su PIN). El que ya tiene correo no
     // necesita escribirlo.
-    if (!existing.email) {
+    // Formularios SIN campo de correo (la página del curso, o una tienda que
+    // quedó abierta desde antes de este cambio): entra igual — la tienda le
+    // pide el correo antes de pagar (withEmail) y, si su página es vieja, el
+    // pago le dice que la recargue. Nunca se queda trabado sin dónde escribirlo.
+    if (!existing.email && formHasEmailField(req.body)) {
       const typed = String(req.body?.email ?? "").trim();
       const emailError = newAccountEmailError(typed);
       if (emailError) {
@@ -247,6 +258,9 @@ router.post("/quick", pinLock(async (req, res) => {
 
   if (!/^\d{4}$/.test(pin)) {
     return res.status(400).json({ message: "Crea un PIN de 4 dígitos (solo números)." });
+  }
+  if (!formHasEmailField(req.body)) {
+    return res.status(400).json({ message: STALE_FORM_MESSAGE, needEmail: true });
   }
   const emailError = newAccountEmailError(req.body?.email);
   if (emailError) return res.status(400).json({ message: emailError, needEmail: true });

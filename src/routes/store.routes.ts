@@ -141,6 +141,10 @@ router.get("/renewals", requireCustomerSession, (req, res) => {
   res.json({ accounts });
 });
 
+// La tienda actual pide el correo ANTES de pagar (withEmail); esto solo lo
+// ve una página que quedó abierta desde antes, que no tiene dónde escribirlo.
+const NEED_EMAIL_MESSAGE = "Agrega tu correo para continuar: ahí te llegan tus datos de acceso y los avisos. Si no ves dónde escribirlo, recarga la página (↻).";
+
 router.post("/renewals/checkout", requireCustomerSession, async (req, res) => {
   // Normalizado ACÁ (con el "51" si hace falta) antes de mandarlo al bot —
   // si no, un cliente que tipeó su celular sin el prefijo terminaría con
@@ -159,7 +163,7 @@ router.post("/renewals/checkout", requireCustomerSession, async (req, res) => {
   }
   const renewer = findCustomerById((req as RequestWithCustomer).customerId);
   if (renewer && !renewer.email) {
-    return res.status(409).json({ message: "Agrega tu correo para continuar: ahí te llegan tus datos de acceso y los avisos.", needEmail: true });
+    return res.status(409).json({ message: NEED_EMAIL_MESSAGE, needEmail: true });
   }
 
   if (isNonRenewablePlatform(platform)) {
@@ -869,7 +873,7 @@ router.post("/checkout", async (req, res) => {
   }
   // Desde ahora el correo es obligatorio para comprar.
   if (!customer.email) {
-    return res.status(409).json({ message: "Agrega tu correo para continuar: ahí te llegan tus datos de acceso y los avisos.", needEmail: true });
+    return res.status(409).json({ message: NEED_EMAIL_MESSAGE, needEmail: true });
   }
 
   const platform       = req.body?.platform ? String(req.body.platform).trim() : undefined;
