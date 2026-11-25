@@ -1,4 +1,6 @@
 import http from "http";
+import dns from "dns";
+import net from "net";
 import { loginRateLimit } from "./utils/rate-limit.util";
 import { hasLoginPass, cleanOldLoginTraces, cleanOldIpFailures } from "./db/security.repository";
 import express from "express";
@@ -72,6 +74,12 @@ import { runExpiryReminderEmails } from "./jobs/expiry-reminder-email.job";
 import { runExpireChatMedia } from "./jobs/expiry-chat-media.job";
 import { runSupportBotSweep } from "./services/support-bot.service";
 import { findSuspiciousApprovedOrders } from "./db/orders.repository";
+
+// El servidor no tiene IPv6 y Node solo esperaba 0,25 s por cada intento de
+// conexión: a veces Gmail (códigos por correo) fallaba con «AggregateError».
+// IPv4 primero y 2 s de margen por intento.
+dns.setDefaultResultOrder("ipv4first");
+net.setDefaultAutoSelectFamilyAttemptTimeout(2000);
 
 const app = express();
 

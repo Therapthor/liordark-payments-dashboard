@@ -65,14 +65,27 @@ function sdk(): typeof Anthropic {
 // ── Configuración (Configuración › 🥭 Manguito Pro) ──
 
 const K = {
-  apiKey: "ai_api_key", authToken: "ai_auth_token", baseUrl: "ai_base_url",
-  phones: "ai_allowed_phones", dailyCap: "ai_daily_cap_usd", monthlyCap: "ai_monthly_cap_usd",
+  creds: "ai_credentials", phones: "ai_allowed_phones", dailyCap: "ai_daily_cap_usd", monthlyCap: "ai_monthly_cap_usd",
+  // Versión anterior (una sola clave): se pasa sola a la lista.
+  oldApiKey: "ai_api_key", oldAuthToken: "ai_auth_token", oldBaseUrl: "ai_base_url",
 };
 export const DEFAULT_DAILY_CAP = 3;
 export const DEFAULT_MONTHLY_CAP = 50;
 
-export type AiConfig = {
-  apiKey: string; authToken: string; baseUrl: string; phones: string[]; dailyCap: number; monthlyCap: number;
+// ── Claves de API (varias, en orden) ──
+// Se usan en el orden de la lista. Si una se queda sin saldo, la rechazan o
+// llega al límite de uso, Manguito pasa sola a la siguiente y la deja en
+// pausa un rato (sin saldo: 6 h; inválida: 24 h; límite: 1 min). Si vuelve
+// a responder, se limpia sola. Así, cuando se acaba el saldo a fin de mes,
+// basta con agregar otra clave y todo sigue.
+export type FailKind = "billing" | "auth" | "rate";
+export type AiCredential = {
+  id: string; label: string; kind: "apiKey" | "authToken"; secret: string; baseUrl: string;
+  enabled: boolean; failedAt: number | null; failKind: FailKind | ""; lastOkAt: number | null; addedAt: number;
+};
+const COOLDOWN_MS: Record<FailKind, number> = { billing: 6 * 3600e3, auth: 24 * 3600e3, rate: 60e3 };
+export const FAIL_TEXT: Record<FailKind, string> = {
+  billing: "sin saldo", auth: "clave inválida o sin permiso", rate: "límite de uso",
 };
 
 function num(v: string | null, def: number): number {
@@ -80,11 +93,53 @@ function num(v: string | null, def: number): number {
   return v !== null && v !== "" && isFinite(n) && n >= 0 ? n : def;
 }
 
+export function listCredentials(): AiCredential[] {
+  let list: AiCredential[] = [];
+  try { list = JSON.parse(getAdminSetting(K.creds) || "[]"); } catch { list = []; }
+  if (!Array.isArray(list)) list = [];
+  const oldKey = (getAdminSetting(K.oldApiKey) || "").trim();
+  const oldTok = (getAdminSetting(K.oldAuthToken) || "").trim();
+  if (oldKey || oldTok) {
+    list.push(newCredential("Principal", oldKey ? "apiKey" : "authToken", oldKey || oldTok, (getAdminSetting(K.oldBaseUrl) || "").trim()));
+    saveCredentials(list);
+    setAdminSetting(K.oldApiKey, ""); setAdminSetting(K.oldAuthToken, ""); setAdminSetting(K.oldBaseUrl, "");
+  }
+  return list;
+}
+
+function saveCredentials(list: AiCredential[]): void {
+  setAdminSetting(K.creds, JSON.stringify(list));
+}
+
+function newCredential(label: string, kind: "apiKey" | "authToken", secret: string, baseUrl: string): AiCredential {
+  return {
+    id: crypto.randomBytes(4).toString("hex"), label: label.slice(0, 40) || "Clave", kind, secret, baseUrl,
+    enabled: true, failedAt: null, failKind: "", lastOkAt: null, addedAt: Date.now(),
+  };
+}
+
+function updateCredential(id: string, patch: Partial<AiCredential>): void {
+  const list = listCredentials();
+  const c = list.find(x => x.id === id);
+  if (!c) return;
+  Object.assign(c, patch);
+  saveCredentials(list);
+}
+
+function isCoolingDown(c: AiCredential, now = Date.now()): boolean {
+  return !!(c.failedAt && c.failKind && now - c.failedAt < COOLDOWN_MS[c.failKind]);
+}
+
+export function credentialState(c: AiCredential): { state: "ok" | "paused" | "off"; reason: string } {
+  if (!c.enabled) return { state: "off", reason: "desactivada" };
+  if (isCoolingDown(c) && c.failKind) return { state: "paused", reason: FAIL_TEXT[c.failKind] };
+  return { state: "ok", reason: "" };
+}
+
+export type AiConfig = { phones: string[]; dailyCap: number; monthlyCap: number };
+
 export function aiConfig(): AiConfig {
   return {
-    apiKey:     (getAdminSetting(K.apiKey) || "").trim(),
-    authToken:  (getAdminSetting(K.authToken) || "").trim(),
-    baseUrl:    (getAdminSetting(K.baseUrl) || "").trim(),
     phones:     (getAdminSetting(K.phones) || "").split(",").map(s => s.trim()).filter(Boolean),
     dailyCap:   num(getAdminSetting(K.dailyCap), DEFAULT_DAILY_CAP),
     monthlyCap: num(getAdminSetting(K.monthlyCap), DEFAULT_MONTHLY_CAP),
@@ -92,8 +147,7 @@ export function aiConfig(): AiConfig {
 }
 
 export function isAiConfigured(): boolean {
-  const c = aiConfig();
-  return !!(c.apiKey || c.authToken);
+  return listCredentials().some(c => c.enabled);
 }
 
 const last9 = (p: string) => String(p || "").replace(/\D/g, "").slice(-9);
@@ -103,34 +157,61 @@ export function isAiAllowedPhone(phone: string): boolean {
   return d.length === 9 && aiConfig().phones.includes(d);
 }
 
-/** Guarda lo que vino (campos ausentes no se tocan). Devuelve un error legible o null. */
+function cleanBaseUrl(raw: unknown): { ok: true; value: string } | { ok: false; message: string } {
+  const v = String(raw ?? "").trim().replace(/\/+$/, "");
+  if (!v) return { ok: true, value: "" };
+  let u: URL;
+  try { u = new URL(v); } catch { return { ok: false, message: "La dirección (base URL) no es válida." }; }
+  const local = u.hostname === "127.0.0.1" || u.hostname === "localhost";
+  if (u.protocol !== "https:" && !(local && u.protocol === "http:")) return { ok: false, message: "La dirección (base URL) debe empezar con https://" };
+  return { ok: true, value: v };
+}
+
+/** Agrega una clave al final de la lista. Devuelve un error legible o null. */
+export function addCredential(body: any): string | null {
+  const apiKey = String(body?.apiKey ?? "").trim();
+  const token = String(body?.authToken ?? "").trim();
+  if (!apiKey && !token) return "Pega la clave de la API (o el token).";
+  const secret = apiKey || token;
+  if (secret.length < 20 || secret.length > 2000 || /\s/.test(secret)) return apiKey ? "Esa clave de API no parece válida." : "Ese token no parece válido.";
+  const base = cleanBaseUrl(body?.baseUrl);
+  if (!base.ok) return base.message;
+  const list = listCredentials();
+  if (list.some(c => c.secret === secret)) return "Esa clave ya está en la lista.";
+  if (list.length >= 20) return "Máximo 20 claves.";
+  list.push(newCredential(String(body?.label ?? "").trim() || `Clave ${list.length + 1}`, apiKey ? "apiKey" : "authToken", secret, base.value));
+  saveCredentials(list);
+  return null;
+}
+
+/** Activar/desactivar, renombrar, subir/bajar en la lista o quitarle la pausa. */
+export function editCredential(id: string, body: any): string | null {
+  const list = listCredentials();
+  const i = list.findIndex(c => c.id === id);
+  if (i < 0) return "Esa clave ya no existe.";
+  const c = list[i]!;
+  if (typeof body?.enabled === "boolean") c.enabled = body.enabled;
+  if (typeof body?.label === "string" && body.label.trim()) c.label = body.label.trim().slice(0, 40);
+  if (body?.reset) { c.failedAt = null; c.failKind = ""; }
+  if (body?.move === "up" && i > 0) [list[i - 1], list[i]] = [list[i]!, list[i - 1]!];
+  if (body?.move === "down" && i < list.length - 1) [list[i + 1], list[i]] = [list[i]!, list[i + 1]!];
+  saveCredentials(list);
+  return null;
+}
+
+export function deleteCredential(id: string): boolean {
+  const list = listCredentials();
+  const next = list.filter(c => c.id !== id);
+  if (next.length === list.length) return false;
+  saveCredentials(next);
+  return true;
+}
+
+/** Celulares con acceso y topes (los campos ausentes no se tocan). */
 export function saveAiConfig(body: any): string | null {
-  const secret = (v: unknown) => String(v ?? "").trim();
-  if (body?.clearCredentials) {
-    setAdminSetting(K.apiKey, "");
-    setAdminSetting(K.authToken, "");
-  }
-  if (body?.apiKey !== undefined && secret(body.apiKey)) {
-    const v = secret(body.apiKey);
-    if (v.length < 20 || v.length > 400 || /\s/.test(v)) return "Esa clave de API no parece válida.";
-    setAdminSetting(K.apiKey, v);
-    setAdminSetting(K.authToken, ""); // una sola forma de entrar: clave o token
-  }
-  if (body?.authToken !== undefined && secret(body.authToken)) {
-    const v = secret(body.authToken);
-    if (v.length < 20 || v.length > 2000 || /\s/.test(v)) return "Ese token no parece válido.";
-    setAdminSetting(K.authToken, v);
-    setAdminSetting(K.apiKey, "");
-  }
-  if (body?.baseUrl !== undefined) {
-    const v = secret(body.baseUrl).replace(/\/+$/, "");
-    if (v) {
-      let u: URL;
-      try { u = new URL(v); } catch { return "La dirección (base URL) no es válida."; }
-      const local = u.hostname === "127.0.0.1" || u.hostname === "localhost";
-      if (u.protocol !== "https:" && !(local && u.protocol === "http:")) return "La dirección (base URL) debe empezar con https://";
-    }
-    setAdminSetting(K.baseUrl, v);
+  if (body?.apiKey || body?.authToken) {
+    const err = addCredential(body);
+    if (err) return err;
   }
   if (body?.phones !== undefined) {
     const list = String(body.phones).split(/[\s,;]+/).map(last9).filter(p => p.length === 9);
@@ -145,14 +226,61 @@ export function saveAiConfig(body: any): string | null {
   return null;
 }
 
-function makeClient(): Anthropic | null {
-  const c = aiConfig();
-  if (!c.apiKey && !c.authToken) return null;
+function clientFor(c: AiCredential): Anthropic {
   const Client = sdk();
   const base = c.baseUrl ? { baseURL: c.baseUrl } : {};
-  return c.apiKey
-    ? new Client({ apiKey: c.apiKey, ...base, maxRetries: 2 })
-    : new Client({ authToken: c.authToken, ...base, maxRetries: 2 });
+  return c.kind === "apiKey"
+    ? new Client({ apiKey: c.secret, ...base, maxRetries: 1 })
+    : new Client({ authToken: c.secret, ...base, maxRetries: 1 });
+}
+
+/** ¿Este error es de la clave (saldo, permiso, límite)? → probar con la siguiente. */
+function credentialFailure(err: unknown): FailKind | null {
+  let A: typeof Anthropic;
+  try { A = sdk(); } catch { return null; }
+  if (err instanceof A.AuthenticationError || err instanceof A.PermissionDeniedError) return "auth";
+  if (err instanceof A.RateLimitError) return "rate";
+  if (err instanceof A.APIError) {
+    const m = String((err as any)?.message || "");
+    if (err.status === 402 || /credit|balance|billing|payment|quota|insufficient/i.test(m)) return "billing";
+  }
+  return null;
+}
+
+class NoCredentialError extends Error {}
+
+/**
+ * Corre `fn` con la primera clave disponible de la lista; si falla por la
+ * clave (saldo, permiso, límite) y `canSwitch()` lo permite (en un chat: si
+ * todavía no se mostró texto), la pone en pausa y prueba con la siguiente.
+ */
+async function withCredential<T>(
+  fn: (client: Anthropic, cred: AiCredential) => Promise<T>,
+  canSwitch: () => boolean = () => true,
+  only?: string,
+): Promise<{ value: T; cred: AiCredential }> {
+  const all = listCredentials().filter(c => c.enabled && (!only || c.id === only));
+  if (!all.length) throw new NoCredentialError("Manguito Pro todavía no tiene una clave de API activa.");
+  const now = Date.now();
+  let candidates = only ? all : all.filter(c => !isCoolingDown(c, now));
+  // Todas en pausa: se reintenta la que lleva más tiempo en pausa (un 400/401 no cobra).
+  if (!candidates.length) candidates = [...all].sort((a, b) => (a.failedAt ?? 0) - (b.failedAt ?? 0)).slice(0, 1);
+  let lastErr: unknown = null;
+  for (const cred of candidates) {
+    try {
+      const value = await fn(clientFor(cred), cred);
+      if (cred.failedAt || !cred.lastOkAt || now - cred.lastOkAt > 3600e3) updateCredential(cred.id, { failedAt: null, failKind: "", lastOkAt: Date.now() });
+      return { value, cred };
+    } catch (err) {
+      const kind = credentialFailure(err);
+      if (!kind) throw err;
+      updateCredential(cred.id, { failedAt: Date.now(), failKind: kind });
+      console.warn(`⚠️ Manguito Pro: clave «${cred.label}» en pausa (${FAIL_TEXT[kind]})`);
+      lastErr = err;
+      if (!canSwitch()) throw err;
+    }
+  }
+  throw lastErr;
 }
 
 function usageOf(u: any): Usage {
@@ -166,39 +294,34 @@ function usageOf(u: any): Usage {
 
 /** Mensaje de error de la API apto para mostrar (sin claves ni detalles internos). */
 export function friendlyApiError(err: unknown): string {
+  if (err instanceof NoCredentialError) return err.message;
   let A: typeof Anthropic;
   try { A = sdk(); } catch { return "Manguito Pro no pudo iniciar (falta la librería de la API)."; }
-  if (err instanceof A.AuthenticationError) return "La clave de la API no es válida (revisa Configuración › Manguito Pro).";
-  if (err instanceof A.PermissionDeniedError) return "La cuenta de la API no tiene permiso para este modelo.";
-  if (err instanceof A.RateLimitError) return "La API está ocupada (límite de uso). Intenta en un momento.";
-  if (err instanceof A.BadRequestError) {
-    const m = String((err as any)?.message || "");
-    if (/credit|balance|billing/i.test(m)) return "La cuenta de la API se quedó sin saldo.";
-    return "La API rechazó el pedido.";
-  }
+  const kind = credentialFailure(err);
+  if (kind === "billing") return "Las claves de la API se quedaron sin saldo (agrega otra en Configuración › Manguito Pro).";
+  if (kind === "auth") return "La clave de la API no es válida o no tiene permiso.";
+  if (kind === "rate") return "La API está ocupada (límite de uso). Intenta en un momento.";
+  if (err instanceof A.BadRequestError) return "La API rechazó el pedido.";
   if (err instanceof A.APIConnectionError) return "No se pudo conectar con la API.";
   if (err instanceof A.APIError) return "La API respondió con un error (" + (err.status ?? "?") + ").";
   return "Algo falló al responder.";
 }
 
-// ── Prueba de conexión (botón del panel) ──
+// ── Prueba de conexión (botones del panel) ──
 
-export async function testAiConnection(): Promise<{ ok: true; model: string; ms: number } | { ok: false; message: string }> {
+export async function testAiConnection(credId?: string): Promise<{ ok: true; model: string; ms: number; label: string } | { ok: false; message: string }> {
   const t0 = Date.now();
-  let client: Anthropic | null;
-  try { client = makeClient(); } catch (err) { return { ok: false, message: friendlyApiError(err) }; }
-  if (!client) return { ok: false, message: "Primero guarda la clave de la API (o el token)." };
   try {
-    const r = await client.messages.create({
+    const { value: r, cred } = await withCredential(client => client.messages.create({
       model: ROUTER_MODEL,
       max_tokens: 32,
       thinking: { type: "disabled" },
       output_config: { effort: "low" },
       messages: [{ role: "user", content: "Responde solo con la palabra: OK" }],
-    });
+    }), () => !credId, credId);
     const u = usageOf(r.usage);
-    logUsage({ customerId: 0, kind: "test", model: r.model, ...u, costUsd: costUsd(r.model, u) });
-    return { ok: true, model: r.model, ms: Date.now() - t0 };
+    logUsage({ customerId: 0, kind: "test", model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u) });
+    return { ok: true, model: r.model, ms: Date.now() - t0, label: cred.label };
   } catch (err) {
     return { ok: false, message: friendlyApiError(err) };
   }
@@ -247,7 +370,7 @@ function fallbackRoute(text: string, imageCount: number): { tier: Tier; effort: 
 }
 
 async function chooseRoute(
-  client: Anthropic, customerId: number, text: string, imageCount: number, prevTier: Tier | null,
+  customerId: number, text: string, imageCount: number, prevTier: Tier | null,
 ): Promise<{ tier: Tier; effort: Effort; how: "regla" | "selector" | "respaldo" }> {
   const quick = obviousRoute(text, imageCount, prevTier);
   if (quick) return { ...quick, how: "regla" };
@@ -258,16 +381,16 @@ async function chooseRoute(
     text.length > 1500 ? text.slice(0, 1500) + " […]" : text,
   ].filter(Boolean).join("\n");
   try {
-    const r = await client.messages.create({
+    const { value: r, cred } = await withCredential(client => client.messages.create({
       model: ROUTER_MODEL,
       max_tokens: 200,
       thinking: { type: "disabled" },
       output_config: { effort: "low", format: { type: "json_schema", schema: ROUTER_SCHEMA } },
       system: ROUTER_SYSTEM,
       messages: [{ role: "user", content: summary }],
-    });
+    }));
     const u = usageOf(r.usage);
-    logUsage({ customerId, kind: "router", model: r.model, ...u, costUsd: costUsd(r.model, u) });
+    logUsage({ customerId, kind: "router", model: r.model, credId: cred.id, ...u, costUsd: costUsd(r.model, u) });
     const block = r.content.find(b => b.type === "text");
     const parsed = block && block.type === "text" ? JSON.parse(block.text) : null;
     if (parsed && parsed.tier in TIERS && ["low", "medium", "high"].includes(parsed.effort)) {
@@ -374,13 +497,6 @@ export async function runChat(opts: {
   prevTier: Tier | null; signal: AbortSignal; emit: (e: ChatEvent) => void;
 }): Promise<void> {
   const { customerId, conversationId, signal, emit } = opts;
-  let client: Anthropic | null = null;
-  try { client = makeClient(); } catch { client = null; }
-  if (!client) {
-    const id = addMessage({ conversationId, role: "assistant", text: "", status: "error" });
-    emit({ type: "done", status: "error", messageId: id, message: "Manguito Pro todavía no está conectado." });
-    return;
-  }
   activeChats.add(customerId);
   recentByCustomer.set(customerId, [...(recentByCustomer.get(customerId) || []).filter(t => Date.now() - t < 3600e3), Date.now()]);
 
@@ -390,8 +506,9 @@ export async function runChat(opts: {
   let usage: Usage = { inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheWrite: 0 };
   let status = "ok" as "ok" | "stopped" | "refusal" | "error";
   let errorMessage = "";
+  let credId = "";
   try {
-    const route = await chooseRoute(client, customerId, opts.text, opts.imageCount, opts.prevTier);
+    const route = await chooseRoute(customerId, opts.text, opts.imageCount, opts.prevTier);
     tier = capTierByBudget(route.tier, customerId);
     const cfg = TIERS[tier];
     model = cfg.model;
@@ -410,7 +527,7 @@ export async function runChat(opts: {
     // Respaldo del lado de la API (si el modelo declina, sigue otro de su
     // misma familia, nunca Fable). Si el proveedor no lo acepta, se repite
     // sin él (un 400 no cobra tokens).
-    const open = (withFallback: boolean) => withFallback && cfg.fallback
+    const open = (client: Anthropic, withFallback: boolean) => withFallback && cfg.fallback
       ? client.beta.messages.stream({
           ...base,
           messages: base.messages as Anthropic.Beta.BetaMessageParam[],
@@ -420,6 +537,7 @@ export async function runChat(opts: {
       : client.messages.stream(base, { signal });
 
     const consume = async (stream: ReturnType<typeof open>) => {
+      text = ""; // un intento fallido con otra clave no dejó texto
       for await (const ev of stream as AsyncIterable<any>) {
         if (ev.type === "message_start") {
           model = ev.message?.model || model;
@@ -440,12 +558,17 @@ export async function runChat(opts: {
       }
     };
 
-    try {
-      await consume(open(true));
-    } catch (err) {
-      if (!(err instanceof sdk().BadRequestError) || text || !cfg.fallback || signal.aborted) throw err;
-      await consume(open(false));
-    }
+    // Con la primera clave disponible; si esa se quedó sin saldo (o la
+    // rechazan) antes de escribir nada, sigue con la siguiente de la lista.
+    const { cred } = await withCredential(async client => {
+      try {
+        await consume(open(client, true));
+      } catch (err) {
+        if (!(err instanceof sdk().BadRequestError) || credentialFailure(err) || text || !cfg.fallback || signal.aborted) throw err;
+        await consume(open(client, false));
+      }
+    }, () => !text && !signal.aborted);
+    credId = cred.id;
   } catch (err) {
     if (signal.aborted || err instanceof sdk().APIUserAbortError) status = "stopped";
     else { status = "error"; errorMessage = friendlyApiError(err); }
@@ -454,7 +577,7 @@ export async function runChat(opts: {
   }
 
   if (model && (usage.inputTokens || usage.outputTokens)) {
-    logUsage({ customerId, kind: "chat", tier, model, ...usage, costUsd: costUsd(model, usage) });
+    logUsage({ customerId, kind: "chat", tier, model, credId, ...usage, costUsd: costUsd(model, usage) });
   }
   if (status === "refusal" && !text.trim()) text = "Lo siento, con eso no puedo ayudarte. ¿Te ayudo con otra cosa?";
   const messageId = addMessage({ conversationId, role: "assistant", text, tier, model, status });

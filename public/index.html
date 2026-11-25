@@ -919,17 +919,33 @@
             <h2>Manguito Pro</h2>
           </div>
           <div class="mlc-card">
-            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">🥭</span><div><b>Conexión con la API</b><small id="mgp-status">Cargando…</small></div></div>
-            <form id="mgp-form" autocomplete="off">
-              <label class="mgp-label" for="mgp-key">Clave de la API (empieza con sk-ant-)</label>
-              <input id="mgp-key" type="password" placeholder="Pégala aquí para cambiarla (vacío = no cambia)" spellcheck="false" autocomplete="new-password" />
+            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">🔑</span><div><b>Claves de la API</b><small id="mgp-status">Cargando…</small></div></div>
+            <p class="text-muted mgp-help">Se usan en este orden. Si una se queda sin saldo, la rechazan o llega a su límite, Manguito pasa sola a la siguiente y deja esa en pausa (sin saldo: 6 h). ¿Se acabó el saldo a fin de mes? Agrega otra clave y todo sigue.</p>
+            <ul class="mgp-keys" id="mgp-keys"></ul>
+            <form id="mgp-add" autocomplete="off">
+              <label class="mgp-label" for="mgp-label">Agregar clave</label>
+              <div class="mgp-add-row">
+                <input id="mgp-label" type="text" maxlength="40" placeholder="Nombre (ej. Cuenta diciembre)" />
+                <input id="mgp-key" type="password" placeholder="Clave de la API (sk-ant-…)" spellcheck="false" autocomplete="new-password" />
+              </div>
               <details class="mgp-more">
                 <summary>¿Tu proveedor te dio «base URL» y «auth token»?</summary>
                 <label class="mgp-label" for="mgp-token">Auth token (en lugar de la clave)</label>
-                <input id="mgp-token" type="password" placeholder="Vacío = no cambia" spellcheck="false" autocomplete="new-password" />
+                <input id="mgp-token" type="password" placeholder="Token" spellcheck="false" autocomplete="new-password" />
                 <label class="mgp-label" for="mgp-base">Base URL (vacío = la oficial de Anthropic)</label>
                 <input id="mgp-base" type="text" placeholder="https://api.anthropic.com" spellcheck="false" />
               </details>
+              <div class="mgp-actions">
+                <button class="btn-primary" type="submit">Agregar clave</button>
+                <button class="btn-secondary" type="button" id="mgp-test">Probar conexión</button>
+                <a class="btn-secondary" href="https://liordark.com/manguito/" target="_blank" rel="noopener">Abrir Manguito Pro</a>
+              </div>
+              <p class="text-muted" id="mgp-msg"></p>
+            </form>
+          </div>
+          <div class="mlc-card">
+            <div class="mlc-card-head"><span class="mlc-logo" aria-hidden="true">🥭</span><div><b>Quién puede usarlo y topes</b><small>Solo los celulares de esta lista ven Manguito Pro en la tienda.</small></div></div>
+            <form id="mgp-form" autocomplete="off">
               <label class="mgp-label" for="mgp-phones">Celulares con acceso (uno por línea)</label>
               <textarea id="mgp-phones" rows="3" placeholder="9XXXXXXXX" spellcheck="false"></textarea>
               <div class="mgp-caps">
@@ -938,11 +954,8 @@
               </div>
               <div class="mgp-actions">
                 <button class="btn-primary" type="submit">Guardar</button>
-                <button class="btn-secondary" type="button" id="mgp-test">Probar conexión</button>
-                <button class="btn-secondary" type="button" id="mgp-clear">Quitar clave</button>
-                <a class="btn-secondary" href="https://liordark.com/manguito/" target="_blank" rel="noopener">Abrir Manguito Pro</a>
               </div>
-              <p class="text-muted" id="mgp-msg"></p>
+              <p class="text-muted" id="mgp-msg2"></p>
             </form>
           </div>
           <div class="mlc-card">

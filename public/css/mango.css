@@ -2389,9 +2389,9 @@ button.mp-kpi:active { transform: scale(0.98); }
 
 /* ── Configuración › 🥭 Manguito Pro ── */
 #config-section-manguito .mlc-card { margin-bottom: 14px; }
-#mgp-form { display: flex; flex-direction: column; gap: 6px; }
+#mgp-form, #mgp-add, .mgp-more { display: flex; flex-direction: column; gap: 6px; }
 .mgp-label { font-size: 13px; font-weight: 700; margin-top: 8px; }
-#mgp-form input, #mgp-form textarea { width: 100%; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--mp-line, #F3E2C4); background: #fff; }
+#mgp-form input, #mgp-form textarea, #mgp-add input { width: 100%; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--mp-line, #F3E2C4); background: #fff; }
 .mgp-more { margin-top: 6px; font-size: 13.5px; }
 .mgp-more summary { cursor: pointer; font-weight: 700; color: var(--mp-leaf, #1F6B44); }
 .mgp-caps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 8px; }
@@ -2404,3 +2404,15 @@ button.mp-kpi:active { transform: scale(0.98); }
 .mgp-stats span { font-size: 12.5px; color: var(--mp-muted, #8A6E4B); }
 .mgp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .mgp-table th, .mgp-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--mp-line, #F3E2C4); }
+.mgp-help { font-size: 13px; margin: 4px 0 10px; }
+.mgp-keys { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mgp-keys li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1.5px solid var(--mp-line, #F3E2C4); border-radius: 14px; background: #fff; }
+.mgp-key-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mgp-key-main small { color: var(--mp-muted, #8A6E4B); font-size: 12.5px; overflow-wrap: anywhere; }
+.mgp-key-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.mgp-chip { align-self: flex-start; font-size: 12px; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+.mgp-chip.ok { background: #E3F3E9; color: #2E5A41; }
+.mgp-chip.warn { background: #FFE4D6; color: #7A3518; }
+.mgp-chip.off { background: #ECECEC; color: #555; }
+.mgp-add-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+@media (max-width: 640px) { .mgp-add-row { grid-template-columns: 1fr; } }

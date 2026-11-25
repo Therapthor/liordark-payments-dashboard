@@ -1,25 +1,51 @@
-// Configuración › 🥭 Manguito Pro — conexión con la API, quién puede usarlo,
-// topes de gasto y cuánto se lleva gastado. Ver routes/manguito-admin.routes.ts.
-// La clave nunca vuelve al navegador: solo se ven sus últimos 4 caracteres.
+// Configuración › 🥭 Manguito Pro — claves de la API (varias, en orden, con
+// cambio automático si una se queda sin saldo), quién puede usarlo, topes y
+// gasto. Ver routes/manguito-admin.routes.ts. Las claves nunca vuelven al
+// navegador: solo se ven sus últimos 4 caracteres.
 (function () {
   "use strict";
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const usd = n => "US$ " + (Number(n) || 0).toFixed(Number(n) < 1 ? 4 : 2);
+  const ago = ms => {
+    if (!ms) return "";
+    const m = Math.round((Date.now() - ms) / 60000);
+    return m < 1 ? "recién" : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`;
+  };
   const TIER_NAMES = { rapido: "⚡ Rápido (Haiku)", equilibrado: "🧠 Equilibrado (Sonnet)", experto: "🏆 Experto (Opus)", router: "🧭 Selector de modelo", test: "🔌 Pruebas de conexión" };
 
-  function msg(text) { $("mgp-msg").textContent = text || ""; }
+  const msg = (text, id) => { $(id || "mgp-msg").textContent = text || ""; };
+
+  function keyRow(k, i, n) {
+    const chip = k.state === "ok" ? `<span class="mgp-chip ok">✅ Activa</span>`
+      : k.state === "paused" ? `<span class="mgp-chip warn">⏸️ En pausa: ${esc(k.reason)}${k.failedAt ? " · " + ago(k.failedAt) : ""}</span>`
+      : `<span class="mgp-chip off">Desactivada</span>`;
+    return `<li data-id="${esc(k.id)}">
+      <div class="mgp-key-main">
+        <b>${i + 1}. ${esc(k.label)}</b>
+        <small>${k.kind === "authToken" ? "Token" : "Clave"} ••••${esc(k.tail)}${k.baseUrl ? " · " + esc(k.baseUrl) : ""} · este mes ${usd(k.monthUsd)}${k.lastOkAt ? " · respondió " + ago(k.lastOkAt) : ""}</small>
+        ${chip}
+      </div>
+      <div class="mgp-key-btns">
+        <button type="button" class="btn-secondary btn-sm" data-act="up" ${i === 0 ? "disabled" : ""} title="Usar antes">↑</button>
+        <button type="button" class="btn-secondary btn-sm" data-act="down" ${i === n - 1 ? "disabled" : ""} title="Usar después">↓</button>
+        <button type="button" class="btn-secondary btn-sm" data-act="test">Probar</button>
+        ${k.state === "paused" ? `<button type="button" class="btn-secondary btn-sm" data-act="reset">Quitar pausa</button>` : ""}
+        <button type="button" class="btn-secondary btn-sm" data-act="toggle">${k.enabled ? "Desactivar" : "Activar"}</button>
+        <button type="button" class="btn-secondary btn-sm" data-act="delete">Borrar</button>
+      </div>
+    </li>`;
+  }
 
   function render(v) {
-    $("mgp-status").textContent = v.configured
-      ? `✅ Conectada con ${v.mode === "authToken" ? "token" : "clave"} ••••${v.secretTail}${v.baseUrl ? " · " + v.baseUrl : ""}`
-      : "Sin conectar: pega la clave de tu API y guarda.";
-    $("mgp-base").value = v.baseUrl || "";
+    const keys = v.credentials || [];
+    const active = keys.filter(k => k.state === "ok").length;
+    $("mgp-status").textContent = !keys.length ? "Sin claves: agrega la primera abajo."
+      : `${keys.length} clave${keys.length > 1 ? "s" : ""} · ${active} lista${active === 1 ? "" : "s"} para usar`;
+    $("mgp-keys").innerHTML = keys.map((k, i) => keyRow(k, i, keys.length)).join("");
     $("mgp-phones").value = (v.phones || []).join("\n");
     $("mgp-daily").value = v.dailyCap;
     $("mgp-monthly").value = v.monthlyCap;
-    $("mgp-key").value = "";
-    $("mgp-token").value = "";
     const u = v.usage || { today: {}, month: {}, byTier: [] };
     $("mgp-usage").innerHTML =
       `<div class="mgp-stats"><div><b>${usd(u.today.usd)}</b><span>Hoy · ${u.today.messages || 0} mensajes</span></div>` +
@@ -47,35 +73,54 @@
     try { render(await call("GET", "")); } catch (err) { $("mgp-status").textContent = "⚠️ " + err.message; }
   }
 
+  function showTest(r) {
+    if (r.view) render(r.view);
+    msg(r.ok ? `✅ Funciona: «${r.label}» respondió con ${r.model} en ${(r.ms / 1000).toFixed(1)} s.` : "⚠️ " + r.message);
+  }
+
   function init() {
-    const form = $("mgp-form");
-    if (!form) return;
-    form.addEventListener("submit", async e => {
+    if (!$("mgp-add")) return;
+    $("mgp-add").addEventListener("submit", async e => {
       e.preventDefault();
-      msg("Guardando…");
-      const body = {
-        baseUrl: $("mgp-base").value,
-        phones: $("mgp-phones").value,
-        dailyCap: $("mgp-daily").value,
-        monthlyCap: $("mgp-monthly").value,
-      };
+      const body = { label: $("mgp-label").value, baseUrl: $("mgp-base").value };
       if ($("mgp-key").value.trim()) body.apiKey = $("mgp-key").value.trim();
       else if ($("mgp-token").value.trim()) body.authToken = $("mgp-token").value.trim();
-      try { render(await call("POST", "", body)); msg("✅ Guardado."); }
-      catch (err) { msg("⚠️ " + err.message); }
+      else { msg("⚠️ Pega la clave de la API (o el token)."); return; }
+      msg("Guardando…");
+      try {
+        render(await call("POST", "/keys", body));
+        ["mgp-label", "mgp-key", "mgp-token", "mgp-base"].forEach(id => { $(id).value = ""; });
+        msg("✅ Clave agregada. Tócale «Probar» para confirmar que tiene saldo.");
+      } catch (err) { msg("⚠️ " + err.message); }
     });
     $("mgp-test").addEventListener("click", async () => {
       msg("Probando…");
+      try { showTest(await call("POST", "/test")); } catch (err) { msg("⚠️ " + err.message); }
+    });
+    $("mgp-keys").addEventListener("click", async e => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const id = btn.closest("li").dataset.id;
+      const act = btn.dataset.act;
       try {
-        const r = await call("POST", "/test");
-        msg(r.ok ? `✅ Funciona: respondió ${r.model} en ${(r.ms / 1000).toFixed(1)} s.` : "⚠️ " + r.message);
-        load();
+        if (act === "test") { msg("Probando…"); showTest(await call("POST", `/keys/${id}/test`)); return; }
+        if (act === "delete") {
+          if (!confirm("¿Borrar esta clave de la lista?")) return;
+          render(await call("DELETE", `/keys/${id}`)); msg("Clave borrada."); return;
+        }
+        const enabled = btn.textContent.trim() === "Activar";
+        const body = act === "up" || act === "down" ? { move: act } : act === "reset" ? { reset: true } : { enabled };
+        render(await call("PATCH", `/keys/${id}`, body));
+        msg("");
       } catch (err) { msg("⚠️ " + err.message); }
     });
-    $("mgp-clear").addEventListener("click", async () => {
-      if (!confirm("¿Quitar la clave? Manguito Pro dejará de responder hasta que pongas otra.")) return;
-      try { render(await call("POST", "", { clearCredentials: true })); msg("Clave quitada."); }
-      catch (err) { msg("⚠️ " + err.message); }
+    $("mgp-form").addEventListener("submit", async e => {
+      e.preventDefault();
+      msg("Guardando…", "mgp-msg2");
+      try {
+        render(await call("POST", "", { phones: $("mgp-phones").value, dailyCap: $("mgp-daily").value, monthlyCap: $("mgp-monthly").value }));
+        msg("✅ Guardado.", "mgp-msg2");
+      } catch (err) { msg("⚠️ " + err.message, "mgp-msg2"); }
     });
   }
 

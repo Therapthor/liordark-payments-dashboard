@@ -54,6 +54,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage(created_at);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_customer ON ai_usage(customer_id, created_at);
 `);
+// Qué clave de la lista se usó (para ver el gasto de cada una).
+if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).some(c => c.name === "cred_id")) {
+  db.exec(`ALTER TABLE ai_usage ADD COLUMN cred_id TEXT NOT NULL DEFAULT ''`);
+}
 
 export type AiConversation = { id: number; title: string; createdAt: string; updatedAt: string };
 export type AiMessage = {
@@ -132,13 +136,13 @@ export function deleteUploadRows(ids: string[]): void {
 }
 
 export function logUsage(u: {
-  customerId: number; kind: "chat" | "router" | "test"; tier?: string; model: string;
+  customerId: number; kind: "chat" | "router" | "test"; tier?: string; model: string; credId?: string;
   inputTokens: number; outputTokens: number; cacheRead: number; cacheWrite: number; costUsd: number;
 }): void {
   db.prepare(`
-    INSERT INTO ai_usage (customer_id, kind, tier, model, input_tokens, output_tokens, cache_read, cache_write, cost_usd)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(u.customerId, u.kind, u.tier ?? "", u.model, u.inputTokens, u.outputTokens, u.cacheRead, u.cacheWrite, u.costUsd);
+    INSERT INTO ai_usage (customer_id, kind, tier, model, cred_id, input_tokens, output_tokens, cache_read, cache_write, cost_usd)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(u.customerId, u.kind, u.tier ?? "", u.model, u.credId ?? "", u.inputTokens, u.outputTokens, u.cacheRead, u.cacheWrite, u.costUsd);
 }
 
 // Días y meses en hora de Lima (UTC-5), igual que el resto del panel.
@@ -177,4 +181,14 @@ export function usageSummary() {
     month: { usd: month.usd, messages: month.messages ?? 0 },
     byTier,
   };
+}
+
+/** Gasto estimado de este mes por clave de la lista. */
+export function monthSpendByCredential(): Record<string, number> {
+  const rows = db.prepare(`
+    SELECT cred_id AS id, COALESCE(SUM(cost_usd), 0) AS usd FROM ai_usage
+    WHERE strftime('%Y-%m', created_at, '-5 hours') = strftime('%Y-%m', 'now', '-5 hours') AND cred_id != ''
+    GROUP BY cred_id
+  `).all() as { id: string; usd: number }[];
+  return Object.fromEntries(rows.map(r => [r.id, r.usd]));
 }
