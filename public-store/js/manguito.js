@@ -170,14 +170,14 @@
   function renderMessages(list, conv) {
     const box = $("mg-messages");
     box.innerHTML = "";
-    if (conv && conv.summary) {
+    if (conv && conv.summary && conv.compacted > 0) {
       const d = document.createElement("details");
       d.className = "mg-summary";
       d.innerHTML = `<summary>📦 ${conv.compacted} mensaje(s) anteriores resumidos para ahorrar espacio</summary><div>${esc(conv.summary)}</div>`;
       box.appendChild(d);
     }
     for (const m of list) box.appendChild(m.role === "user" ? userMessageEl(m) : assistantMessageEl(m));
-    $("mg-hello").hidden = list.length > 0 || !!(conv && conv.summary);
+    $("mg-hello").hidden = list.length > 0 || !!(conv && conv.compacted > 0);
     scrollToEnd(true);
   }
 
@@ -467,6 +467,7 @@
 
   // ── Uso del mes y pausa de 1 hora ──
   let pauseTimer = null;
+  const FOOT_TEXT = "Manguito Pro puede equivocarse. Revisa la información importante.";
   function showUsage(u) {
     if (!u) return;
     const chip = $("mg-usage");
@@ -481,6 +482,13 @@
       $("mg-pause").textContent = `☕ Manguito está descansando después de mucho uso seguido. Vuelve a las ${t} y sigues sin problema.`;
       pauseTimer = setTimeout(refreshUsage, Math.min(u.cooldownUntil - Date.now() + 1500, 2147000000));
     }
+    // Aviso suave cuando faltan pocos mensajes para la pausa.
+    const foot = $("mg-foot");
+    const left = u.burstLeft;
+    foot.textContent = !paused && typeof left === "number" && left <= 5
+      ? `☕ Te ${left === 1 ? "queda 1 mensaje" : `quedan ${left} mensajes`} antes de una pausa de 1 hora.`
+      : FOOT_TEXT;
+    foot.classList.toggle("warn", !paused && typeof left === "number" && left <= 5);
     state.paused = !!paused;
     updateSend();
   }

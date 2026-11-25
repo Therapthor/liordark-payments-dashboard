@@ -73,12 +73,24 @@ db.exec(`
   );
 `);
 
+// Pausas de 1 hora: cuántas lleva hoy (máximo 2 al día, ver manguito.service.ts).
+{
+  const cols = (db.prepare(`PRAGMA table_info(ai_customer_state)`).all() as { name: string }[]).map(c => c.name);
+  if (!cols.includes("pauses_day")) db.exec(`ALTER TABLE ai_customer_state ADD COLUMN pauses_day TEXT NOT NULL DEFAULT ''`);
+  if (!cols.includes("pauses_count")) db.exec(`ALTER TABLE ai_customer_state ADD COLUMN pauses_count INTEGER NOT NULL DEFAULT 0`);
+}
+// Hasta qué mensaje cubre el resumen de cada conversación: lo anterior ya
+// no se vuelve a mandar a la API (se manda el resumen, mucho más corto).
+if (!(db.prepare(`PRAGMA table_info(ai_conversations)`).all() as { name: string }[]).some(c => c.name === "summary_upto")) {
+  db.exec(`ALTER TABLE ai_conversations ADD COLUMN summary_upto INTEGER NOT NULL DEFAULT 0`);
+}
+
 // Qué clave de la lista se usó (para ver el gasto de cada una).
 if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).some(c => c.name === "cred_id")) {
   db.exec(`ALTER TABLE ai_usage ADD COLUMN cred_id TEXT NOT NULL DEFAULT ''`);
 }
 
-export type AiConversation = { id: number; title: string; createdAt: string; updatedAt: string; summary: string; compacted: number };
+export type AiConversation = { id: number; title: string; createdAt: string; updatedAt: string; summary: string; compacted: number; summaryUpto: number };
 export type AiMessage = {
   id: number; conversationId: number; role: "user" | "assistant"; text: string;
   images: string[]; tier: string; model: string; status: string; createdAt: string;
@@ -102,7 +114,7 @@ export function listConversations(customerId: number, limit = 60): AiConversatio
 
 export function getConversation(customerId: number, id: number): AiConversation | null {
   const row = db.prepare(`
-    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, summary, compacted
+    SELECT id, title, created_at AS createdAt, updated_at AS updatedAt, summary, compacted, summary_upto AS summaryUpto
     FROM ai_conversations WHERE id = ? AND customer_id = ?
   `).get(id, customerId) as AiConversation | undefined;
   return row ?? null;
@@ -215,9 +227,16 @@ export function monthSpendByCredential(): Record<string, number> {
 // ── Compactación y límites de espacio ──
 
 /** Reemplaza los mensajes con id <= upto por su resumen (en una transacción). */
-export const applyCompaction = db.transaction((conversationId: number, upto: number, summary: string, count: number) => {
-  db.prepare(`DELETE FROM ai_messages WHERE conversation_id = ? AND id <= ?`).run(conversationId, upto);
-  db.prepare(`UPDATE ai_conversations SET summary = ?, compacted = compacted + ? WHERE id = ?`).run(summary, count, conversationId);
+/** El resumen ahora cubre hasta el mensaje `upto` (esos ya no se mandan a la API). */
+export function setSummary(conversationId: number, upto: number, summary: string): void {
+  db.prepare(`UPDATE ai_conversations SET summary = ?, summary_upto = MAX(summary_upto, ?) WHERE id = ?`).run(summary, upto, conversationId);
+}
+
+/** Borra del servidor los mensajes hasta `upto` (ya están en el resumen). */
+export const pruneMessages = db.transaction((conversationId: number, upto: number): number => {
+  const n = db.prepare(`DELETE FROM ai_messages WHERE conversation_id = ? AND id <= ?`).run(conversationId, upto).changes;
+  if (n) db.prepare(`UPDATE ai_conversations SET compacted = compacted + ? WHERE id = ?`).run(n, conversationId);
+  return n;
 });
 
 export function countMessages(conversationId: number): number {
@@ -276,17 +295,33 @@ export function bumpMessagesSinceMemory(customerId: number): number {
   return customerState(customerId).msgsSinceMemory;
 }
 
-export function setCooldown(customerId: number, untilMs: number): void {
+/** Pausa hasta `untilMs` si hoy (hora de Lima) aún no llegó a `maxPerDay` pausas. */
+export const registerPause = db.transaction((customerId: number, untilMs: number, maxPerDay: number): boolean => {
   ensureState(customerId);
-  db.prepare(`UPDATE ai_customer_state SET cooldown_until = ? WHERE customer_id = ?`).run(untilMs, customerId);
+  const today = (db.prepare(`SELECT date('now', '-5 hours') AS d`).get() as { d: string }).d;
+  const r = db.prepare(`SELECT pauses_day AS day, pauses_count AS n FROM ai_customer_state WHERE customer_id = ?`).get(customerId) as { day: string; n: number };
+  const n = r.day === today ? r.n : 0;
+  if (n >= maxPerDay) return false;
+  db.prepare(`UPDATE ai_customer_state SET cooldown_until = ?, pauses_day = ?, pauses_count = ? WHERE customer_id = ?`).run(untilMs, today, n + 1, customerId);
+  return true;
+});
+
+/** Pausas que ya tuvo hoy (hora de Lima). */
+export function pausesToday(customerId: number): number {
+  const r = db.prepare(`
+    SELECT pauses_count AS n FROM ai_customer_state WHERE customer_id = ? AND pauses_day = date('now', '-5 hours')
+  `).get(customerId) as { n: number } | undefined;
+  return r?.n ?? 0;
 }
 
-export function spentLastMinutesByCustomer(customerId: number, minutes: number): number {
+/** Respuestas del chat desde `sinceMs` (para la tanda de mensajes antes de una pausa). */
+export function chatsSince(customerId: number, sinceMs: number): number {
   const r = db.prepare(`
-    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage WHERE customer_id = ? AND created_at >= datetime('now', ?)
-  `).get(customerId, `-${minutes} minutes`) as { t: number };
-  return r.t;
+    SELECT COUNT(*) AS n FROM ai_usage WHERE customer_id = ? AND kind = 'chat' AND created_at >= datetime(?, 'unixepoch')
+  `).get(customerId, Math.floor(sinceMs / 1000)) as { n: number };
+  return r.n;
 }
+
 
 export function spentThisMonthByCustomer(customerId: number): number {
   const r = db.prepare(`

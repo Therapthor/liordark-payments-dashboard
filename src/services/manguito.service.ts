@@ -5,10 +5,10 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { getAdminSetting, setAdminSetting } from "../db/security.repository";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
-  applyCompaction, countMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
+  setSummary, pruneMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
   deleteConversation, deleteUploadRows, getConversation, customerState, setMemory,
-  bumpMessagesSinceMemory, setCooldown, spentLastMinutesByCustomer, spentThisMonthByCustomer,
-  type AiMessage,
+  bumpMessagesSinceMemory, registerPause, pausesToday, chatsSince, spentThisMonthByCustomer,
+  type AiMessage, type AiConversation,
 } from "../db/manguito.repository";
 
 // ─────────────────────────────────────────────────────────────
@@ -20,10 +20,13 @@ import {
 //     ⚡ Rápido (Haiku 5.5) · 🧠 Equilibrado (Sonnet 5.5) · 🏆 Experto (Opus 5.5).
 //   Claude Fable no se usa nunca.
 // · Ahorro de tokens: saludos cortos sin pasar por el selector, esfuerzo
-//   bajo por defecto, historial recortado (solo los últimos mensajes y solo
-//   las imágenes recientes), caché de la conversación (90 % más barato al
-//   releer), imágenes achicadas en el navegador y topes de gasto por día
-//   (por cliente) y por mes (total). Con poco saldo del día baja de nivel.
+//   bajo por defecto, respuestas cortas, NO se reenvía toda la conversación
+//   (solo los últimos mensajes + un resumen de lo anterior + la memoria del
+//   cliente), solo la imagen más reciente, caché (90 % más barato al
+//   releer), imágenes achicadas en el navegador y topes de gasto por día,
+//   por cliente al mes y total al mes. Con poco saldo baja de nivel.
+// · Pausa de 1 hora (como Claude) si manda muchos mensajes seguidos;
+//   máximo 2 pausas al día.
 // La clave de la API se guarda en el panel (nunca en el código ni en git)
 // y nunca sale hacia el navegador.
 // ─────────────────────────────────────────────────────────────
@@ -32,9 +35,9 @@ export type Tier = "rapido" | "equilibrado" | "experto";
 type Effort = "low" | "medium" | "high";
 
 export const TIERS: Record<Tier, { model: string; label: string; maxTokens: number; fallback: string | null }> = {
-  rapido:      { model: "claude-haiku-5-5",  label: "⚡ Rápido",      maxTokens: 4096,  fallback: null },
-  equilibrado: { model: "claude-sonnet-5-5", label: "🧠 Equilibrado", maxTokens: 8192,  fallback: "claude-sonnet-5" },
-  experto:     { model: "claude-opus-5-5",   label: "🏆 Experto",     maxTokens: 16000, fallback: "claude-opus-4-8" },
+  rapido:      { model: "claude-haiku-5-5",  label: "⚡ Rápido",      maxTokens: 2048,  fallback: null },
+  equilibrado: { model: "claude-sonnet-5-5", label: "🧠 Equilibrado", maxTokens: 4096,  fallback: "claude-sonnet-5" },
+  experto:     { model: "claude-opus-5-5",   label: "🏆 Experto",     maxTokens: 10000, fallback: "claude-opus-4-8" },
 };
 const ROUTER_MODEL = "claude-haiku-5-5";
 
@@ -69,14 +72,16 @@ function sdk(): typeof Anthropic {
 
 const K = {
   creds: "ai_credentials", phones: "ai_allowed_phones", dailyCap: "ai_daily_cap_usd", monthlyCap: "ai_monthly_cap_usd",
-  hourlyCap: "ai_hourly_cap_usd", clientMonthlyCap: "ai_client_monthly_cap_usd",
+  clientMonthlyCap: "ai_client_monthly_cap_usd", burstMessages: "ai_burst_messages", pausesPerDay: "ai_pauses_per_day",
   // Versión anterior (una sola clave): se pasa sola a la lista.
   oldApiKey: "ai_api_key", oldAuthToken: "ai_auth_token", oldBaseUrl: "ai_base_url",
 };
 export const DEFAULT_DAILY_CAP = 2;
 export const DEFAULT_MONTHLY_CAP = 50;
-export const DEFAULT_HOURLY_CAP = 0.5;        // pasarlo en 1 hora → pausa de 1 hora
 export const DEFAULT_CLIENT_MONTHLY_CAP = 10; // por cliente al mes
+export const DEFAULT_BURST_MESSAGES = 30;     // tantos mensajes en 5 horas → pausa de 1 hora
+export const DEFAULT_PAUSES_PER_DAY = 2;      // después de 2 pausas en el día ya no pausa (sigue el tope del día)
+const BURST_WINDOW_H = 5;
 const COOLDOWN_MIN = 60;
 
 // ── Claves de API (varias, en orden) ──
@@ -143,12 +148,15 @@ export function credentialState(c: AiCredential): { state: "ok" | "paused" | "of
   return { state: "ok", reason: "" };
 }
 
-export type AiConfig = { phones: string[]; hourlyCap: number; dailyCap: number; clientMonthlyCap: number; monthlyCap: number };
+export type AiConfig = {
+  phones: string[]; burstMessages: number; pausesPerDay: number; dailyCap: number; clientMonthlyCap: number; monthlyCap: number;
+};
 
 export function aiConfig(): AiConfig {
   return {
     phones:           (getAdminSetting(K.phones) || "").split(",").map(s => s.trim()).filter(Boolean),
-    hourlyCap:        num(getAdminSetting(K.hourlyCap), DEFAULT_HOURLY_CAP),
+    burstMessages:    Math.floor(num(getAdminSetting(K.burstMessages), DEFAULT_BURST_MESSAGES)),
+    pausesPerDay:     Math.floor(num(getAdminSetting(K.pausesPerDay), DEFAULT_PAUSES_PER_DAY)),
     dailyCap:         num(getAdminSetting(K.dailyCap), DEFAULT_DAILY_CAP),
     clientMonthlyCap: num(getAdminSetting(K.clientMonthlyCap), DEFAULT_CLIENT_MONTHLY_CAP),
     monthlyCap:       num(getAdminSetting(K.monthlyCap), DEFAULT_MONTHLY_CAP),
@@ -226,11 +234,20 @@ export function saveAiConfig(body: any): string | null {
     const list = String(body.phones).split(/[\s,;]+/).map(last9).filter(p => p.length === 9);
     setAdminSetting(K.phones, [...new Set(list)].join(","));
   }
-  for (const [field, key] of [["hourlyCap", K.hourlyCap], ["dailyCap", K.dailyCap], ["clientMonthlyCap", K.clientMonthlyCap], ["monthlyCap", K.monthlyCap]] as const) {
+  for (const [field, key] of [["dailyCap", K.dailyCap], ["clientMonthlyCap", K.clientMonthlyCap], ["monthlyCap", K.monthlyCap]] as const) {
     if (body?.[field] === undefined) continue;
     const n = Number(body[field]);
     if (!isFinite(n) || n < 0 || n > 10000) return "El tope debe ser un monto entre 0 y 10000 dólares.";
     setAdminSetting(key, String(Math.round(n * 100) / 100));
+  }
+  for (const [field, key, max, label] of [
+    ["burstMessages", K.burstMessages, 1000, "Los mensajes antes de la pausa deben ser un número entre 0 y 1000."],
+    ["pausesPerDay", K.pausesPerDay, 24, "Las pausas al día deben ser un número entre 0 y 24."],
+  ] as const) {
+    if (body?.[field] === undefined) continue;
+    const n = Number(body[field]);
+    if (!Number.isInteger(n) || n < 0 || n > max) return label;
+    setAdminSetting(key, String(n));
   }
   return null;
 }
@@ -412,9 +429,13 @@ async function chooseRoute(
 // ── Historial que se manda (recortado para ahorrar) ──
 
 export const UPLOAD_DIR = path.resolve(process.cwd(), "data", "ai-uploads");
-const MAX_HISTORY_MESSAGES = 14;
-const MAX_HISTORY_CHARS = 60_000;     // ~15 mil tokens de texto como máximo
-const IMAGE_TURNS_KEPT = 2;           // solo las imágenes de los 2 últimos mensajes con imagen
+// No se reenvía toda la conversación: solo lo que aún no está en el resumen
+// (como mucho los 8 últimos mensajes). Lo anterior va en el resumen (corto)
+// y lo duradero del cliente, en su memoria.
+const MAX_HISTORY_MESSAGES = 8;
+const MAX_HISTORY_CHARS = 16_000;     // ~4 mil tokens de texto como máximo
+const OLD_REPLY_CHARS = 1_500;        // respuestas anteriores a la última: recortadas
+const IMAGE_TURNS_KEPT = 1;           // solo las imágenes del último mensaje con imagen
 
 export function uploadPath(id: string, mediaType: string): string {
   const ext = mediaType === "image/png" ? "png" : mediaType === "image/webp" ? "webp" : mediaType === "image/gif" ? "gif" : "jpg";
@@ -434,16 +455,24 @@ function imageBlock(id: string): Anthropic.ImageBlockParam | null {
   } catch { return null; }
 }
 
-function buildHistory(conversationId: number): Anthropic.MessageParam[] {
-  let msgs = listMessages(conversationId).filter(m => m.text.trim() || m.images.length);
+function clip(text: string, max: number): string {
+  return text.length > max ? text.slice(0, max) + "\n[…respuesta recortada para ahorrar]" : text;
+}
+
+function buildHistory(conversationId: number, summaryUpto: number): Anthropic.MessageParam[] {
+  let msgs = listMessages(conversationId).filter(m => m.id > summaryUpto && (m.text.trim() || m.images.length));
   msgs = msgs.slice(-MAX_HISTORY_MESSAGES);
   let chars = msgs.reduce((s, m) => s + m.text.length, 0);
   while (msgs.length > 1 && chars > MAX_HISTORY_CHARS) { chars -= msgs[0]!.text.length; msgs = msgs.slice(1); }
   while (msgs.length && msgs[0]!.role !== "user") msgs = msgs.slice(1);
 
   const withImages = msgs.filter(m => m.role === "user" && m.images.length).slice(-IMAGE_TURNS_KEPT);
+  const lastReply = [...msgs].reverse().find(m => m.role === "assistant");
   return msgs.map((m: AiMessage): Anthropic.MessageParam => {
-    if (m.role === "assistant") return { role: "assistant", content: m.text || "(respuesta interrumpida)" };
+    if (m.role === "assistant") {
+      const t = m === lastReply ? m.text : clip(m.text, OLD_REPLY_CHARS);
+      return { role: "assistant", content: t || "(respuesta interrumpida)" };
+    }
     const blocks: Anthropic.ContentBlockParam[] = [];
     if (m.images.length && withImages.includes(m)) {
       for (const id of m.images) { const b = imageBlock(id); if (b) blocks.push(b); }
@@ -455,19 +484,19 @@ function buildHistory(conversationId: number): Anthropic.MessageParam[] {
   });
 }
 
-function systemPrompt(customerId: number, conversationId: number): string {
+function systemPrompt(customerId: number, conv: AiConversation | null): string {
   const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10).split("-").reverse().join("/");
   const memory = customerState(customerId).memory.trim();
-  const summary = getConversation(customerId, conversationId)?.summary?.trim() || "";
+  const summary = conv?.summary?.trim() || "";
   return [
     "Eres Manguito Pro, el asistente de inteligencia artificial de Manguitope (liordark.com). Funcionas con modelos Claude de Anthropic; si te preguntan, puedes decirlo.",
     "Responde en el idioma del cliente (normalmente español de Perú), claro, cálido y directo. Usa Markdown sencillo cuando ayude (listas, negritas, tablas cortas, bloques de código con su lenguaje).",
-    "Sé breve por defecto: responde lo que se pidió, sin relleno; extiéndete solo si el cliente lo pide o el tema lo necesita.",
+    "Sé conciso y directo: da la respuesta primero, sin introducciones, sin repetir la pregunta y sin despedidas ni «¿te ayudo con algo más?». Por defecto, unas 150 palabras como máximo; extiéndete solo si el cliente lo pide o la tarea lo necesita (código completo, un documento). Si dice «sigue», continúa donde quedaste.",
     "No puedes crear ni editar videos, audio ni imágenes: si te lo piden, dilo con amabilidad y ofrece una alternativa en texto (un guion, una descripción, un prompt).",
     "No tienes acceso a internet ni a archivos fuera de esta conversación, y no ejecutas código: solo lo escribes para que el cliente lo use. Si no sabes algo con certeza, dilo.",
     `Fecha de hoy: ${today}.`,
     ...(memory ? ["", "Lo que recuerdas de este cliente (de conversaciones anteriores; úsalo con naturalidad, sin recitarlo):", memory] : []),
-    ...(summary ? ["", "Resumen de la parte anterior de esta conversación (ya no se muestra completa):", summary] : []),
+    ...(summary ? ["", "Resumen de la parte anterior de esta conversación (esos mensajes ya no se te muestran):", summary] : []),
   ].join("\n");
 }
 
@@ -475,7 +504,7 @@ function systemPrompt(customerId: number, conversationId: number): string {
 
 const activeChats = new Set<number>();
 const recentByCustomer = new Map<number, number[]>();
-const MAX_PER_HOUR = 40;
+const MAX_PER_MINUTE = 10;            // antispam (nadie escribe más rápido)
 
 export type ChatEvent =
   | { type: "meta"; conversationId: number; tier: Tier; label: string }
@@ -497,18 +526,17 @@ export function chatGate(customerId: number): ChatGate {
   if (spentTodayByCustomer(customerId) >= cfg.dailyCap) return { ok: false, status: 429, message: "Llegaste al límite de uso de hoy. Mañana se renueva 🥭" };
   if (activeChats.has(customerId)) return { ok: false, status: 409, message: "Espera a que termine la respuesta anterior." };
   const now = Date.now();
-  const recent = (recentByCustomer.get(customerId) || []).filter(t => now - t < 3600e3);
-  if (recent.length >= MAX_PER_HOUR) return { ok: false, status: 429, message: "Vas muy rápido: espera unos minutos y sigue." };
+  const recent = (recentByCustomer.get(customerId) || []).filter(t => now - t < 60e3);
+  if (recent.length >= MAX_PER_MINUTE) return { ok: false, status: 429, message: "Vas muy rápido: espera un minuto y sigue." };
   return { ok: true };
 }
 
-/** Con poco saldo (hora, día o mes del cliente), baja de nivel para no pasarse. */
+/** Con poco saldo (día o mes del cliente), baja de nivel para no pasarse. */
 function capTierByBudget(tier: Tier, customerId: number): Tier {
   const cfg = aiConfig();
   const left = Math.min(
     cfg.dailyCap - spentTodayByCustomer(customerId),
     cfg.clientMonthlyCap - spentThisMonthByCustomer(customerId),
-    cfg.hourlyCap - spentLastMinutesByCustomer(customerId, COOLDOWN_MIN),
   );
   if (left < 0.10) return "rapido";
   if (left < 0.40 && tier === "experto") return "equilibrado";
@@ -521,7 +549,7 @@ export async function runChat(opts: {
 }): Promise<void> {
   const { customerId, conversationId, signal, emit } = opts;
   activeChats.add(customerId);
-  recentByCustomer.set(customerId, [...(recentByCustomer.get(customerId) || []).filter(t => Date.now() - t < 3600e3), Date.now()]);
+  recentByCustomer.set(customerId, [...(recentByCustomer.get(customerId) || []).filter(t => Date.now() - t < 60e3), Date.now()]);
 
   let text = "";
   let tier: Tier = "rapido";
@@ -537,13 +565,17 @@ export async function runChat(opts: {
     model = cfg.model;
     emit({ type: "meta", conversationId, tier, label: cfg.label });
 
+    // Rápido: sin pensar. Equilibrado: como mucho esfuerzo medio. Solo el
+    // Experto puede pensar a fondo (nunca xhigh ni max).
+    const effort: Effort = tier === "rapido" ? "low" : tier === "equilibrado" && route.effort === "high" ? "medium" : route.effort;
+    const conv = getConversation(customerId, conversationId);
     const base = {
       model: cfg.model,
       max_tokens: cfg.maxTokens,
-      system: systemPrompt(customerId, conversationId),
-      messages: buildHistory(conversationId),
-      thinking: { type: "adaptive" as const },
-      output_config: { effort: route.effort },
+      system: systemPrompt(customerId, conv),
+      messages: buildHistory(conversationId, conv?.summaryUpto ?? 0),
+      thinking: tier === "rapido" ? { type: "disabled" as const } : { type: "adaptive" as const },
+      output_config: { effort },
       cache_control: { type: "ephemeral" as const }, // la conversación queda en caché: releerla cuesta ~10 %
     };
 
@@ -577,6 +609,11 @@ export async function runChat(opts: {
             cacheWrite:   Math.max(usage.cacheWrite, u.cacheWrite),
           };
           if (ev.delta?.stop_reason === "refusal") status = "refusal";
+          if (ev.delta?.stop_reason === "max_tokens") {
+            const note = "\n\n_(Se cortó por largo. Escribe «sigue» y continúo.)_";
+            text += note;
+            emit({ type: "text", text: note });
+          }
         }
       }
     };
@@ -608,26 +645,45 @@ export async function runChat(opts: {
   afterChat(customerId, conversationId, status === "ok");
 }
 
-/** Después de cada respuesta: pausa si gastó mucho en 1 hora; memoria y
- *  compactación con el modelo más barato, en segundo plano (no hace esperar). */
+// ── Pausa de 1 hora (como Claude) ──
+// Si manda `burstMessages` mensajes en 5 horas, descansa 1 hora y luego
+// sigue normal. Como mucho `pausesPerDay` pausas al día; después ya no
+// pausa (solo queda el tope de gasto del día).
+
+function burstCount(customerId: number): number {
+  const since = Math.max(customerState(customerId).cooldownUntil, Date.now() - BURST_WINDOW_H * 3600e3);
+  return chatsSince(customerId, since);
+}
+
+function maybePause(customerId: number): void {
+  const cfg = aiConfig();
+  if (!cfg.burstMessages || !cfg.pausesPerDay) return;
+  if (burstCount(customerId) >= cfg.burstMessages) registerPause(customerId, Date.now() + COOLDOWN_MIN * 60e3, cfg.pausesPerDay);
+}
+
+/** Después de cada respuesta: ¿toca pausa?; resumen y memoria con el modelo
+ *  más barato, en segundo plano (no hace esperar). */
 function afterChat(customerId: number, conversationId: number, ok: boolean): void {
-  if (spentLastMinutesByCustomer(customerId, COOLDOWN_MIN) >= aiConfig().hourlyCap) {
-    setCooldown(customerId, Date.now() + COOLDOWN_MIN * 60e3);
-  }
+  maybePause(customerId);
   if (!ok) return;
   const pending = bumpMessagesSinceMemory(customerId);
   void (async () => {
-    if (countMessages(conversationId) > COMPACT_AT) await compactConversation(customerId, conversationId).catch(() => {});
+    await compactConversation(customerId, conversationId).catch(() => {});
     if (pending >= MEMORY_EVERY) await updateMemory(customerId, conversationId).catch(() => {});
   })();
 }
 
 // ── Compactación: lo viejo de cada conversación pasa a un resumen ──
-// Cuando una conversación pasa de COMPACT_AT mensajes, todo menos los
-// últimos KEEP_RECENT se resume (con Haiku, el más barato) y se borra: ocupa
-// menos espacio en el servidor y se mandan menos tokens en cada respuesta.
-const COMPACT_AT = 24;
-const KEEP_RECENT = 10;
+// 1) Resumen (ahorra tokens): cuando hay más de SUMMARIZE_AT mensajes que
+//    el resumen aún no cubre, todos menos los CONTEXT_KEEP últimos se suman
+//    al resumen (con Haiku, el más barato). Esos ya no se mandan a la API.
+// 2) Limpieza (ahorra espacio): con más de PRUNE_AT mensajes guardados, se
+//    borran del servidor los ya resumidos y quedan a la vista los últimos
+//    KEEP_VISIBLE. No llama a la API.
+const SUMMARIZE_AT = 8;
+const CONTEXT_KEEP = 4;
+const PRUNE_AT = 24;
+const KEEP_VISIBLE = 10;
 const SUMMARY_MAX = 1500;
 const MEMORY_MAX = 1200;
 const MEMORY_EVERY = 6;          // la memoria se actualiza cada 6 mensajes del cliente
@@ -657,29 +713,46 @@ async function cheapText(customerId: number, kind: "compact" | "memory", system:
   return b && b.type === "text" ? b.text.trim() : "";
 }
 
-export async function compactConversation(customerId: number, conversationId: number): Promise<boolean> {
-  if (compacting.has(conversationId)) return false;
+async function summarizeConversation(customerId: number, conversationId: number): Promise<void> {
+  const conv = getConversation(customerId, conversationId);
+  if (!conv) return;
+  const fresh = listMessages(conversationId).filter(m => m.id > conv.summaryUpto);
+  if (fresh.length <= SUMMARIZE_AT) return;
+  // Quedan fuera del resumen los últimos CONTEXT_KEEP, empezando por un mensaje del cliente.
+  let cut = fresh.length - CONTEXT_KEEP;
+  while (cut < fresh.length && fresh[cut]!.role !== "user") cut++;
+  const old = fresh.slice(0, cut);
+  if (!old.length) return;
+  const summary = await cheapText(customerId, "compact",
+    "Resumes conversaciones para poder continuarlas sin releerlas. Escribe en español, en viñetas breves: el tema, datos y decisiones importantes, lo que el cliente pidió, lo que ya se le respondió (lo esencial, incluido código clave si hace falta para seguir) y lo que quedó pendiente. Nada de relleno. Nunca incluyas contraseñas, PIN, códigos de verificación ni números de tarjeta. Máximo 1200 caracteres.",
+    (conv.summary ? `Resumen anterior:\n${conv.summary}\n\n` : "") + `Mensajes nuevos a resumir:\n${transcript(old, 24_000)}`,
+    700);
+  if (summary) setSummary(conversationId, old[old.length - 1]!.id, summary.slice(0, SUMMARY_MAX));
+}
+
+function pruneConversation(customerId: number, conversationId: number): void {
+  const conv = getConversation(customerId, conversationId);
+  const msgs = listMessages(conversationId);
+  if (!conv || msgs.length <= PRUNE_AT) return;
+  let cut = msgs.length - KEEP_VISIBLE;
+  while (cut < msgs.length && msgs[cut]!.role !== "user") cut++;
+  // Solo se borra lo que ya está en el resumen.
+  const upto = Math.min(conv.summaryUpto, msgs[cut - 1]!.id);
+  const gone = msgs.filter(m => m.id <= upto);
+  if (!gone.length) return;
+  pruneMessages(conversationId, upto);
+  // Las imágenes de los mensajes borrados ya no se usan.
+  const imgs = gone.flatMap(m => m.images);
+  for (const id of imgs) { const up = getUpload(id); if (up) fs.promises.unlink(uploadPath(id, up.mediaType)).catch(() => {}); }
+  deleteUploadRows(imgs);
+}
+
+export async function compactConversation(customerId: number, conversationId: number): Promise<void> {
+  if (compacting.has(conversationId)) return;
   compacting.add(conversationId);
   try {
-    const conv = getConversation(customerId, conversationId);
-    const msgs = listMessages(conversationId);
-    if (!conv || msgs.length <= COMPACT_AT) return false;
-    // Se conservan los últimos KEEP_RECENT, empezando siempre por un mensaje del cliente.
-    let cut = msgs.length - KEEP_RECENT;
-    while (cut < msgs.length && msgs[cut]!.role !== "user") cut++;
-    const old = msgs.slice(0, cut);
-    if (!old.length) return false;
-    const summary = await cheapText(customerId, "compact",
-      "Resumes conversaciones para poder continuarlas. Escribe en español, en viñetas breves: el tema, datos y decisiones importantes, lo que el cliente pidió y lo que quedó pendiente. Nada de relleno. Nunca incluyas contraseñas, PIN, códigos ni números de tarjeta. Máximo 1200 caracteres.",
-      (conv.summary ? `Resumen anterior:\n${conv.summary}\n\n` : "") + `Mensajes nuevos a resumir:\n${transcript(old, 24_000)}`,
-      700);
-    if (!summary) return false;
-    applyCompaction(conversationId, old[old.length - 1]!.id, summary.slice(0, SUMMARY_MAX), old.length);
-    // Las imágenes de los mensajes resumidos ya no se usan: se borran.
-    const imgs = old.flatMap(m => m.images);
-    for (const id of imgs) { const up = getUpload(id); if (up) fs.promises.unlink(uploadPath(id, up.mediaType)).catch(() => {}); }
-    deleteUploadRows(imgs);
-    return true;
+    await summarizeConversation(customerId, conversationId);
+    pruneConversation(customerId, conversationId);
   } finally {
     compacting.delete(conversationId);
   }
@@ -711,19 +784,25 @@ export function clearMemory(customerId: number): void {
   setMemory(customerId, "");
 }
 
-/** Lo que el cliente ve de su uso (sin montos en dólares). */
-export function customerUsage(customerId: number): { monthPct: number; cooldownUntil: number } {
+/** Lo que el cliente ve de su uso (sin montos en dólares). `burstLeft`:
+ *  mensajes que le quedan antes de una pausa (null si hoy ya no pausa). */
+export function customerUsage(customerId: number): { monthPct: number; cooldownUntil: number; burstLeft: number | null } {
   const cfg = aiConfig();
   const pct = cfg.clientMonthlyCap > 0 ? Math.min(100, Math.round(spentThisMonthByCustomer(customerId) / cfg.clientMonthlyCap * 100)) : 100;
   const pause = customerState(customerId).cooldownUntil;
-  return { monthPct: pct, cooldownUntil: pause > Date.now() ? pause : 0 };
+  const canPause = cfg.burstMessages > 0 && pausesToday(customerId) < cfg.pausesPerDay;
+  return {
+    monthPct: pct,
+    cooldownUntil: pause > Date.now() ? pause : 0,
+    burstLeft: canPause ? Math.max(0, cfg.burstMessages - burstCount(customerId)) : null,
+  };
 }
 
 // ── Mantenimiento cada 3 horas: compactar, límite de conversaciones e imágenes ──
 
 export async function manguitoMaintenance(): Promise<void> {
   if (!isAiConfigured()) return;
-  for (const c of conversationsToCompact(COMPACT_AT)) {
+  for (const c of conversationsToCompact(SUMMARIZE_AT)) {
     await compactConversation(c.customerId, c.id).catch(() => {});
   }
   for (const c of conversationsOverLimit(MAX_CONVERSATIONS)) {
