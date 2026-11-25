@@ -1199,6 +1199,7 @@
   }
 
   function closeComboBuilder() {
+    afterModalClose();
     document.getElementById("build-combo-modal").hidden = true;
   }
 
@@ -1387,6 +1388,7 @@
   }
 
   function closeProductDetail() {
+    afterModalClose();
     const modal = document.getElementById("product-detail-modal");
     modal.classList.add("closing");
     setTimeout(() => {
@@ -1982,6 +1984,7 @@
   }
 
   function closeCheckout() {
+    afterModalClose();
     stopPolling();
     document.getElementById("checkout-modal").hidden = true;
   }
@@ -2445,7 +2448,12 @@
   // mucho en el celular) seguía con el formulario viejo. Al volver a la
   // pestaña se compara la huella con el servidor y, si cambió, se recarga
   // sola — pero nunca en medio de algo: con una ventana abierta (pago,
-  // registro, detalle) o escribiendo, espera a la próxima revisión.
+  // registro, detalle) o escribiendo, espera: se vuelve a revisar apenas
+  // cierra esa ventana (afterModalClose).
+  let storeVersionCheck = () => {};
+  // 1,5 s de espera: si al cerrar una ventana se abre otra (Comprar → pago),
+  // para entonces ya está abierta y no se recarga en medio.
+  function afterModalClose() { setTimeout(() => storeVersionCheck(), 1500); }
   function watchStoreVersion() {
     let mine = null;
     let checking = false;
@@ -2467,6 +2475,7 @@
       } catch { /* sin red: se revisa después */ }
       checking = false;
     }
+    storeVersionCheck = check;
     check();
     document.addEventListener("visibilitychange", check);
     window.addEventListener("focus", check);
