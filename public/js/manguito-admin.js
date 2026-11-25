@@ -44,6 +44,7 @@
       : `${keys.length} clave${keys.length > 1 ? "s" : ""} · ${active} lista${active === 1 ? "" : "s"} para usar`;
     $("mgp-keys").innerHTML = keys.map((k, i) => keyRow(k, i, keys.length)).join("");
     $("mgp-phones").value = (v.phones || []).join("\n");
+    $("mgp-phone-caps").value = v.phoneCaps || "";
     $("mgp-burst").value = v.burstMessages;
     $("mgp-pauses").value = v.pausesPerDay;
     $("mgp-daily").value = v.dailyCap;
@@ -122,7 +123,7 @@
       msg("Guardando…", "mgp-msg2");
       try {
         render(await call("POST", "", {
-          phones: $("mgp-phones").value, burstMessages: $("mgp-burst").value, pausesPerDay: $("mgp-pauses").value, dailyCap: $("mgp-daily").value,
+          phones: $("mgp-phones").value, phoneCaps: $("mgp-phone-caps").value, burstMessages: $("mgp-burst").value, pausesPerDay: $("mgp-pauses").value, dailyCap: $("mgp-daily").value,
           clientMonthlyCap: $("mgp-client-monthly").value, monthlyCap: $("mgp-monthly").value,
         }));
         msg("✅ Guardado.", "mgp-msg2");

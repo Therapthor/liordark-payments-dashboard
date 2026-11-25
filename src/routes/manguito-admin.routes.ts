@@ -20,6 +20,7 @@ function view() {
       monthUsd: spend[k.id] ?? 0,
     })),
     phones: c.phones,
+    phoneCaps: Object.entries(c.phoneCaps).map(([p, v]) => `${p} = ${v}`).join("\n"),
     burstMessages: c.burstMessages,
     pausesPerDay: c.pausesPerDay,
     dailyCap: c.dailyCap,

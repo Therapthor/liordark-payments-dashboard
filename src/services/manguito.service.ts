@@ -3,6 +3,7 @@ import path from "path";
 import crypto from "crypto";
 import type Anthropic from "@anthropic-ai/sdk";
 import { getAdminSetting, setAdminSetting } from "../db/security.repository";
+import { findCustomerById } from "../db/customer.repository";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
   setSummary, pruneMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
@@ -73,6 +74,7 @@ function sdk(): typeof Anthropic {
 const K = {
   creds: "ai_credentials", phones: "ai_allowed_phones", dailyCap: "ai_daily_cap_usd", monthlyCap: "ai_monthly_cap_usd",
   clientMonthlyCap: "ai_client_monthly_cap_usd", burstMessages: "ai_burst_messages", pausesPerDay: "ai_pauses_per_day",
+  phoneCaps: "ai_phone_caps", // {celular: tope US$ al mes} — topes especiales (sin tope diario)
   // Versión anterior (una sola clave): se pasa sola a la lista.
   oldApiKey: "ai_api_key", oldAuthToken: "ai_auth_token", oldBaseUrl: "ai_base_url",
 };
@@ -150,7 +152,17 @@ export function credentialState(c: AiCredential): { state: "ok" | "paused" | "of
 
 export type AiConfig = {
   phones: string[]; burstMessages: number; pausesPerDay: number; dailyCap: number; clientMonthlyCap: number; monthlyCap: number;
+  phoneCaps: Record<string, number>;
 };
+
+function readPhoneCaps(): Record<string, number> {
+  try {
+    const o = JSON.parse(getAdminSetting(K.phoneCaps) || "{}");
+    const out: Record<string, number> = {};
+    for (const [p, v] of Object.entries(o)) if (/^\d{9}$/.test(p) && typeof v === "number" && isFinite(v) && v >= 0) out[p] = v;
+    return out;
+  } catch { return {}; }
+}
 
 export function aiConfig(): AiConfig {
   return {
@@ -160,6 +172,7 @@ export function aiConfig(): AiConfig {
     dailyCap:         num(getAdminSetting(K.dailyCap), DEFAULT_DAILY_CAP),
     clientMonthlyCap: num(getAdminSetting(K.clientMonthlyCap), DEFAULT_CLIENT_MONTHLY_CAP),
     monthlyCap:       num(getAdminSetting(K.monthlyCap), DEFAULT_MONTHLY_CAP),
+    phoneCaps:        readPhoneCaps(),
   };
 }
 
@@ -171,7 +184,28 @@ const last9 = (p: string) => String(p || "").replace(/\D/g, "").slice(-9);
 
 export function isAiAllowedPhone(phone: string): boolean {
   const d = last9(phone);
-  return d.length === 9 && aiConfig().phones.includes(d);
+  const cfg = aiConfig();
+  return d.length === 9 && (cfg.phones.includes(d) || d in cfg.phoneCaps);
+}
+
+/** Topes de este cliente: el especial de su celular (al mes, sin tope
+ *  diario) o los generales del panel. */
+function capsFor(customerId: number, cfg = aiConfig()): { monthly: number; daily: number } {
+  const special = cfg.phoneCaps[last9(findCustomerById(customerId)?.phone || "")];
+  return special !== undefined ? { monthly: special, daily: Infinity } : { monthly: cfg.clientMonthlyCap, daily: cfg.dailyCap };
+}
+
+/** «9XXXXXXXX = 50» por línea → {"9XXXXXXXX": 50}. Devuelve un error legible o el objeto. */
+function parsePhoneCaps(raw: string): Record<string, number> | string {
+  const out: Record<string, number> = {};
+  for (const line of raw.split(/[\n;]+/).map(l => l.trim()).filter(Boolean)) {
+    const m = line.match(/^([+\d][\d\s-]*?)\s*(?:[=:]|\s)\s*(?:US)?\$?\s*(\d+(?:[.,]\d+)?)\s*$/i);
+    const phone = m ? last9(m[1]!) : "";
+    const cap = m ? Number(m[2]!.replace(",", ".")) : NaN;
+    if (phone.length !== 9 || !isFinite(cap) || cap > 10000) return `Revisa «${line.slice(0, 40)}»: escribe el celular y el tope, por ejemplo 9XXXXXXXX = 50`;
+    out[phone] = Math.round(cap * 100) / 100;
+  }
+  return out;
 }
 
 function cleanBaseUrl(raw: unknown): { ok: true; value: string } | { ok: false; message: string } {
@@ -229,6 +263,11 @@ export function saveAiConfig(body: any): string | null {
   if (body?.apiKey || body?.authToken) {
     const err = addCredential(body);
     if (err) return err;
+  }
+  if (body?.phoneCaps !== undefined) {
+    const caps = parsePhoneCaps(String(body.phoneCaps));
+    if (typeof caps === "string") return caps;
+    setAdminSetting(K.phoneCaps, JSON.stringify(caps));
   }
   if (body?.phones !== undefined) {
     const list = String(body.phones).split(/[\s,;]+/).map(last9).filter(p => p.length === 9);
@@ -522,8 +561,9 @@ export function chatGate(customerId: number): ChatGate {
   const pause = customerState(customerId).cooldownUntil;
   if (pause > Date.now()) return { ok: false, status: 429, message: `☕ Manguito está descansando después de mucho uso seguido. Vuelve a las ${limaTime(pause)} y sigues sin problema.` };
   if (spentThisMonth() >= cfg.monthlyCap) return { ok: false, status: 429, message: "Manguito Pro llegó a su límite de este mes. Vuelve pronto 🥭" };
-  if (spentThisMonthByCustomer(customerId) >= cfg.clientMonthlyCap) return { ok: false, status: 429, message: "Usaste todo tu Manguito Pro de este mes. El 1 del próximo mes se renueva 🥭" };
-  if (spentTodayByCustomer(customerId) >= cfg.dailyCap) return { ok: false, status: 429, message: "Llegaste al límite de uso de hoy. Mañana se renueva 🥭" };
+  const caps = capsFor(customerId, cfg);
+  if (spentThisMonthByCustomer(customerId) >= caps.monthly) return { ok: false, status: 429, message: "Usaste todo tu Manguito Pro de este mes. El 1 del próximo mes se renueva 🥭" };
+  if (spentTodayByCustomer(customerId) >= caps.daily) return { ok: false, status: 429, message: "Llegaste al límite de uso de hoy. Mañana se renueva 🥭" };
   if (activeChats.has(customerId)) return { ok: false, status: 409, message: "Espera a que termine la respuesta anterior." };
   const now = Date.now();
   const recent = (recentByCustomer.get(customerId) || []).filter(t => now - t < 60e3);
@@ -533,10 +573,10 @@ export function chatGate(customerId: number): ChatGate {
 
 /** Con poco saldo (día o mes del cliente), baja de nivel para no pasarse. */
 function capTierByBudget(tier: Tier, customerId: number): Tier {
-  const cfg = aiConfig();
+  const caps = capsFor(customerId);
   const left = Math.min(
-    cfg.dailyCap - spentTodayByCustomer(customerId),
-    cfg.clientMonthlyCap - spentThisMonthByCustomer(customerId),
+    caps.daily - spentTodayByCustomer(customerId),
+    caps.monthly - spentThisMonthByCustomer(customerId),
   );
   if (left < 0.10) return "rapido";
   if (left < 0.40 && tier === "experto") return "equilibrado";
@@ -788,7 +828,8 @@ export function clearMemory(customerId: number): void {
  *  mensajes que le quedan antes de una pausa (null si hoy ya no pausa). */
 export function customerUsage(customerId: number): { monthPct: number; cooldownUntil: number; burstLeft: number | null } {
   const cfg = aiConfig();
-  const pct = cfg.clientMonthlyCap > 0 ? Math.min(100, Math.round(spentThisMonthByCustomer(customerId) / cfg.clientMonthlyCap * 100)) : 100;
+  const monthly = capsFor(customerId, cfg).monthly;
+  const pct = monthly > 0 ? Math.min(100, Math.round(spentThisMonthByCustomer(customerId) / monthly * 100)) : 100;
   const pause = customerState(customerId).cooldownUntil;
   const canPause = cfg.burstMessages > 0 && pausesToday(customerId) < cfg.pausesPerDay;
   return {
