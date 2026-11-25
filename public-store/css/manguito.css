@@ -166,7 +166,8 @@ body.mg {
 /* Bienvenida */
 .mg-hello { text-align: center; padding: 9vh 4px 10px; }
 .mg-hello img { border-radius: 14px; background: var(--accent); }
-.mg-hello h2 { font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: -.02em; margin: 14px 0 22px; }
+.mg-hello h2 { font-family: var(--font-display); font-weight: 700; font-size: 30px; letter-spacing: -.02em; margin: 14px 0 6px; }
+.mg-private { margin: 0 0 22px; font-size: 13px; color: var(--muted); }
 .mg-sugg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 600px; margin: 0 auto; }
 .mg-sugg button {
   text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 14px; padding: 12px 14px; cursor: pointer;

@@ -649,6 +649,7 @@
           <li>Uso restringido por horas para cuidar tus créditos</li>
           <li>Si llegas al límite, esperas un rato y sigues (o usas créditos)</li>
           <li>Modelos de Claude automáticos: usa el mejor en cada tarea</li>
+          <li>Uso personal y privado: nadie más tiene acceso a tus chats</li>
         </ul>
         <button class="mg-btn-solid" type="button" data-buy="plan">${buyLabel || "Elegir plan mensual"}</button></div>`;
     }
@@ -659,6 +660,7 @@
           <li>Úsalo cuando quieras: hoy, mañana o en un solo día</li>
           <li>Recarga cuando se acabe</li>
           <li>Ves cuánto te queda y a qué ritmo gastas</li>
+          <li>Uso personal y privado: nadie más tiene acceso a tus chats</li>
         </ul>
         <button class="mg-btn-solid" type="button" data-buy="credits">${buyLabel || "Comprar créditos"}</button></div>`;
     }
