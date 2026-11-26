@@ -65,6 +65,7 @@
     purchase_full_account: "Cuenta completa",
     renewal:               "Renovación",
     wipe_inactive:         "Saldo borrado (inactividad)",
+    manguito_key:          "Key Manguito Pro",
   };
 
   const QUEUE_STATUS_LABEL = { queued: "En cola", prepared: "Preparado", delivered: "Entregado", cancelled: "Cancelado" };

@@ -30,6 +30,7 @@ import {
 } from "../db/wholesaler-notifications.repository";
 import { getCatalogProductByPlatform, listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
 import { publicStoreInfo } from "../services/manguito.service";
+import { keyOffer, buyKey, renewKey, changeKey, setKeyActive, renameKey, wholesalerKeys } from "../services/manguito-keys.service";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
 import { insertApprovedOrder } from "../db/orders.repository";
@@ -203,21 +204,54 @@ router.post("/topup", async (req, res) => {
   }
 });
 
-// ── MANGUITO PRO (chat con IA) — es un servicio: se compra y se usa en
-// liordark.com/manguito/ con el mismo celular del mayorista (ahí sale el
-// precio mayorista solo). Aquí solo la tarjeta: nombre, imagen y precios.
+// ── MANGUITO PRO (chat con IA) — el mayorista compra KEYS con su saldo y
+// se las da a sus clientes: entran en liordark.com/manguito/ con la key.
+// Cada key = 30 días del plan mensual (precio mayorista). Puede renovarla,
+// cambiarla (la anterior deja de servir; el historial sigue) o darla de baja.
 router.get("/manguito", (req, res) => {
   const wholesaler = findWholesalerById(wid(req));
   const info = publicStoreInfo(wholesaler?.phone);
-  if (!info.enabled) { res.json({ manguito: null }); return; }
-  const prices = [info.monthly?.priceSoles, ...info.packs.map(p => p.priceSoles)].filter((x): x is number => !!x && x > 0);
+  const offer = keyOffer();
+  res.setHeader("Cache-Control", "no-store");
   res.json({
-    manguito: {
+    manguito: offer.available ? {
       name: info.name, imageUrl: info.imageUrl, discount: info.discount,
-      from: prices.length ? Math.min(...prices) : null,
+      from: offer.priceSoles, keyPrice: offer.priceSoles, usd: offer.usd, days: offer.days,
+      windowHours: info.windowHours,
       url: "https://liordark.com/manguito/",
-    },
+    } : null,
+    keys: wholesalerKeys(wid(req)),
   });
+});
+
+router.post("/manguito/keys", (req, res) => {
+  const r = buyKey(wid(req), req.body?.label);
+  if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
+  res.status(201).json(r);
+});
+
+router.post("/manguito/keys/:id/renew", (req, res) => {
+  const r = renewKey(wid(req), Number(req.params.id));
+  if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
+  res.json(r);
+});
+
+router.post("/manguito/keys/:id/change", (req, res) => {
+  const r = changeKey(wid(req), Number(req.params.id));
+  if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
+  res.json(r);
+});
+
+router.post("/manguito/keys/:id/status", (req, res) => {
+  const r = setKeyActive(wid(req), Number(req.params.id), !!req.body?.active);
+  if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
+  res.json(r);
+});
+
+router.patch("/manguito/keys/:id", (req, res) => {
+  const r = renameKey(wid(req), Number(req.params.id), req.body?.label);
+  if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
+  res.json(r);
 });
 
 // ── CATÁLOGO (precio mayorista) — solo lo que tiene precio mayorista Y

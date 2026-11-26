@@ -672,6 +672,7 @@ export function walletsForNotices(): WalletNoticeRow[] {
       w.notice_expiring AS noticeExpiring, w.notice_expired AS noticeExpired, w.notice_low AS noticeLow, w.notice_out AS noticeOut,
       (SELECT p.usd FROM ai_purchases p WHERE p.customer_id = w.customer_id AND p.status = 'paid' AND p.kind IN ('credits', 'gift') ORDER BY p.id DESC LIMIT 1) AS lastCreditsUsd
     FROM ai_wallets w LEFT JOIN customers c ON c.id = w.customer_id
+    WHERE w.customer_id > 0 -- las keys de mayoristas no reciben avisos de la tienda
   `).all() as WalletNoticeRow[];
 }
 export function setWalletNotice(customerId: number, field: "notice_expiring" | "notice_expired" | "notice_low" | "notice_out", value: number): void {

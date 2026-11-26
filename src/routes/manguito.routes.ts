@@ -2,12 +2,10 @@ import fs from "fs";
 import path from "path";
 import { Router } from "express";
 import multer from "multer";
-import { type RequestWithCustomer } from "../services/customer-auth.service";
-import { findCustomerById } from "../db/customer.repository";
 import {
   addMessage, createConversation, deleteConversation, deleteUploadRows, getConversation, getUpload,
   listConversations, listMessages, saveUpload, touchConversation, deleteAllConversations, deleteAllShares,
-  recentUploadBytes, type AiFile, type UploadKind,
+  recentUploadBytes, wallet, countConversations, type AiFile, type UploadKind,
 } from "../db/manguito.repository";
 import {
   TIERS, UPLOAD_DIR, chatGate, isAiConfigured, newUploadId, runChat, uploadPath,
@@ -15,6 +13,8 @@ import {
   type ChatEvent, type Tier,
 } from "../services/manguito.service";
 import { createShareFor, mySharesView, removeShare, continueShare, SHARE_TOKEN_RE } from "../services/manguito-share.service";
+import type { AiUser } from "../services/manguito-keys.service";
+import { getKey } from "../db/manguito-keys.repository";
 
 // ─────────────────────────────────────────────────────────────
 // /api/store/ai — Manguito Pro para el cliente (va DESPUÉS de
@@ -44,17 +44,21 @@ function cleanName(v: unknown): string {
   return String(v ?? "").replace(/[\u0000-\u001f\u007f<>"\\/:*?|]/g, "").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
-function customerOf(req: unknown) {
-  return findCustomerById((req as RequestWithCustomer).customerId);
+/** Quién escribe: cliente de la tienda o cliente de un mayorista (key, id negativo). */
+function customerOf(req: unknown): AiUser | null {
+  return ((req as { aiUser?: AiUser }).aiUser) ?? null;
 }
 
 router.get("/access", (req, res) => {
   const c = customerOf(req);
   res.setHeader("Cache-Control", "no-store");
   const allowed = !!c && hasAiAccess(c);
+  const k = c?.keyId ? getKey(c.keyId) : null;
   res.json({
-    allowed, configured: isAiConfigured(), store: publicStoreInfo(c?.phone), meter: allowed ? customerMeter(c!.id) : null,
-    lapsed: !allowed && c ? lapsedInfo(c.id) : null,
+    allowed, configured: isAiConfigured(), store: k ? null : publicStoreInfo(c?.phone), meter: allowed ? customerMeter(c!.id) : null,
+    lapsed: !allowed && c && !k ? lapsedInfo(c.id) : null,
+    // Cliente de un mayorista: no compra aquí (se lo renueva su proveedor).
+    keyUser: k ? { label: k.label, status: k.status, planEnd: wallet(c!.id).planEnd || 0, conversations: countConversations(c!.id) } : null,
   });
 });
 
@@ -62,6 +66,7 @@ router.get("/access", (req, res) => {
 router.post("/buy", async (req, res) => {
   const c = customerOf(req);
   if (!c) { res.status(401).json({ message: "Inicia sesión." }); return; }
+  if (c.keyId) { res.status(403).json({ message: "Tu acceso lo renueva quien te dio tu key." }); return; }
   const kind = req.body?.kind === "plan" ? "plan" : "credits";
   const r = await startAiPurchase(c, kind, Number(req.body?.pack) || 0);
   if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
@@ -79,7 +84,12 @@ router.get("/buy/:orderName", (req, res) => {
 // Todo lo demás: solo quien tiene acceso.
 router.use((req, res, next) => {
   const c = customerOf(req);
-  if (!c || !hasAiAccess(c)) { res.status(403).json({ code: "no_access", message: "Elige un plan para usar Manguito Pro 🥭" }); return; }
+  if (!c || !hasAiAccess(c)) {
+    res.status(403).json(c?.keyId
+      ? { code: "key_expired", message: "Tu acceso a Manguito Pro venció. Pídele a quien te dio tu key que lo renueve 🥭" }
+      : { code: "no_access", message: "Elige un plan para usar Manguito Pro 🥭" });
+    return;
+  }
   next();
 });
 

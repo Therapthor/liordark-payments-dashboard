@@ -11,6 +11,7 @@ import { createSystemIncident } from "../db/support-tickets.repository";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { findWholesalerByPhone } from "../db/wholesaler.repository";
 import { isLocalMedia, mediaFilePath, MEDIA_PREFIX } from "./product-media.service";
+import { getKey, keyDisplay } from "../db/manguito-keys.repository";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
   setSummary, pruneMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
@@ -1056,7 +1057,7 @@ export function saveStoreConfig(body: any): string | null {
 export type Limit = { used: number; limit: number; resetsAt: number };
 export type PlanStatus = { endsAt: number; usd: number; cycle: Limit; week: Limit; window: Limit };
 
-function planStatus(customerId: number, w: AiWallet = wallet(customerId), now = Date.now()): PlanStatus | null {
+export function planStatus(customerId: number, w: AiWallet = wallet(customerId), now = Date.now()): PlanStatus | null {
   if (!(w.planEnd > now) || w.planUsd <= 0) return null;
   const cfg = storeConfig().monthly;
   const cycleStart = w.planStart + Math.floor((now - w.planStart) / CYCLE_MS) * CYCLE_MS;
@@ -1109,6 +1110,16 @@ function freeSource(customerId: number): FreeCheck {
 type Pick = { ok: true; source: Source } | { ok: false; status: number; message: string; code: string };
 
 export function pickSource(customerId: number): Pick {
+  const p = pickSourceRaw(customerId);
+  // Cliente de un mayorista (key): no compra aquí; se lo renueva su proveedor.
+  if (customerId < 0 && !p.ok) {
+    if (p.code === "plan_limit") return { ...p, message: p.message.replace(/ Si no quieres esperar.*$/, "") };
+    return { ok: false, status: 402, code: "key_expired", message: "Tu acceso a Manguito Pro venció. Pídele a quien te dio tu key que lo renueve 🥭" };
+  }
+  return p;
+}
+
+function pickSourceRaw(customerId: number): Pick {
   const w = wallet(customerId);
   const plan = planStatus(customerId, w);
   const blocked = plan ? planBlock(plan) : null;
@@ -1133,6 +1144,13 @@ function currentSourceKind(customerId: number): UsageSource {
  *  Si no renueva, pierde el acceso pero sus conversaciones quedan guardadas
  *  (vuelven apenas paga). */
 export function hasAiAccess(customer: { id: number; phone: string }): boolean {
+  if (customer.id < 0) {
+    // Key de mayorista: dada de baja = sin acceso (su historial queda guardado).
+    const k = getKey(-customer.id);
+    if (!k || k.status !== "active") return false;
+    const w = wallet(customer.id);
+    return w.credits > MIN_CREDITS || w.planEnd > Date.now();
+  }
   if (isAiAllowedPhone(customer.phone)) return true;
   const w = wallet(customer.id);
   return w.credits > MIN_CREDITS || w.planEnd > Date.now();
@@ -1140,7 +1158,7 @@ export function hasAiAccess(customer: { id: number; phone: string }): boolean {
 
 /** Cliente que pagó antes y ya no tiene saldo: para el aviso «renueva». */
 export function lapsedInfo(customerId: number): { planEnd: number; conversations: number } | null {
-  if (!hasPaidAiPurchase(customerId)) return null;
+  if (customerId < 0 || !hasPaidAiPurchase(customerId)) return null;
   return { planEnd: wallet(customerId).planEnd || 0, conversations: countConversations(customerId) };
 }
 
@@ -1157,7 +1175,7 @@ export function customerMeter(customerId: number) {
   const pick = pickSource(customerId);
   return {
     plan,
-    credits: (w.credits > 0 || hasPaidAiPurchase(customerId)) ? {
+    credits: (w.credits > 0 || (customerId > 0 && hasPaidAiPurchase(customerId))) ? {
       balance: Math.round(w.credits * 10000) / 10000,
       spent24h: Math.round(day.usd * 10000) / 10000,
       messages24h: day.messages,
@@ -1243,12 +1261,13 @@ export function storeAdminView() {
     outstanding: outstandingBalance(),
     apiBalance: apiBalance(),
     month: salesThisMonth(),
-    purchases: recentAiPurchases(30),
+    // Keys de mayoristas (id negativo): «🔑 Nombre · mayorista» en vez de celular.
+    purchases: recentAiPurchases(30).map(p => p.customerId < 0 ? { ...p, phone: keyDisplay(-p.customerId) } : p),
     subscribers: subscribersSummary().map(r => ({
-      phone: r.phone, planActive: r.planEnd > now, planEnd: r.planEnd, planUsd: r.planUsd,
+      phone: r.customerId < 0 ? keyDisplay(-r.customerId) : r.phone, planActive: r.planEnd > now, planEnd: r.planEnd, planUsd: r.planUsd,
       credits: Math.round(r.credits * 100) / 100, paidSoles: r.paidSoles, giftsUsd: r.giftsUsd,
       spentUsd: Math.round(r.spentUsd * 10000) / 10000, monthUsd: Math.round(r.monthUsd * 10000) / 10000,
-      lastAt: r.lastAt, wholesaler: aiDiscountFor(r.phone) > 0,
+      lastAt: r.lastAt, wholesaler: r.customerId < 0 || aiDiscountFor(r.phone) > 0,
     })),
   };
 }

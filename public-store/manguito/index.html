@@ -14,6 +14,37 @@
 </head>
 <body class="mg">
 
+<!-- ═══ Portada: entrar con la key que te dio tu proveedor ═══ -->
+<section class="mg-cover" id="mg-cover" hidden>
+  <div class="mg-cover-bg" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="mg-cover-in">
+    <div class="mg-cover-logo"><img src="/assets/logo.webp" alt="" width="92" height="92"></div>
+    <p class="mg-cover-kicker">Tu inteligencia artificial personal</p>
+    <h1 class="mg-cover-title">Manguito <em>Pro</em></h1>
+    <p class="mg-cover-sub">Pregunta lo que quieras, analiza tus documentos y crea archivos en segundos. Con Claude, la IA de Anthropic.</p>
+    <form class="mg-cover-card" id="mg-key-form" autocomplete="off" novalidate>
+      <label for="mg-key-input">Ingresa tu key</label>
+      <div class="mg-key-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2"/><path d="m17 6 2 2"/><path d="m14 9 2 2"/></svg>
+        <input id="mg-key-input" type="text" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="MANGO-XXXX-XXXX-XXXX" maxlength="24" aria-describedby="mg-key-error">
+      </div>
+      <p class="mg-key-error" id="mg-key-error" role="alert" hidden></p>
+      <button class="mg-key-btn" type="submit" id="mg-key-btn">
+        <span>Entrar</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+      </button>
+      <p class="mg-key-help">¿No tienes una key? Pídesela a quien te ofreció Manguito Pro.</p>
+    </form>
+    <ul class="mg-cover-feats">
+      <li><b>⚡</b>Respuestas al instante</li>
+      <li><b>📎</b>Lee PDF, Word y Excel</li>
+      <li><b>📄</b>Crea archivos</li>
+      <li><b>🔒</b>Privado</li>
+    </ul>
+    <a class="mg-cover-login" href="/#manguito">¿Ya tienes cuenta? <b>Inicia sesión</b></a>
+  </div>
+</section>
+
 <div class="mg-app" id="mg-app">
   <!-- ═══ Barra lateral ═══ -->
   <aside class="mg-side" id="mg-side" aria-label="Conversaciones">
@@ -50,11 +81,12 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5-5 5 5"/></svg>
       </button>
       <div class="mg-menu" id="mg-menu" role="menu" hidden>
-        <button type="button" role="menuitem" data-menu="plans">💳 Planes y recargas</button>
+        <button type="button" role="menuitem" data-menu="plans" class="mg-store-only">💳 Planes y recargas</button>
         <button type="button" role="menuitem" data-menu="memory">🧠 Lo que recuerdo de ti</button>
         <button type="button" role="menuitem" data-menu="links">🔗 Mis links compartidos</button>
         <button type="button" role="menuitem" data-menu="wipe" class="danger">🗑️ Borrar todo el historial</button>
-        <a role="menuitem" href="/">← Volver a la tienda</a>
+        <a role="menuitem" href="/" class="mg-store-only">← Volver a la tienda</a>
+        <button type="button" role="menuitem" data-menu="key-logout" class="mg-key-only">🚪 Salir (usar otra key)</button>
       </div>
     </div>
   </aside>
@@ -85,6 +117,7 @@
       <h2 id="mg-gate-title">Manguito Pro</h2>
       <p id="mg-gate-text"></p>
       <a class="mg-btn-dark" id="mg-gate-btn" href="/#manguito" hidden>Iniciar sesión</a>
+      <button class="mg-btn-dark" id="mg-gate-key" type="button" hidden>Usar otra key</button>
     </section>
 
     <!-- Planes (sin acceso, o «Planes y recargas») -->

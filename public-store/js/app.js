@@ -246,7 +246,7 @@
     tip.className = "mg-tour";
     tip.setAttribute("role", "dialog");
     tip.innerHTML = `<b>🥭 ¡Nuevo! Manguito Pro</b><p>Aquí está tu inteligencia artificial: usa Claude sin cuentas raras y paga con Yape.</p>` +
-      `<div class="mg-tour-btns"><button type="button" class="mg-tour-skip">Entendido</button><a class="mg-tour-go" href="/manguito/">Ver planes</a></div>`;
+      `<div class="mg-tour-btns"><button type="button" class="mg-tour-skip">Entendido</button><a class="mg-tour-go" href="/manguito/#tienda">Ver planes</a></div>`;
     document.body.appendChild(tip);
     link.classList.add("mg-tour-pulse");
     const place = () => {
@@ -281,7 +281,7 @@
     const name = info.name || "Manguito Pro · IA con Claude";
     const custom = !!info.imageUrl;
     return `
-      <a class="product-card product-card-exclusive manguito-card" href="/manguito/" aria-label="${escapeHtml(name)}">
+      <a class="product-card product-card-exclusive manguito-card" href="/manguito/#tienda" aria-label="${escapeHtml(name)}">
         <div class="product-img-wrap${custom ? "" : " manguito-card-img"}">
           <img src="${escapeHtml(custom ? imgSrc(info.imageUrl) : "/assets/logo.webp")}" alt="" loading="lazy" decoding="async">
           <span class="product-badge-overlay badge-exclusive">Nuevo · IA</span>

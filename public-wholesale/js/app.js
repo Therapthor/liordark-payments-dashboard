@@ -700,6 +700,7 @@
     { id: "comprar",       label: "Comprar",       icon: "cart" },
     { id: "cuentas",       label: "Cuentas",       icon: "box", badge: true },
     { id: "creditos",      label: "Créditos",      icon: "card" },
+    { id: "manguito",      label: "Manguito Pro",  icon: "key" },
     { id: "recordatorios", label: "Recordatorios", icon: "speaker" },
     { id: "soporte",       label: "Soporte",       icon: "chat" },
   ];
@@ -717,7 +718,7 @@
 
   // Páginas que en mobile viven dentro de "Más" — su tab activo visualmente
   // sigue siendo "Más" (no hay botón propio en la tab bar para ellas).
-  const PAGES_UNDER_MAS = ["creditos", "recordatorios", "soporte"];
+  const PAGES_UNDER_MAS = ["creditos", "manguito", "recordatorios", "soporte"];
   function mobileTabFor(view) {
     return PAGES_UNDER_MAS.includes(view) ? "mas" : view;
   }
@@ -802,6 +803,7 @@
     else if (view === "creditos")      loadCreditos();
     else if (view === "recordatorios") loadReminders();
     else if (view === "soporte")       loadSoporte();
+    else if (view === "manguito")      loadMgKeys();
   }
 
   let currentBalanceCents = 0;
@@ -855,6 +857,190 @@
 
   function catalogItem(platform) {
     return cachedCatalog.find(c => c.platform === platform) || null;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MANGUITO PRO — keys de IA para los clientes del mayorista. Cada key se
+  // paga con su saldo (30 días). Su cliente entra en liordark.com/manguito/
+  // con la key. Puede renovarla, cambiarla o darla de baja; el historial de
+  // su cliente no se pierde.
+  // ─────────────────────────────────────────────────────────────
+
+  let mgKeys = [];
+  let mgOffer = null;
+  const MG_URL = "https://liordark.com/manguito/";
+  const mgMoney = n => "S/ " + Number(n || 0).toFixed(2);
+  const mgDay = ms => new Date(ms).toLocaleDateString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "short", year: "numeric" }).replace(".", "");
+
+  function mgAgo(sqlDate) {
+    const t = new Date(String(sqlDate).replace(" ", "T") + "Z").getTime();
+    const d = Math.floor((Date.now() - t) / 864e5);
+    return d <= 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} días`;
+  }
+
+  function mgKeyMessage(k) {
+    return `🥭 *Manguito Pro* — tu inteligencia artificial\n\n` +
+      `1. Entra a ${MG_URL}\n2. Pon tu key: *${k.key}*\n\n` +
+      (k.planEnd > Date.now() ? `Tu acceso vence el ${mgDay(k.planEnd)}.` : "");
+  }
+  function mgWaHref(k) {
+    const digits = String(k.label || "").replace(/\D/g, "");
+    return digits.length === 9 || (digits.length === 11 && digits.startsWith("51"))
+      ? waLink(digits, mgKeyMessage(k))
+      : "https://api.whatsapp.com/send?text=" + encodeURIComponent(mgKeyMessage(k));
+  }
+
+  function mgKeyCardHtml(k) {
+    const now = Date.now();
+    const off = k.status !== "active";
+    const expired = !off && !(k.planEnd > now);
+    const days = Math.ceil((k.planEnd - now) / 864e5);
+    const tone = off ? "tone-none" : expired ? "tone-over" : days <= 3 ? "tone-soon" : "tone-ok";
+    const status = off ? "Dada de baja" + (k.planEnd > now ? ` · le quedan ${days} día${days === 1 ? "" : "s"}` : "")
+      : expired ? (k.planEnd ? `Vencida el ${mgDay(k.planEnd)}` : "Sin días")
+      : `Activa · vence el ${mgDay(k.planEnd)} (${days} día${days === 1 ? "" : "s"})`;
+    const seen = k.lastLoginAt ? `entró ${mgAgo(k.lastLoginAt)}` : "aún no entra";
+    const price = mgOffer ? ` ${mgMoney(mgOffer.keyPrice)}` : "";
+    return `
+      <article class="client-card mgk-card${off ? " off" : ""}" data-key-id="${k.id}">
+        <div class="client-card-head">
+          <span class="mgk-card-ic">${icon("key")}</span>
+          <div class="client-card-id">
+            <div class="client-platform">${escapeHtml(k.label || "Cliente sin nombre")}</div>
+            <div class="client-phone">${k.conversations} conversación${k.conversations === 1 ? "" : "es"} · ${seen}</div>
+          </div>
+          <details class="more-menu">
+            <summary aria-label="Más acciones" title="Más acciones">${icon("more")}</summary>
+            <div class="more-menu-list">
+              <button type="button" data-mgk="rename">${icon("user")}Cambiar nombre</button>
+              <button type="button" data-mgk="change">${icon("swap")}Cambiar key</button>
+              ${off
+                ? `<button type="button" data-mgk="on">${icon("undo")}Reactivar</button>`
+                : `<button type="button" class="danger" data-mgk="off">${icon("ban")}Dar de baja</button>`}
+            </div>
+          </details>
+        </div>
+        <div class="client-status ${tone}">${escapeHtml(status)}</div>
+        ${!off && !expired ? `<div class="mgk-usage"><div class="mgk-bar"><i style="width:${Math.max(2, k.usedPct)}%"></i></div><span>${k.usedPct}% usado este mes</span></div>` : ""}
+        <div class="mgk-keyrow"><code>${escapeHtml(k.key)}</code><button class="btn-ghost btn-xs" type="button" data-mgk="copy">${icon("copy")}Copiar</button></div>
+        <div class="client-card-actions">
+          <button class="btn-primary btn-sm" type="button" data-mgk="renew">${off || expired ? "Renovar" : "+30 días"}${price}</button>
+          <a class="btn-ghost btn-sm" href="${escapeHtml(mgWaHref(k))}" target="_blank" rel="noopener">${icon("send")}Enviar</a>
+        </div>
+      </article>`;
+  }
+
+  function renderMgKeys() {
+    const list = document.getElementById("mgk-list");
+    const openId = list.querySelector("details.more-menu[open]")?.closest("[data-key-id]")?.dataset.keyId;
+    list.innerHTML = mgKeys.map(mgKeyCardHtml).join("");
+    document.getElementById("mgk-empty").hidden = mgKeys.length > 0;
+    if (openId) { const d = list.querySelector(`[data-key-id="${openId}"] details.more-menu`); if (d) d.open = true; }
+    if (mgOffer) {
+      document.getElementById("mgk-price").textContent = `${mgMoney(mgOffer.keyPrice)} por key · 30 días`;
+      document.getElementById("mgk-price-sub").textContent = `US$ ${mgOffer.usd} de uso al mes, repartido en el mes.`;
+    }
+    document.getElementById("mgk-new-btn").disabled = !mgOffer;
+  }
+
+  async function loadMgKeys() {
+    const list = document.getElementById("mgk-list");
+    if (!mgKeys.length) list.innerHTML = `<p class="muted small">Cargando…</p>`;
+    try {
+      const data = await api("/manguito");
+      mgOffer = data.manguito;
+      mgKeys = data.keys || [];
+      renderMgKeys();
+    } catch (err) {
+      list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function mgShowDone(k, title) {
+    document.getElementById("mgk-step-form").hidden = true;
+    document.getElementById("mgk-step-done").hidden = false;
+    document.getElementById("mgk-done-title").textContent = title;
+    document.getElementById("mgk-done-key").textContent = k.key;
+    document.getElementById("mgk-done-wa").href = mgWaHref(k);
+    document.getElementById("mgk-modal").hidden = false;
+  }
+
+  function initMgKeys() {
+    const modal = document.getElementById("mgk-modal");
+    const close = () => { modal.hidden = true; };
+    document.getElementById("mgk-close").addEventListener("click", close);
+    document.getElementById("mgk-done-ok").addEventListener("click", close);
+    modal.addEventListener("click", e => { if (e.target === modal) close(); });
+    document.getElementById("mgk-new-btn").addEventListener("click", () => {
+      if (!mgOffer) return;
+      document.getElementById("mgk-step-form").hidden = false;
+      document.getElementById("mgk-step-done").hidden = true;
+      document.getElementById("mgk-error").hidden = true;
+      document.getElementById("mgk-label").value = "";
+      document.getElementById("mgk-modal-price").textContent = `Se descuentan ${mgMoney(mgOffer.keyPrice)} de tu saldo (tienes ${money(currentBalanceCents)}). Incluye 30 días.`;
+      modal.hidden = false;
+      setTimeout(() => document.getElementById("mgk-label").focus(), 50);
+    });
+    const createBtn = document.getElementById("mgk-create");
+    createBtn.addEventListener("click", async () => {
+      const err = document.getElementById("mgk-error");
+      err.hidden = true;
+      createBtn.disabled = true;
+      try {
+        const r = await api("/manguito/keys", { method: "POST", body: { label: document.getElementById("mgk-label").value } });
+        mgKeys.unshift(r.key);
+        renderMgKeys();
+        refreshBalance();
+        mgShowDone(r.key, "¡Key lista!");
+      } catch (ex) {
+        err.textContent = ex.message; err.hidden = false;
+      } finally { createBtn.disabled = false; }
+    });
+    document.getElementById("mgk-label").addEventListener("keydown", e => { if (e.key === "Enter") createBtn.click(); });
+    document.getElementById("mgk-done-copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(document.getElementById("mgk-done-key").textContent); toast("Key copiada"); } catch { /* sin permiso */ }
+    });
+
+    document.getElementById("mgk-list").addEventListener("click", async e => {
+      const btn = e.target.closest("[data-mgk]");
+      if (!btn) return;
+      const card = btn.closest("[data-key-id]");
+      const k = mgKeys.find(x => String(x.id) === card.dataset.keyId);
+      if (!k) return;
+      const act = btn.dataset.mgk;
+      btn.closest("details.more-menu")?.removeAttribute("open");
+      const update = nk => { mgKeys = mgKeys.map(x => x.id === nk.id ? nk : x); renderMgKeys(); };
+      try {
+        if (act === "copy") {
+          try { await navigator.clipboard.writeText(k.key); toast("Key copiada"); } catch { toast(k.key); }
+        } else if (act === "renew") {
+          if (!confirm(`¿Sumar 30 días a la key de ${k.label || "tu cliente"}? Se descuentan ${mgMoney(mgOffer?.keyPrice)} de tu saldo.`)) return;
+          btn.disabled = true;
+          const r = await api(`/manguito/keys/${k.id}/renew`, { method: "POST" });
+          update(r.key); refreshBalance();
+          toast(`Renovada hasta el ${mgDay(r.key.planEnd)}`);
+        } else if (act === "change") {
+          if (!confirm("¿Cambiar la key? La actual deja de funcionar y tu cliente tendrá que poner la nueva. Su historial se mantiene.")) return;
+          const r = await api(`/manguito/keys/${k.id}/change`, { method: "POST" });
+          update(r.key);
+          mgShowDone(r.key, "Key nueva");
+        } else if (act === "off") {
+          if (!confirm(`¿Dar de baja la key de ${k.label || "tu cliente"}? Ya no podrá entrar (puedes reactivarla mientras le queden días). El saldo no se devuelve.`)) return;
+          update((await api(`/manguito/keys/${k.id}/status`, { method: "POST", body: { active: false } })).key);
+          toast("Key dada de baja");
+        } else if (act === "on") {
+          update((await api(`/manguito/keys/${k.id}/status`, { method: "POST", body: { active: true } })).key);
+          toast("Key reactivada");
+        } else if (act === "rename") {
+          const label = prompt("Nombre o celular de tu cliente:", k.label || "");
+          if (label === null) return;
+          update((await api(`/manguito/keys/${k.id}`, { method: "PATCH", body: { label } })).key);
+        }
+      } catch (ex) {
+        toast(ex.message);
+        btn.disabled = false;
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1692,6 +1878,7 @@
     purchase_full_account:  "Compra de cuenta completa",
     renewal:                "Renovación",
     wipe_inactive:          "Saldo retirado por inactividad",
+    manguito_key:           "Key Manguito Pro",
   };
 
   function ledgerRowHtml(entry) {
@@ -1884,11 +2071,10 @@
         <div class="catalog-card-img${m.imageUrl ? "" : " manguito-ws-img"}">${img}</div>
         <div class="catalog-card-body">
           <div class="catalog-card-title">${escapeHtml(m.name)} <span class="tag tag-mango">Nuevo · IA</span></div>
-          <div class="catalog-card-price">${m.from ? "Desde S/ " + escapeHtml(String(m.from)) : ""}</div>
-          <div class="catalog-card-stock">Mensual o créditos · Yape${m.discount ? ` · S/ ${escapeHtml(String(m.discount))} menos` : ""}</div>
-          <div class="catalog-card-stock">Se usa en liordark.com con tu mismo celular</div>
+          <div class="catalog-card-price">${m.keyPrice ? "S/ " + escapeHtml(Number(m.keyPrice).toFixed(2)) + " por key" : ""}</div>
+          <div class="catalog-card-stock">Key de 30 días para tu cliente · se paga con tu saldo</div>
         </div>
-        <a class="catalog-go-btn" href="${escapeHtml(m.url)}" target="_blank" rel="noopener" aria-label="Ver planes de ${escapeHtml(m.name)}">Ver planes</a>
+        <button class="catalog-go-btn" type="button" data-page="manguito" aria-label="Crear una key de ${escapeHtml(m.name)}">Crear key</button>
       </div>`;
   }
 
@@ -2580,6 +2766,7 @@
     initCuentasPage();
     initCreditosPage();
     initComprarPage();
+    initMgKeys();
     initRemindersPage();
     initSoportePage();
     initNotifications();

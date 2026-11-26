@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { publicStoreInfo } from "../services/manguito.service";
 import { shareView, unlockShare, SHARE_TOKEN_RE } from "../services/manguito-share.service";
+import { loginWithKey, clearKeyCookie } from "../services/manguito-keys.service";
 
 // ─────────────────────────────────────────────────────────────
 // /api/store/ai-public — Manguito Pro SIN sesión: planes a la venta (para
@@ -44,6 +45,31 @@ router.post("/share/:token/unlock", (req, res) => {
   }
   attempts.delete(key);
   res.json(r);
+});
+
+// Entrar con la key que le dio su mayorista: máximo 10 intentos fallidos por
+// conexión cada 15 minutos (las keys tienen 12 letras al azar).
+const keyAttempts = new Map<string, number[]>();
+router.post("/key-login", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const ip = req.ip || "";
+  const now = Date.now();
+  const list = (keyAttempts.get(ip) || []).filter(t => now - t < 15 * 60e3);
+  if (list.length >= 10) { res.status(429).json({ message: "Demasiados intentos. Espera 15 minutos y vuelve a probar." }); return; }
+  const r = loginWithKey(req.body?.key, res);
+  if (!r.ok) {
+    list.push(now); keyAttempts.set(ip, list);
+    if (keyAttempts.size > 5000) keyAttempts.clear();
+    res.status(r.status).json({ message: r.message });
+    return;
+  }
+  keyAttempts.delete(ip);
+  res.json({ ok: true });
+});
+
+router.post("/key-logout", (_req, res) => {
+  clearKeyCookie(res);
+  res.json({ ok: true });
 });
 
 export default router;

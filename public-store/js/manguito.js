@@ -30,6 +30,7 @@
     store: null,      // planes a la venta
     meter: null,      // saldo del cliente
     view: "chat",
+    keyUser: null,    // cliente de un mayorista (entró con key): no compra aquí
   };
 
   // ── Utilidades ──
@@ -382,6 +383,7 @@
     if (k === "memory") openMemory();
     if (k === "links") openLinks();
     if (k === "wipe") openWipe();
+    if (k === "key-logout") keyLogout();
   });
 
   // ── Vistas: chat / planes / puerta ──
@@ -399,11 +401,63 @@
     else { $("mg-share").hidden = !state.convId; renderBanner(); }
   }
 
-  function gate(title, text, loginBtn) {
+  function gate(title, text, loginBtn, keyBtn) {
     showView("gate");
     $("mg-gate-title").textContent = title;
     $("mg-gate-text").textContent = text;
     $("mg-gate-btn").hidden = !loginBtn;
+    $("mg-gate-key").hidden = !keyBtn;
+  }
+  $("mg-gate-key").addEventListener("click", () => keyLogout());
+
+  // ── Portada: entrar con la key que te dio tu proveedor ──
+  function formatKey(v) {
+    let s = String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (s.startsWith("MANGO")) s = s.slice(5);
+    s = s.slice(0, 12);
+    return s ? "MANGO-" + (s.match(/.{1,4}/g) || []).join("-") : "";
+  }
+  function showCover(message) {
+    document.body.classList.add("mg-cover-on");
+    $("mg-cover").hidden = false;
+    $("mg-cover").classList.remove("mg-cover-out");
+    const err = $("mg-key-error");
+    err.hidden = !message; err.textContent = message || "";
+    if (!matchMedia("(pointer: coarse)").matches) setTimeout(() => $("mg-key-input").focus(), 350);
+  }
+  const keyInput = $("mg-key-input");
+  keyInput.addEventListener("blur", () => { const f = formatKey(keyInput.value); if (f.replace(/[^A-Z0-9]/g, "").length === 17) keyInput.value = f; });
+  keyInput.addEventListener("input", () => {
+    // Mientras escribe: solo mayúsculas; al pegar una key completa, se ordena sola.
+    const up = keyInput.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+    const f = formatKey(up);
+    keyInput.value = up.replace(/[^A-Z0-9]/g, "").length >= 12 && f.replace(/[^A-Z0-9]/g, "").length === 17 ? f : up;
+    $("mg-key-error").hidden = true;
+    $("mg-cover").querySelector(".mg-cover-card").classList.remove("shake");
+  });
+  $("mg-key-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const key = formatKey(keyInput.value);
+    const err = $("mg-key-error"), btn = $("mg-key-btn"), card = $("mg-cover").querySelector(".mg-cover-card");
+    if (key.replace(/[^A-Z0-9]/g, "").length !== 17) {
+      err.textContent = "La key tiene este formato: MANGO-XXXX-XXXX-XXXX"; err.hidden = false;
+      card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
+      return;
+    }
+    btn.disabled = true; btn.classList.add("loading");
+    try {
+      await api("/api/store/ai-public/key-login", jsonBody("POST", { key }));
+      $("mg-cover").classList.add("mg-cover-out");
+      setTimeout(() => { $("mg-cover").hidden = true; document.body.classList.remove("mg-cover-on"); init(); }, 380);
+    } catch (ex) {
+      err.textContent = ex.message; err.hidden = false;
+      card.classList.remove("shake"); void card.offsetWidth; card.classList.add("shake");
+    } finally { btn.disabled = false; btn.classList.remove("loading"); }
+  });
+  async function keyLogout() {
+    try { await api("/api/store/ai-public/key-logout", jsonBody("POST", {})); } catch { /* igual sale */ }
+    try { localStorage.removeItem("mg_conv"); } catch { /* sin storage */ }
+    location.replace("/manguito/");
   }
 
   // ── Imágenes: achicar en el navegador y subir una por una ──
@@ -700,8 +754,8 @@
     let html = "", name = "";
     if (m && m.plan) {
       const p = m.plan;
-      name = "Plan mensual";
-      html += `<div class="mg-meter-head"><b>Plan mensual</b><span>vence ${dayLabel(p.endsAt)}</span></div>` +
+      name = state.keyUser ? "Acceso hasta el " + dayLabel(p.endsAt).replace(/\.$/, "") : "Plan mensual";
+      html += `<div class="mg-meter-head"><b>${state.keyUser ? "Tu acceso" : "Plan mensual"}</b><span>vence ${dayLabel(p.endsAt)}</span></div>` +
         `<div class="mg-bars">` +
         barRow((state.store && state.store.windowHours || 3) + " horas", p.window.used, p.window.limit, p.window.resetsAt ? "Se renueva a las " + hhmm(p.window.resetsAt) : "Empieza con tu próximo mensaje") +
         barRow("Semana", p.week.used, p.week.limit, "Se renueva el " + dayTime(p.week.resetsAt)) +
@@ -746,7 +800,9 @@
       if (canBuy && m.block.code !== "free_limit") btn = m.block.code === "no_access" ? "Ver planes" : "Recargar";
       refreshTimer = setTimeout(refreshMeter, 60e3); // se revisa solo cada minuto
     } else if (m.plan && m.plan.endsAt - Date.now() < 3 * 864e5) {
-      text = `⏰ Tu plan vence el ${dayTime(m.plan.endsAt)}. Renuévalo con Yape para no quedarte sin Manguito.`;
+      text = state.keyUser
+        ? `⏰ Tu acceso vence el ${dayTime(m.plan.endsAt)}. Pídele a quien te dio tu key que lo renueve.`
+        : `⏰ Tu plan vence el ${dayTime(m.plan.endsAt)}. Renuévalo con Yape para no quedarte sin Manguito.`;
       if (canBuy) btn = "Renovar";
     } else if (m.plan && m.source === "plan" && m.plan.window.resetsAt && pct(m.plan.window.used, m.plan.window.limit) >= 75) {
       text = `⚡ Vas rápido: usaste ${pct(m.plan.window.used, m.plan.window.limit)}% de estas ${state.store ? state.store.windowHours : 3} horas (se renueva a las ${hhmm(m.plan.window.resetsAt)}).`;
@@ -1087,6 +1143,11 @@
     let access;
     try { access = await api("/access"); }
     catch (err) {
+      const code = err.data && err.data.code;
+      if (code === "key_changed" || code === "key_off") { showCover(err.message); return; }
+      // Quien llega directo (sin cuenta ni key) ve la portada para poner su key.
+      // Desde la tienda (#planes) se ven los planes, como siempre.
+      if (err.status === 401 && location.hash !== "#planes" && location.hash !== "#tienda") { showCover(""); return; }
       if (err.status === 401 || err.status === 403) {
         state.authed = false;
         try { state.store = await api("/api/store/ai-public/info"); } catch { state.store = null; }
@@ -1099,6 +1160,20 @@
     state.allowed = !!access.allowed;
     state.store = access.store || null;
     state.lapsed = access.lapsed || null;
+    state.keyUser = access.keyUser || null;
+    if (location.hash === "#tienda") history.replaceState(null, "", location.pathname + (state.allowed ? "" : "#planes"));
+    document.body.classList.toggle("mg-key-mode", !!state.keyUser);
+    if (state.keyUser) {
+      // Cliente de un mayorista: sin tienda ni planes; su proveedor lo renueva.
+      document.querySelectorAll(".mg-brand").forEach(a => { a.href = "/manguito/"; a.title = "Manguito Pro"; });
+      if (!state.allowed) {
+        const k = state.keyUser;
+        const convs = k.conversations ? ` Tus ${k.conversations} conversación(es) siguen guardadas.` : "";
+        if (k.status !== "active") gate("Acceso en pausa", "Quien te dio tu key la puso en pausa. Escríbele para reactivarla." + convs, false, true);
+        else gate("Tu acceso venció", `Venció el ${dayLabel(k.planEnd).replace(/\.$/, "")}. Pídele a quien te dio tu key que lo renueve y sigues donde lo dejaste.` + convs, false, true);
+        return;
+      }
+    }
     if (!state.allowed) {
       if (state.store && state.store.enabled) { showPlans(false); return; }
       gate("Prueba privada", "Manguito Pro está en prueba privada por ahora. ¡Muy pronto para todos! 🥭", false);

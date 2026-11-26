@@ -1315,3 +1315,36 @@ select.input {
 .codigos-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
 .codigos-empty[hidden] { display: none; }
 .codigos-empty p { margin: 0; }
+
+/* ─── Manguito Pro: keys para clientes ─────────────────────── */
+.mas-row-icon.t-mango { background: var(--chip-bg); color: #8A5600; }
+.mgk-hero {
+  display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 22px; margin-bottom: 12px;
+  background: linear-gradient(135deg, #FFF1C9, #FFE09A); box-shadow: var(--shadow-card);
+}
+.mgk-hero-logo { width: 52px; height: 52px; border-radius: 15px; object-fit: cover; flex-shrink: 0; box-shadow: 0 8px 16px -10px rgba(122, 78, 18, .7); }
+.mgk-hero-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #2B1B0E; }
+.mgk-hero-txt b { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
+.mgk-hero-txt span { font-size: 12.5px; font-weight: 600; opacity: .8; }
+.mgk-steps { margin: 0 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted-2); }
+.mgk-list { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.mgk-card.off { opacity: .72; }
+.mgk-card-ic { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; background: var(--chip-bg); color: #8A5600; flex-shrink: 0; }
+.mgk-card-ic .ic { width: 20px; height: 20px; }
+.mgk-usage { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.mgk-bar { flex: 1; height: 7px; border-radius: 99px; background: var(--soft); overflow: hidden; }
+.mgk-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--mango), var(--mango-deep)); }
+.mgk-keyrow, .mgk-keybox {
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 14px;
+  background: var(--soft); border: 1px dashed var(--line, rgba(0,0,0,.12));
+}
+.mgk-keyrow code, .mgk-keybox code {
+  flex: 1; min-width: 0; font: 800 15px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .05em;
+  overflow-wrap: anywhere; color: var(--text);
+}
+.mgk-keybox { margin: 12px 0; padding: 12px 10px 12px 14px; }
+.mgk-keybox code { font-size: 17px; }
+.mgk-label { display: block; margin: 14px 0 6px; font-size: 13.5px; font-weight: 800; }
+#mgk-step-form .btn-primary, #mgk-step-done .btn-wa { margin-top: 14px; }
+#mgk-step-done .btn-ghost.btn-block { margin-top: 8px; }
+@media (min-width: 900px) { .mgk-list { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); } }

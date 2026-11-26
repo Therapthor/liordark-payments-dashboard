@@ -390,6 +390,27 @@
         <div id="reminders-list" class="reminders-list"></div>
       </section>
 
+      <!-- ─── MANGUITO PRO: keys para tus clientes ─── -->
+      <section id="page-manguito" class="page" hidden>
+        <div class="page-head"><h2 class="page-title">Manguito Pro</h2></div>
+        <p class="page-subtitle">Dale a tus clientes su propia inteligencia artificial (Claude) con una key.</p>
+        <div class="mgk-hero">
+          <img class="mgk-hero-logo" src="/assets/logo.webp" alt="">
+          <div class="mgk-hero-txt">
+            <b id="mgk-price">Key de 30 días</b>
+            <span id="mgk-price-sub">Uso mensual con límites cada 3 horas para que le dure todo el mes.</span>
+          </div>
+          <button class="btn-primary btn-sm" id="mgk-new-btn" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nueva key</button>
+        </div>
+        <ol class="mgk-steps">
+          <li>Crea la key y envíasela a tu cliente por WhatsApp.</li>
+          <li>Tu cliente entra en <b>liordark.com/manguito</b> y pone su key.</li>
+          <li>Renuévala cada 30 días. Si cambias la key o la das de baja, su historial no se pierde.</li>
+        </ol>
+        <div id="mgk-list" class="mgk-list"></div>
+        <p id="mgk-empty" class="empty-state" hidden>Aún no tienes keys. Crea la primera para tu cliente.</p>
+      </section>
+
       <!-- ─── SOPORTE ─── -->
       <section id="page-soporte" class="page" hidden>
         <div class="page-head"><h2 class="page-title">Soporte</h2></div>
@@ -434,6 +455,11 @@
             <span class="mas-row-label">Créditos<small>Saldo, recargas por Yape e historial</small></span>
             <svg class="ic mas-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
           </button>
+          <button type="button" class="mas-row" data-page="manguito">
+            <span class="mas-row-icon t-mango"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg></span>
+            <span class="mas-row-label">Manguito Pro<small>Keys de IA para tus clientes</small></span>
+            <svg class="ic mas-row-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
           <button type="button" class="mas-row" data-page="recordatorios">
             <span class="mas-row-icon t-blue"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10v4a1 1 0 0 0 1 1h3l5 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg></span>
             <span class="mas-row-label">Recordatorios<small>Avisa a los que vencen hoy</small></span>
@@ -464,6 +490,30 @@
   </div>
 
   <!-- ═══════════ MODAL: RECARGA YAPE ═══════════ -->
+  <!-- ═══════════ MODAL: NUEVA KEY DE MANGUITO PRO ═══════════ -->
+  <div id="mgk-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="mgk-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <div id="mgk-step-form">
+        <span class="modal-icon tone-mango"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg></span>
+        <h2>Nueva key de Manguito Pro</h2>
+        <p class="muted" id="mgk-modal-price">Se descuenta de tu saldo. Incluye 30 días.</p>
+        <label class="mgk-label" for="mgk-label">¿Para quién es? <span class="muted">(opcional)</span></label>
+        <input class="input" id="mgk-label" maxlength="60" placeholder="Nombre o celular de tu cliente" autocomplete="off">
+        <p class="form-error" id="mgk-error" hidden></p>
+        <button class="btn-primary btn-block" id="mgk-create" type="button">Crear key</button>
+      </div>
+      <div id="mgk-step-done" hidden>
+        <span class="modal-icon tone-leaf"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg></span>
+        <h2 id="mgk-done-title">¡Key lista!</h2>
+        <p class="muted">Envíasela a tu cliente: entra en <b>liordark.com/manguito</b> y la pone.</p>
+        <div class="mgk-keybox"><code id="mgk-done-key"></code><button class="btn-ghost btn-xs" id="mgk-done-copy" type="button">Copiar</button></div>
+        <a class="btn-wa btn-block" id="mgk-done-wa" href="#" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        <button class="btn-ghost btn-block" id="mgk-done-ok" type="button">Listo</button>
+      </div>
+    </div>
+  </div>
+
   <div id="checkout-modal" class="modal-backdrop" hidden>
     <div class="modal-card">
       <button class="modal-close" id="checkout-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>

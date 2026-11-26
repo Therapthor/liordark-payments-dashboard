@@ -3,6 +3,7 @@ import axios from "axios";
 import { tiktokPixelId } from "./marketing.routes";
 import manguitoRoutes from "./manguito.routes";
 import manguitoPublicRoutes from "./manguito-public.routes";
+import { requireAiUser } from "../services/manguito-keys.service";
 import { env } from "../config/env";
 import { requireCustomerSession, type RequestWithCustomer } from "../services/customer-auth.service";
 import { findCustomerById, setCustomerEmail, findCustomerByEmail } from "../db/customer.repository";
@@ -603,10 +604,11 @@ router.get("/reviews", (_req, res) => {
 // Manguito Pro sin sesión: planes a la venta y links compartidos.
 router.use("/ai-public", manguitoPublicRoutes);
 
-router.use(requireCustomerSession);
+// Manguito Pro (chat con Claude) — ver routes/manguito.routes.ts. Entra
+// quien tiene sesión de la tienda o una key de un mayorista.
+router.use("/ai", requireAiUser, manguitoRoutes);
 
-// Manguito Pro (chat con Claude) — ver routes/manguito.routes.ts.
-router.use("/ai", manguitoRoutes);
+router.use(requireCustomerSession);
 
 // Reseña del cliente (una por cliente; solo con alguna compra). Queda
 // pendiente hasta que el dueño la publica en Configuración › Reseñas.
