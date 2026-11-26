@@ -193,11 +193,92 @@
     return li;
   }
 
+  // ── Manguito Pro (chat con IA): servicio fijo, no se borra. Aquí solo se
+  // cambian su nombre y su imagen (tienda y mayoristas). Precios, planes y
+  // encendido: en la sección Manguito Pro.
+  let manguitoStore = null;
+
+  function renderManguito(st) {
+    const li = document.createElement("li");
+    li.className = "catalog-item catalog-item-manguito" + (st.enabled ? "" : " catalog-item-off");
+    li.dataset.mg = "1";
+    const prices = [st.monthly && st.monthly.enabled ? st.monthly.priceSoles : null, ...(st.packs || []).map(p => p.priceSoles)].filter(x => x > 0);
+    const from = prices.length ? Math.min(...prices) : null;
+    const thumb = st.imageUrl
+      ? `<img class="catalog-thumb" src="${escapeHtml(st.imageUrl)}" alt="" />`
+      : `<div class="catalog-thumb catalog-thumb-empty catalog-thumb-mango">🥭</div>`;
+    li.innerHTML = `
+      ${thumb}
+      <div class="catalog-main">
+        <div class="catalog-name">
+          ${escapeHtml(st.name)}
+          <span class="catalog-tag catalog-tag-ai">Servicio · IA</span>
+          ${st.enabled ? "" : '<span class="catalog-tag catalog-tag-off">Apagado</span>'}
+        </div>
+        <div class="catalog-desc">Se muestra en la tienda y en mayoristas (S/ 5 menos). Precios y planes: en <b>Manguito Pro</b>.</div>
+      </div>
+      <div class="catalog-price">
+        ${from ? "Desde S/ " + escapeHtml(String(from)) : ""}
+        <div class="catalog-price-wholesale text-muted">Stock ilimitado</div>
+      </div>
+      <div class="catalog-actions">
+        <button class="icon-btn-sm catalog-mg-edit-btn" title="Cambiar nombre e imagen">✏️</button>
+      </div>
+    `;
+    return li;
+  }
+
+  function openManguitoModal() {
+    if (!manguitoStore) return;
+    document.getElementById("mgcat-name").value = manguitoStore.name || "";
+    document.getElementById("mgcat-image-url").value = manguitoStore.imageUrl || "";
+    document.getElementById("mgcat-image-status").textContent = "";
+    showImagePreview("mgcat");
+    document.getElementById("mgcat-error").hidden = true;
+    document.getElementById("mgcat-modal").hidden = false;
+  }
+
+  function initManguitoModal() {
+    wireImageField("mgcat", () => "manguito-pro", () => null);
+    document.getElementById("mgcat-image-clear").addEventListener("click", () => {
+      document.getElementById("mgcat-image-url").value = "";
+      document.getElementById("mgcat-image-status").textContent = "Se usará el logo de siempre al tocar «Guardar».";
+      showImagePreview("mgcat");
+    });
+    document.getElementById("mgcat-cancel").addEventListener("click", () => {
+      document.getElementById("mgcat-modal").hidden = true;
+    });
+    document.getElementById("mgcat-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorEl = document.getElementById("mgcat-error");
+      errorEl.hidden = true;
+      try {
+        const res = await fetch("/api/manguito-admin/store", {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: document.getElementById("mgcat-name").value.trim(),
+            imageUrl: document.getElementById("mgcat-image-url").value.trim(),
+          }),
+        });
+        if (res.status === 401) { location.reload(); return; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.message || "No se pudo guardar.");
+        manguitoStore = data.store || manguitoStore;
+        document.getElementById("mgcat-modal").hidden = true;
+        renderProductList();
+      } catch (err) {
+        errorEl.textContent = err.message || "No se pudo guardar.";
+        errorEl.hidden = false;
+      }
+    });
+  }
+
   function renderProductList() {
     const list  = document.getElementById("catalog-list");
     const empty = document.getElementById("catalog-empty");
     list.innerHTML = "";
-    if (cachedProducts.length === 0) { empty.hidden = false; return; }
+    if (manguitoStore) list.appendChild(renderManguito(manguitoStore));
+    if (cachedProducts.length === 0 && !manguitoStore) { empty.hidden = false; return; }
     empty.hidden = true;
     for (const p of cachedProducts) list.appendChild(renderProduct(p));
   }
@@ -265,6 +346,7 @@
     document.getElementById("catalog-list").addEventListener("click", async (e) => {
       const li = e.target.closest(".catalog-item");
       if (!li) return;
+      if (li.dataset.mg) { if (e.target.closest(".catalog-mg-edit-btn")) openManguitoModal(); return; }
       const id = Number(li.dataset.id);
       const product = cachedProducts.find(p => p.id === id);
       if (!product) return;
@@ -477,9 +559,12 @@
   // ─────────────────────────────────────────────────────────────
 
   async function loadAll() {
-    const [{ products }, { combos }] = await Promise.all([api("/products"), api("/combos")]);
+    const manguito = fetch("/api/manguito-admin", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+    const [{ products }, { combos }, mg] = await Promise.all([api("/products"), api("/combos"), manguito]);
     cachedProducts = products;
     cachedCombos   = combos;
+    if (mg && mg.store) manguitoStore = mg.store;
     renderProductList();
     renderComboList();
   }
@@ -489,6 +574,7 @@
     if (initialized) return;
     initialized = true;
     initProductModal();
+    initManguitoModal();
     initProductListActions();
     initComboModal();
     initComboListActions();

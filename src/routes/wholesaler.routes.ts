@@ -29,6 +29,7 @@ import {
   markAllWholesalerNotificationsRead,
 } from "../db/wholesaler-notifications.repository";
 import { getCatalogProductByPlatform, listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
+import { publicStoreInfo } from "../services/manguito.service";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
 import { insertApprovedOrder } from "../db/orders.repository";
@@ -200,6 +201,23 @@ router.post("/topup", async (req, res) => {
     console.error("❌ No se pudo crear la recarga en el bot:", err?.response?.data?.message ?? err?.message);
     res.status(502).json({ message: err?.response?.data?.message ?? "No se pudo conectar con el bot." });
   }
+});
+
+// ── MANGUITO PRO (chat con IA) — es un servicio: se compra y se usa en
+// liordark.com/manguito/ con el mismo celular del mayorista (ahí sale el
+// precio mayorista solo). Aquí solo la tarjeta: nombre, imagen y precios.
+router.get("/manguito", (req, res) => {
+  const wholesaler = findWholesalerById(wid(req));
+  const info = publicStoreInfo(wholesaler?.phone);
+  if (!info.enabled) { res.json({ manguito: null }); return; }
+  const prices = [info.monthly?.priceSoles, ...info.packs.map(p => p.priceSoles)].filter((x): x is number => !!x && x > 0);
+  res.json({
+    manguito: {
+      name: info.name, imageUrl: info.imageUrl, discount: info.discount,
+      from: prices.length ? Math.min(...prices) : null,
+      url: "https://liordark.com/manguito/",
+    },
+  });
 });
 
 // ── CATÁLOGO (precio mayorista) — solo lo que tiene precio mayorista Y

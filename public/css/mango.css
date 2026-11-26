@@ -572,6 +572,9 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
 .catalog-price-wholesale { font-family: var(--mp-font); font-weight: 700; font-size: 12px; color: var(--mp-muted); }
 .catalog-actions { gap: 6px; align-items: center; }
 .catalog-item-off { opacity: 0.55; }
+.catalog-item-manguito { box-shadow: var(--mp-shadow-sm), inset 0 0 0 2px #FFD866; }
+.catalog-thumb-mango { display: flex; align-items: center; justify-content: center; font-size: 24px; background: linear-gradient(135deg, #FFE8A3, #FFC93C); }
+.catalog-tag.catalog-tag-ai { background: #FFF1D0; color: #6B4A00; }
 
 .sms-day-row, .sec-session, .web-customer-row, .soporte-card, .credentials-box, .access-history-item, .self-renew-card, .codes-account-row {
   border: none;

@@ -1861,9 +1861,35 @@
   function renderComprarGrid() {
     const grid  = document.getElementById("catalog-grid");
     const empty = document.getElementById("catalog-empty");
-    empty.hidden = cachedCatalog.length > 0;
-    patchKeyed(grid, cachedCatalog.map(p => ({ key: p.platform, html: catalogCardHtml(p) })));
+    empty.hidden = cachedCatalog.length > 0 || !!cachedManguito;
+    const items = cachedCatalog.map(p => ({ key: p.platform, html: catalogCardHtml(p) }));
+    if (cachedManguito) items.unshift({ key: "__manguito", html: manguitoCardHtml(cachedManguito) });
+    patchKeyed(grid, items);
     renderCart();
+  }
+
+  // Manguito Pro (chat con IA): es un servicio, no va al carrito. Se compra
+  // y se usa en liordark.com/manguito/ con el mismo celular (ahí ya sale el
+  // precio mayorista). Nombre e imagen: Configuración → Catálogo del panel.
+  let cachedManguito = null;
+  async function fetchManguito() {
+    try { cachedManguito = (await api("/manguito")).manguito || null; } catch { /* se deja lo último */ }
+  }
+  function manguitoCardHtml(m) {
+    const img = m.imageUrl
+      ? mediaHtml(m.imageUrl, "IA")
+      : `<img src="/assets/logo.webp" alt="" loading="lazy">`;
+    return `
+      <div class="catalog-card manguito-ws-card">
+        <div class="catalog-card-img${m.imageUrl ? "" : " manguito-ws-img"}">${img}</div>
+        <div class="catalog-card-body">
+          <div class="catalog-card-title">${escapeHtml(m.name)} <span class="tag tag-mango">Nuevo · IA</span></div>
+          <div class="catalog-card-price">${m.from ? "Desde S/ " + escapeHtml(String(m.from)) : ""}</div>
+          <div class="catalog-card-stock">Mensual o créditos · Yape${m.discount ? ` · S/ ${escapeHtml(String(m.discount))} menos` : ""}</div>
+          <div class="catalog-card-stock">Se usa en liordark.com con tu mismo celular</div>
+        </div>
+        <a class="catalog-go-btn" href="${escapeHtml(m.url)}" target="_blank" rel="noopener" aria-label="Ver planes de ${escapeHtml(m.name)}">Ver planes</a>
+      </div>`;
   }
 
   function cartTotalCents() {
@@ -1950,7 +1976,7 @@
     // y se actualiza en su sitio cuando llegan los datos.
     if (!grid.querySelector(".catalog-card")) grid.innerHTML = `<p class="muted small">Cargando…</p>`;
     try {
-      await fetchCatalog();
+      await Promise.all([fetchCatalog(), fetchManguito()]);
       renderComprarGrid();
       renderFullOrderPlatformOptions();
     } catch (err) {

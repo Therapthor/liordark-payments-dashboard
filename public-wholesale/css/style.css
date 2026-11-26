@@ -879,6 +879,16 @@ select.input {
   background: var(--leaf); color: #fff; display: flex; align-items: center; justify-content: center;
 }
 .catalog-add-btn:hover { background: var(--leaf-hover); }
+/* Manguito Pro (servicio de IA): enlace a liordark.com/manguito/ en vez de carrito */
+.manguito-ws-card { box-shadow: var(--shadow-card), inset 0 0 0 2px var(--mango-light); }
+.manguito-ws-card .catalog-card-title .tag { margin-left: 4px; vertical-align: 2px; }
+.manguito-ws-img { background: linear-gradient(135deg, #FFE8A3, #FFC93C); }
+.manguito-ws-img img { width: 72%; height: 72%; border-radius: 12px; }
+.catalog-go-btn {
+  flex-shrink: 0; min-height: 44px; padding: 0 14px; border-radius: 15px; display: inline-flex; align-items: center;
+  background: var(--leaf); color: #fff; font-weight: 800; font-size: 13px; text-decoration: none; white-space: nowrap;
+}
+.catalog-go-btn:hover { background: var(--leaf-hover); }
 .catalog-add-btn .ic { stroke-width: 2.4; }
 .catalog-qty-stepper {
   display: flex; align-items: center; gap: 6px; flex-shrink: 0;

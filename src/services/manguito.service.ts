@@ -10,6 +10,7 @@ import { normalizePeruPhone } from "../utils/phone.util";
 import { createSystemIncident } from "../db/support-tickets.repository";
 import { createCustomerNotification } from "../db/customer-notifications.repository";
 import { findWholesalerByPhone } from "../db/wholesaler.repository";
+import { isLocalMedia, mediaFilePath, MEDIA_PREFIX } from "./product-media.service";
 import {
   addMessage, listMessages, logUsage, spentThisMonth, spentTodayByCustomer, getUpload,
   setSummary, pruneMessages, conversationsToCompact, conversationsOverLimit, oldUploads,
@@ -919,10 +920,12 @@ const WEEK_MS = 7 * 24 * 3600e3;
 const CYCLE_MS = 30 * 24 * 3600e3;
 const MIN_CREDITS = 0.003;
 
-const SK = { enabled: "ai_store_enabled", monthly: "ai_plan_monthly", packs: "ai_credit_packs", rate: "ai_exchange_rate" };
+const SK = { enabled: "ai_store_enabled", monthly: "ai_plan_monthly", packs: "ai_credit_packs", rate: "ai_exchange_rate", name: "ai_store_name", image: "ai_store_image" };
 export type MonthlyPlan = { enabled: boolean; priceSoles: number; usd: number; weekPct: number; windowPct: number };
 export type CreditPack = { priceSoles: number; usd: number };
-export type StoreConfig = { enabled: boolean; rate: number; monthly: MonthlyPlan; packs: CreditPack[] };
+export type StoreConfig = { enabled: boolean; rate: number; monthly: MonthlyPlan; packs: CreditPack[]; name: string; imageUrl: string };
+// Cómo sale en el catálogo de la tienda y de mayoristas (Configuración → Catálogo).
+export const DEFAULT_PRODUCT_NAME = "Manguito Pro · IA con Claude";
 const DEFAULT_MONTHLY: MonthlyPlan = { enabled: true, priceSoles: 20, usd: 50, weekPct: 25, windowPct: 4 };
 const DEFAULT_PACKS: CreditPack[] = [{ priceSoles: 20, usd: 50 }, { priceSoles: 45, usd: 100 }];
 
@@ -933,7 +936,12 @@ function readJson<T>(key: string, def: T): T {
 export function storeConfig(): StoreConfig {
   const m = { ...DEFAULT_MONTHLY, ...readJson<Partial<MonthlyPlan>>(SK.monthly, {}) };
   const packs = readJson<CreditPack[]>(SK.packs, DEFAULT_PACKS).filter(p => p && p.priceSoles > 0 && p.usd > 0).slice(0, 4);
-  return { enabled: getAdminSetting(SK.enabled) === "1", rate: num(getAdminSetting(SK.rate), 3.75), monthly: m, packs };
+  const image = getAdminSetting(SK.image) || "";
+  return {
+    enabled: getAdminSetting(SK.enabled) === "1", rate: num(getAdminSetting(SK.rate), 3.75), monthly: m, packs,
+    name: (getAdminSetting(SK.name) || "").trim() || DEFAULT_PRODUCT_NAME,
+    imageUrl: isLocalMedia(image) && mediaFilePath(image.slice(MEDIA_PREFIX.length)) ? image : "",
+  };
 }
 
 /** Guarda la venta (panel). Devuelve un error legible o null. */
@@ -966,6 +974,17 @@ export function saveStoreConfig(body: any): string | null {
     setAdminSetting(SK.rate, String(r));
   }
   if (body?.enabled !== undefined) setAdminSetting(SK.enabled, body.enabled ? "1" : "0");
+  if (body?.name !== undefined) {
+    const name = String(body.name ?? "").replace(/\s+/g, " ").trim();
+    if (name.length > 60) return "El nombre puede tener hasta 60 letras.";
+    setAdminSetting(SK.name, name);
+  }
+  if (body?.imageUrl !== undefined) {
+    // Solo imágenes subidas con «📷 Subir imagen» (guardadas en el servidor).
+    const url = String(body.imageUrl ?? "").trim();
+    if (url && !(isLocalMedia(url) && mediaFilePath(url.slice(MEDIA_PREFIX.length)))) return "Sube la imagen con «📷 Subir imagen».";
+    setAdminSetting(SK.image, url);
+  }
   return null;
 }
 
@@ -1095,6 +1114,8 @@ export function publicStoreInfo(phone?: string) {
   const discount = aiDiscountFor(phone);
   return {
     enabled: s.enabled && isAiConfigured(),
+    name: s.name,
+    imageUrl: s.imageUrl,
     windowHours: WINDOW_HOURS,
     discount, // mayoristas: S/ 5 menos (precios ya descontados)
     monthly: s.monthly.enabled ? { priceSoles: discounted(s.monthly.priceSoles, discount), basePrice: s.monthly.priceSoles, usd: s.monthly.usd, weekPct: s.monthly.weekPct, windowPct: s.monthly.windowPct } : null,

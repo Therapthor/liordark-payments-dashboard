@@ -277,14 +277,17 @@
   function manguitoCardHtml(info) {
     const prices = [info.monthly ? info.monthly.priceSoles : null, ...(info.packs || []).map(p => p.priceSoles)].filter(x => x);
     const from = prices.length ? Math.min(...prices) : null;
+    // Nombre e imagen: Configuración → Catálogo del panel.
+    const name = info.name || "Manguito Pro · IA con Claude";
+    const custom = !!info.imageUrl;
     return `
-      <a class="product-card product-card-exclusive manguito-card" href="/manguito/" aria-label="Manguito Pro · inteligencia artificial con Claude">
-        <div class="product-img-wrap manguito-card-img">
-          <img src="/assets/logo.webp" alt="" loading="lazy" decoding="async">
+      <a class="product-card product-card-exclusive manguito-card" href="/manguito/" aria-label="${escapeHtml(name)}">
+        <div class="product-img-wrap${custom ? "" : " manguito-card-img"}">
+          <img src="${escapeHtml(custom ? imgSrc(info.imageUrl) : "/assets/logo.webp")}" alt="" loading="lazy" decoding="async">
           <span class="product-badge-overlay badge-exclusive">Nuevo · IA</span>
         </div>
         <div class="product-body">
-          <span class="product-title">Manguito Pro · IA con Claude</span>
+          <span class="product-title">${escapeHtml(name)}</span>
           <span class="product-stock"><i></i>Disponible · mensual o créditos</span>
           <div class="product-buy-row">
             <span class="product-price-big">${from ? `<small>Desde S/</small>${escapeHtml(String(from))}` : ""}</span>
