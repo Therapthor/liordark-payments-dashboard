@@ -36,7 +36,7 @@ export function createShareFor(customerId: number, body: any): { ok: true; token
   if (!conv) return { ok: false, message: "Conversación no encontrada." };
   if (listShares(customerId).length >= MAX_SHARES) return { ok: false, message: "Tienes muchos links. Borra alguno en «Mis links compartidos»." };
 
-  const all = listMessages(conv.id).filter(m => m.text.trim() || m.images.length);
+  const all = listMessages(conv.id).filter(m => m.text.trim() || m.images.length || m.files.length);
   const mode = body?.mode === "result" ? "result" : body?.mode === "selected" ? "selected" : "all";
   let chosen = all;
   if (mode === "result") {
@@ -56,7 +56,7 @@ export function createShareFor(customerId: number, body: any): { ok: true; token
     const text = m.text.length > MAX_TEXT ? m.text.slice(0, MAX_TEXT) + "\n[…]" : m.text;
     total += text.length;
     if (total > MAX_TOTAL) break;
-    messages.push({ role: m.role, text, ...(m.role === "assistant" && tierLabel(m.tier) ? { label: tierLabel(m.tier) } : {}), ...(m.images.length ? { images: m.images.length } : {}) });
+    messages.push({ role: m.role, text, ...(m.role === "assistant" && tierLabel(m.tier) ? { label: tierLabel(m.tier) } : {}), ...(m.images.length + m.files.length ? { images: m.images.length + m.files.length } : {}) });
   }
 
   const password = typeof body?.password === "string" ? body.password : "";
@@ -124,7 +124,7 @@ export function continueShare(customerId: number, token: string, password: strin
   // Turnos alternados (cliente / Manguito), empezando por el cliente.
   const turns: { role: "user" | "assistant"; text: string }[] = [];
   for (const m of s.messages) {
-    const note = m.role === "user" && m.images ? `[${m.images} imagen(es) en el chat original]\n` : "";
+    const note = m.role === "user" && m.images ? `[${m.images} imagen(es) o archivo(s) en el chat original]\n` : "";
     const text = note + m.text;
     const last = turns[turns.length - 1];
     if (last && last.role === m.role) last.text += "\n\n" + text;

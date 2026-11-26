@@ -110,7 +110,7 @@
           <button type="button" data-prompt="Explícame de forma sencilla cómo funciona la inteligencia artificial."><b>💡 Explícame algo</b><span>Un tema difícil, en simple</span></button>
           <button type="button" data-prompt="Corrige la ortografía y mejora este texto: "><b>✍️ Mejora un texto</b><span>Ortografía, tono y claridad</span></button>
           <button type="button" data-prompt="Dame 5 ideas para vender más por WhatsApp."><b>📈 Ideas de negocio</b><span>Ventas, precios, redes</span></button>
-          <button type="button" data-prompt="¿Qué ves en esta imagen?" data-attach="1"><b>🖼️ Analiza una imagen</b><span>Pégala o súbela</span></button>
+          <button type="button" data-prompt="Revisa este archivo y dime lo más importante." data-attach="1"><b>📎 Analiza un archivo</b><span>Foto, PDF, Word, Excel o video</span></button>
         </div>
       </div>
       <div id="mg-messages"></div>
@@ -122,9 +122,9 @@
         <div class="mg-thumbs" id="mg-thumbs" hidden></div>
         <textarea id="mg-input" rows="1" placeholder="Escribe tu mensaje…" maxlength="20000" enterkeyhint="send"></textarea>
         <div class="mg-box-bar">
-          <label class="mg-tool" title="Adjuntar imagen (también puedes pegarla o arrastrarla)">
+          <label class="mg-tool" title="Adjuntar imagen, documento o video (también puedes pegarlo o arrastrarlo)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6L15 7.6"/></svg>
-            <input type="file" id="mg-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+            <input type="file" id="mg-file" accept="image/*,video/*,.pdf,.docx,.doc,.xlsx,.xlsm,.xls,.pptx,.ppt,.txt,.md,.csv,.tsv,.json,.xml,.html,.htm,.css,.js,.ts,.py,.java,.c,.cpp,.cs,.php,.rb,.go,.rs,.kt,.swift,.sql,.yaml,.yml,.log,.rtf,.srt,.vtt" multiple hidden>
           </label>
           <span class="mg-box-hint" id="mg-box-hint">Enter para enviar · Shift+Enter nueva línea</span>
           <button class="mg-send" id="mg-send" type="submit" aria-label="Enviar" disabled>
@@ -138,7 +138,7 @@
       <p class="mg-foot" id="mg-foot">Manguito Pro puede equivocarse. Revisa la información importante.</p>
     </form>
 
-    <div class="mg-drop" id="mg-drop" hidden><span>Suelta la imagen aquí</span></div>
+    <div class="mg-drop" id="mg-drop" hidden><span>Suelta tu archivo aquí</span></div>
   </main>
 </div>
 
@@ -154,6 +154,7 @@
   </div>
 </div>
 
+<script src="/js/manguito-files.js"></script>
 <script src="/js/manguito-md.js"></script>
 <script src="/js/manguito.js"></script>
 </body>

@@ -19,7 +19,8 @@ import {
   wallet, setWindowStart, planSpentSince, creditsSpentSince, createAiPurchase, findAiPurchase, markAiPurchasePaid,
   giftAi, hasPaidAiPurchase, recentAiPurchases, outstandingBalance, cleanupPendingAiPurchases, avgCostPerMessage,
   spentByCredentialSince, subscribersSummary, salesThisMonth, walletsForNotices, setWalletNotice, countConversations,
-  type AiMessage, type AiConversation, type UsageSource, type AiWallet,
+  attachmentIds,
+  type AiMessage, type AiConversation, type UsageSource, type AiWallet, type AiFile,
 } from "../db/manguito.repository";
 
 // ─────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ type Effort = "low" | "medium" | "high";
 
 export const TIERS: Record<Tier, { model: string; label: string; maxTokens: number; fallback: string | null }> = {
   rapido:      { model: "claude-haiku-5-5",  label: "⚡ Rápido",      maxTokens: 2048,  fallback: null },
-  equilibrado: { model: "claude-sonnet-5-5", label: "🧠 Equilibrado", maxTokens: 4096,  fallback: "claude-sonnet-5" },
+  equilibrado: { model: "claude-sonnet-5-5", label: "🧠 Equilibrado", maxTokens: 8192,  fallback: "claude-sonnet-5" },
   experto:     { model: "claude-opus-5-5",   label: "🏆 Experto",     maxTokens: 10000, fallback: "claude-opus-4-8" },
 };
 const ROUTER_MODEL = "claude-haiku-5-5";
@@ -423,7 +424,7 @@ export async function testAiConnection(credId?: string): Promise<{ ok: true; mod
 const ROUTER_SYSTEM = [
   "Eres el selector de modelo de Manguito Pro. Lee el último mensaje del cliente y elige el modelo MÁS BARATO que lo resuelva bien.",
   "- rapido: saludos, charla, preguntas simples o de datos conocidos, traducciones o resúmenes de textos cortos, describir una imagen sencilla, continuar algo simple.",
-  "- equilibrado: redactar textos largos, explicar temas a fondo, código normal, analizar imágenes o documentos con detalle, planes, matemáticas de colegio o universidad básica.",
+  "- equilibrado: redactar textos largos, explicar temas a fondo, código normal, analizar imágenes, videos o documentos con detalle, crear archivos para descargar (Word, Excel, PDF), planes, matemáticas de colegio o universidad básica.",
   "- experto: razonamiento difícil de varios pasos, código complejo o depuración difícil, matemáticas o lógica avanzadas, análisis profundo donde un error cuesta caro.",
   "effort: low si es directo, medium si hay que pensar algo, high solo si es realmente difícil.",
   "Si el mensaje es una continuación corta de la charla (ej. «sigue», «y eso?», «dame otro»), mantén el modelo anterior.",
@@ -442,7 +443,9 @@ const ROUTER_SCHEMA = {
 
 /** Sin llamar a la API: saludos y frases cortitas van directo al rápido. Lo que
  *  pide pensar (explicar, código, cálculos…) siempre pasa por el selector. */
-const NEEDS_THOUGHT = /explica|analiza|c[oó]digo|program|calcul|resuelv|demuestr|compar|redact|escrib|traduc|resum|corrig|plan|estrategia|por\s*qu[eé]|c[oó]mo\s+(hago|funciona|se|puedo)/i;
+const NEEDS_THOUGHT = /explica|analiza|c[oó]digo|program|calcul|resuelv|demuestr|compar|redact|escrib|traduc|resum|corrig|plan|estrategia|archivo|descarg|word|excel|pdf|docx|xlsx|csv|documento|por\s*qu[eé]|c[oó]mo\s+(hago|funciona|se|puedo)/i;
+// Pide un archivo para descargar: nunca con el rápido (se cortaría).
+const WANTS_FILE = /(archivo|descargable|descarga|\bword\b|excel|\bpdf\b|docx|xlsx|\bcsv\b|hoja de c[aá]lculo)/i;
 const SMALL_TALK = /^(hola|holi|buen[oa]s|gracias|ok|okay|listo|chau|adi[oó]s|bye|perfecto|genial|excelente|s[ií]|no)\b/i;
 function obviousRoute(text: string, imageCount: number, prevTier: Tier | null): { tier: Tier; effort: Effort } | null {
   const t = text.trim();
@@ -467,7 +470,7 @@ async function chooseRoute(
   if (quick) return { ...quick, how: "regla" };
   const summary = [
     prevTier ? `Modelo usado en el mensaje anterior: ${prevTier}.` : "Es el primer mensaje de la conversación.",
-    imageCount ? `El cliente adjuntó ${imageCount} imagen(es).` : "",
+    imageCount ? `El cliente adjuntó ${imageCount} archivo(s) (imágenes, documentos o un video).` : "",
     "Mensaje del cliente:",
     text.length > 1500 ? text.slice(0, 1500) + " […]" : text,
   ].filter(Boolean).join("\n");
@@ -501,9 +504,12 @@ const MAX_HISTORY_MESSAGES = 8;
 const MAX_HISTORY_CHARS = 16_000;     // ~4 mil tokens de texto como máximo
 const OLD_REPLY_CHARS = 1_500;        // respuestas anteriores a la última: recortadas
 const IMAGE_TURNS_KEPT = 1;           // solo las imágenes del último mensaje con imagen
+// Documentos y videos: solo los del último mensaje que los trajo (con la
+// caché de la API, releerlos en las preguntas siguientes cuesta ~10 %).
 
 export function uploadPath(id: string, mediaType: string): string {
-  const ext = mediaType === "image/png" ? "png" : mediaType === "image/webp" ? "webp" : mediaType === "image/gif" ? "gif" : "jpg";
+  const ext = mediaType === "image/png" ? "png" : mediaType === "image/webp" ? "webp" : mediaType === "image/gif" ? "gif"
+    : mediaType === "application/pdf" ? "pdf" : mediaType === "text/plain" ? "txt" : "jpg";
   return path.join(UPLOAD_DIR, `${id}.${ext}`);
 }
 
@@ -520,18 +526,41 @@ function imageBlock(id: string): Anthropic.ImageBlockParam | null {
   } catch { return null; }
 }
 
+function docBlock(f: Extract<AiFile, { kind: "pdf" | "text" }>): Anthropic.ContentBlockParam | null {
+  const up = getUpload(f.id);
+  if (!up) return null;
+  try {
+    const buf = fs.readFileSync(uploadPath(f.id, up.mediaType));
+    const title = f.name.slice(0, 200) || "documento";
+    if (f.kind === "pdf") return { type: "document", title, source: { type: "base64", media_type: "application/pdf", data: buf.toString("base64") } } as Anthropic.ContentBlockParam;
+    return { type: "document", title, source: { type: "text", media_type: "text/plain", data: buf.toString("utf8") } } as Anthropic.ContentBlockParam;
+  } catch { return null; }
+}
+
+const fmtDuration = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+
+/** Lo que adjuntó un mensaje, en palabras (resúmenes y notas). */
+function attachmentsNote(m: AiMessage): string {
+  const parts: string[] = [];
+  if (m.images.length) parts.push(`${m.images.length} imagen(es)`);
+  for (const f of m.files) parts.push(f.kind === "video" ? `video «${f.name}»` : `documento «${f.name}»`);
+  return parts.join(", ");
+}
+
 function clip(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "\n[…respuesta recortada para ahorrar]" : text;
 }
 
 function buildHistory(conversationId: number, summaryUpto: number): Anthropic.MessageParam[] {
-  let msgs = listMessages(conversationId).filter(m => m.id > summaryUpto && (m.text.trim() || m.images.length));
+  let msgs = listMessages(conversationId).filter(m => m.id > summaryUpto && (m.text.trim() || m.images.length || m.files.length));
   msgs = msgs.slice(-MAX_HISTORY_MESSAGES);
   let chars = msgs.reduce((s, m) => s + m.text.length, 0);
   while (msgs.length > 1 && chars > MAX_HISTORY_CHARS) { chars -= msgs[0]!.text.length; msgs = msgs.slice(1); }
   while (msgs.length && msgs[0]!.role !== "user") msgs = msgs.slice(1);
 
   const withImages = msgs.filter(m => m.role === "user" && m.images.length).slice(-IMAGE_TURNS_KEPT);
+  const withDocs = msgs.filter(m => m.role === "user" && m.files.some(f => f.kind !== "video")).slice(-1);
+  const withVideo = msgs.filter(m => m.role === "user" && m.files.some(f => f.kind === "video")).slice(-1);
   const lastReply = [...msgs].reverse().find(m => m.role === "assistant");
   return msgs.map((m: AiMessage): Anthropic.MessageParam => {
     if (m.role === "assistant") {
@@ -539,12 +568,28 @@ function buildHistory(conversationId: number, summaryUpto: number): Anthropic.Me
       return { role: "assistant", content: t || "(respuesta interrumpida)" };
     }
     const blocks: Anthropic.ContentBlockParam[] = [];
+    // Documentos primero (la API responde mejor con el documento antes de la pregunta).
+    for (const f of m.files) {
+      if (f.kind === "video") continue;
+      const b = withDocs.includes(m) ? docBlock(f) : null;
+      blocks.push(b ?? { type: "text", text: `[El cliente envió antes el documento «${f.name}»; ya no se reenvía. Si hace falta, pídele que lo adjunte otra vez.]` });
+    }
+    for (const f of m.files) {
+      if (f.kind !== "video") continue;
+      const frames = withVideo.includes(m) ? f.frames.map(imageBlock).filter((b): b is Anthropic.ImageBlockParam => !!b) : [];
+      if (frames.length) {
+        blocks.push({ type: "text", text: `[Video «${f.name}» (${fmtDuration(f.duration)}). Solo ves ${frames.length} cuadros tomados a lo largo del video, en orden y sin audio; si algo depende del sonido, dilo.]` });
+        blocks.push(...frames);
+      } else {
+        blocks.push({ type: "text", text: `[El cliente envió antes el video «${f.name}»; ya no está disponible (los videos son temporales).]` });
+      }
+    }
     if (m.images.length && withImages.includes(m)) {
       for (const id of m.images) { const b = imageBlock(id); if (b) blocks.push(b); }
     } else if (m.images.length) {
       blocks.push({ type: "text", text: `[El cliente envió ${m.images.length} imagen(es) antes; ya no se reenvían para ahorrar.]` });
     }
-    blocks.push({ type: "text", text: m.text.trim() || "(imagen)" });
+    blocks.push({ type: "text", text: m.text.trim() || (m.files.length ? "(archivo adjunto)" : "(imagen)") });
     return { role: "user", content: blocks };
   });
 }
@@ -559,6 +604,15 @@ function systemPrompt(customerId: number, conv: AiConversation | null): string {
     "Sé conciso y directo: da la respuesta primero, sin introducciones, sin repetir la pregunta y sin despedidas ni «¿te ayudo con algo más?». Por defecto, unas 150 palabras como máximo; extiéndete solo si el cliente lo pide o la tarea lo necesita (código completo, un documento). Si dice «sigue», continúa donde quedaste.",
     "No puedes crear ni editar videos, audio ni imágenes: si te lo piden, dilo con amabilidad y ofrece una alternativa en texto (un guion, una descripción, un prompt).",
     "No tienes acceso a internet ni a archivos fuera de esta conversación, y no ejecutas código: solo lo escribes para que el cliente lo use. Si no sabes algo con certeza, dilo.",
+    "El cliente puede adjuntar imágenes, documentos (PDF, Word, Excel, PowerPoint, texto o código) y videos cortos. De Word, Excel y PowerPoint recibes solo el texto (sin formato ni imágenes). De un video ves solo algunos cuadros, sin audio.",
+    "ARCHIVOS PARA DESCARGAR: cuando el cliente pida un archivo (Word, Excel, PDF, CSV, texto, código…) o claramente le sirva uno, escribe su contenido COMPLETO dentro de un bloque así, y la página le pone un botón «Descargar»:",
+    "```archivo:nombre.ext",
+    "(contenido)",
+    "```",
+    "- .docx (Word) y .pdf: el contenido en Markdown sencillo: # título, ## subtítulo, párrafos, listas con «- » o «1. », **negritas** y tablas simples con |.",
+    "- .xlsx (Excel): el contenido en CSV separado por comas, la primera fila con los encabezados; usa comillas si un dato lleva coma. Números sin «S/» ni separador de miles (ej. 1250.50). Una sola hoja.",
+    "- .csv, .txt, .md, .json, .html, .xml y código (.py, .js, .sql…): el texto tal cual.",
+    "Nombre corto y claro, sin tildes ni espacios (ej. cotizacion-mayo.docx). Un bloque por archivo, sin otro bloque de código dentro. Fuera del bloque escribe solo una línea diciendo qué contiene. No digas que no puedes crear archivos: sí puedes, de esta forma.",
     `Fecha de hoy: ${today}.`,
     ...(memory ? ["", "Lo que recuerdas de este cliente (de conversaciones anteriores; úsalo con naturalidad, sin recitarlo):", memory] : []),
     ...(summary ? ["", "Resumen de la parte anterior de esta conversación (esos mensajes ya no se te muestran):", summary] : []),
@@ -625,6 +679,8 @@ export async function runChat(opts: {
   let credId = "";
   try {
     const route = await chooseRoute(customerId, opts.text, opts.imageCount, opts.prevTier, source.kind);
+    // Un archivo para descargar no entra en el rápido (se cortaría a la mitad).
+    if (route.tier === "rapido" && WANTS_FILE.test(opts.text)) { route.tier = "equilibrado"; if (route.effort === "high") route.effort = "medium"; }
     tier = capTierByBudget(route.tier, source.left);
     const cfg = TIERS[tier];
     model = cfg.model;
@@ -755,11 +811,11 @@ const SUMMARY_MAX = 1500;
 const MEMORY_MAX = 1200;
 const MEMORY_EVERY = 6;          // la memoria se actualiza cada 6 mensajes del cliente
 const MAX_CONVERSATIONS = 40;    // por cliente (las más viejas se borran)
-const UPLOAD_DAYS = 14;          // las imágenes se borran a los 14 días
+const UPLOAD_DAYS = 14;          // imágenes y documentos se borran a los 14 días (videos: 24 horas)
 const compacting = new Set<number>();
 
 function transcript(msgs: AiMessage[], maxChars: number): string {
-  const lines = msgs.map(m => `${m.role === "user" ? "Cliente" : "Manguito"}: ${m.text.replace(/\s+/g, " ").trim()}${m.images.length ? ` [${m.images.length} imagen(es)]` : ""}`);
+  const lines = msgs.map(m => `${m.role === "user" ? "Cliente" : "Manguito"}: ${m.text.replace(/\s+/g, " ").trim()}${attachmentsNote(m) ? ` [adjuntó: ${attachmentsNote(m)}]` : ""}`);
   let out = lines.join("\n");
   if (out.length > maxChars) out = "…" + out.slice(-maxChars);
   return out;
@@ -808,8 +864,8 @@ function pruneConversation(customerId: number, conversationId: number): void {
   const gone = msgs.filter(m => m.id <= upto);
   if (!gone.length) return;
   pruneMessages(conversationId, upto);
-  // Las imágenes de los mensajes borrados ya no se usan.
-  const imgs = gone.flatMap(m => m.images);
+  // Los archivos de los mensajes borrados ya no se usan.
+  const imgs = gone.flatMap(attachmentIds);
   for (const id of imgs) { const up = getUpload(id); if (up) fs.promises.unlink(uploadPath(id, up.mediaType)).catch(() => {}); }
   deleteUploadRows(imgs);
 }
@@ -886,6 +942,11 @@ async function maintenanceSteps(): Promise<void> {
     for (const id of imgs) { const up = getUpload(id); if (up) fs.promises.unlink(uploadPath(id, up.mediaType)).catch(() => {}); }
     deleteUploadRows(imgs);
   }
+  cleanOldUploads();
+}
+
+/** Borra del disco lo viejo: imágenes y documentos a los 14 días, videos a las 24 horas. */
+function cleanOldUploads(): void {
   const old = oldUploads(UPLOAD_DAYS);
   for (const u of old) fs.promises.unlink(uploadPath(u.id, u.mediaType)).catch(() => {});
   deleteUploadRows(old.map(u => u.id));
@@ -896,6 +957,8 @@ export function startManguitoMaintenance(): void {
   if (maintenanceTimer) return;
   setTimeout(() => { manguitoMaintenance().catch(() => {}); }, 90_000);
   maintenanceTimer = setInterval(() => { manguitoMaintenance().catch(() => {}); }, 3 * 3600e3);
+  // Los videos son temporales: se revisa cada hora.
+  setInterval(() => { try { cleanOldUploads(); } catch { /* reintenta en 1 h */ } }, 3600e3);
 }
 
 // ═════════════════════════════════════════════════════════════

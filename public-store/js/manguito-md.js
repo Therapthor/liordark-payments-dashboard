@@ -24,6 +24,19 @@
   const isBlockStart = l => isFence(l) || isUl(l) || isOl(l) || /^#{1,4}\s/.test(l) || /^>\s?/.test(l) || isTableRow(l);
   const cells = l => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => inline(esc(c.trim())));
 
+  // Archivo para descargar (```archivo:nombre.ext): la tarjeta lleva el
+  // contenido escapado; manguito-files.js arma el archivo al tocar «Descargar».
+  function fileCard(rawName, content, closed) {
+    const F = window.MangoFiles;
+    const inf = F ? F.info(rawName) : { name: String(rawName).trim() || "archivo.txt", ext: "txt", label: "Archivo", tone: "txt" };
+    const lines = content ? content.split("\n").length : 0;
+    return '<div class="mg-file" data-name="' + esc(inf.name) + '">' +
+      '<div class="mg-file-row"><span class="mg-file-ic t-' + esc(inf.tone) + '">' + esc(inf.ext.toUpperCase().slice(0, 4)) + "</span>" +
+      '<span class="mg-file-info"><b>' + esc(inf.name) + "</b><small>" + esc(inf.label) + (closed ? " · " + lines + " línea" + (lines === 1 ? "" : "s") : " · escribiendo…") + "</small></span>" +
+      '<button type="button" class="mg-file-dl" data-mg-dl' + (closed ? "" : " disabled") + ">" + (closed ? "Descargar" : "Creando…") + "</button></div>" +
+      '<details class="mg-file-src"><summary>Ver contenido</summary><pre><code>' + esc(content) + "</code></pre></details></div>";
+  }
+
   function md(src) {
     const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
     const out = [];
@@ -35,7 +48,10 @@
         const buf = [];
         i++;
         while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+        const closed = i < lines.length; // mientras escribe, el bloque aún no cierra
         i++;
+        const file = lang.match(/^(?:archivo|file)\s*:\s*(.+)$/i);
+        if (file) { out.push(fileCard(file[1], buf.join("\n"), closed)); continue; }
         out.push('<div class="mg-code"><div class="mg-code-head"><span>' + esc(lang || "código") +
           '</span><button type="button" data-copy-code>Copiar</button></div><pre><code>' + esc(buf.join("\n")) + "</code></pre></div>");
         continue;

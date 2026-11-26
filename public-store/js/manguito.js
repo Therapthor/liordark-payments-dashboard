@@ -9,6 +9,8 @@
 
   const API = "/api/store/ai";
   const MAX_IMAGES = 4;
+  const MAX_DOCS = 3;
+  const CHUNK = 900 * 1024;            // el servidor web deja pasar ~1 MB por pedido: lo grande va en partes
   const IMG_MAX_SIDE = 1568;          // más grande no mejora y gasta más tokens
   const UPLOAD_MAX_BYTES = 900 * 1024; // el servidor web acepta hasta ~1 MB por pedido
   const PAY_WINDOW_MS = 5 * 60 * 1000;
@@ -176,11 +178,29 @@
     '</div>';
   }
 
+  const fmtSize = b => !b ? "" : b < 1024 * 1024 ? Math.max(1, Math.round(b / 1024)) + " KB" : (b / 1048576).toFixed(1).replace(".0", "") + " MB";
+  const fmtDur = s => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  const VIDEO_NOTE = "Los videos son temporales: Manguito mira algunos cuadros (sin audio) y se borran en 24 horas.";
+
+  // Documentos y videos que mandó el cliente (en su mensaje).
+  function fileChipsHtml(files) {
+    return (files || []).map(f => {
+      if (f.kind === "video") {
+        return `<span class="mg-chip-file video">${f.thumb ? `<img src="${esc(f.thumb)}" alt="">` : `<i class="t-video">▶</i>`}` +
+          `<span><b>${esc(f.name)}</b><small>Video${f.duration ? " · " + fmtDur(f.duration) : ""} · ${f.thumb ? "temporal, se borra en 24 h" : "ya se borró"}</small></span></span>`;
+      }
+      return `<span class="mg-chip-file"><i class="t-${f.kind === "pdf" ? "pdf" : "doc"}">${f.kind === "pdf" ? "PDF" : "DOC"}</i>` +
+        `<span><b>${esc(f.name)}</b><small>${fmtSize(f.bytes)}${f.available === false ? " · ya no está guardado" : ""}</small></span></span>`;
+    }).join("");
+  }
+
   function userMessageEl(m) {
     const el = document.createElement("div");
     el.className = "mg-msg user";
     const imgs = (m.images || []).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Imagen enviada" loading="lazy"></a>`).join("");
+    const files = fileChipsHtml(m.files);
     el.innerHTML = (imgs ? `<div class="mg-msg-imgs">${imgs}</div>` : "") +
+      (files ? `<div class="mg-msg-files">${files}</div>` : "") +
       (m.text ? `<div class="mg-bubble">${esc(m.text)}</div>` : "") +
       (m.text ? `<div class="mg-meta"><button class="mg-act" type="button" data-copy>${IC.copy}Copiar</button></div>` : "");
     el._raw = m.text || "";
@@ -421,9 +441,17 @@
   function renderThumbs() {
     const box = $("mg-thumbs");
     box.hidden = state.pending.length === 0;
-    box.innerHTML = state.pending.map(p =>
-      `<div class="mg-thumb${p.loading ? " loading" : ""}"><img src="${esc(p.url)}" alt=""><button type="button" data-rm="${p.key}" aria-label="Quitar">✕</button></div>`
-    ).join("");
+    const rm = p => `<button type="button" data-rm="${p.key}" aria-label="Quitar">✕</button>`;
+    box.innerHTML = state.pending.map(p => {
+      const cls = "mg-thumb" + (p.loading ? " loading" : "");
+      if (p.kind === "doc") {
+        return `<div class="${cls} doc" title="${esc(p.name)}"><i class="t-${p.docKind === "pdf" ? "pdf" : "doc"}">${p.docKind === "pdf" ? "PDF" : "DOC"}</i><span>${esc(p.name)}</span>${rm(p)}</div>`;
+      }
+      if (p.kind === "video") {
+        return `<div class="${cls} video" title="${esc(p.name)}">${p.url ? `<img src="${esc(p.url)}" alt="">` : ""}<span class="mg-thumb-badge">▶ ${p.duration ? fmtDur(p.duration) : "video"}</span>${rm(p)}</div>`;
+      }
+      return `<div class="${cls}"><img src="${esc(p.url)}" alt="">${rm(p)}</div>`;
+    }).join("") + (state.pending.some(p => p.kind === "video") ? `<p class="mg-thumbs-note">🎬 ${VIDEO_NOTE}</p>` : "");
     updateSend();
   }
   $("mg-thumbs").addEventListener("click", e => {
@@ -433,39 +461,100 @@
     renderThumbs();
   });
 
+  /** Sube un archivo (en partes si pasa de ~1 MB). */
+  async function uploadBlob(blob, kind, name) {
+    const total = Math.max(1, Math.ceil(blob.size / CHUNK));
+    let id = "", data = null;
+    for (let part = 0; part < total; part++) {
+      const fd = new FormData();
+      fd.append("kind", kind); fd.append("name", name || ""); fd.append("total", String(total)); fd.append("part", String(part));
+      if (id) fd.append("id", id);
+      fd.append("file", blob.slice(part * CHUNK, (part + 1) * CHUNK), name || "archivo");
+      data = await api("/upload", { method: "POST", body: fd });
+      id = data.id;
+    }
+    return data;
+  }
+
   let keySeq = 0;
-  async function addImages(files) {
+  const isVideo = f => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|3gp|mkv|avi)$/i.test(f.name || "");
+  const isImage = f => /^image\/(png|jpe?g|webp|gif|heic|heif|bmp)$/.test(f.type);
+  const count = kind => state.pending.filter(p => p.kind === kind).length;
+
+  async function addFiles(files) {
     if (state.view !== "chat" || !state.allowed) return;
-    const list = [...files].filter(f => /^image\//.test(f.type));
-    if (!list.length) return;
-    for (const file of list) {
-      if (state.pending.length >= MAX_IMAGES) { toast(`Máximo ${MAX_IMAGES} imágenes por mensaje.`); break; }
-      const p = { key: ++keySeq, url: "", id: null, loading: true };
-      state.pending.push(p);
-      try {
-        const blob = await compress(file);
-        p.url = URL.createObjectURL(blob);
-        renderThumbs();
-        const fd = new FormData();
-        fd.append("image", blob, "imagen.jpg");
-        const data = await api("/upload", { method: "POST", body: fd });
-        p.id = data.id;
-        p.loading = false;
-      } catch (err) {
-        state.pending = state.pending.filter(x => x !== p);
-        toast(err.message || "No se pudo subir la imagen.");
-      }
-      renderThumbs();
+    for (const file of [...files]) {
+      if (isImage(file)) await addImage(file);
+      else if (isVideo(file)) await addVideo(file);
+      else await addDoc(file);
     }
   }
 
-  $("mg-file").addEventListener("change", e => { addImages(e.target.files); e.target.value = ""; });
+  async function addImage(file) {
+    if (count("image") >= MAX_IMAGES) { toast(`Máximo ${MAX_IMAGES} imágenes por mensaje.`); return; }
+    const p = { key: ++keySeq, kind: "image", url: "", id: null, loading: true };
+    state.pending.push(p);
+    try {
+      const blob = await compress(file);
+      p.url = URL.createObjectURL(blob);
+      renderThumbs();
+      p.id = (await uploadBlob(blob, "image", "imagen.jpg")).id;
+      p.loading = false;
+    } catch (err) {
+      state.pending = state.pending.filter(x => x !== p);
+      toast(err.message || "No se pudo subir la imagen.");
+    }
+    renderThumbs();
+  }
 
-  // Pegar imágenes (Ctrl+V) y arrastrarlas
+  async function addDoc(file) {
+    if (count("doc") >= MAX_DOCS) { toast(`Máximo ${MAX_DOCS} documentos por mensaje.`); return; }
+    const p = { key: ++keySeq, kind: "doc", docKind: /\.pdf$/i.test(file.name || "") ? "pdf" : "text", name: file.name || "documento", bytes: file.size, id: null, loading: true };
+    state.pending.push(p);
+    renderThumbs();
+    try {
+      const d = await window.MangoFiles.readDocument(file);
+      p.docKind = d.kind;
+      p.id = (await uploadBlob(d.blob, d.kind, d.name)).id;
+      p.loading = false;
+      if (d.note) toast(`«${d.name}»: ${d.note}`);
+    } catch (err) {
+      state.pending = state.pending.filter(x => x !== p);
+      toast(err.message || "No se pudo subir el documento.");
+    }
+    renderThumbs();
+  }
+
+  async function addVideo(file) {
+    if (count("video") >= 1) { toast("Solo 1 video por mensaje."); return; }
+    if (file.size > window.MangoFiles.VIDEO_MAX_BYTES) { toast("El video pesa más de 15 MB. Recórtalo o envía uno más corto."); return; }
+    const p = { key: ++keySeq, kind: "video", name: file.name || "video", bytes: file.size, url: "", frames: [], duration: 0, loading: true };
+    state.pending.push(p);
+    renderThumbs();
+    toast("🎬 " + VIDEO_NOTE);
+    try {
+      const v = await window.MangoFiles.videoFrames(file);
+      p.duration = v.duration;
+      p.url = URL.createObjectURL(v.frames[0]);
+      renderThumbs();
+      for (let i = 0; i < v.frames.length; i++) {
+        p.frames.push((await uploadBlob(v.frames[i], "frame", `cuadro-${i + 1}.jpg`)).id);
+      }
+      p.loading = false;
+    } catch (err) {
+      state.pending = state.pending.filter(x => x !== p);
+      toast(err.message || "No se pudo leer el video.");
+    }
+    renderThumbs();
+  }
+
+  $("mg-file").addEventListener("change", e => { const f = [...e.target.files]; e.target.value = ""; addFiles(f); });
+
+  // Pegar (Ctrl+V) y arrastrar archivos
   document.addEventListener("paste", e => {
     if (!e.clipboardData || !$("mg-modal").hidden) return;
-    const files = [...e.clipboardData.items].filter(it => it.kind === "file" && /^image\//.test(it.type)).map(it => it.getAsFile()).filter(Boolean);
-    if (files.length) { e.preventDefault(); addImages(files); }
+    const files = [...e.clipboardData.items].filter(it => it.kind === "file").map(it => it.getAsFile()).filter(Boolean);
+    if (files.length) { e.preventDefault(); addFiles(files); }
   });
   let dragDepth = 0;
   const main = $("mg-main");
@@ -474,7 +563,7 @@
   main.addEventListener("dragover", e => { if ([...(e.dataTransfer?.types || [])].includes("Files")) e.preventDefault(); });
   main.addEventListener("drop", e => {
     dragDepth = 0; $("mg-drop").hidden = true;
-    if (e.dataTransfer?.files?.length) { e.preventDefault(); addImages(e.dataTransfer.files); }
+    if (e.dataTransfer?.files?.length) { e.preventDefault(); addFiles(e.dataTransfer.files); }
   });
 
   // ── Escribir y enviar ──
@@ -515,13 +604,19 @@
     e.preventDefault();
     if (state.streaming) return;
     const text = input.value.trim();
-    const ready = state.pending.filter(p => p.id);
+    const ready = state.pending.filter(p => !p.loading && (p.id || (p.frames && p.frames.length)));
     if (!text && !ready.length) return;
 
-    const images = ready.map(p => p.id);
-    const shown = ready.map(p => p.url);
+    const imgs = ready.filter(p => p.kind === "image");
+    const images = imgs.map(p => p.id);
+    const docs = ready.filter(p => p.kind === "doc").map(p => p.id);
+    const vid = ready.find(p => p.kind === "video");
+    const video = vid ? { name: vid.name, bytes: vid.bytes, duration: vid.duration, frames: vid.frames } : null;
+    const shownFiles = ready.filter(p => p.kind !== "image").map(p => p.kind === "video"
+      ? { kind: "video", name: p.name, duration: p.duration, thumb: p.url }
+      : { kind: p.docKind, name: p.name, bytes: p.bytes });
     $("mg-hello").hidden = true;
-    $("mg-messages").appendChild(userMessageEl({ text, images: shown }));
+    $("mg-messages").appendChild(userMessageEl({ text, images: imgs.map(p => p.url), files: shownFiles }));
     const reply = assistantMessageEl({ text: "", typing: true });
     $("mg-messages").appendChild(reply);
     scrollToEnd(true);
@@ -539,7 +634,7 @@
       const res = await fetch(API + "/chat", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: state.convId, text, images }),
+        body: JSON.stringify({ conversationId: state.convId, text, images, docs, video }),
         signal: state.controller.signal,
       });
       if (!res.ok) {

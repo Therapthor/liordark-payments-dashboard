@@ -638,3 +638,53 @@ body.mg-shared { overflow: auto; }
 }
 @keyframes mg-sheet-in { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes mg-sheet-out { to { transform: translateY(100%); } }
+
+/* ═══ Archivos: adjuntos del cliente y archivos para descargar ═══ */
+.mg-thumb.doc { width: auto; max-width: 190px; display: flex; align-items: center; gap: 8px; padding: 0 28px 0 8px; background: var(--surface); }
+.mg-thumb.doc span { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg-thumb.doc.loading::after { inset: auto 6px auto auto; width: 14px; height: 14px; top: 22px; border-width: 2px; }
+.mg-thumb.video { width: 88px; }
+.mg-thumb.video:not(:has(img)) { background: #1E1B17; }
+.mg-thumb-badge { position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, .66); color: #fff; font-size: 10.5px; font-weight: 700; }
+.mg-thumbs-note { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.mg-thumb i, .mg-chip-file i, .mg-file-ic {
+  flex-shrink: 0; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 9px;
+  font-style: normal; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; color: #fff; background: #6B7280;
+}
+.t-pdf { background: #D9442B !important; }
+.t-doc { background: #2B66C9 !important; }
+.t-xls { background: #1E7A45 !important; }
+.t-txt { background: #8A7A66 !important; }
+.t-code { background: #3D3A35 !important; }
+.t-video { background: #1E1B17 !important; font-size: 14px !important; }
+
+.mg-msg-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 6px; }
+.mg-chip-file {
+  display: inline-flex; align-items: center; gap: 10px; max-width: min(100%, 320px); padding: 7px 12px 7px 7px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-align: left;
+}
+.mg-chip-file > span { min-width: 0; }
+.mg-chip-file b { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg-chip-file small { display: block; font-size: 12px; color: var(--muted); }
+.mg-chip-file.video img { width: 56px; height: 40px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+
+.mg-file { margin: 0 0 14px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; }
+.mg-file-row { display: flex; align-items: center; gap: 12px; padding: 12px; }
+.mg-file-ic { width: 44px; height: 44px; border-radius: 11px; font-size: 11px; }
+.mg-file-info { flex: 1; min-width: 0; }
+.mg-file-info b { display: block; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mg-file-info small { display: block; font-size: 12.5px; color: var(--muted); }
+.mg-file-dl {
+  flex-shrink: 0; min-height: 40px; padding: 0 16px; border: 0; border-radius: 11px; cursor: pointer;
+  background: var(--primary); color: var(--primary-ink); font-weight: 800; font-size: 14px;
+  transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+}
+.mg-file-dl:active { transform: scale(.96); }
+.mg-file-dl:disabled { opacity: .5; cursor: default; }
+.mg-file-src { border-top: 1px solid var(--line); }
+.mg-file-src summary { cursor: pointer; padding: 8px 12px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.mg-file-src pre { margin: 0; max-height: 260px; overflow: auto; padding: 10px 12px; background: var(--code-bg); color: #F4E3C8; font-size: 12.5px; }
+@media (max-width: 600px) {
+  .mg-file-dl { padding: 0 12px; }
+  .mg-chip-file { max-width: 100%; }
+}

@@ -232,6 +232,7 @@ const SITE_CSP = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'";
 // afuera, y solo habla con este mismo servidor.
 const MANGUITO_CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self'", "img-src 'self' blob: data:",
+  "media-src 'self' blob:", // el video se abre solo en el navegador para sacarle cuadros
   "font-src 'self'", "connect-src 'self'", "object-src 'none'", "base-uri 'self'",
   "frame-ancestors 'self'", "form-action 'self'",
 ].join("; ");

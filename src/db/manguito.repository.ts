@@ -61,6 +61,16 @@ db.exec(`
   if (!cols.includes("summary")) db.exec(`ALTER TABLE ai_conversations ADD COLUMN summary TEXT NOT NULL DEFAULT ''`);
   if (!cols.includes("compacted")) db.exec(`ALTER TABLE ai_conversations ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0`);
 }
+// Archivos adjuntos (además de imágenes): documentos (PDF o texto sacado de
+// Word/Excel/etc. en el navegador) y cuadros de video. `files` del mensaje
+// guarda nombre/tamaño aunque el archivo ya se haya borrado.
+{
+  const up = (db.prepare(`PRAGMA table_info(ai_uploads)`).all() as { name: string }[]).map(c => c.name);
+  if (!up.includes("kind")) db.exec(`ALTER TABLE ai_uploads ADD COLUMN kind TEXT NOT NULL DEFAULT 'image'`); // image | pdf | text | frame
+  if (!up.includes("name")) db.exec(`ALTER TABLE ai_uploads ADD COLUMN name TEXT NOT NULL DEFAULT ''`);
+  const msg = (db.prepare(`PRAGMA table_info(ai_messages)`).all() as { name: string }[]).map(c => c.name);
+  if (!msg.includes("files")) db.exec(`ALTER TABLE ai_messages ADD COLUMN files TEXT NOT NULL DEFAULT '[]'`);
+}
 // «Cerebro» de cada cliente: lo que Manguito recuerda de él entre
 // conversaciones, y la pausa de 1 hora cuando gasta mucho de golpe.
 db.exec(`
@@ -147,18 +157,29 @@ if (!(db.prepare(`PRAGMA table_info(ai_usage)`).all() as { name: string }[]).som
 }
 
 export type AiConversation = { id: number; title: string; createdAt: string; updatedAt: string; summary: string; compacted: number; summaryUpto: number };
+/** Adjunto que no es imagen: documento (pdf/texto) o video (sus cuadros). */
+export type AiFile =
+  | { kind: "pdf" | "text"; id: string; name: string; bytes: number }
+  | { kind: "video"; name: string; bytes: number; duration: number; frames: string[] };
 export type AiMessage = {
   id: number; conversationId: number; role: "user" | "assistant"; text: string;
-  images: string[]; tier: string; model: string; status: string; createdAt: string;
+  images: string[]; files: AiFile[]; tier: string; model: string; status: string; createdAt: string;
 };
 
 function toMessage(r: any): AiMessage {
   let images: string[] = [];
+  let files: AiFile[] = [];
   try { images = JSON.parse(r.images || "[]"); } catch { images = []; }
+  try { files = JSON.parse(r.files || "[]"); } catch { files = []; }
   return {
-    id: r.id, conversationId: r.conversation_id, role: r.role, text: r.text, images,
+    id: r.id, conversationId: r.conversation_id, role: r.role, text: r.text, images, files: Array.isArray(files) ? files : [],
     tier: r.tier, model: r.model, status: r.status, createdAt: r.created_at,
   };
+}
+
+/** Todos los archivos subidos de un mensaje (imágenes, documentos y cuadros de video). */
+export function attachmentIds(m: AiMessage): string[] {
+  return [...m.images, ...m.files.flatMap(f => f.kind === "video" ? f.frames : [f.id])];
 }
 
 export function listConversations(customerId: number, limit = 60): AiConversation[] {
@@ -188,7 +209,7 @@ export function touchConversation(id: number): void {
 /** Borra la conversación y devuelve los ids de las imágenes que tenía. */
 export const deleteConversation = db.transaction((customerId: number, id: number): string[] | null => {
   if (!getConversation(customerId, id)) return null;
-  const images = listMessages(id).flatMap(m => m.images);
+  const images = listMessages(id).flatMap(attachmentIds);
   db.prepare(`DELETE FROM ai_messages WHERE conversation_id = ?`).run(id);
   db.prepare(`DELETE FROM ai_conversations WHERE id = ?`).run(id);
   return images;
@@ -199,22 +220,33 @@ export function listMessages(conversationId: number): AiMessage[] {
 }
 
 export function addMessage(m: {
-  conversationId: number; role: "user" | "assistant"; text: string; images?: string[];
+  conversationId: number; role: "user" | "assistant"; text: string; images?: string[]; files?: AiFile[];
   tier?: string; model?: string; status?: string;
 }): number {
   const r = db.prepare(`
-    INSERT INTO ai_messages (conversation_id, role, text, images, tier, model, status) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(m.conversationId, m.role, m.text, JSON.stringify(m.images ?? []), m.tier ?? "", m.model ?? "", m.status ?? "ok");
+    INSERT INTO ai_messages (conversation_id, role, text, images, files, tier, model, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(m.conversationId, m.role, m.text, JSON.stringify(m.images ?? []), JSON.stringify(m.files ?? []), m.tier ?? "", m.model ?? "", m.status ?? "ok");
   return Number(r.lastInsertRowid);
 }
 
-export function saveUpload(id: string, customerId: number, mediaType: string, bytes: number): void {
-  db.prepare(`INSERT INTO ai_uploads (id, customer_id, media_type, bytes) VALUES (?, ?, ?, ?)`).run(id, customerId, mediaType, bytes);
+export type UploadKind = "image" | "pdf" | "text" | "frame";
+export type AiUpload = { id: string; customerId: number; mediaType: string; kind: UploadKind; name: string; bytes: number };
+
+export function saveUpload(id: string, customerId: number, mediaType: string, bytes: number, kind: UploadKind = "image", name = ""): void {
+  db.prepare(`INSERT INTO ai_uploads (id, customer_id, media_type, bytes, kind, name) VALUES (?, ?, ?, ?, ?, ?)`).run(id, customerId, mediaType, bytes, kind, name);
 }
 
-export function getUpload(id: string): { id: string; customerId: number; mediaType: string } | null {
-  const r = db.prepare(`SELECT id, customer_id AS customerId, media_type AS mediaType FROM ai_uploads WHERE id = ?`).get(id) as any;
+export function getUpload(id: string): AiUpload | null {
+  const r = db.prepare(`SELECT id, customer_id AS customerId, media_type AS mediaType, kind, name, bytes FROM ai_uploads WHERE id = ?`).get(id) as any;
   return r ?? null;
+}
+
+/** Cuánto subió el cliente en la última hora (para que nadie llene el disco). */
+export function recentUploadBytes(customerId: number): { count: number; bytes: number } {
+  return db.prepare(`
+    SELECT COUNT(*) AS count, COALESCE(SUM(bytes), 0) AS bytes FROM ai_uploads
+    WHERE customer_id = ? AND created_at >= datetime('now', '-1 hour')
+  `).get(customerId) as { count: number; bytes: number };
 }
 
 export function deleteUploadRows(ids: string[]): void {
@@ -324,10 +356,11 @@ export function conversationsOverLimit(maxPerCustomer: number): { id: number; cu
   `).all(maxPerCustomer) as { id: number; customerId: number }[];
 }
 
-/** Imágenes subidas hace más de `days` días. */
+/** Archivos subidos hace más de `days` días; los cuadros de video, a las 24 horas. */
 export function oldUploads(days: number): { id: string; mediaType: string }[] {
   return db.prepare(`
-    SELECT id, media_type AS mediaType FROM ai_uploads WHERE created_at < datetime('now', ?)
+    SELECT id, media_type AS mediaType FROM ai_uploads
+    WHERE created_at < datetime('now', ?) OR (kind = 'frame' AND created_at < datetime('now', '-24 hours'))
   `).all(`-${days} days`) as { id: string; mediaType: string }[];
 }
 
@@ -529,7 +562,7 @@ export function cleanupPendingAiPurchases(): void {
 export const deleteAllConversations = db.transaction((customerId: number): string[] => {
   const ids = (db.prepare(`SELECT id FROM ai_conversations WHERE customer_id = ?`).all(customerId) as { id: number }[]).map(r => r.id);
   const images: string[] = [];
-  for (const id of ids) images.push(...listMessages(id).flatMap(m => m.images));
+  for (const id of ids) images.push(...listMessages(id).flatMap(attachmentIds));
   db.prepare(`DELETE FROM ai_messages WHERE conversation_id IN (SELECT id FROM ai_conversations WHERE customer_id = ?)`).run(customerId);
   db.prepare(`DELETE FROM ai_conversations WHERE customer_id = ?`).run(customerId);
   const orphan = (db.prepare(`SELECT id FROM ai_uploads WHERE customer_id = ?`).all(customerId) as { id: string }[]).map(r => r.id);
