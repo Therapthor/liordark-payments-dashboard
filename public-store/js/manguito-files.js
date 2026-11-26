@@ -8,6 +8,7 @@
   "use strict";
 
   const MAX_TEXT_CHARS = 200000;
+  const userErr = m => Object.assign(new Error(m), { user: true }); // mensaje listo para el cliente
   const VIDEO_MAX_BYTES = 15 * 1024 * 1024;
   const MAX_FRAMES = 8;
   const enc = new TextEncoder();
@@ -19,7 +20,7 @@
     for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) {
       if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
     }
-    if (eocd < 0) throw new Error("El archivo está dañado o no es de Office.");
+    if (eocd < 0) throw userErr("El archivo está dañado o no es de Office.");
     const count = dv.getUint16(eocd + 10, true);
     let p = dv.getUint32(eocd + 16, true);
     const dec = new TextDecoder();
@@ -35,11 +36,11 @@
     async function read(name) {
       const e = map.get(name);
       if (!e) return null;
-      if (e.usize > 60 * 1024 * 1024) throw new Error("El documento es demasiado grande.");
+      if (e.usize > 60 * 1024 * 1024) throw userErr("El documento es demasiado grande.");
       const start = e.off + 30 + dv.getUint16(e.off + 26, true) + dv.getUint16(e.off + 28, true);
       const data = u8.subarray(start, start + e.csize);
       if (e.method === 0) return dec.decode(data);
-      if (e.method !== 8 || typeof DecompressionStream === "undefined") throw new Error("Tu navegador no puede abrir este documento. Guárdalo como PDF.");
+      if (e.method !== 8 || typeof DecompressionStream === "undefined") throw userErr("Tu navegador no puede abrir este documento. Actualízalo o guárdalo como PDF.");
       const out = await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
       return dec.decode(out);
     }
@@ -160,28 +161,377 @@
     catch { return new TextDecoder("windows-1252").decode(buf); } // CSV de Excel en español
   }
 
-  /** Prepara un documento para mandarlo: PDF tal cual; lo demás, como texto. */
+  // ═══ Office viejo (.doc, .xls, .ppt): archivo «compuesto» (CFB) ═══
+  const END = 0xfffffffa;
+  function cfb(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(buf);
+    if (![0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every((b, i) => u8[i] === b)) return null;
+    const ss = 1 << dv.getUint16(0x1e, true), mss = 1 << dv.getUint16(0x20, true);
+    const nFat = dv.getUint32(0x2c, true), dirStart = dv.getUint32(0x30, true), cutoff = dv.getUint32(0x38, true);
+    const miniFatStart = dv.getUint32(0x3c, true);
+    const off = n => (n + 1) * ss;
+    const fatSecs = [];
+    for (let i = 0; i < 109 && fatSecs.length < nFat; i++) { const x = dv.getUint32(0x4c + i * 4, true); if (x < END) fatSecs.push(x); }
+    for (let d = dv.getUint32(0x44, true), g = 0; d < END && fatSecs.length < nFat && g < 50000 && off(d) + ss <= u8.length; g++) {
+      for (let i = 0; i < ss / 4 - 1 && fatSecs.length < nFat; i++) { const x = dv.getUint32(off(d) + i * 4, true); if (x < END) fatSecs.push(x); }
+      d = dv.getUint32(off(d) + ss - 4, true);
+    }
+    const fat = [];
+    for (const f of fatSecs) { if (off(f) + ss > u8.length) continue; for (let i = 0; i < ss / 4; i++) fat.push(dv.getUint32(off(f) + i * 4, true)); }
+    function readChain(start, size) {
+      const secs = [];
+      for (let x = start, g = 0; x < END && x < fat.length && g < 2e6; g++) { secs.push(x); x = fat[x]; }
+      const out = new Uint8Array(secs.length * ss);
+      secs.forEach((x, i) => { if (off(x) < u8.length) out.set(u8.subarray(off(x), Math.min(off(x) + ss, u8.length)), i * ss); });
+      return size != null ? out.subarray(0, Math.min(size, out.length)) : out;
+    }
+    const dir = readChain(dirStart);
+    const ddv = new DataView(dir.buffer, dir.byteOffset, dir.byteLength);
+    const d16 = new TextDecoder("utf-16le");
+    const entries = [];
+    for (let o = 0; o + 128 <= dir.length; o += 128) {
+      const type = dir[o + 0x42];
+      if (!type) continue;
+      const nlen = Math.min(64, ddv.getUint16(o + 0x40, true));
+      entries.push({ name: d16.decode(dir.subarray(o, o + Math.max(0, nlen - 2))), type, start: ddv.getUint32(o + 0x74, true), size: ddv.getUint32(o + 0x78, true) });
+    }
+    const root = entries.find(e => e.type === 5);
+    const mini = root ? readChain(root.start, root.size) : new Uint8Array(0);
+    const miniFat = [];
+    if (miniFatStart < END) {
+      const mf = readChain(miniFatStart), mdv = new DataView(mf.buffer, mf.byteOffset, mf.byteLength);
+      for (let i = 0; i + 4 <= mf.length; i += 4) miniFat.push(mdv.getUint32(i, true));
+    }
+    function stream(name) {
+      const e = entries.find(x => x.type === 2 && x.name.toLowerCase() === name.toLowerCase());
+      if (!e) return null;
+      if (e.size >= cutoff) return readChain(e.start, e.size);
+      const out = new Uint8Array(e.size);
+      for (let x = e.start, pos = 0, g = 0; x < END && pos < e.size && g < 2e6; g++) {
+        out.set(mini.subarray(x * mss, x * mss + Math.min(mss, e.size - pos)), pos);
+        pos += mss; x = miniFat[x];
+      }
+      return out;
+    }
+    return { stream, has: n => entries.some(x => x.name.toLowerCase() === n.toLowerCase()) };
+  }
+  const view = a => new DataView(a.buffer, a.byteOffset, a.byteLength);
+  const d1252 = new TextDecoder("windows-1252"), d16le = new TextDecoder("utf-16le");
+
+  // ── Word 97-2003 (.doc) ──
+  function readDoc(c) {
+    const wd = c.stream("WordDocument");
+    const dv = view(wd);
+    const flags = dv.getUint16(0x0a, true);
+    if (flags & 0x0100) throw new Error("PROTEGIDO");
+    let text = "";
+    const ident = dv.getUint16(0, true);
+    if (ident === 0xa5ec) {
+      const table = c.stream(flags & 0x0200 ? "1Table" : "0Table");
+      let pos = 32;
+      pos += 2 + dv.getUint16(pos, true) * 2;          // fibRgW
+      const cslw = dv.getUint16(pos, true), lw = pos + 2;
+      const ccpText = dv.getUint32(lw + 12, true);
+      const fc = lw + cslw * 4 + 2;
+      const fcClx = dv.getUint32(fc + 33 * 8, true), lcbClx = dv.getUint32(fc + 33 * 8 + 4, true);
+      if (table && lcbClx && fcClx + lcbClx <= table.length) {
+        const tv = view(table);
+        let p = fcClx;
+        while (p < fcClx + lcbClx && table[p] === 0x01) p += 3 + tv.getInt16(p + 1, true);
+        if (table[p] === 0x02) {
+          const lcb = tv.getUint32(p + 1, true), plc = p + 5, n = Math.floor((lcb - 4) / 12);
+          for (let i = 0; i < n; i++) {
+            const cp0 = tv.getUint32(plc + i * 4, true), cp1 = tv.getUint32(plc + (i + 1) * 4, true);
+            let f = tv.getUint32(plc + (n + 1) * 4 + i * 8 + 2, true);
+            const compressed = (f & 0x40000000) !== 0;
+            f &= 0x3fffffff;
+            const len = Math.max(0, cp1 - cp0);
+            text += compressed ? d1252.decode(wd.subarray(f / 2, f / 2 + len)) : d16le.decode(wd.subarray(f, f + len * 2));
+          }
+        }
+      }
+      if (ccpText && text.length > ccpText) text = text.slice(0, ccpText); // solo el cuerpo
+    }
+    if (!text) text = d1252.decode(wd.subarray(dv.getUint32(0x18, true), dv.getUint32(0x1c, true))); // Word 6/95
+    for (let k = 0; k < 6; k++) text = text.replace(/\x13[^\x13\x14\x15]*\x14([^\x13\x15]*)\x15/g, "$1").replace(/\x13[^\x13\x14\x15]*\x15/g, "");
+    return text.replace(/[\x13\x14\x15]/g, "").replace(/\x07\x07/g, "\n").replace(/\x07/g, " | ")
+      .replace(/[\r\x0b\x0c]/g, "\n").replace(/[\x00-\x08\x0e-\x1f]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  // ── Excel 97-2003 (.xls) ──
+  function readXls(c) {
+    let wb = c.stream("Workbook"), biff5 = false;
+    if (!wb) { wb = c.stream("Book"); biff5 = true; }
+    const dv = view(wb);
+    const recs = [];
+    for (let p = 0; p + 4 <= wb.length;) { const len = dv.getUint16(p + 2, true); recs.push({ type: dv.getUint16(p, true), off: p + 4, len, pos: p }); p += 4 + len; }
+    if (recs.some(r => r.type === 0x002f)) throw new Error("PROTEGIDO");
+    const dLat = new TextDecoder("windows-1252");
+    const str = (o, short) => {      // XLUnicodeString (o corto: cch de 1 byte)
+      const cch = short ? wb[o] : dv.getUint16(o, true), q = o + (short ? 1 : 2);
+      if (biff5) return dLat.decode(wb.subarray(q, q + cch));
+      const high = wb[q] & 1;
+      return high ? d16le.decode(wb.subarray(q + 1, q + 1 + cch * 2)) : dLat.decode(wb.subarray(q + 1, q + 1 + cch));
+    };
+    const sheetAt = new Map(), sst = [];
+    for (let i = 0; i < recs.length; i++) {
+      const r = recs[i];
+      if (r.type === 0x0085) sheetAt.set(dv.getUint32(r.off, true), str(r.off + 6, true));
+      if (r.type === 0x00fc) {
+        const segs = [wb.subarray(r.off, r.off + r.len)];
+        for (let j = i + 1; j < recs.length && recs[j].type === 0x003c; j++) segs.push(wb.subarray(recs[j].off, recs[j].off + recs[j].len));
+        let si = 0, p = 8;
+        const byte = () => { while (si < segs.length && p >= segs[si].length) { si++; p = 0; } return si < segs.length ? segs[si][p++] : 0; };
+        const u16 = () => byte() | (byte() << 8);
+        const unique = view(segs[0]).getUint32(4, true);
+        for (let k = 0; k < unique && si < segs.length; k++) {
+          const cch = u16(), fl = byte();
+          let high = fl & 1;
+          const runs = fl & 8 ? u16() : 0, ext = fl & 4 ? (u16() | (u16() << 16)) >>> 0 : 0;
+          let out = "", left = cch;
+          while (left > 0 && si < segs.length) {
+            if (p >= segs[si].length) { si++; p = 0; if (si >= segs.length) break; high = segs[si][p++] & 1; continue; }
+            const per = high ? 2 : 1, n = Math.min(left, Math.floor((segs[si].length - p) / per));
+            if (!n) { p = segs[si].length; continue; }
+            out += high ? d16le.decode(segs[si].subarray(p, p + n * 2)) : dLat.decode(segs[si].subarray(p, p + n));
+            p += n * per; left -= n;
+          }
+          for (let skip = runs * 4 + ext; skip > 0; skip--) byte();
+          sst.push(out);
+        }
+      }
+    }
+    const rk = v => {
+      let n;
+      if (v & 2) n = v >> 2;
+      else { const b = new DataView(new ArrayBuffer(8)); b.setUint32(4, (v & 0xfffffffc) >>> 0, true); n = b.getFloat64(0, true); }
+      return v & 1 ? n / 100 : n;
+    };
+    const num = x => Number.isInteger(x) ? String(x) : String(Math.round(x * 1e10) / 1e10);
+    const sheets = [];
+    let cur = null, pending = null, rowsLeft = 20000;
+    const set = (row, col, v) => { if (!cur || col > 255) return; if (!cur.rows.has(row)) { if (rowsLeft-- <= 0) return; cur.rows.set(row, []); } cur.rows.get(row)[col] = csvCell(String(v)); };
+    for (const r of recs) {
+      if (r.type === 0x0809 && sheetAt.has(r.pos)) { cur = { name: sheetAt.get(r.pos), rows: new Map() }; sheets.push(cur); continue; }
+      if (r.type === 0x0207) { if (pending && cur) { set(pending[0], pending[1], str(r.off)); pending = null; } continue; } // resultado de fórmula (texto)
+      if (!cur || r.len < 6) continue;
+      const row = dv.getUint16(r.off, true), col = dv.getUint16(r.off + 2, true);
+      switch (r.type) {
+        case 0x00fd: set(row, col, sst[dv.getUint32(r.off + 6, true)] ?? ""); break;      // texto
+        case 0x0203: set(row, col, num(dv.getFloat64(r.off + 6, true))); break;           // número
+        case 0x027e: set(row, col, num(rk(dv.getUint32(r.off + 6, true)))); break;        // número corto
+        case 0x00bd: { const last = dv.getUint16(r.off + r.len - 2, true);                // varios números
+          for (let cc = col, q = r.off + 4; cc <= last && q + 6 <= r.off + r.len - 2; cc++, q += 6) set(row, cc, num(rk(dv.getUint32(q + 2, true))));
+          break; }
+        case 0x0204: case 0x00d6: set(row, col, str(r.off + 6)); break;                   // texto (viejo)
+        case 0x0205: set(row, col, wb[r.off + 7] ? "#ERROR" : wb[r.off + 6] ? "VERDADERO" : "FALSO"); break;
+        case 0x0006:                                                                       // fórmula: su resultado
+          if (dv.getUint16(r.off + 12, true) === 0xffff) {
+            const t = wb[r.off + 6];
+            if (t === 0) pending = [row, col]; else if (t === 1) set(row, col, wb[r.off + 8] ? "VERDADERO" : "FALSO");
+          } else set(row, col, num(dv.getFloat64(r.off + 6, true)));
+          break;
+      }
+    }
+    return sheets.map(sh => {
+      const rows = [...sh.rows.entries()].sort((a, b) => a[0] - b[0]).map(([, cells]) => Array.from(cells, x => x ?? "").join(","));
+      return rows.length ? `## Hoja: ${sh.name}\n` + rows.join("\n") : "";
+    }).filter(Boolean).join("\n\n").trim();
+  }
+
+  // ── PowerPoint 97-2003 (.ppt) ──
+  function readPpt(c) {
+    const s = c.stream("PowerPoint Document");
+    const dv = view(s), out = [];
+    const walk = (a, b, depth) => {
+      for (let p = a; p + 8 <= b;) {
+        const vi = dv.getUint16(p, true), type = dv.getUint16(p + 2, true), len = dv.getUint32(p + 4, true);
+        const body = p + 8, next = body + len;
+        if (next > b) break;
+        if ((vi & 0xf) === 0xf && depth < 24) walk(body, next, depth + 1);
+        else if (type === 0x0fa0) out.push(d16le.decode(s.subarray(body, next)));
+        else if (type === 0x0fa8) out.push(d1252.decode(s.subarray(body, next)));
+        p = next;
+      }
+    };
+    walk(0, s.length, 0);
+    const MASTER = /^(haga clic|haz clic|click to (edit|add)|segundo nivel|second level|\*$)/i;
+    const seen = new Set();
+    return out.map(t => t.replace(/[\r\x0b]/g, "\n").trim())
+      .filter(t => t && !MASTER.test(t) && !seen.has(t) && seen.add(t)).join("\n\n");
+  }
+
+  // ── RTF ──
+  const RTF_SKIP = /^(fonttbl|colortbl|stylesheet|info|pict|object|header[lrf]?|footer[lrf]?|themedata|colorschememapping|latentstyles|datastore|xmlnstbl|listtable|listoverridetable|rsidtbl|generator|mmathPr|fldinst|filetbl|revtbl|pgdsctbl|nonshppict|shpinst)$/;
+  const RTF_CH = { emdash: "—", endash: "–", bullet: "•", lquote: "‘", rquote: "’", ldblquote: "“", rdblquote: "”" };
+  function rtfToText(src) {
+    const stack = [];
+    let skip = false, uc = 1, pend = 0, out = "";
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === "{") { stack.push([skip, uc]); continue; }
+      if (ch === "}") { const st = stack.pop(); if (st) [skip, uc] = st; continue; }
+      if (ch === "\r" || ch === "\n") continue;
+      if (ch !== "\\") { if (pend > 0) pend--; else if (!skip) out += ch; continue; }
+      const nx = src[i + 1];
+      if (nx === "\\" || nx === "{" || nx === "}") { if (!skip) out += nx; i++; continue; }
+      if (nx === "'") { const code = parseInt(src.substr(i + 2, 2), 16); i += 3; if (pend > 0) pend--; else if (!skip && code) out += d1252.decode(Uint8Array.of(code)); continue; }
+      if (nx === "*") { skip = true; i++; continue; }
+      if (nx === "~") { if (!skip) out += " "; i++; continue; }
+      if (nx === "\r" || nx === "\n") { if (!skip) out += "\n"; i++; continue; }
+      const m = /^([a-zA-Z]+)(-?\d+)? ?/.exec(src.slice(i + 1, i + 40));
+      if (!m) { i++; continue; }
+      i += m[0].length;
+      const w = m[1], arg = m[2] !== undefined ? Number(m[2]) : null;
+      if (RTF_SKIP.test(w)) { skip = true; continue; }
+      if (skip) continue;
+      if (/^(par|line|row|sect|page)$/.test(w)) out += "\n";
+      else if (w === "tab") out += "\t";
+      else if (w === "cell") out += " | ";
+      else if (w === "u" && arg !== null) { out += String.fromCharCode(arg < 0 ? arg + 65536 : arg); pend = uc; }
+      else if (w === "uc" && arg !== null) uc = arg;
+      else if (RTF_CH[w]) out += RTF_CH[w];
+    }
+    return out.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  // ── OpenOffice / LibreOffice (.odt, .ods, .odp) ──
+  async function readOdf(z) {
+    const s = await z.read("content.xml");
+    if (!s) throw new Error("No se encontró el contenido del documento.");
+    const doc = xml(s);
+    const body = byName(doc, "body")[0] || doc.documentElement;
+    const out = [];
+    if (byName(body, "spreadsheet").length) {
+      let rowsLeft = 20000;
+      for (const t of byName(body, "table")) {
+        const lines = [];
+        for (const r of byName(t, "table-row")) {
+          if (rowsLeft-- <= 0) break;
+          const cells = [];
+          for (const c of [...r.children].filter(x => /table-cell$/.test(x.localName))) {
+            const rep = Math.min(Number(c.getAttribute("table:number-columns-repeated")) || 1, 50);
+            const v = byName(c, "p").map(p => p.textContent).join(" ");
+            for (let k = 0; k < rep; k++) cells.push(csvCell(v));
+          }
+          while (cells.length && cells[cells.length - 1] === "") cells.pop();
+          if (cells.length) lines.push(cells.join(","));
+        }
+        if (lines.length) out.push(`## Hoja: ${t.getAttribute("table:name") || "Hoja"}\n` + lines.join("\n"));
+      }
+    } else if (byName(body, "presentation").length) {
+      byName(body, "page").forEach((pg, i) => {
+        const t = byName(pg, "p").map(p => p.textContent).filter(x => x.trim());
+        if (t.length) out.push(`## Diapositiva ${i + 1}\n` + t.join("\n"));
+      });
+    } else {
+      const walk = (n, inList) => {
+        for (const c of n.children) {
+          if (c.localName === "h") out.push("#".repeat(Math.min(4, Number(c.getAttribute("text:outline-level")) || 1)) + " " + c.textContent);
+          else if (c.localName === "p") out.push((inList ? "- " : "") + c.textContent);
+          else if (c.localName === "table-row") out.push("| " + [...c.children].map(x => byName(x, "p").map(p => p.textContent).join(" ")).join(" | ") + " |");
+          else walk(c, inList || c.localName === "list-item");
+        }
+      };
+      walk(body, false);
+    }
+    return out.join("\n").trim();
+  }
+
+  // ── Libros (.epub) ──
+  async function readEpub(z) {
+    const htmlText = s => new DOMParser().parseFromString(s.replace(/<\/(p|div|h\d|li|tr)>/gi, "$&\n"), "text/html").body.textContent;
+    let files = z.names.filter(n => /\.x?html?$/i.test(n)).sort();
+    const cont = await z.read("META-INF/container.xml");
+    const opfPath = cont && (xml(cont).querySelector("rootfile")?.getAttribute("full-path") || "");
+    if (opfPath) {
+      const opf = await z.read(opfPath);
+      if (opf) {
+        const d = xml(opf), base = opfPath.replace(/[^/]*$/, "");
+        const items = {};
+        for (const it of byName(d, "item")) items[it.getAttribute("id")] = base + it.getAttribute("href");
+        const spine = byName(d, "itemref").map(r => items[r.getAttribute("idref")]).filter(Boolean);
+        if (spine.length) files = spine;
+      }
+    }
+    const out = [];
+    let total = 0;
+    for (const f of files) {
+      if (total > MAX_TEXT_CHARS) break;
+      const s = await z.read(decodeURIComponent(f));
+      if (!s) continue;
+      const t = htmlText(s).replace(/[ \t]{2,}/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
+      if (t) { out.push(t); total += t.length; }
+    }
+    return out.join("\n\n");
+  }
+
+  // HTML que llega con otro nombre (ej. «.doc» que exporta una web).
+  const htmlToText = s => new DOMParser().parseFromString(
+    s.replace(/<(script|style)[\s\S]*?<\/\1>/gi, "").replace(/<\/(td|th)>/gi, " | $&").replace(/<(br|\/p|\/div|\/tr|\/li|\/h\d)[^>]*>/gi, "$&\n"),
+    "text/html").body.textContent.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+
+  /** Prepara un documento para mandarlo: PDF tal cual; lo demás, como texto.
+   *  Se reconoce por su contenido (no solo por la extensión). */
   async function readDocument(file) {
     const name = file.name || "documento";
     const ext = (name.match(/\.([a-z0-9]+)$/i) || [, ""])[1].toLowerCase();
-    if (ext === "pdf" || file.type === "application/pdf") {
-      if (file.size > 10 * 1024 * 1024) throw new Error("El PDF pesa más de 10 MB.");
+    const head = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+    const headStr = String.fromCharCode(...head.subarray(0, 1024));
+    const isPdf = headStr.includes("%PDF-");
+    const isZip = head[0] === 0x50 && head[1] === 0x4b && head[2] === 3 && head[3] === 4;
+    const isCfb = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
+    const isRtf = /^\s*\{\\rtf/.test(headStr);
+    const locked = () => userErr(`«${name}» tiene contraseña. Ábrelo, quítale la contraseña y vuelve a enviarlo.`);
+    if (isPdf || ext === "pdf") {
+      if (!isPdf) throw userErr(`«${name}» no es un PDF válido.`);
+      if (file.size > 10 * 1024 * 1024) throw userErr("El PDF pesa más de 10 MB.");
       return { kind: "pdf", blob: file, name, note: "" };
     }
-    if (["doc", "xls", "ppt"].includes(ext)) throw new Error(`«${name}» es un formato antiguo. Guárdalo como .${ext}x o PDF y vuelve a intentar.`);
     let text;
-    if (["docx", "docm", "xlsx", "xlsm", "pptx"].includes(ext)) {
-      if (file.size > 25 * 1024 * 1024) throw new Error("El documento pesa más de 25 MB.");
-      const z = await zipEntries(await file.arrayBuffer());
-      text = ext.startsWith("doc") ? await readDocx(z) : ext.startsWith("xls") ? await readXlsx(z) : await readPptx(z);
-    } else if (TEXT_EXT.test(name) || /^text\//.test(file.type) || file.type === "application/json") {
-      if (file.size > 3 * 1024 * 1024) throw new Error("El archivo de texto pesa más de 3 MB.");
-      text = await readText(file);
-    } else {
-      throw new Error(`No puedo leer «${name}». Usa PDF, Word, Excel, PowerPoint, texto, imágenes o un video.`);
+    try {
+      if (isZip || isCfb) {
+        if (file.size > 25 * 1024 * 1024) throw userErr("El documento pesa más de 25 MB.");
+        const buf = await file.arrayBuffer();
+        if (isZip) {
+          const z = await zipEntries(buf), has = n => z.names.includes(n);
+          if (has("word/document.xml")) text = await readDocx(z);
+          else if (has("xl/workbook.xml")) text = await readXlsx(z);
+          else if (has("ppt/presentation.xml") || z.names.some(n => /^ppt\/slides\//.test(n))) text = await readPptx(z);
+          else if (has("content.xml")) text = await readOdf(z);
+          else if (has("META-INF/container.xml")) text = await readEpub(z);
+          else if (z.names.some(n => /^Index\/.*\.iwa$/.test(n) || n === "Index.zip")) throw userErr(`«${name}» es de Pages, Numbers o Keynote: ábrelo y usa Archivo › Exportar a › PDF o Word, y envía ese.`);
+          else throw userErr(`No reconozco el contenido de «${name}». Envíalo como PDF o Word.`);
+        } else {
+          const c = cfb(buf);
+          if (!c) throw userErr(`«${name}» está dañado.`);
+          if (c.has("EncryptedPackage") || c.has("EncryptionInfo")) throw locked();
+          if (c.has("WordDocument")) text = readDoc(c);
+          else if (c.has("Workbook") || c.has("Book")) text = readXls(c);
+          else if (c.has("PowerPoint Document")) text = readPpt(c);
+          else throw userErr(`No reconozco el contenido de «${name}». Envíalo como PDF o Word.`);
+        }
+      } else if (isRtf) {
+        if (file.size > 25 * 1024 * 1024) throw userErr("El documento pesa más de 25 MB.");
+        text = rtfToText(await readText(file));
+      } else {
+        // ¿Es texto? (pocos caracteres de control)
+        const ctrl = [...head].filter(b => b < 9 || (b > 13 && b < 32)).length;
+        if (!(TEXT_EXT.test(name) || /^text\//.test(file.type) || file.type === "application/json") && ctrl > head.length * 0.02) {
+          throw userErr(`No puedo leer «${name}». Envíalo como PDF, Word, Excel, PowerPoint o texto.`);
+        }
+        if (file.size > 3 * 1024 * 1024) throw userErr("El archivo de texto pesa más de 3 MB.");
+        text = await readText(file);
+        // .doc/.xls que en verdad son páginas web
+        if (!/^html?$/.test(ext) && /^\s*(<!doctype html|<html|<\?xml[^>]*>\s*<html|<table|<body)/i.test(text.slice(0, 600))) text = htmlToText(text);
+      }
+    } catch (err) {
+      if (err && err.message === "PROTEGIDO") throw locked();
+      if (err && err.user) throw err;
+      throw userErr(`No pude leer «${name}» (puede estar dañado). Prueba guardándolo como PDF.`);
     }
     text = String(text || "").replace(/\u0000/g, "");
-    if (!text.trim()) throw new Error(`«${name}» no tiene texto que leer.`);
+    if (!text.trim()) throw userErr(`«${name}» no tiene texto que leer (si es escaneado, envíalo como PDF o foto).`);
     let note = "";
     if (text.length > MAX_TEXT_CHARS) { text = text.slice(0, MAX_TEXT_CHARS); note = "Es muy largo: Manguito leerá solo el inicio."; }
     return { kind: "text", blob: new Blob([text], { type: "text/plain" }), name, note };
@@ -517,5 +867,5 @@
     }
   });
 
-  window.MangoFiles = { readDocument, videoFrames, build, info, safeName, VIDEO_MAX_BYTES, _test: { docx, xlsx, pdf, parseCsv, zipEntries, readDocx, readXlsx, readPptx } };
+  window.MangoFiles = { readDocument, videoFrames, build, info, safeName, VIDEO_MAX_BYTES, _test: { docx, xlsx, pdf, parseCsv, zipEntries, rtfToText } };
 })();
