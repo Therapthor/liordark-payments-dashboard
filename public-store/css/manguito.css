@@ -803,3 +803,8 @@ body.mg-cover-on .mg-app { display: none; }
 body.mg-key-mode .mg-key-only { display: block !important; }
 body.mg-key-mode .mg-store-only, body.mg-key-mode .mg-to-store { display: none !important; }
 #mg-gate-key { margin-top: 6px; border: 0; cursor: pointer; }
+
+/* Logo Manguito Pro (mango con chispa): ya trae su fondo y borde */
+.mg-brand img, .mg-hello img, .mg-who img, .mg-gate img, .mg-plans-in > img { background: none; }
+.mg-cover-logo { padding: 0; background: none; border-radius: 26px; box-shadow: 0 26px 44px -22px rgba(176, 102, 0, .5); }
+.mg-cover-logo img { border-radius: 0; object-fit: contain; }

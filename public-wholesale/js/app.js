@@ -2127,7 +2127,7 @@
   function manguitoCardHtml(m) {
     const img = m.imageUrl
       ? mediaHtml(m.imageUrl, "IA")
-      : `<img src="/assets/logo.webp" alt="" loading="lazy">`;
+      : `<img src="/assets/manguito-pro.svg" alt="" loading="lazy">`;
     return `
       <div class="catalog-card manguito-ws-card">
         <div class="catalog-card-img${m.imageUrl ? "" : " manguito-ws-img"}">${img}</div>

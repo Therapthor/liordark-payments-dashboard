@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="Manguito Pro">
+  <defs>
+    <linearGradient id="mpBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFF1D6"/></linearGradient>
+    <linearGradient id="mpMango" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#FFDA4F"/><stop offset=".55" stop-color="#FFA126"/><stop offset="1" stop-color="#EE5A1E"/></linearGradient>
+    <linearGradient id="mpLeaf" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#1F8A4C"/><stop offset="1" stop-color="#6AD996"/></linearGradient>
+  </defs>
+  <rect x="2" y="2" width="236" height="236" rx="56" fill="url(#mpBg)" stroke="#EADCC2" stroke-width="2"/>
+  <path d="M126 66 C 86 62 56 94 58 134 C 60 172 90 192 124 188 C 164 184 188 150 184 112 C 181 84 156 68 126 66 Z" fill="url(#mpMango)"/>
+  <path d="M126 68 C 128 46 148 32 176 34 C 174 58 154 74 126 68 Z" fill="url(#mpLeaf)"/>
+  <path d="M131 64 C 144 54 156 46 170 40" stroke="#0F5F33" stroke-width="2.5" fill="none" stroke-linecap="round" opacity=".55"/>
+  <ellipse cx="92" cy="112" rx="14" ry="24" transform="rotate(28 92 112)" fill="#FFFFFF" opacity=".35"/>
+  <path d="M140 102 C 142 120 148 126 166 128 C 148 130 142 136 140 154 C 138 136 132 130 114 128 C 132 126 138 120 140 102 Z" fill="#FFFFFF"/>
+  <circle cx="168" cy="102" r="5" fill="#FFFFFF" opacity=".9"/>
+</svg>

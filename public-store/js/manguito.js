@@ -211,7 +211,7 @@
   function assistantMessageEl(m) {
     const el = document.createElement("div");
     el.className = "mg-msg assistant";
-    el.innerHTML = '<div class="mg-who"><img src="/assets/logo.webp" alt=""><b>Manguito</b><span class="mg-tier" hidden></span></div>' +
+    el.innerHTML = '<div class="mg-who"><img src="/assets/manguito-pro.svg" alt=""><b>Manguito</b><span class="mg-tier" hidden></span></div>' +
       '<div class="mg-answer"></div><div class="mg-meta"></div>';
     setAssistant(el, m);
     return el;

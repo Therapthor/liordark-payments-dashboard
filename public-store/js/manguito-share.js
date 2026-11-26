@@ -34,7 +34,7 @@
     document.title = (data.title || "Chat compartido") + " · Manguito Pro";
     const msgs = (data.messages || []).map((m, i) => m.role === "user"
       ? `<div class="mg-msg user" data-i="${i}">${m.images ? `<div class="mg-msg-imgs"><span class="mg-img-gone">📎 ${m.images} adjunto(s) (no se comparten)</span></div>` : ""}<div class="mg-bubble">${esc(m.text)}</div></div>`
-      : `<div class="mg-msg assistant" data-i="${i}"><div class="mg-who"><img src="/assets/logo.webp" alt=""><b>Manguito</b>${m.label ? `<span class="mg-tier">${esc(m.label)}</span>` : ""}</div>` +
+      : `<div class="mg-msg assistant" data-i="${i}"><div class="mg-who"><img src="/assets/manguito-pro.svg" alt=""><b>Manguito</b>${m.label ? `<span class="mg-tier">${esc(m.label)}</span>` : ""}</div>` +
         `<div class="mg-answer">${md(m.text)}</div><div class="mg-meta"><button class="mg-act" type="button" data-copy>${COPY_IC}Copiar</button></div></div>`
     ).join("");
     $("sh-main").innerHTML = `<div class="mg-shared-head"><h1>${esc(data.title || "Chat compartido")}</h1>` +

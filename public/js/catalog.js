@@ -206,7 +206,7 @@
     const from = prices.length ? Math.min(...prices) : null;
     const thumb = st.imageUrl
       ? `<img class="catalog-thumb" src="${escapeHtml(st.imageUrl)}" alt="" />`
-      : `<div class="catalog-thumb catalog-thumb-empty catalog-thumb-mango">🥭</div>`;
+      : `<img class="catalog-thumb" src="/assets/manguito-pro.svg" alt="" />`;
     li.innerHTML = `
       ${thumb}
       <div class="catalog-main">

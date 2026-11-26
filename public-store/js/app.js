@@ -283,7 +283,7 @@
     return `
       <a class="product-card product-card-exclusive manguito-card" href="/manguito/#tienda" aria-label="${escapeHtml(name)}">
         <div class="product-img-wrap${custom ? "" : " manguito-card-img"}">
-          <img src="${escapeHtml(custom ? imgSrc(info.imageUrl) : "/assets/logo.webp")}" alt="" loading="lazy" decoding="async">
+          <img src="${escapeHtml(custom ? imgSrc(info.imageUrl) : "/assets/manguito-pro.svg")}" alt="" loading="lazy" decoding="async">
           <span class="product-badge-overlay badge-exclusive">Nuevo · IA</span>
         </div>
         <div class="product-body">
