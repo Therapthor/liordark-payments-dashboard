@@ -30,7 +30,7 @@ import {
 } from "../db/wholesaler-notifications.repository";
 import { getCatalogProductByPlatform, listCatalogProducts, type CatalogProduct } from "../db/catalog.repository";
 import { publicStoreInfo } from "../services/manguito.service";
-import { keyOffer, buyKey, renewKey, changeKey, setKeyActive, renameKey, wholesalerKeys } from "../services/manguito-keys.service";
+import { keyOffer, buyKey, renewKey, changeKey, setKeyActive, renameKey, wholesalerKeys, unlimitKey, parseChoice } from "../services/manguito-keys.service";
 import { listPaymentMethods } from "../db/payment-method.repository";
 import { renewAccount, limaTodayISO, addDaysISO } from "../services/access.service";
 import { insertApprovedOrder } from "../db/orders.repository";
@@ -216,7 +216,7 @@ router.get("/manguito", (req, res) => {
   res.json({
     manguito: offer.available ? {
       name: info.name, imageUrl: info.imageUrl, discount: info.discount,
-      from: offer.priceSoles, keyPrice: offer.priceSoles, usd: offer.usd, days: offer.days,
+      keyPrice: offer.fromSoles, monthly: offer.monthly, packs: offer.packs,
       windowHours: info.windowHours,
       url: "https://liordark.com/manguito/",
     } : null,
@@ -225,13 +225,20 @@ router.get("/manguito", (req, res) => {
 });
 
 router.post("/manguito/keys", (req, res) => {
-  const r = buyKey(wid(req), req.body?.label);
+  const r = buyKey(wid(req), req.body?.label, parseChoice(req.body));
   if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
   res.status(201).json(r);
 });
 
 router.post("/manguito/keys/:id/renew", (req, res) => {
-  const r = renewKey(wid(req), Number(req.params.id));
+  const r = renewKey(wid(req), Number(req.params.id), req.body);
+  if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
+  res.json(r);
+});
+
+// Quitar límites: el plan mensual pasa a créditos (con lo que le quedaba).
+router.post("/manguito/keys/:id/unlimit", (req, res) => {
+  const r = unlimitKey(wid(req), Number(req.params.id));
   if (!r.ok) { res.status(r.status).json({ message: r.message }); return; }
   res.json(r);
 });

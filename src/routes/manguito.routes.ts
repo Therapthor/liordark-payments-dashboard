@@ -58,7 +58,7 @@ router.get("/access", (req, res) => {
     allowed, configured: isAiConfigured(), store: k ? null : publicStoreInfo(c?.phone), meter: allowed ? customerMeter(c!.id) : null,
     lapsed: !allowed && c && !k ? lapsedInfo(c.id) : null,
     // Cliente de un mayorista: no compra aquí (se lo renueva su proveedor).
-    keyUser: k ? { label: k.label, status: k.status, planEnd: wallet(c!.id).planEnd || 0, conversations: countConversations(c!.id) } : null,
+    keyUser: k ? { label: k.label, status: k.status, mode: k.mode, planEnd: wallet(c!.id).planEnd || 0, conversations: countConversations(c!.id) } : null,
   });
 });
 
@@ -86,7 +86,9 @@ router.use((req, res, next) => {
   const c = customerOf(req);
   if (!c || !hasAiAccess(c)) {
     res.status(403).json(c?.keyId
-      ? { code: "key_expired", message: "Tu acceso a Manguito Pro venció. Pídele a quien te dio tu key que lo renueve 🥭" }
+      ? { code: "key_expired", message: getKey(c.keyId)?.mode === "credits"
+          ? "Se acabaron tus créditos. Pídele a quien te dio tu key que te recargue 🥭"
+          : "Tu acceso a Manguito Pro venció. Pídele a quien te dio tu key que lo renueve 🥭" }
       : { code: "no_access", message: "Elige un plan para usar Manguito Pro 🥭" });
     return;
   }

@@ -809,7 +809,7 @@
     } else if (m.plan && m.source === "plan" && pct(m.plan.week.used, m.plan.week.limit) >= 80) {
       text = `Te queda poco de esta semana (se renueva el ${dayTime(m.plan.week.resetsAt)}).`;
     } else if (m.credits && m.source === "credits" && m.credits.estMessages <= 20) {
-      text = `Te quedan ≈ ${m.credits.estMessages} mensajes de créditos.`; if (canBuy) btn = "Recargar";
+      text = `Te quedan ≈ ${m.credits.estMessages} mensajes de créditos.` + (state.keyUser ? " Pídele a quien te dio tu key que te recargue." : ""); if (canBuy) btn = "Recargar";
     } else if (m.free && m.source === "free" && typeof m.free.burstLeft === "number" && m.free.burstLeft <= 5) {
       foot.textContent = `☕ Te ${m.free.burstLeft === 1 ? "queda 1 mensaje" : `quedan ${m.free.burstLeft} mensajes`} antes de una pausa de 1 hora.`;
       foot.classList.add("warn");
@@ -1170,6 +1170,7 @@
         const k = state.keyUser;
         const convs = k.conversations ? ` Tus ${k.conversations} conversación(es) siguen guardadas.` : "";
         if (k.status !== "active") gate("Acceso en pausa", "Quien te dio tu key la puso en pausa. Escríbele para reactivarla." + convs, false, true);
+        else if (k.mode === "credits") gate("Se acabaron tus créditos", "Pídele a quien te dio tu key que te recargue y sigues donde lo dejaste." + convs, false, true);
         else gate("Tu acceso venció", `Venció el ${dayLabel(k.planEnd).replace(/\.$/, "")}. Pídele a quien te dio tu key que lo renueve y sigues donde lo dejaste.` + convs, false, true);
         return;
       }

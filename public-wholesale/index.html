@@ -403,9 +403,9 @@
           <button class="btn-primary btn-sm" id="mgk-new-btn" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nueva key</button>
         </div>
         <ol class="mgk-steps">
-          <li>Crea la key y envíasela a tu cliente por WhatsApp.</li>
+          <li>Crea la key (<b>mensual</b> o <b>solo créditos</b>) y envíasela por WhatsApp.</li>
           <li>Tu cliente entra en <b>liordark.com/manguito</b> y pone su key.</li>
-          <li>Renuévala cada 30 días. Si cambias la key o la das de baja, su historial no se pierde.</li>
+          <li>Renueva o recarga cuando quieras. Si cambias la key o la das de baja, su historial no se pierde.</li>
         </ol>
         <div id="mgk-list" class="mgk-list"></div>
         <p id="mgk-empty" class="empty-state" hidden>Aún no tienes keys. Crea la primera para tu cliente.</p>
@@ -496,10 +496,14 @@
       <button class="modal-close" id="mgk-close" type="button" aria-label="Cerrar"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <div id="mgk-step-form">
         <span class="modal-icon tone-mango"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M16 7l3 3"/></svg></span>
-        <h2>Nueva key de Manguito Pro</h2>
-        <p class="muted" id="mgk-modal-price">Se descuenta de tu saldo. Incluye 30 días.</p>
-        <label class="mgk-label" for="mgk-label">¿Para quién es? <span class="muted">(opcional)</span></label>
-        <input class="input" id="mgk-label" maxlength="60" placeholder="Nombre o celular de tu cliente" autocomplete="off">
+        <h2 id="mgk-form-title">Nueva key de Manguito Pro</h2>
+        <div id="mgk-label-wrap">
+          <label class="mgk-label" for="mgk-label">¿Para quién es? <span class="muted">(opcional)</span></label>
+          <input class="input" id="mgk-label" maxlength="60" placeholder="Nombre o celular de tu cliente" autocomplete="off">
+        </div>
+        <p class="mgk-label">¿Qué le vendes?</p>
+        <div class="mgk-options" id="mgk-options" role="radiogroup" aria-label="Tipo de key"></div>
+        <p class="muted small" id="mgk-modal-price"></p>
         <p class="form-error" id="mgk-error" hidden></p>
         <button class="btn-primary btn-block" id="mgk-create" type="button">Crear key</button>
       </div>

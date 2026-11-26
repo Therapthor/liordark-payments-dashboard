@@ -1113,7 +1113,8 @@ export function pickSource(customerId: number): Pick {
   const p = pickSourceRaw(customerId);
   // Cliente de un mayorista (key): no compra aquí; se lo renueva su proveedor.
   if (customerId < 0 && !p.ok) {
-    if (p.code === "plan_limit") return { ...p, message: p.message.replace(/ Si no quieres esperar.*$/, "") };
+    if (p.code === "plan_limit") return { ...p, message: p.message.replace(/ Si no quieres esperar.*$/, " Si no quieres esperar, pídele a quien te dio tu key que te quite los límites.") };
+    if (getKey(-customerId)?.mode === "credits") return { ok: false, status: 402, code: "key_expired", message: "Se acabaron tus créditos. Pídele a quien te dio tu key que te recargue 🥭" };
     return { ok: false, status: 402, code: "key_expired", message: "Tu acceso a Manguito Pro venció. Pídele a quien te dio tu key que lo renueve 🥭" };
   }
   return p;

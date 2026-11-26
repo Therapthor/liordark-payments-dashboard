@@ -868,8 +868,10 @@
 
   let mgKeys = [];
   let mgOffer = null;
+  let mgModal = { type: "new", key: null };
   const MG_URL = "https://liordark.com/manguito/";
   const mgMoney = n => "S/ " + Number(n || 0).toFixed(2);
+  const mgUsd = n => "US$ " + Number(n || 0).toFixed(2).replace(/\.00$/, "");
   const mgDay = ms => new Date(ms).toLocaleDateString("es-PE", { timeZone: "America/Lima", day: "numeric", month: "short", year: "numeric" }).replace(".", "");
 
   function mgAgo(sqlDate) {
@@ -879,9 +881,10 @@
   }
 
   function mgKeyMessage(k) {
+    const tail = k.planActive ? `Tu acceso mensual vence el ${mgDay(k.planEnd)}.`
+      : k.credits > 0 ? `Tienes ${mgUsd(k.credits)} de créditos, sin vencimiento.` : "";
     return `🥭 *Manguito Pro* — tu inteligencia artificial\n\n` +
-      `1. Entra a ${MG_URL}\n2. Pon tu key: *${k.key}*\n\n` +
-      (k.planEnd > Date.now() ? `Tu acceso vence el ${mgDay(k.planEnd)}.` : "");
+      `1. Entra a ${MG_URL}\n2. Pon tu key: *${k.key}*\n\n` + tail;
   }
   function mgWaHref(k) {
     const digits = String(k.label || "").replace(/\D/g, "");
@@ -890,17 +893,48 @@
       : "https://api.whatsapp.com/send?text=" + encodeURIComponent(mgKeyMessage(k));
   }
 
+  // Opciones para vender: plan mensual (con límites) o paquetes de créditos.
+  function mgOptions() {
+    if (!mgOffer) return [];
+    const out = [];
+    if (mgOffer.monthly) {
+      const m = mgOffer.monthly;
+      out.push({ value: "plan", title: "Mensual", price: m.priceSoles,
+        desc: `30 días · ${mgUsd(m.usd)} de uso con límites cada ${m.windowHours || 3} horas y por semana, para que le dure todo el mes.` });
+    }
+    (mgOffer.packs || []).forEach((p, i) => out.push({ value: "credits:" + i, title: `Solo créditos · ${mgUsd(p.usd)}`, price: p.priceSoles,
+      desc: `${mgUsd(p.usd)} de saldo · sin límites ni vencimiento. Puede usarlo todo de golpe y le recargas.` }));
+    return out;
+  }
+  function mgSelected() {
+    const r = document.querySelector('input[name="mgk-kind"]:checked');
+    const v = r ? r.value : "plan";
+    const opt = mgOptions().find(o => o.value === v);
+    return { v, opt, body: v === "plan" ? { kind: "plan" } : { kind: "credits", pack: Number(v.split(":")[1]) || 0 } };
+  }
+  function mgPaintPrice() {
+    const { opt } = mgSelected();
+    const price = opt ? opt.price : 0;
+    document.getElementById("mgk-modal-price").textContent = `Se descuentan ${mgMoney(price)} de tu saldo (tienes ${money(currentBalanceCents)}).`;
+    document.getElementById("mgk-create").textContent = mgModal.type === "new" ? `Crear key · ${mgMoney(price)}` : `Pagar ${mgMoney(price)}`;
+  }
+
   function mgKeyCardHtml(k) {
     const now = Date.now();
     const off = k.status !== "active";
-    const expired = !off && !(k.planEnd > now);
+    const credits = !k.planActive && (k.mode === "credits" || k.credits > 0);
     const days = Math.ceil((k.planEnd - now) / 864e5);
-    const tone = off ? "tone-none" : expired ? "tone-over" : days <= 3 ? "tone-soon" : "tone-ok";
-    const status = off ? "Dada de baja" + (k.planEnd > now ? ` · le quedan ${days} día${days === 1 ? "" : "s"}` : "")
-      : expired ? (k.planEnd ? `Vencida el ${mgDay(k.planEnd)}` : "Sin días")
-      : `Activa · vence el ${mgDay(k.planEnd)} (${days} día${days === 1 ? "" : "s"})`;
+    let status, tone;
+    if (off) { status = "Dada de baja"; tone = "tone-none"; }
+    else if (k.planActive) {
+      status = `Mensual · vence el ${mgDay(k.planEnd)} (${days} día${days === 1 ? "" : "s"})` + (k.credits > 0.003 ? ` · + ${mgUsd(k.credits)} en créditos` : "");
+      tone = days <= 3 ? "tone-soon" : "tone-ok";
+    } else if (credits && k.credits > 0.003) { status = `Créditos · le quedan ${mgUsd(k.credits)}`; tone = k.credits < 5 ? "tone-soon" : "tone-ok"; }
+    else if (k.mode === "credits") { status = "Sin créditos"; tone = "tone-over"; }
+    else { status = k.planEnd ? `Mensual vencida el ${mgDay(k.planEnd)}` : "Sin días"; tone = "tone-over"; }
     const seen = k.lastLoginAt ? `entró ${mgAgo(k.lastLoginAt)}` : "aún no entra";
-    const price = mgOffer ? ` ${mgMoney(mgOffer.keyPrice)}` : "";
+    const modeTag = k.planActive || (k.mode === "plan" && !credits) ? `<span class="tag tag-mango">Mensual</span>` : `<span class="tag tag-blue">Créditos</span>`;
+    const mainBtn = k.planActive ? "Renovar" : credits || k.mode === "credits" ? "Recargar" : "Renovar";
     return `
       <article class="client-card mgk-card${off ? " off" : ""}" data-key-id="${k.id}">
         <div class="client-card-head">
@@ -909,11 +943,13 @@
             <div class="client-platform">${escapeHtml(k.label || "Cliente sin nombre")}</div>
             <div class="client-phone">${k.conversations} conversación${k.conversations === 1 ? "" : "es"} · ${seen}</div>
           </div>
+          ${modeTag}
           <details class="more-menu">
             <summary aria-label="Más acciones" title="Más acciones">${icon("more")}</summary>
             <div class="more-menu-list">
+              ${k.planActive ? `<button type="button" data-mgk="unlimit">${icon("swap")}Quitar límites (pasar a créditos)</button>` : ""}
               <button type="button" data-mgk="rename">${icon("user")}Cambiar nombre</button>
-              <button type="button" data-mgk="change">${icon("swap")}Cambiar key</button>
+              <button type="button" data-mgk="change">${icon("key")}Cambiar key</button>
               ${off
                 ? `<button type="button" data-mgk="on">${icon("undo")}Reactivar</button>`
                 : `<button type="button" class="danger" data-mgk="off">${icon("ban")}Dar de baja</button>`}
@@ -921,10 +957,10 @@
           </details>
         </div>
         <div class="client-status ${tone}">${escapeHtml(status)}</div>
-        ${!off && !expired ? `<div class="mgk-usage"><div class="mgk-bar"><i style="width:${Math.max(2, k.usedPct)}%"></i></div><span>${k.usedPct}% usado este mes</span></div>` : ""}
+        ${!off && k.planActive ? `<div class="mgk-usage"><div class="mgk-bar"><i style="width:${Math.max(2, k.usedPct)}%"></i></div><span>${k.usedPct}% usado este mes</span></div>` : ""}
         <div class="mgk-keyrow"><code>${escapeHtml(k.key)}</code><button class="btn-ghost btn-xs" type="button" data-mgk="copy">${icon("copy")}Copiar</button></div>
         <div class="client-card-actions">
-          <button class="btn-primary btn-sm" type="button" data-mgk="renew">${off || expired ? "Renovar" : "+30 días"}${price}</button>
+          <button class="btn-primary btn-sm" type="button" data-mgk="renew">${mainBtn}</button>
           <a class="btn-ghost btn-sm" href="${escapeHtml(mgWaHref(k))}" target="_blank" rel="noopener">${icon("send")}Enviar</a>
         </div>
       </article>`;
@@ -937,8 +973,8 @@
     document.getElementById("mgk-empty").hidden = mgKeys.length > 0;
     if (openId) { const d = list.querySelector(`[data-key-id="${openId}"] details.more-menu`); if (d) d.open = true; }
     if (mgOffer) {
-      document.getElementById("mgk-price").textContent = `${mgMoney(mgOffer.keyPrice)} por key · 30 días`;
-      document.getElementById("mgk-price-sub").textContent = `US$ ${mgOffer.usd} de uso al mes, repartido en el mes.`;
+      document.getElementById("mgk-price").textContent = `Desde ${mgMoney(mgOffer.keyPrice)} por key`;
+      document.getElementById("mgk-price-sub").textContent = "Mensual (con límites para todo el mes) o solo créditos (sin límites).";
     }
     document.getElementById("mgk-new-btn").disabled = !mgOffer;
   }
@@ -965,33 +1001,59 @@
     document.getElementById("mgk-modal").hidden = false;
   }
 
+  // Ventana para crear una key o renovarla/recargarla (elige mensual o créditos).
+  function mgOpenForm(type, key) {
+    if (!mgOffer) return;
+    mgModal = { type, key: key || null };
+    const opts = mgOptions();
+    const pre = type === "renew" && key && key.mode === "credits" && !key.planActive
+      ? (opts.find(o => o.value.startsWith("credits")) || opts[0]).value
+      : (opts.find(o => o.value === "plan") || opts[0]).value;
+    document.getElementById("mgk-options").innerHTML = opts.map(o => `
+      <label class="mgk-opt">
+        <input type="radio" name="mgk-kind" value="${o.value}"${o.value === pre ? " checked" : ""}>
+        <span class="mgk-opt-body"><span class="mgk-opt-top"><b>${escapeHtml(o.title)}</b><em>${mgMoney(o.price)}</em></span><small>${escapeHtml(o.desc)}</small></span>
+      </label>`).join("");
+    document.getElementById("mgk-form-title").textContent = type === "new" ? "Nueva key de Manguito Pro" : `Renovar o recargar · ${key.label || "tu cliente"}`;
+    document.getElementById("mgk-label-wrap").hidden = type !== "new";
+    document.getElementById("mgk-step-form").hidden = false;
+    document.getElementById("mgk-step-done").hidden = true;
+    document.getElementById("mgk-error").hidden = true;
+    document.getElementById("mgk-label").value = "";
+    mgPaintPrice();
+    document.getElementById("mgk-modal").hidden = false;
+    if (type === "new") setTimeout(() => document.getElementById("mgk-label").focus(), 50);
+  }
+
   function initMgKeys() {
     const modal = document.getElementById("mgk-modal");
     const close = () => { modal.hidden = true; };
     document.getElementById("mgk-close").addEventListener("click", close);
     document.getElementById("mgk-done-ok").addEventListener("click", close);
     modal.addEventListener("click", e => { if (e.target === modal) close(); });
-    document.getElementById("mgk-new-btn").addEventListener("click", () => {
-      if (!mgOffer) return;
-      document.getElementById("mgk-step-form").hidden = false;
-      document.getElementById("mgk-step-done").hidden = true;
-      document.getElementById("mgk-error").hidden = true;
-      document.getElementById("mgk-label").value = "";
-      document.getElementById("mgk-modal-price").textContent = `Se descuentan ${mgMoney(mgOffer.keyPrice)} de tu saldo (tienes ${money(currentBalanceCents)}). Incluye 30 días.`;
-      modal.hidden = false;
-      setTimeout(() => document.getElementById("mgk-label").focus(), 50);
-    });
+    document.getElementById("mgk-options").addEventListener("change", mgPaintPrice);
+    document.getElementById("mgk-new-btn").addEventListener("click", () => mgOpenForm("new"));
     const createBtn = document.getElementById("mgk-create");
     createBtn.addEventListener("click", async () => {
       const err = document.getElementById("mgk-error");
       err.hidden = true;
       createBtn.disabled = true;
+      const { body } = mgSelected();
       try {
-        const r = await api("/manguito/keys", { method: "POST", body: { label: document.getElementById("mgk-label").value } });
-        mgKeys.unshift(r.key);
-        renderMgKeys();
-        refreshBalance();
-        mgShowDone(r.key, "¡Key lista!");
+        if (mgModal.type === "new") {
+          const r = await api("/manguito/keys", { method: "POST", body: { ...body, label: document.getElementById("mgk-label").value } });
+          mgKeys.unshift(r.key);
+          renderMgKeys();
+          refreshBalance();
+          mgShowDone(r.key, "¡Key lista!");
+        } else {
+          const r = await api(`/manguito/keys/${mgModal.key.id}/renew`, { method: "POST", body });
+          mgKeys = mgKeys.map(x => x.id === r.key.id ? r.key : x);
+          renderMgKeys();
+          refreshBalance();
+          close();
+          toast(r.key.planActive && body.kind === "plan" ? `Renovada hasta el ${mgDay(r.key.planEnd)}` : `Recargada: le quedan ${mgUsd(r.key.credits)}`);
+        }
       } catch (ex) {
         err.textContent = ex.message; err.hidden = false;
       } finally { createBtn.disabled = false; }
@@ -1014,18 +1076,19 @@
         if (act === "copy") {
           try { await navigator.clipboard.writeText(k.key); toast("Key copiada"); } catch { toast(k.key); }
         } else if (act === "renew") {
-          if (!confirm(`¿Sumar 30 días a la key de ${k.label || "tu cliente"}? Se descuentan ${mgMoney(mgOffer?.keyPrice)} de tu saldo.`)) return;
-          btn.disabled = true;
-          const r = await api(`/manguito/keys/${k.id}/renew`, { method: "POST" });
-          update(r.key); refreshBalance();
-          toast(`Renovada hasta el ${mgDay(r.key.planEnd)}`);
+          mgOpenForm("renew", k);
+        } else if (act === "unlimit") {
+          if (!confirm(`¿Quitarle los límites a ${k.label || "tu cliente"}?\n\nSu plan mensual termina y lo que le queda (${mgUsd(k.planLeftUsd)}) pasa a créditos sin límites ni vencimiento. Podrá usarlo de golpe; cuando se acabe, le recargas.`)) return;
+          const r = await api(`/manguito/keys/${k.id}/unlimit`, { method: "POST" });
+          update(r.key);
+          toast(`Listo: ${mgUsd(r.movedUsd)} pasaron a créditos sin límites`);
         } else if (act === "change") {
           if (!confirm("¿Cambiar la key? La actual deja de funcionar y tu cliente tendrá que poner la nueva. Su historial se mantiene.")) return;
           const r = await api(`/manguito/keys/${k.id}/change`, { method: "POST" });
           update(r.key);
           mgShowDone(r.key, "Key nueva");
         } else if (act === "off") {
-          if (!confirm(`¿Dar de baja la key de ${k.label || "tu cliente"}? Ya no podrá entrar (puedes reactivarla mientras le queden días). El saldo no se devuelve.`)) return;
+          if (!confirm(`¿Dar de baja la key de ${k.label || "tu cliente"}? Ya no podrá entrar (puedes reactivarla después). El saldo no se devuelve.`)) return;
           update((await api(`/manguito/keys/${k.id}/status`, { method: "POST", body: { active: false } })).key);
           toast("Key dada de baja");
         } else if (act === "on") {
@@ -1038,7 +1101,6 @@
         }
       } catch (ex) {
         toast(ex.message);
-        btn.disabled = false;
       }
     });
   }
@@ -2071,8 +2133,8 @@
         <div class="catalog-card-img${m.imageUrl ? "" : " manguito-ws-img"}">${img}</div>
         <div class="catalog-card-body">
           <div class="catalog-card-title">${escapeHtml(m.name)} <span class="tag tag-mango">Nuevo · IA</span></div>
-          <div class="catalog-card-price">${m.keyPrice ? "S/ " + escapeHtml(Number(m.keyPrice).toFixed(2)) + " por key" : ""}</div>
-          <div class="catalog-card-stock">Key de 30 días para tu cliente · se paga con tu saldo</div>
+          <div class="catalog-card-price">${m.keyPrice ? "Desde S/ " + escapeHtml(Number(m.keyPrice).toFixed(2)) : ""}</div>
+          <div class="catalog-card-stock">Key para tu cliente: mensual o solo créditos · con tu saldo</div>
         </div>
         <button class="catalog-go-btn" type="button" data-page="manguito" aria-label="Crear una key de ${escapeHtml(m.name)}">Crear key</button>
       </div>`;

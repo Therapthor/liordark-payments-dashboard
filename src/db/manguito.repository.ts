@@ -466,6 +466,13 @@ function grant(customerId: number, kind: string, usd: number): void {
   }
 }
 
+/** Quita los límites: termina el plan y lo que quedaba pasa a créditos. */
+export function planToCredits(customerId: number, usd: number): void {
+  ensureWallet(customerId);
+  db.prepare(`UPDATE ai_wallets SET credits_usd = credits_usd + ?, plan_end = ?, notice_low = 0, notice_out = 0 WHERE customer_id = ?`)
+    .run(Math.max(0, Math.round(usd * 10000) / 10000), Date.now(), customerId);
+}
+
 /** Gasto pagado con el plan desde `sinceMs`. */
 export function planSpentSince(customerId: number, sinceMs: number): number {
   const r = db.prepare(`

@@ -3,14 +3,16 @@ import type { Request, Response, NextFunction } from "express";
 import { env } from "../config/env";
 import { db } from "../db/db";
 import {
-  createKey, findKey, getKey, keyIdentity, listKeys, normalizeKey, rotateKey, setKeyLabel, setKeyStatus, touchKeyLogin,
+  createKey, findKey, getKey, keyIdentity, listKeys, normalizeKey, rotateKey, setKeyLabel, setKeyStatus, touchKeyLogin, setKeyMode,
   type AiKey,
 } from "../db/manguito-keys.repository";
-import { createAiPurchase, markAiPurchasePaid, wallet, countConversations } from "../db/manguito.repository";
+import { createAiPurchase, markAiPurchasePaid, wallet, countConversations, planToCredits } from "../db/manguito.repository";
 import { applyWholesalerCreditChange, hasRecentLedgerEntry } from "../db/wholesaler-credit.repository";
 import { requireCustomerSession, type RequestWithCustomer } from "./customer-auth.service";
 import { findCustomerById } from "../db/customer.repository";
-import { storeConfig, isAiConfigured, WHOLESALE_DISCOUNT, planStatus } from "./manguito.service";
+import { storeConfig, isAiConfigured, WHOLESALE_DISCOUNT, WINDOW_HOURS, planStatus } from "./manguito.service";
+
+const CYCLE_MS = 30 * 24 * 3600e3;
 
 // ─────────────────────────────────────────────────────────────
 // MANGUITO PRO — keys de mayoristas.
@@ -93,29 +95,53 @@ export function requireAiUser(req: Request, res: Response, next: NextFunction): 
 
 // ── Para el mayorista ──
 
-/** Precio de una key: el plan mensual con el descuento de mayorista. */
-export function keyOffer(): { available: boolean; priceSoles: number; usd: number; days: number } {
+/** Lo que el mayorista puede venderle a su cliente: plan mensual (con
+ *  límites) o paquetes de solo créditos — los precios de la tienda con su
+ *  descuento de mayorista. */
+export function keyOffer() {
   const s = storeConfig();
+  const price = (soles: number) => Math.max(1, Math.round((soles - WHOLESALE_DISCOUNT) * 100) / 100);
+  const monthly = s.monthly.enabled
+    ? { priceSoles: price(s.monthly.priceSoles), usd: s.monthly.usd, days: 30, weekPct: s.monthly.weekPct, windowHours: WINDOW_HOURS }
+    : null;
+  const packs = s.packs.map(p => ({ priceSoles: price(p.priceSoles), usd: p.usd }));
+  const prices = [monthly?.priceSoles, ...packs.map(p => p.priceSoles)].filter((x): x is number => !!x);
   return {
-    available: isAiConfigured() && s.monthly.enabled,
-    priceSoles: Math.max(1, Math.round((s.monthly.priceSoles - WHOLESALE_DISCOUNT) * 100) / 100),
-    usd: s.monthly.usd,
-    days: 30,
+    available: isAiConfigured() && prices.length > 0,
+    monthly, packs,
+    fromSoles: prices.length ? Math.min(...prices) : 0,
   };
+}
+
+export type KeyChoice = { kind: "plan" } | { kind: "credits"; pack: number };
+export function parseChoice(body: any, fallback: KeyChoice = { kind: "plan" }): KeyChoice {
+  if (body?.kind === "credits") return { kind: "credits", pack: Math.max(0, Math.floor(Number(body?.pack) || 0)) };
+  if (body?.kind === "plan") return { kind: "plan" };
+  return fallback;
 }
 
 class KeyError extends Error { constructor(public status: number, message: string) { super(message); } }
 
-/** Cobra la key del saldo y le suma 30 días del plan (todo o nada). */
-function chargeAndGrant(wholesalerId: number, k: AiKey, ref: string): number {
+/** Cobra del saldo lo elegido y se lo da a la key (todo o nada). */
+function chargeAndGrant(wholesalerId: number, k: AiKey, ref: string, choice: KeyChoice): number {
   const offer = keyOffer();
   if (!offer.available) throw new KeyError(409, "Manguito Pro no está disponible en este momento.");
-  const cents = Math.round(offer.priceSoles * 100);
+  let priceSoles: number, usd: number;
+  if (choice.kind === "plan") {
+    if (!offer.monthly) throw new KeyError(400, "El plan mensual no está disponible ahora. Elige créditos.");
+    priceSoles = offer.monthly.priceSoles; usd = offer.monthly.usd;
+  } else {
+    const p = offer.packs[choice.pack];
+    if (!p) throw new KeyError(400, "Ese paquete de créditos ya no existe. Recarga la página.");
+    priceSoles = p.priceSoles; usd = p.usd;
+  }
+  const cents = Math.round(priceSoles * 100);
   const d = applyWholesalerCreditChange(wholesalerId, -cents, "manguito_key", ref, "system");
-  if (!d.ok) throw new KeyError(402, d.error === "Saldo insuficiente." ? `Saldo insuficiente: la key cuesta S/ ${offer.priceSoles.toFixed(2)}. Recarga créditos.` : d.error);
+  if (!d.ok) throw new KeyError(402, d.error === "Saldo insuficiente." ? `Saldo insuficiente: cuesta S/ ${priceSoles.toFixed(2)}. Recarga créditos.` : d.error);
   const orderName = `key-${k.id}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
-  createAiPurchase({ customerId: keyIdentity(k.id), orderName, kind: "plan", amountSoles: offer.priceSoles.toFixed(2), usd: offer.usd });
+  createAiPurchase({ customerId: keyIdentity(k.id), orderName, kind: choice.kind, amountSoles: priceSoles.toFixed(2), usd });
   markAiPurchasePaid(orderName);
+  setKeyMode(k.id, choice.kind);
   return d.newBalanceCents;
 }
 
@@ -131,13 +157,13 @@ function run(fn: () => KeyResult): KeyResult {
 
 const cleanLabel = (v: unknown) => String(v ?? "").replace(/[\u0000-\u001f<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
 
-export function buyKey(wholesalerId: number, label: unknown): KeyResult {
+export function buyKey(wholesalerId: number, label: unknown, choice: KeyChoice): KeyResult {
   if (hasRecentLedgerEntry(wholesalerId, "manguito_key", `mgkey:new:${wholesalerId}:`, 4)) {
     return { ok: false, status: 429, message: "Espera un momento: ya se está creando una key." };
   }
   return run(() => db.transaction(() => {
     const k = createKey(wholesalerId, cleanLabel(label));
-    const balanceCents = chargeAndGrant(wholesalerId, k, `mgkey:new:${wholesalerId}:${k.id}`);
+    const balanceCents = chargeAndGrant(wholesalerId, k, `mgkey:new:${wholesalerId}:${k.id}`, choice);
     return { ok: true as const, key: keyView(getKey(k.id)!), balanceCents };
   })());
 }
@@ -148,14 +174,34 @@ function ownKey(wholesalerId: number, id: number): AiKey {
   return k;
 }
 
-export function renewKey(wholesalerId: number, id: number): KeyResult {
+export function renewKey(wholesalerId: number, id: number, body: unknown): KeyResult {
   return run(() => db.transaction(() => {
     const k = ownKey(wholesalerId, id);
     if (hasRecentLedgerEntry(wholesalerId, "manguito_key", `mgkey:renew:${k.id}:`, 4)) throw new KeyError(429, "Ya se renovó hace un momento.");
-    const balanceCents = chargeAndGrant(wholesalerId, k, `mgkey:renew:${k.id}:${Date.now()}`);
+    const choice = parseChoice(body, k.mode === "credits" ? { kind: "credits", pack: 0 } : { kind: "plan" });
+    const balanceCents = chargeAndGrant(wholesalerId, k, `mgkey:renew:${k.id}:${Date.now()}`, choice);
     if (k.status !== "active") setKeyStatus(k.id, "active");
     return { ok: true as const, key: keyView(getKey(k.id)!), balanceCents };
   })());
+}
+
+/** Quitar el limitador: el plan mensual termina y lo que le quedaba (este
+ *  mes y los meses ya pagados) pasa a créditos sin límites de tiempo. */
+export function unlimitKey(wholesalerId: number, id: number): KeyResult & { movedUsd?: number } {
+  let moved = 0;
+  const r = run(() => db.transaction(() => {
+    const k = ownKey(wholesalerId, id);
+    const who = keyIdentity(k.id);
+    const plan = planStatus(who);
+    if (!plan) throw new KeyError(409, "Esta key no tiene un plan mensual activo.");
+    const thisMonth = Math.max(0, plan.cycle.limit - plan.cycle.used);
+    const laterMonths = Math.max(0, Math.round((plan.endsAt - plan.cycle.resetsAt) / CYCLE_MS));
+    moved = Math.round((thisMonth + laterMonths * plan.usd) * 100) / 100;
+    planToCredits(who, moved);
+    setKeyMode(k.id, "credits");
+    return { ok: true as const, key: keyView(getKey(k.id)!) };
+  })());
+  return r.ok ? { ...r, movedUsd: moved } : r;
 }
 
 export function changeKey(wholesalerId: number, id: number): KeyResult {
@@ -175,8 +221,12 @@ export function keyView(k: AiKey) {
   const who = keyIdentity(k.id);
   const w = wallet(who);
   const plan = planStatus(who, w);
+  const planLeftUsd = plan
+    ? Math.round((Math.max(0, plan.cycle.limit - plan.cycle.used) + Math.max(0, Math.round((plan.endsAt - plan.cycle.resetsAt) / CYCLE_MS)) * plan.usd) * 100) / 100
+    : 0;
   return {
-    id: k.id, key: k.key, label: k.label, status: k.status, planEnd: w.planEnd || 0,
+    id: k.id, key: k.key, label: k.label, status: k.status, mode: k.mode, planEnd: w.planEnd || 0,
+    planActive: !!plan, planLeftUsd, credits: Math.round(Math.max(0, w.credits) * 100) / 100,
     usedPct: plan && plan.cycle.limit > 0 ? Math.min(100, Math.round(plan.cycle.used / plan.cycle.limit * 100)) : 0,
     conversations: countConversations(who), lastLoginAt: k.lastLoginAt, createdAt: k.createdAt,
   };

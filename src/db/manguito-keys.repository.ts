@@ -23,12 +23,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_ai_keys_wholesaler ON ai_keys(wholesaler_id);
 `);
+// Qué le vendió el mayorista: plan mensual (con límites) o solo créditos.
+{
+  const cols = (db.prepare(`PRAGMA table_info(ai_keys)`).all() as { name: string }[]).map(c => c.name);
+  if (!cols.includes("mode")) db.exec(`ALTER TABLE ai_keys ADD COLUMN mode TEXT NOT NULL DEFAULT 'plan'`); // plan | credits
+}
 
 export type AiKey = {
-  id: number; wholesalerId: number; key: string; label: string; status: "active" | "off";
+  id: number; wholesalerId: number; key: string; label: string; status: "active" | "off"; mode: "plan" | "credits";
   createdAt: string; updatedAt: string; lastLoginAt: string | null;
 };
-const COLS = `id, wholesaler_id AS wholesalerId, key, label, status, created_at AS createdAt, updated_at AS updatedAt, last_login_at AS lastLoginAt`;
+const COLS = `id, wholesaler_id AS wholesalerId, key, label, status, mode, created_at AS createdAt, updated_at AS updatedAt, last_login_at AS lastLoginAt`;
 
 /** Id que usa el chat para esta key (negativo: nunca choca con un cliente). */
 export const keyIdentity = (keyId: number): number => -keyId;
@@ -88,6 +93,10 @@ export function rotateKey(id: number): AiKey | null {
 
 export function setKeyStatus(id: number, status: "active" | "off"): void {
   db.prepare(`UPDATE ai_keys SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
+}
+
+export function setKeyMode(id: number, mode: "plan" | "credits"): void {
+  db.prepare(`UPDATE ai_keys SET mode = ?, updated_at = datetime('now') WHERE id = ?`).run(mode, id);
 }
 
 export function setKeyLabel(id: number, label: string): void {
