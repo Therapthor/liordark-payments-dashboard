@@ -19,7 +19,7 @@ import {
   bumpMessagesSinceMemory, registerPause, pausesToday, chatsSince, spentThisMonthByCustomer,
   wallet, setWindowStart, planSpentSince, creditsSpentSince, createAiPurchase, findAiPurchase, markAiPurchasePaid,
   giftAi, hasPaidAiPurchase, recentAiPurchases, outstandingBalance, cleanupPendingAiPurchases, avgCostPerMessage,
-  spentByCredentialSince, subscribersSummary, salesThisMonth, walletsForNotices, setWalletNotice, countConversations,
+  subscribersSummary, salesThisMonth, walletsForNotices, setWalletNotice, countConversations,
   attachmentIds,
   type AiMessage, type AiConversation, type UsageSource, type AiWallet, type AiFile,
 } from "../db/manguito.repository";
@@ -109,9 +109,6 @@ export type FailKind = "billing" | "auth" | "rate";
 export type AiCredential = {
   id: string; label: string; kind: "apiKey" | "authToken"; secret: string; baseUrl: string;
   enabled: boolean; failedAt: number | null; failKind: FailKind | ""; lastOkAt: number | null; addedAt: number;
-  // Saldo que el admin dice que tiene la cuenta de la API (y desde cuándo):
-  // lo que queda = ese saldo − lo gastado con esta clave desde entonces.
-  budgetUsd?: number | null; budgetAt?: number | null;
 };
 const COOLDOWN_MS: Record<FailKind, number> = { billing: 6 * 3600e3, auth: 24 * 3600e3, rate: 60e3 };
 export const FAIL_TEXT: Record<FailKind, string> = {
@@ -261,15 +258,6 @@ export function editCredential(id: string, body: any): string | null {
   if (typeof body?.enabled === "boolean") c.enabled = body.enabled;
   if (typeof body?.label === "string" && body.label.trim()) c.label = body.label.trim().slice(0, 40);
   if (body?.reset) { c.failedAt = null; c.failKind = ""; }
-  if (body?.budgetUsd !== undefined) {
-    const raw = String(body.budgetUsd ?? "").trim().replace(",", ".");
-    if (raw === "") { c.budgetUsd = null; c.budgetAt = null; }
-    else {
-      const n = Number(raw);
-      if (!isFinite(n) || n < 0 || n > 100000) return "El saldo debe ser un monto en US$.";
-      c.budgetUsd = Math.round(n * 100) / 100; c.budgetAt = Date.now();
-    }
-  }
   if (body?.move === "up" && i > 0) [list[i - 1], list[i]] = [list[i]!, list[i - 1]!];
   if (body?.move === "down" && i < list.length - 1) [list[i + 1], list[i]] = [list[i]!, list[i + 1]!];
   saveCredentials(list);
@@ -934,7 +922,6 @@ async function maintenanceSteps(): Promise<void> {
   if (!isAiConfigured()) return;
   cleanupPendingAiPurchases();
   try { sendWalletNotices(); } catch (err: any) { incident("Manguito Pro: no se pudieron mandar los avisos de vencimiento", `Error: ${safeErr(err)}`); }
-  checkApiBalance();
   for (const c of conversationsToCompact(SUMMARIZE_AT)) {
     await compactConversation(c.customerId, c.id).catch(() => {});
   }
@@ -1248,7 +1235,6 @@ export function onAiPurchasePaid(orderName: string, amount?: string): { ok: bool
   if (!findAiPurchase(orderName)) return null;
   const r = markAiPurchasePaid(orderName, amount);
   const p = r.purchase;
-  if (r.ok && !r.alreadyPaid) setImmediate(() => { try { checkApiBalance(); } catch { /* no crítico */ } });
   return { ok: r.ok, alreadyPaid: !!r.alreadyPaid, label: p ? (p.kind === "plan" ? "Plan mensual" : `Créditos US$ ${p.usd}`) : "" };
 }
 
@@ -1260,7 +1246,6 @@ export function storeAdminView() {
   return {
     store: s,
     outstanding: outstandingBalance(),
-    apiBalance: apiBalance(),
     month: salesThisMonth(),
     // Keys de mayoristas (id negativo): «🔑 Nombre · mayorista» en vez de celular.
     purchases: recentAiPurchases(30).map(p => p.customerId < 0 ? { ...p, phone: keyDisplay(-p.customerId) } : p),
@@ -1356,31 +1341,6 @@ export function reportOrphanAiPayment(orderName: string, amount: string): void {
   incident("Manguito Pro: pago confirmado sin compra",
     `El bot confirmó el Yape del pedido ${orderName} (S/ ${amount || "?"}) pero no se encontró la compra en el panel, así que no se acreditó nada.\n` +
     `El celular va al inicio del pedido (web-<celular>-…). Dale su saldo con «Regalar saldo» en Configuración › 🥭 Manguito Pro.`);
-}
-
-// ── Saldo de la API («stock»): pedir recarga a tiempo ──
-
-export function apiBalance(): { known: boolean; remaining: number; keys: number } {
-  let remaining = 0, keys = 0;
-  for (const c of listCredentials()) {
-    if (!c.enabled || c.budgetUsd === null || c.budgetUsd === undefined || !c.budgetAt) continue;
-    keys++;
-    remaining += Math.max(0, c.budgetUsd - spentByCredentialSince(c.id, c.budgetAt));
-  }
-  return { known: keys > 0, remaining: Math.round(remaining * 100) / 100, keys };
-}
-
-export function checkApiBalance(): void {
-  const bal = apiBalance();
-  if (!bal.known) return;
-  const o = outstandingBalance();
-  const owed = Math.round((o.credits + o.plans) * 100) / 100;
-  if (bal.remaining < 10 || bal.remaining < owed) {
-    incident("Manguito Pro: pide más saldo para la API",
-      `Queda ≈ US$ ${bal.remaining.toFixed(2)} en las claves (según el saldo que anotaste en el panel y lo gastado desde entonces).\n` +
-      `Saldo vendido a clientes aún sin usar: US$ ${owed.toFixed(2)} (créditos US$ ${o.credits.toFixed(2)} + planes US$ ${o.plans.toFixed(2)}).\n\n` +
-      `Recarga la cuenta de la API (o crea otra clave) y anota el saldo nuevo en Configuración › 🥭 Manguito Pro › Claves.`);
-  }
 }
 
 // ── Avisos al cliente (campanita): plan por vencer / vencido, créditos ──

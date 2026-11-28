@@ -628,14 +628,6 @@ export function avgCostPerMessage(customerId: number): number {
   return r.n && r.n >= 3 ? r.usd / r.n : 0;
 }
 
-/** Gasto estimado de una clave desde `sinceMs` (para el saldo que queda en la API). */
-export function spentByCredentialSince(credId: string, sinceMs: number): number {
-  const r = db.prepare(`
-    SELECT COALESCE(SUM(cost_usd), 0) AS t FROM ai_usage WHERE cred_id = ? AND created_at >= datetime(?, 'unixepoch')
-  `).get(credId, Math.floor(sinceMs / 1000)) as { t: number };
-  return r.t;
-}
-
 /** Suscriptores (plan o créditos) con lo que pagaron y lo que gastaron. */
 export function subscribersSummary(): {
   customerId: number; phone: string; planEnd: number; planUsd: number; credits: number;
