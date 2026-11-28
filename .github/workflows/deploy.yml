@@ -18,17 +18,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      HAS_SSH_KEY: ${{ secrets.VPS_SSH_KEY != '' }}
+      # La dirección del servidor va en el secreto VPS_HOST (no en el repo público).
+      HAS_SSH_KEY: ${{ secrets.VPS_SSH_KEY != '' && secrets.VPS_HOST != '' }}
     steps:
-      - name: Avisar si falta la llave
+      - name: Avisar si falta la llave o la dirección
         if: env.HAS_SSH_KEY != 'true'
-        run: echo "Falta el secreto VPS_SSH_KEY en Settings > Secrets and variables > Actions. No se despliega."
+        run: |
+          echo "Falta el secreto VPS_SSH_KEY o VPS_HOST en Settings > Secrets and variables > Actions. No se despliega."
+          exit 1
 
       - name: Desplegar por SSH
         if: env.HAS_SSH_KEY == 'true'
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: 161.132.53.122
+          host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 10m
