@@ -7,6 +7,7 @@ La memoria completa (dueño, publicación, verificación y reglas de seguridad) 
 - Pruebas solo con mocks; nunca proveedores reales.
 
 ## Este repo
+- **Mapa de dónde está cada cosa: `docs/MAPA.md`** — leerlo antes de buscar; actualizarlo si se mueve o crea algo importante.
 - Express 5 + TypeScript + better-sqlite3 (`data/payments.db`).
 - `public/` = panel (panel.liordark.com) · `public-store/` = tienda (liordark.com) y Manguito Pro (`/manguito/`) · `public-wholesale/` = mayorista.liordark.com.
 - `src/routes`, `src/services`, `src/db` (repositorios con migraciones `PRAGMA table_info` + `ALTER TABLE`).
