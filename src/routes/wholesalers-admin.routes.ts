@@ -6,7 +6,10 @@ import {
   setWholesalerStatus,
   setWholesalerPassword,
 } from "../db/wholesaler.repository";
-import { applyWholesalerCreditChange, listLedgerForWholesaler } from "../db/wholesaler-credit.repository";
+import { applyWholesalerCreditChange, creditWasAlreadyApplied, listLedgerForWholesaler } from "../db/wholesaler-credit.repository";
+import { db } from "../db/db";
+import { getCatalogProductByPlatform } from "../db/catalog.repository";
+import { wholesalePlansFor } from "../services/plans.service";
 import {
   assignProfilesToWholesaler,
   sellProfileForWholesaler,
@@ -16,6 +19,8 @@ import {
   getAccountById,
   setAccountExpiry,
   setClientDate,
+  releaseProfile,
+  deleteAccount,
 } from "../db/access.repository";
 import {
   listPendingFullAccountQueue,
@@ -279,6 +284,116 @@ router.post("/:id/clients/:profileId/renew", (req, res) => {
   }
   renewAccount(account.id);
   res.json({ ok: true, account: getAccountById(account.id) });
+});
+
+// ── ELIMINAR UNA CUENTA DEL MAYORISTA (con o sin reembolso) ──
+// Para cambios o confusiones del mayorista. El reembolso devuelve a su saldo
+// el último pago de esa cuenta: la última renovación (si renovó después de
+// comprarla) o su parte de la compra. Asignada a mano por el admin = S/ 0.
+
+type RefundQuote = { cents: number; ref: string; what: string };
+
+/** Hora (ms) que va dentro de una referencia «tipo:mayorista:…:<ms>:…». */
+function refTime(ref: string): number {
+  const m = ref.match(/:(\d{13})(?::|$)/);
+  return m ? Number(m[1]) : 0;
+}
+
+function refundQuoteFor(wholesalerId: number, profileId: number): RefundQuote {
+  const profile = getProfileById(profileId)!;
+  const account = getAccountById(profile.accountId);
+  const soldAt = refTime(profile.orderRef || "");
+
+  // Última renovación pagada de esta cuenta, posterior a la venta.
+  const renewals = db.prepare(`
+    SELECT amount_cents AS a, reference AS r FROM wholesaler_credit_ledger
+    WHERE wholesaler_id = ? AND type = 'renewal' AND amount_cents < 0 AND reference LIKE ?
+    ORDER BY id DESC
+  `).all(wholesalerId, `wholesale-renew:${wholesalerId}:${profileId}:%`) as { a: number; r: string }[];
+  const ren = renewals.find(x => refTime(x.r) >= soldAt);
+  if (ren) {
+    const ref = "refund:" + ren.r;
+    return creditWasAlreadyApplied("refund_admin", ref) ? { cents: 0, ref, what: "ya reembolsada" } : { cents: -ren.a, ref, what: "la última renovación" };
+  }
+
+  const buy = profile.orderRef ? db.prepare(`
+    SELECT amount_cents AS a, type FROM wholesaler_credit_ledger
+    WHERE wholesaler_id = ? AND reference = ? AND type IN ('purchase_profile', 'purchase_full_account') AND amount_cents < 0
+    ORDER BY id DESC LIMIT 1
+  `).get(wholesalerId, profile.orderRef) as { a: number; type: string } | undefined : undefined;
+  const ref = "refund:" + (profile.orderRef || "") + ":" + profileId;
+  if (!buy) return { cents: 0, ref, what: "sin pago registrado" };
+  if (creditWasAlreadyApplied("refund_admin", ref)) return { cents: 0, ref, what: "ya reembolsada" };
+
+  // Una compra puede traer varias cuentas (combo): a cada una le toca su
+  // precio mayorista, sin pasar de lo que falta devolver de esa compra.
+  const refunded = (db.prepare(`
+    SELECT COALESCE(SUM(amount_cents), 0) AS s FROM wholesaler_credit_ledger
+    WHERE wholesaler_id = ? AND type = 'refund_admin' AND reference LIKE ?
+  `).get(wholesalerId, "refund:" + profile.orderRef + ":%") as { s: number }).s;
+  const remaining = Math.max(0, -buy.a - refunded);
+  const others = (db.prepare(`
+    SELECT COUNT(*) AS n FROM access_profiles WHERE order_ref = ? AND client_phone != '' AND id != ?
+  `).get(profile.orderRef, profileId) as { n: number }).n;
+  if (others === 0 || !account) return { cents: remaining, ref, what: "la compra" };
+
+  const product = getCatalogProductByPlatform(account.platform);
+  let unit = Number(buy.type === "purchase_full_account" ? product?.wholesaleFullPrice : product?.wholesalePrice) || 0;
+  const plan = wholesalePlansFor(account.platform, product?.wholesalePrice)?.find(p => p.months === profile.planMonths);
+  if (plan && buy.type !== "purchase_full_account") unit = plan.wholesalePrice;
+  return { cents: Math.min(remaining, Math.round(unit * 100)), ref, what: "su parte de la compra" };
+}
+
+function ownedClient(req: any) {
+  const wholesalerId = Number(req.params.id);
+  const profile = getProfileById(Number(req.params.profileId));
+  if (!profile || profile.wholesalerId !== wholesalerId || !profile.clientPhone) return null;
+  const account = getAccountById(profile.accountId);
+  return account ? { wholesalerId, profile, account } : null;
+}
+
+router.get("/:id/clients/:profileId/refund-quote", (req, res) => {
+  const found = ownedClient(req);
+  if (!found) return res.status(404).json({ message: "Cuenta no encontrada." });
+  const q = refundQuoteFor(found.wholesalerId, found.profile.id);
+  res.json({ cents: q.cents, what: q.what });
+});
+
+const removeClient = db.transaction((wholesalerId: number, profileId: number, refund: boolean, expectedCents: number | null) => {
+  const profile = getProfileById(profileId)!;
+  const account = getAccountById(profile.accountId)!;
+  let refundedCents = 0;
+  if (refund) {
+    const q = refundQuoteFor(wholesalerId, profileId);
+    if (expectedCents !== null && expectedCents !== q.cents) {
+      return { ok: false as const, status: 409, message: `El monto cambió: ahora es S/ ${(q.cents / 100).toFixed(2)}. Vuelve a intentarlo.` };
+    }
+    if (q.cents > 0) {
+      const r = applyWholesalerCreditChange(wholesalerId, q.cents, "refund_admin", q.ref, "admin");
+      if (!r.ok) return { ok: false as const, status: 400, message: r.error };
+      refundedCents = q.cents;
+    }
+  }
+  // Cuenta creada solo para esta venta (activación a pedido o cuenta puesta
+  // a mano por el admin) y sin otros clientes: se borra de Accesos. Si es
+  // un perfil del stock, se libera (igual que cuando el mayorista lo quita).
+  const createdForSale = /canva|gemini|youtube/i.test(account.platform) || profile.orderRef.startsWith("admin-assign:");
+  const alone = account.profiles.every(p => p.id === profile.id || !p.clientPhone);
+  releaseProfile(profile.id, refund ? "admin: eliminada con reembolso" : "admin: eliminada");
+  if (createdForSale && alone) deleteAccount(account.id);
+  return { ok: true as const, refundedCents, platform: account.platform, email: account.email };
+});
+
+router.post("/:id/clients/:profileId/remove", (req, res) => {
+  const found = ownedClient(req);
+  if (!found) return res.status(404).json({ message: "Cuenta no encontrada (quizá ya se eliminó)." });
+  const raw = req.body?.expectedCents;
+  const expected = raw === undefined || raw === null ? null : Math.round(Number(raw));
+  const out = removeClient(found.wholesalerId, found.profile.id, req.body?.refund === true, expected);
+  if (!out.ok) return res.status(out.status).json({ message: out.message });
+  createWholesalerNotification(found.wholesalerId, "account_removed", out.platform, out.email,
+    out.refundedCents > 0 ? `Se devolvió S/ ${(out.refundedCents / 100).toFixed(2)} a tu saldo.` : "");
+  res.json({ ok: true, refundedCents: out.refundedCents });
 });
 
 // ── COLA DE CUENTAS COMPLETAS A PEDIDO ──

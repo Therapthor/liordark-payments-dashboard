@@ -17,7 +17,8 @@ export type LedgerEntryType =
   | "renewal"
   | "wipe_inactive"
   | "gift_course"
-  | "manguito_key";
+  | "manguito_key"
+  | "refund_admin"; // reembolso del admin al eliminar una cuenta del mayorista
 
 export type CreditChangeResult =
   | { ok: true; newBalanceCents: number }

@@ -1941,6 +1941,7 @@
     renewal:                "Renovación",
     wipe_inactive:          "Saldo retirado por inactividad",
     manguito_key:           "Key Manguito Pro",
+    refund_admin:           "Reembolso (cuenta eliminada)",
   };
 
   function ledgerRowHtml(entry) {

@@ -15,7 +15,7 @@ import { getCatalogProductByPlatform } from "./catalog.repository";
 // "client_expiring": aviso viejo, uno por perfil (ya no se crea; las filas
 // que quedan se siguen mostrando). "expiry_digest": resumen diario de cuentas
 // por vencer (ver services/wholesaler-expiry-digest.service.ts).
-export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active" | "support_update" | "expiry_digest" | "membership";
+export type WholesalerNotificationType = "purchase_added" | "full_account_ready" | "client_expiring" | "support_resolved" | "password_changed" | "account_replaced" | "renewal_active" | "support_update" | "expiry_digest" | "membership" | "account_removed";
 
 export type WholesalerNotification = {
   id:           number;
@@ -69,6 +69,8 @@ export function createWholesalerNotification(
     ? `🔑 La cuenta de ${platformTitle(platform)} de tu cliente tiene una contraseña nueva: ${customMessage}`
     : type === "account_replaced"
     ? `${buildSupportResolvedHeadline(platform, true)}\n\n${customMessage}`
+    : type === "account_removed"
+    ? `🗑️ Se eliminó la cuenta de ${platformTitle(platform)} de tu cliente.` + (customMessage.trim() ? ` ${customMessage.trim()}` : "")
     : buildMessage(type, platform);
   db.prepare(`
     INSERT INTO wholesaler_notifications (wholesaler_id, type, platform, account_email, message)

@@ -66,6 +66,7 @@
     renewal:               "Renovación",
     wipe_inactive:         "Saldo borrado (inactividad)",
     manguito_key:          "Key Manguito Pro",
+    refund_admin:          "Reembolso (cuenta eliminada)",
   };
 
   const QUEUE_STATUS_LABEL = { queued: "En cola", prepared: "Preparado", delivered: "Entregado", cancelled: "Cancelado" };
@@ -500,7 +501,11 @@
       <td>${escapeHtml(c.platform)}</td>
       <td>${isOwn ? `<span class="badge access-badge-matched">🧑‍💼 Cuenta propia</span>` : escapeHtml(c.clientPhone)}</td>
       <td>${fmtDateTime(c.expiresAt)}</td>
-      <td>${nonRenewable ? "" : `<button class="btn-secondary btn-sm wc-renew-btn">🔄 Renovar</button>`}</td>
+      <td class="wc-actions">
+        ${nonRenewable ? "" : `<button class="btn-secondary btn-sm wc-renew-btn">🔄 Renovar</button>`}
+        <button class="btn-secondary btn-sm wc-refund-btn" title="Quita la cuenta y devuelve su pago al saldo del mayorista">↩️ Eliminar + reembolso</button>
+        <button class="btn-danger btn-sm wc-remove-btn" title="Quita la cuenta sin devolver saldo">🗑️ Solo eliminar</button>
+      </td>
     `;
     return tr;
   }
@@ -511,7 +516,39 @@
     tbody.innerHTML = "";
     if (clients.length === 0) { empty.hidden = false; return; }
     empty.hidden = true;
+    clientsCache = clients;
     for (const c of clients) tbody.appendChild(renderClientsRow(clientsTarget, c));
+  }
+  let clientsCache = [];
+
+  async function removeClientAccount(btn, refund) {
+    const w = clientsTarget;
+    const tr = btn.closest("tr");
+    const c = clientsCache.find(x => String(x.id) === tr.dataset.profileId);
+    if (!w || !c) return;
+    const who = `${c.platform} de ${c.clientPhone}`;
+    tr.querySelectorAll("button").forEach(b => { b.disabled = true; });
+    try {
+      let body = { refund: false };
+      if (refund) {
+        const q = await api("/" + w.id + "/clients/" + c.id + "/refund-quote");
+        const msg = q.cents > 0
+          ? `¿Eliminar ${who} y devolver ${fmtMoney(q.cents)} (${q.what}) al saldo de ${w.displayName}?`
+          : `Esta cuenta no tiene pago para devolver (${q.what}).\n¿Eliminar ${who} sin reembolso?`;
+        if (!confirm(msg)) return;
+        body = { refund: true, expectedCents: q.cents };
+      } else if (!confirm(`¿Eliminar ${who} SIN devolver saldo?`)) {
+        return;
+      }
+      const r = await api("/" + w.id + "/clients/" + c.id + "/remove", { method: "POST", body: JSON.stringify(body) });
+      alert(r.refundedCents > 0 ? `Listo: cuenta eliminada y ${fmtMoney(r.refundedCents)} devueltos al saldo.` : "Listo: cuenta eliminada.");
+      await openClientsModal(w);
+      loadAll().catch(() => {});
+    } catch (err) {
+      alert(err.message || "No se pudo eliminar.");
+    } finally {
+      tr.querySelectorAll("button").forEach(b => { b.disabled = false; });
+    }
   }
 
   async function openClientsModal(w) {
@@ -533,6 +570,8 @@
 
   function initClientsModal() {
     document.getElementById("wholesaler-clients-tbody").addEventListener("click", async (e) => {
+      const rm = e.target.closest(".wc-refund-btn, .wc-remove-btn");
+      if (rm) { removeClientAccount(rm, rm.classList.contains("wc-refund-btn")); return; }
       const btn = e.target.closest(".wc-renew-btn");
       if (!btn || !clientsTarget) return;
       const tr = btn.closest("tr");
